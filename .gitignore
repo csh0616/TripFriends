@@ -2,3 +2,9 @@ node_modules/
 .env
 .env.*
 .DS_Store
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+.hypothesis/
+mutants/
