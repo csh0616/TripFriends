@@ -1,7 +1,7 @@
 """화면 조합 함수 (GRAPH-001 §6, SCREEN-001 §4~§5). 순수 함수, TDD 대상."""
 
 from datetime import time
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, Field
 
@@ -67,24 +67,50 @@ class Screen(BaseModel):
 
 
 # ---------- 기준 값 (SCREEN-001 §4-1·§4-2a) ----------
+# mutmut은 함수 안 코드만 바꿔 본다. 기준 값도 돌연변이 대상이 되도록 모듈 상수 대신 _limits() 안에 둔다
 
-FIXED_SOON_MIN = 15  # §4-1 순위 2: 고정 일정 출발까지 15분 이하
-LEAVE_SOON_MIN = 10  # §4-1 순위 5: 다음 장소 출발 10분 전
-MEAL_WINDOWS = ((time(11, 30), time(13, 30)), (time(18, 0), time(20, 0)))
-MEAL_GAP_MIN = 45  # 강한 신호: 다음 일정(식사 아님)까지 45분 이상
-RAIN_PROB = 0.6  # 강한 신호: 2시간 안 비 예보 60% 이상
-LONG_WALK_KM = 10.0  # 강한 신호: 10km 이상
-LONG_WALK_GAP_MIN = 30  # 강한 신호: 다음 일정까지 30분 이상
-EVENING = time(18, 0)  # 남은 일정 없음 + 18:00 이후 / 전
-WEAK_FREE_MIN = 30  # 약한 신호: 여유(이동 제외) 30분 이상
-WEAK_WALK_KM = 7.0  # 약한 신호: 7~10km
-WEAK_MEAL_BEFORE_MIN = 30  # 약한 신호: 식사 시간대 30분 전
+
+class Limits(NamedTuple):
+    fixed_soon_min: int  # §4-1 순위 2: 고정 일정 출발까지 15분 이하
+    leave_soon_min: int  # §4-1 순위 5: 다음 장소 출발 10분 전
+    meal_windows: tuple[tuple[time, time], ...]  # 점심·저녁 시간대
+    meal_gap_min: int  # 강한 신호: 다음 일정(식사 아님)까지 45분 이상
+    rain_prob: float  # 강한 신호: 2시간 안 비 예보 60% 이상
+    long_walk_km: float  # 강한 신호: 10km 이상
+    long_walk_gap_min: int  # 강한 신호: 다음 일정까지 30분 이상
+    evening: time  # 남은 일정 없음 + 18:00 이후 / 전
+    weak_free_min: int  # 약한 신호: 여유(이동 제외) 30분 이상
+    weak_walk_km: float  # 약한 신호: 7~10km
+    weak_walk_gap_min: int  # 약한 신호: 7~10km는 다음 일정까지 30분 이상
+    weak_meal_before_min: int  # 약한 신호: 식사 시간대 30분 전
+
+
+def _limits() -> Limits:
+    return Limits(
+        fixed_soon_min=15,
+        leave_soon_min=10,
+        meal_windows=((time(11, 30), time(13, 30)), (time(18, 0), time(20, 0))),
+        meal_gap_min=45,
+        rain_prob=0.6,
+        long_walk_km=10.0,
+        long_walk_gap_min=30,
+        evening=time(18, 0),
+        weak_free_min=30,
+        weak_walk_km=7.0,
+        weak_walk_gap_min=30,
+        weak_meal_before_min=30,
+    )
+
 
 # §4-3: 대화(G3)가 메인으로 고를 수 있는 카드
 CHAT_PICKS = frozenset({"T-02", "T-03", "T-04", "T-08", "T-09", "T-10", "T-11", "T-13"})
 
 # 친구 한마디 자리의 제안 칩 (§4-2a 예시 문장)
-REST_CHIP = SuggestionChip(card="T-09", label="근처 쉴 곳 볼래?")
+CHIP_LABELS = {
+    "T-09": "근처 쉴 곳 볼래?",
+    "T-10": "근처 먹을 곳 볼래?",
+    "T-11": "근처 둘러볼 곳 볼래?",
+}
 
 # 바뀐 이유 한 줄 (대본 틀, §6: LLM이 쓰지 않는다)
 REASONS = {
@@ -114,11 +140,12 @@ def _until(now: time, t: time) -> int:
 
 
 def _in_meal_window(now: time) -> bool:
-    return any(start <= now <= end for start, end in MEAL_WINDOWS)
+    return any(start <= now <= end for start, end in _limits().meal_windows)
 
 
 def _before_meal_window(now: time) -> bool:
-    return any(0 < _until(now, start) <= WEAK_MEAL_BEFORE_MIN for start, _ in MEAL_WINDOWS)
+    lim = _limits()
+    return any(0 < _until(now, start) <= lim.weak_meal_before_min for start, _ in lim.meal_windows)
 
 
 def _starts_in(s: Snapshot) -> int | None:
@@ -161,20 +188,21 @@ def _move_status(s: Snapshot) -> Literal["on_track", "delayed", "free"]:
     if any(e.kind == "delay" for e in s.open_events):
         return "delayed"
     free = _free_min(s)
-    if free is None or free >= WEAK_FREE_MIN:
+    if free is None or free >= _limits().weak_free_min:
         return "free"
     return "on_track"
 
 
 def _pick_main(s: Snapshot) -> tuple[str, str]:
     """GRAPH-001 §6 순서로 메인 카드와 이유 키를 고른다."""
+    lim = _limits()
     # 1. 안전·오프라인
     if s.safety:
         return "X-01", "X-01"
     if s.offline:
         return "T-01", "offline"
     # 2. 고정 일정 임박
-    if s.fixed_event and _until(s.now, s.fixed_event.leave_by) <= FIXED_SOON_MIN:
+    if s.fixed_event and _until(s.now, s.fixed_event.leave_by) <= lim.fixed_soon_min:
         return "T-07", "T-07"
     # 3. 대화가 고른 메인 카드
     if s.chat_pick in CHAT_PICKS:
@@ -186,33 +214,39 @@ def _pick_main(s: Snapshot) -> tuple[str, str]:
     if "closed" in kinds:
         return "T-06", "T-06"
     free = _free_min(s)
-    if s.moving or (free is not None and free <= LEAVE_SOON_MIN):
+    if s.moving or (free is not None and free <= lim.leave_soon_min):
         return "T-02", "T-02"
     if s.arriving and s.next_item and not s.next_item.hours_checked:
         return "T-05", "T-05"
     # 순위 7은 §4-2a 강한 신호 "남은 일정 없음 + 18:00 이후"로 판정 (18:00 전은 약한 신호)
-    if s.remaining_items == 0 and s.now >= EVENING:
+    if s.remaining_items == 0 and s.now >= lim.evening:
         return "T-08", "T-08"
     # 5. §4-2a 강한 신호
     next_is_meal = s.next_item is not None and s.next_item.is_meal
-    if _in_meal_window(s.now) and not s.meal_eaten and not next_is_meal and _gap_at_least(s, MEAL_GAP_MIN):
+    if _in_meal_window(s.now) and not s.meal_eaten and not next_is_meal and _gap_at_least(s, lim.meal_gap_min):
         return "T-10", "T-10"
-    if s.rain_prob_2h >= RAIN_PROB and s.outdoor_remaining:
+    if s.rain_prob_2h >= lim.rain_prob and s.outdoor_remaining:
         return "T-12", "T-12"
-    if s.walked_km >= LONG_WALK_KM and _gap_at_least(s, LONG_WALK_GAP_MIN):
+    if s.walked_km >= lim.long_walk_km and _gap_at_least(s, lim.long_walk_gap_min):
         return "T-09", "T-09"
     return "T-01", "T-01"
 
 
-def _weak_signal(s: Snapshot) -> bool:
-    """§4-2a 약한 신호: 하나라도 맞으면 제안 칩."""
+def _weak_chip(s: Snapshot) -> SuggestionChip | None:
+    """§4-2a 약한 신호 → 제안 칩. 여러 개면 표 순서로 첫 번째만."""
+    lim = _limits()
     free = _free_min(s)
-    return (
-        (free is not None and free >= WEAK_FREE_MIN)
-        or WEAK_WALK_KM <= s.walked_km < LONG_WALK_KM
-        or _before_meal_window(s.now)
-        or (s.remaining_items == 0 and s.now < EVENING)
-    )
+    if lim.weak_walk_km <= s.walked_km < lim.long_walk_km and _gap_at_least(s, lim.weak_walk_gap_min):
+        card = "T-09"
+    elif _before_meal_window(s.now) and not s.meal_eaten:
+        card = "T-10"
+    elif free is not None and free >= lim.weak_free_min:
+        card = "T-11"
+    elif s.remaining_items == 0 and s.now < lim.evening:
+        card = "T-11"
+    else:
+        return None
+    return SuggestionChip(card=card, label=CHIP_LABELS[card])
 
 
 def compose_screen(snapshot: Snapshot) -> Screen:
@@ -221,7 +255,7 @@ def compose_screen(snapshot: Snapshot) -> Screen:
     subs = _pairs(main, s)
     if reason_key == "offline":
         subs = ["X-02", *subs]
-    chip = REST_CHIP if reason_key == "T-01" and _weak_signal(s) else None
+    chip = _weak_chip(s) if reason_key == "T-01" else None
     # TODO: 깜빡임 규칙 (조작 후 30초, 직전 변경 후 3분 안의 순위 5~8 변경, SCREEN-001 §6)
     return Screen(
         main=main,
