@@ -8,3 +8,6 @@ __pycache__/
 .pytest_cache/
 .hypothesis/
 mutants/
+
+# Claude가 만든 초안·임시 파일 (저장소에 넣지 않음)
+Claude outputs/
