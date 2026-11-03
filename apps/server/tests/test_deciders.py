@@ -1,4 +1,4 @@
-"""판단기 테스트. 근거: TASK-001 §2 deciders, §4 AC-6~9·AC-19, §9-1 AC-21, ADR-011 §2. Jev는 가짜 HTTP로."""
+"""판단기 테스트. 근거: TASK-001 §2 deciders, §4 AC-6~9·AC-19, §9-1 AC-21·24, ADR-011 §2. Jev는 가짜 HTTP로."""
 
 import inspect
 import json
@@ -21,7 +21,7 @@ class FixedDecider:
         return Decision(pick="chat", source="rule", reason="고정")
 
 
-def jev_answer(choice: str, confidence: float, cost: float = 0.00004):
+def jev_answer(choice: str, confidence: float, cost: float | str = 0.00004):
     """실제 Jev 응답 모양 (TASK-001 §9-1 AC-21, POC-001 측정): 요청한 질문 id 아래에 답, 비용은 provider_metadata."""
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -66,6 +66,12 @@ def test_AC21_실제_응답_모양에서도_확신_낮으면_되묻기():
     assert result.pick is None
     assert result.source == "jev"
     assert result.cost_usd == pytest.approx(0.00002)
+
+
+def test_AC21_비용이_숫자_문자열이어도_읽음():
+    result = make(jev_answer("request", 0.9, cost="0.0000412")).decide("라멘", OPTIONS)
+    assert result.source == "jev"
+    assert result.cost_usd == pytest.approx(0.0000412)
 
 
 def test_AC06_확신_0_55면_고르지_않고_되묻기():
@@ -130,3 +136,64 @@ def test_AC19_실제_Jev_한번_연결_확인():
     assert result.pick == "request"
     assert result.latency_ms > 0
     assert result.cost_usd > 0
+
+
+# ---------- §9-1 AC-24 첫 호출 지연 대비 ----------
+
+
+def test_AC24_HTTP_연결을_호출마다_새로_만들지_않고_예열한_연결을_재사용(monkeypatch):
+    created = []
+    for cls in (httpx.Client, httpx.AsyncClient):
+        original = cls.__init__
+
+        def counting_init(self, *args, _original=original, **kwargs):
+            created.append(type(self).__name__)
+            _original(self, *args, **kwargs)
+
+        monkeypatch.setattr(cls, "__init__", counting_init)
+
+    hosts = []
+    answer = jev_answer("request", 0.9)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        hosts.append(request.url.host)
+        if request.content and "questions" in json.loads(request.content):
+            return answer(request)
+        return httpx.Response(200, json={})
+
+    decider = make(handler)
+    decider.warm_up()
+    for _ in range(3):
+        assert decider.decide("라멘", OPTIONS).source == "jev"
+
+    assert len(created) <= 1
+    assert len(hosts) >= 4  # 예열 1번 이상 + 판단 3번
+    assert len(set(hosts)) == 1  # 예열은 판단과 같은 곳으로 연결을 연다
+
+
+def test_AC24_시간_초과면_이유에_시간_초과():
+    def slow(request):
+        time.sleep(1.2)
+        return jev_answer("request", 0.9)(request)
+
+    result = make(slow).decide("라멘", OPTIONS)
+    assert result.source == "fallback"
+    assert "시간 초과" in result.reason
+
+
+def test_AC24_HTTP_오류면_이유에_HTTP_오류():
+    result = make(lambda request: httpx.Response(500, json={"error": "server"})).decide("라멘", OPTIONS)
+    assert result.source == "fallback"
+    assert "HTTP 오류" in result.reason
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"answers": {}}, {"answers": {"q": {"confidence": 0.9}}}, ["not", "a", "dict"]],
+    ids=["답_없음", "type_없음", "객체_아님"],
+)
+def test_AC24_응답_모양이_다르면_이유에_응답_모양(body):
+    result = make(lambda request: httpx.Response(200, json=body)).decide("라멘", OPTIONS)
+    assert result.source == "fallback"
+    assert result.pick == "chat"
+    assert "응답 모양" in result.reason

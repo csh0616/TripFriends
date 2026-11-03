@@ -90,6 +90,10 @@ class JevDecider:
             reason="Jev 고름" if sure else "Jev 확신 낮음, 되묻기",
         )
 
+    def warm_up(self) -> None:
+        """서버 시작 때 한 번 불러 Jev 쪽 연결을 미리 연다 (TASK-001 §9-1 AC-24)."""
+        raise NotImplementedError
+
     def _post(self, body: dict) -> tuple[_ChoiceAnswer, float]:
         response = self._client.post(_URL, json=body)
         response.raise_for_status()

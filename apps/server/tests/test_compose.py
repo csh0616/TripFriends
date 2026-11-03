@@ -267,6 +267,13 @@ def test_약한신호_식사시간대_30분전이면_칩():
     assert screen.chip.card == "T-10"  # AC-23: 식사 30분 전 → 근처 먹을 곳
 
 
+@pytest.mark.parametrize("now", ["11:10", "17:40"])
+def test_약한신호_끼니를_이미_먹었으면_식사전_칩_없음(now):
+    screen = compose_screen(snap(now=now, meal_eaten=True))
+    assert screen.main == "T-01"
+    assert screen.chip is None
+
+
 # ---------- §9-1 AC-22 경계값 ----------
 
 
@@ -299,12 +306,20 @@ def test_AC22_10km_정각_여유_있으면_메인이_쉴곳이고_칩은_없음(
     assert screen.chip is None
 
 
-def test_AC22_10km_정각_다음일정까지_30분_안되면_메인은_그대로_쉴곳_칩():
+def test_AC22_10km_정각_다음일정까지_30분_안되면_메인은_그대로_칩없음():
+    # 약한 신호는 7.0 이상 10.0 미만, 강한 신호는 10.0 이상 (PM 검토 11-03)
     t = at("15:00")
     screen = compose_screen(snap(now="15:00", walked_km=10.0, next_item=next_item(t, starts_in=29, travel_min=0)))
     assert screen.main == "T-01"
-    assert screen.chip is not None
-    assert screen.chip.card == "T-09"
+    assert screen.chip is None
+
+
+@pytest.mark.parametrize("starts_in, chip_card", [(30, "T-09"), (29, None)])
+def test_약한신호_7_10km는_다음일정까지_30분_이상일때만(starts_in, chip_card):
+    t = at("15:00")
+    screen = compose_screen(snap(now="15:00", walked_km=8.0, next_item=next_item(t, starts_in=starts_in, travel_min=0)))
+    assert screen.main == "T-01"
+    assert (screen.chip.card if screen.chip else None) == chip_card
 
 
 @pytest.mark.parametrize("now, expected", [("17:59", "T-01"), ("18:00", "T-08")])
@@ -312,6 +327,9 @@ def test_AC22_남은일정없음_18시_정각부터_숙소가는법(now, expecte
     # 이번 끼니를 먹은 것으로 두어 식사 강한 신호와 섞이지 않게 한다
     screen = compose_screen(snap(now=now, current_item=None, next_item=None, remaining_items=0, meal_eaten=True))
     assert screen.main == expected
+    if now == "17:59":
+        assert screen.chip is not None
+        assert screen.chip.card == "T-11"  # 남은 일정 없음 + 18:00 전
 
 
 # ---------- §9-1 AC-23 약한 신호가 여러 개면 표 순서로 첫 번째 ----------
@@ -323,10 +341,10 @@ def test_AC22_남은일정없음_18시_정각부터_숙소가는법(now, expecte
     [
         (dict(now="11:10", walked_km=8.0), "T-09"),
         (dict(now="11:10", next_item=next_item(at("11:10"), starts_in=50, travel_min=10)), "T-10"),
-        (dict(now="16:00", walked_km=8.0, current_item=None, next_item=None, remaining_items=0), "T-09"),
+        (dict(now="15:00", walked_km=8.0, next_item=next_item(at("15:00"), starts_in=50, travel_min=10)), "T-09"),
         (dict(now="17:40", current_item=None, next_item=None, remaining_items=0), "T-10"),
     ],
-    ids=["걷기_식사전", "식사전_여유", "걷기_일정끝", "식사전_일정끝"],
+    ids=["걷기_식사전", "식사전_여유", "걷기_여유", "식사전_일정끝"],
 )
 def test_AC23_약한신호_여러개면_표_순서로_첫번째_칩(kw, chip_card):
     screen = compose_screen(snap(**kw))
