@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 
+from catalog import get_catalog
+
 app = FastAPI(title="Tripfriends")
 
 
 @app.get("/health")
 def health() -> dict:
-    raise NotImplementedError
+    return {"ok": True, "cards": len(get_catalog())}
