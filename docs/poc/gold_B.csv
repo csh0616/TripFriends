@@ -1,0 +1,31 @@
+id,직접 입력,정답 방향(quieter/closer/cheaper/different/photo/indoor/food/night/unknown),메모
+B01,사람 적은 데,quieter,
+B02,조용한 곳,quieter,
+B03,숙소 근처로,closer,
+B04,많이 안 걷고 싶어,closer,
+B05,싼 데,cheaper,
+B06,돈 별로 안 드는 곳,cheaper,
+B07,완전 다른 느낌으로,different,
+B08,이런 거 말고,different,
+B09,사진 찍기 좋은 데,photo,
+B10,인스타 감성,photo,
+B11,비 안 맞는 데,indoor,
+B12,실내로,indoor,
+B13,맛있는 거 먹을 수 있는 데,food,
+B14,배고파,food,
+B15,밤에 갈 만한 데,night,
+B16,야경,night,
+B17,관광지 같지 않은 데,quieter,애매(different도 가능)
+B18,현지인들 가는 곳,different,애매
+B19,덜 붐비고 사진 잘 나오는 데,quieter+photo,복수
+B20,가까운데 조용한 데,closer+quieter,복수
+B21,힙한 데,different,애매
+B22,레트로한 곳,different,취향 태그
+B23,애니 성지,different,취향 태그
+B24,쉬어 갈 데,quieter,
+B25,걷기 좋은 데,different,애매
+B26,ㅁㄴㅇㄹ,unknown,의미 없음
+B27,아무거나,unknown,
+B28,부모님이 좋아할 만한 데,quieter,애매
+B29,웨이팅 없는 데,quieter,
+B30,오늘 날씨에 맞는 데,unknown,날씨 데이터 필요

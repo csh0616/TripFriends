@@ -1,4 +1,5 @@
 import * as Device from 'expo-device';
+import { useEffect, useState } from 'react';
 import { Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { fetchHealth } from '@/lib/api';
 
 function getDevMenuHint() {
   if (Platform.OS === 'web') {
@@ -28,7 +30,23 @@ function getDevMenuHint() {
   );
 }
 
+// 서버 /health 결과 한 줄 (TASK-001 AC-3·AC-20)
+function useServerStatus() {
+  const [status, setStatus] = useState('서버에 연결하는 중…');
+  useEffect(() => {
+    let alive = true;
+    fetchHealth()
+      .then((health) => alive && setStatus(`카드 ${health.cards}개 로드됨`))
+      .catch(() => alive && setStatus('서버에 연결할 수 없어요'));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return status;
+}
+
 export default function HomeScreen() {
+  const serverStatus = useServerStatus();
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
@@ -42,6 +60,8 @@ export default function HomeScreen() {
         <ThemedText type="code" style={styles.code}>
           get started
         </ThemedText>
+
+        <ThemedText>{serverStatus}</ThemedText>
 
         <ThemedView type="backgroundElement" style={styles.stepContainer}>
           <HintRow

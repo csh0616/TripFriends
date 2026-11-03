@@ -1,0 +1,15 @@
+{
+  "name": "api-types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "서버 OpenAPI에서 자동 생성한 TS 타입. 손으로 고치지 않는다 (ADR-013)",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "openapi": "cd ../../apps/server && uv run python -c \"import json; from api.main import app; print(json.dumps(app.openapi(), ensure_ascii=False, indent=2))\" > ../../packages/api-types/openapi.json",
+    "generate": "pnpm run openapi && openapi-typescript openapi.json -o index.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  }
+}

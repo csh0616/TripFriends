@@ -1,0 +1,452 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Tripfriends",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/catalog": {
+      "get": {
+        "summary": "Catalog",
+        "operationId": "catalog_catalog_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CardInfo"
+                  },
+                  "type": "array",
+                  "title": "Response Catalog Catalog Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug/compose": {
+      "post": {
+        "summary": "Debug Compose",
+        "operationId": "debug_compose_debug_compose_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Snapshot"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Screen"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CardInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "shows": {
+            "type": "string",
+            "title": "Shows"
+          },
+          "has_place": {
+            "type": "boolean",
+            "title": "Has Place"
+          },
+          "props_schema": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Props Schema"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "shows",
+          "has_place",
+          "props_schema"
+        ],
+        "title": "CardInfo"
+      },
+      "FixedEvent": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "leave_by": {
+            "type": "string",
+            "format": "time",
+            "title": "Leave By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "leave_by"
+        ],
+        "title": "FixedEvent",
+        "description": "예약·공연 같은 고정 일정."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Health": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "cards": {
+            "type": "integer",
+            "title": "Cards"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "cards"
+        ],
+        "title": "Health"
+      },
+      "OpenEvent": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "delay",
+              "closed"
+            ],
+            "title": "Kind"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "OpenEvent",
+        "description": "열린 사건. delay = 미응답 대안이 있는 늦어짐, closed = 닫힘 확인됨."
+      },
+      "PlanItem": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "start": {
+            "type": "string",
+            "format": "time",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "time",
+            "title": "End"
+          },
+          "travel_min": {
+            "type": "integer",
+            "title": "Travel Min",
+            "default": 0
+          },
+          "is_meal": {
+            "type": "boolean",
+            "title": "Is Meal",
+            "default": false
+          },
+          "is_outdoor": {
+            "type": "boolean",
+            "title": "Is Outdoor",
+            "default": false
+          },
+          "hours_checked": {
+            "type": "boolean",
+            "title": "Hours Checked",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "start",
+          "end"
+        ],
+        "title": "PlanItem",
+        "description": "오늘 코스의 일정 한 개."
+      },
+      "Screen": {
+        "properties": {
+          "main": {
+            "type": "string",
+            "title": "Main"
+          },
+          "subs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Subs"
+          },
+          "chip": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SuggestionChip"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "move_status": {
+            "type": "string",
+            "enum": [
+              "on_track",
+              "delayed",
+              "free"
+            ],
+            "title": "Move Status"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "main",
+          "move_status",
+          "reason"
+        ],
+        "title": "Screen",
+        "description": "compose_screen 출력."
+      },
+      "Snapshot": {
+        "properties": {
+          "now": {
+            "type": "string",
+            "format": "time",
+            "title": "Now"
+          },
+          "offline": {
+            "type": "boolean",
+            "title": "Offline",
+            "default": false
+          },
+          "safety": {
+            "type": "boolean",
+            "title": "Safety",
+            "default": false
+          },
+          "current_item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fixed_event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FixedEvent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "open_events": {
+            "items": {
+              "$ref": "#/components/schemas/OpenEvent"
+            },
+            "type": "array",
+            "title": "Open Events"
+          },
+          "walked_km": {
+            "type": "number",
+            "title": "Walked Km",
+            "default": 0.0
+          },
+          "meal_eaten": {
+            "type": "boolean",
+            "title": "Meal Eaten",
+            "default": false
+          },
+          "rain_prob_2h": {
+            "type": "number",
+            "title": "Rain Prob 2H",
+            "default": 0.0
+          },
+          "outdoor_remaining": {
+            "type": "boolean",
+            "title": "Outdoor Remaining",
+            "default": false
+          },
+          "remaining_items": {
+            "type": "integer",
+            "title": "Remaining Items",
+            "default": 0
+          },
+          "chat_pick": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Pick"
+          },
+          "moving": {
+            "type": "boolean",
+            "title": "Moving",
+            "default": false
+          },
+          "arriving": {
+            "type": "boolean",
+            "title": "Arriving",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "now"
+        ],
+        "title": "Snapshot",
+        "description": "compose_screen 입력: 지금 상황 (TASK-001 §2 engine/compose.py)."
+      },
+      "SuggestionChip": {
+        "properties": {
+          "card": {
+            "type": "string",
+            "title": "Card"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "card",
+          "label"
+        ],
+        "title": "SuggestionChip"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
