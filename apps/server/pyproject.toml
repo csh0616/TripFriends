@@ -24,9 +24,12 @@ pythonpath = ["."]
 testpaths = ["tests"]
 markers = ["live: 실제 Jev를 부르는 테스트 (기본 실행에서 제외, `-m live`로 실행)"]
 addopts = "-m 'not live'"
+# 한글 parametrize id를 \uXXXX로 바꾸지 않는다. 바뀐 id로는 mutmut이 테스트를 다시 고르지 못해
+# (pytest 종료 코드 4) 모든 돌연변이를 "잡힘"으로 잘못 센다
+disable_test_id_escaping_and_forfeit_all_rights_to_community_support = true
 
 [tool.mutmut]
 # 돌연변이 대상은 compose_screen만 (TASK-001 §3-4, 목표 80%)
-paths_to_mutate = ["engine/compose.py"]
+source_paths = ["engine/compose.py"]
 also_copy = ["catalog", "deciders", "api", "engine/__init__.py"]
-tests_dir = ["tests/test_compose.py"]
+pytest_add_cli_args_test_selection = ["tests/test_compose.py"]
