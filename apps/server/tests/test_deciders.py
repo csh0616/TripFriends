@@ -1,6 +1,7 @@
-"""판단기 테스트. 근거: TASK-001 §2 deciders, §4 AC-6~9·AC-19, ADR-011 §2. Jev는 가짜 HTTP로."""
+"""판단기 테스트. 근거: TASK-001 §2 deciders, §4 AC-6~9·AC-19, §9-1 AC-21, ADR-011 §2. Jev는 가짜 HTTP로."""
 
 import inspect
+import json
 import os
 import time
 
@@ -20,12 +21,20 @@ class FixedDecider:
         return Decision(pick="chat", source="rule", reason="고정")
 
 
-def jev_answer(choice: str, confidence: float):
+def jev_answer(choice: str, confidence: float, cost: float = 0.00004):
+    """실제 Jev 응답 모양 (TASK-001 §9-1 AC-21, POC-001 측정): 요청한 질문 id 아래에 답, 비용은 provider_metadata."""
+
     def handler(request: httpx.Request) -> httpx.Response:
+        question_ids = list(json.loads(request.content)["questions"])
         rest = (1 - confidence) / (len(OPTIONS) - 1)
         probs = {k: (confidence if k == choice else rest) for k in OPTIONS}
+        answer = {"type": "choice", "choice": choice, "confidence": confidence, "probabilities": probs}
         return httpx.Response(
-            200, json={"type": "choice", "choice": choice, "confidence": confidence, "probabilities": probs}
+            200,
+            json={
+                "answers": {qid: answer for qid in question_ids},
+                "provider_metadata": {"gateway": {"cost": cost}},
+            },
         )
 
     return handler
@@ -42,6 +51,21 @@ def test_Jev_확신_높으면_고른_키를_돌려줌():
     assert result.confidence == pytest.approx(0.9)
     assert result.latency_ms > 0
     assert result.cost_usd >= 0
+
+
+def test_AC21_실제_응답_모양에서_고른_키와_확신과_비용을_읽음():
+    result = make(jev_answer("request", 0.83, cost=0.00004)).decide("근처 라멘집 지금 열린 곳", OPTIONS)
+    assert result.source == "jev"
+    assert result.pick == "request"
+    assert result.confidence == pytest.approx(0.83)
+    assert result.cost_usd == pytest.approx(0.00004)
+
+
+def test_AC21_실제_응답_모양에서도_확신_낮으면_되묻기():
+    result = make(jev_answer("chat", 0.55, cost=0.00002)).decide("음", OPTIONS)
+    assert result.pick is None
+    assert result.source == "jev"
+    assert result.cost_usd == pytest.approx(0.00002)
 
 
 def test_AC06_확신_0_55면_고르지_않고_되묻기():

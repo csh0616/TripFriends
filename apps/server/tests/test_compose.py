@@ -1,4 +1,4 @@
-"""compose_screen 테스트. 근거: TASK-001 §4 AC-10~17, SCREEN-001 §4-1·§4-2a·§5, GRAPH-001 §6."""
+"""compose_screen 테스트. 근거: TASK-001 §4 AC-10~17, §9-1 AC-22·23, SCREEN-001 §4-1·§4-2a·§5, GRAPH-001 §6."""
 
 from datetime import datetime, time, timedelta
 
@@ -247,6 +247,7 @@ def test_AC13_남은일정없음_16시면_지금할일과_칩():
     screen = compose_screen(snap(now="16:00", current_item=None, next_item=None, remaining_items=0))
     assert screen.main == "T-01"
     assert screen.chip is not None
+    assert screen.chip.card == "T-11"  # AC-23: 18시 전 일정 끝 → 여유 시간 제안
 
 
 @pytest.mark.parametrize("free_min, has_chip", [(30, True), (29, False)])
@@ -255,12 +256,83 @@ def test_약한신호_여유_30분_경계(free_min, has_chip):
     screen = compose_screen(snap(next_item=next_item(t, starts_in=free_min + 10, travel_min=10)))
     assert screen.main == "T-01"
     assert (screen.chip is not None) == has_chip
+    if has_chip:
+        assert screen.chip.card == "T-11"  # AC-23: 여유 30분 → 여유 시간 제안
 
 
 def test_약한신호_식사시간대_30분전이면_칩():
     screen = compose_screen(snap(now="11:10"))
     assert screen.main == "T-01"
     assert screen.chip is not None
+    assert screen.chip.card == "T-10"  # AC-23: 식사 30분 전 → 근처 먹을 곳
+
+
+# ---------- §9-1 AC-22 경계값 ----------
+
+
+@pytest.mark.parametrize("now, expected", [("13:30", "T-10"), ("13:31", "T-01")])
+def test_AC22_강한신호_식사_시간대_끝_13시30분_정각은_포함(now, expected):
+    assert compose_screen(snap(**lunch_signal(now))).main == expected
+
+
+@pytest.mark.parametrize(
+    "now, chip_card",
+    [("10:59", None), ("11:00", "T-10"), ("11:29", "T-10"), ("17:30", "T-10")],
+)
+def test_AC22_약한신호_식사_30분전_경계_11시_11시29분(now, chip_card):
+    screen = compose_screen(snap(now=now))
+    assert screen.main == "T-01"
+    assert (screen.chip.card if screen.chip else None) == chip_card
+
+
+@pytest.mark.parametrize("km, chip_card", [(6.9, None), (7.0, "T-09")])
+def test_AC22_약한신호_7km_정각부터_쉴곳_칩(km, chip_card):
+    screen = compose_screen(snap(walked_km=km))
+    assert screen.main == "T-01"
+    assert (screen.chip.card if screen.chip else None) == chip_card
+
+
+def test_AC22_10km_정각_여유_있으면_메인이_쉴곳이고_칩은_없음():
+    t = at("15:00")
+    screen = compose_screen(snap(now="15:00", walked_km=10.0, next_item=next_item(t, starts_in=40, travel_min=0)))
+    assert screen.main == "T-09"
+    assert screen.chip is None
+
+
+def test_AC22_10km_정각_다음일정까지_30분_안되면_메인은_그대로_쉴곳_칩():
+    t = at("15:00")
+    screen = compose_screen(snap(now="15:00", walked_km=10.0, next_item=next_item(t, starts_in=29, travel_min=0)))
+    assert screen.main == "T-01"
+    assert screen.chip is not None
+    assert screen.chip.card == "T-09"
+
+
+@pytest.mark.parametrize("now, expected", [("17:59", "T-01"), ("18:00", "T-08")])
+def test_AC22_남은일정없음_18시_정각부터_숙소가는법(now, expected):
+    # 이번 끼니를 먹은 것으로 두어 식사 강한 신호와 섞이지 않게 한다
+    screen = compose_screen(snap(now=now, current_item=None, next_item=None, remaining_items=0, meal_eaten=True))
+    assert screen.main == expected
+
+
+# ---------- §9-1 AC-23 약한 신호가 여러 개면 표 순서로 첫 번째 ----------
+# 순서: 7~10km → T-09, 식사 30분 전 → T-10, 여유 30분 → T-11, 18시 전 일정 끝 → T-11
+
+
+@pytest.mark.parametrize(
+    "kw, chip_card",
+    [
+        (dict(now="11:10", walked_km=8.0), "T-09"),
+        (dict(now="11:10", next_item=next_item(at("11:10"), starts_in=50, travel_min=10)), "T-10"),
+        (dict(now="16:00", walked_km=8.0, current_item=None, next_item=None, remaining_items=0), "T-09"),
+        (dict(now="17:40", current_item=None, next_item=None, remaining_items=0), "T-10"),
+    ],
+    ids=["걷기_식사전", "식사전_여유", "걷기_일정끝", "식사전_일정끝"],
+)
+def test_AC23_약한신호_여러개면_표_순서로_첫번째_칩(kw, chip_card):
+    screen = compose_screen(snap(**kw))
+    assert screen.main == "T-01"
+    assert screen.chip is not None
+    assert screen.chip.card == chip_card
 
 
 # ---------- 속성 (Hypothesis) ----------
