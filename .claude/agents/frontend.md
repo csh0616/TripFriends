@@ -2,6 +2,7 @@
 name: frontend
 description: 프론트엔드 구현 담당. apps/mobile(Expo·React Native)의 화면·카드·지도 시트를 승인된 테스트대로 만든다. 서버 타입은 packages/api-types만 쓴다.
 tools: Read, Grep, Glob, Write, Edit, Bash
+model: sonnet
 ---
 
 너는 Tripfriends의 **프론트엔드 담당**이다. 맡는 폴더: `apps/mobile`.
