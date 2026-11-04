@@ -13,21 +13,21 @@
 | 팀 에이전트 | Claude Code (팀별 세션) | 맡은 폴더의 실제 개발, 테스트, PR |
 | 학습지원 | Claude (이 프로젝트의 별도 대화, LEARN-001·002) | 결정권자의 선생님. 배울 포인트를 가르치고 이해도를 확인한다 |
 
-## 2. 팀 구성 — Claude Code 에이전트 (11-03 개정, TASK-002부터)
+## 2. 팀 구성 — 역할별 에이전트 4개 (11-04 확정, TASK-002부터)
 저장소 `.claude/agents/`에 역할 파일을 두고, 메인 대화가 `/run-task TASK-00N`으로 나눠 맡긴다. 승현은 **대화 하나**에서 승인만 한다.
 
-| 에이전트 | 맡는 곳 | 하는 일 |
+| 에이전트 | 역할 | 맡는 곳 |
 |---|---|---|
-| `test-writer` | 전체 (테스트 파일만) | 문서만 보고 테스트 먼저 + 한국어 요약표. 구현 안 함 |
-| `server-engine` | `apps/server/engine`, `deciders`, `catalog` | 규칙·점수·방향 해석·코스 DP·`compose_screen`·감지기. LLM 없는 순수 함수 |
-| `server-graphs` | `apps/server/graphs`, `api` | LangGraph 그래프(G1~G3), 엔드포인트, 타입 재생성 |
-| `mobile` | `apps/mobile` | 화면·카드, Jest 테스트 |
-| `reviewer` | 전체 (읽기만) | PR 전 점검: TDD 순서, 문서 일치, 비밀값, 범위, 점수 신뢰도 |
+| `test-writer` | 문서만 보고 테스트 먼저 + 한국어 요약표. 구현 안 함 | 서버·앱 테스트 파일 |
+| `backend` | 서버 구현. **API 응답 모양의 주인** | `apps/server` 전체, `packages/api-types`(생성) |
+| `frontend` | 앱 구현 | `apps/mobile` |
+| `reviewer` | PR 전 점검(읽기만): TDD 순서, 문서 일치, **앱-서버 동기화**, 비밀값, 범위, 점수 신뢰도 | 전체 |
 
-- 에이전트는 **자기 폴더만** 고친다. 다른 폴더가 필요하면 필요한 변경을 적어 메인에게 돌려준다
-- `docs/`는 PM만 고친다
-- 장소(`places`)·감지(G2)·관측 대시보드(`apps/web`)는 해당 TASK가 생길 때 에이전트를 추가한다
-- TASK-001은 이 구조 전에 세션을 손으로 나눠 진행했다 (§7 기록)
+- **순차 vs 병렬** (결정권자 11-04): TASK의 팀 나누기 표에 의존 여부를 적는다. 의존이 있으면 순서대로(backend → 타입 생성 → frontend), 없고 폴더가 겹치지 않을 때만 동시에. 동기화는 `reviewer`가 확인한다
+- **앱 TDD 범위**: 로직·가드레일만 테스트 먼저. 보이는 모습은 승현이 폰에서 확인하고 스크린샷을 PR에
+- 영역별 세부 규칙은 폴더별 `CLAUDE.md`(`apps/server`, `apps/mobile`)가 맡는다
+- `docs/` 내용은 PM만 고친다. 장소 수집·디자인 시스템처럼 성격이 다른 일이 생기면 역할을 추가한다 (예: `designer`)
+- 11-03 한때 영역별 5개(`server-engine`·`server-graphs`·`mobile`)였다가 **역할별로 단순화** (영역 규칙이 폴더 `CLAUDE.md`와 중복, 앱·서버만 성격이 크게 달라서)
 
 ## 3. 계약 (여러 팀이 같이 쓰는 것) — PM 관리
 | 계약 | 위치 | 쓰는 팀 |
@@ -105,7 +105,7 @@ PM: 작업 지시서 작성 (범위, 완료 기준 Given/When/Then, 건드릴 �
 PM: TASK 작성(팀 나누기 표 포함) → 저장소 docs/tasks/
 승현: /run-task TASK-00N
   메인 → test-writer → 요약표 → [승현 + PM 검토 → 승인]
-  메인 → server-engine / server-graphs / mobile (겹치지 않으면 동시)
+  메인 → backend / frontend (의존 있으면 순서대로, 없으면 동시)
   메인 → reviewer → 고칠 것 있으면 다시
 승현 → PM: "끝났어" → PM이 저장소 확인·문서 갱신·포트폴리오 기록 → PR → 머지
 ```
