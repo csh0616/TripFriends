@@ -3,9 +3,10 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-03 |
-| 상태 | **v2 (11-04)** — 1차 test-writer 질문 20개 답변 반영. **§7이 §2~§4보다 우선** |
+| 상태 | **v3 (11-04)** — 질문 Q1~Q40 답변 반영. **§8 > §7 > §2~§4 순서로 우선** |
 | 관련 | SRS-001 FR-02a~c·03·07·07a, NFR-04 · SCREEN-001 §2(머무는 시간) · GRAPH-001 §2 · ADR-011 B·C · POC-001 §5-1·§7-1 · DATA-001 |
 | 브랜치 | `feat/task-002-planning-engine` |
+| 디자인 | **TASK-004 시작 전에 디자인 시스템(토큰·기본 부품)을 결정권자와 함께 만든다** (11-04 결정, PM이 먼저 알림) |
 | 다음 | TASK-003 G1 계획 대화 그래프 + `/planning` API (`backend`) · TASK-004 계획 화면 (`frontend`) — **둘은 이 작업의 공개 함수로 동시에 진행 가능** |
 
 ## 0. 배경
@@ -162,3 +163,31 @@
 ### 7-5. 다시 시작하는 방법
 - 1차 테스트 커밋이 있으면 브랜치째 버리고, `main`에서 새 브랜치로 **새 test-writer**에게 맡긴다
 - test-writer는 `docs/`와 저장소 코드만 본다. **저장소 밖 검색, `Claude outputs/` 읽기 금지** (CLAUDE.md)
+
+
+## 8. 추가 질문 답변 (v3, 2026-11-04) — 이 절이 가장 우선
+test-writer 2차가 테스트 403개를 쓰고 남긴 질문 Q21~Q40과 B6에 대한 결정
+
+| Q | 결정 |
+|---|---|
+| B6 | 붐빔·가격 항은 **절댓값**: `−0.5 × |후보 값 − 좋아한 곳 평균|`. 측정 스크립트가 절댓값이었고 S1~S6를 모두 재현한다 (POC-001 §7-1 문구 보완) |
+| Q21 | `places`는 `dict[id, Place]` |
+| Q22 | `pick_directions`의 `batch`, `remaining`은 `list[Place]`. `next_batch`가 돌려주는 `Batch`는 id만 (호출하는 쪽이 바꿔 넘김) |
+| Q23 | `pick_directions`에 `places: dict[id, Place]` 인자 추가 (좋아한 곳 태그를 찾기 위해). 최종 시그니처: `pick_directions(batch, remaining, reactions, places, last_direction, anchor, at)` |
+| Q24 | 좋아한 곳이 없으면 `different`에 맞는 곳은 **없음** (비교할 취향이 없으므로) |
+| Q25 | 직전 방향을 **먼저 빼고** 규칙 1 → 2 → 1곳 이상 순서로 채운다 (최대 3개가 되게) |
+| Q31 | 남는 시간은 **5분 단위**로, 항목을 방문 순서대로 돌아가며 5분씩 목표(보통 또는 최대)까지 늘린다. 남는 5분 미만은 그대로 둔다 |
+| Q32 | 사용자가 시간을 바꾼 곳은 **꼭 갈 곳처럼 유지**한다 (사용자의 뜻이 우선, AC-12와 같음) |
+| Q33 | 꼭 갈 곳끼리 시간이 모자라면 `Infeasible(reason="must_visit_overflow", blocking=[꼭 갈 곳 전부], suggest_drop=[빼면 나머지가 들어가는 꼭 갈 곳들])` — 꼭 갈 곳도 제안에 들어간다 |
+| Q34 | `closed_at_time`의 "하루 범위"는 **이동 제외** (`start`~`end`와 영업 구간만 본다). 이동 때문에 못 들어가면 `no_time`. 최소는 들어가지만 사용자 값이 안 들어가는 꼭 갈 곳은 `user_stay_conflict` |
+| Q36 | AC-14는 **꼭 갈 곳·사용자 값이 없는 입력만** 비교한다. F46은 지운다 |
+| Q26 | 거리는 하버사인 공식, 지구 반지름 6371km |
+| Q27 | 시각은 `"HH:MM"` 문자열(내부 계산은 분). `date`는 날짜 타입. `DayPlan.end`도 `"29:59"`까지 허용 |
+| Q28 | 장소 없는 고정 일정 항목: `place_id=None`, `hours_status=None`, `stay_source=None`. 고정 일정 앞뒤에는 **쉬는 시간을 넣지 않고 이동 시간만** |
+| Q29 | `fixed_conflict` 유지. 판정 순서: ① 영업 구간에 최소가 안 들어가면 `closed_at_time` ② 들어가는 시간대가 모두 고정 일정과 겹치면 `fixed_conflict` ③ 그 외 `no_time` |
+| Q30 | 고정 일정끼리 겹치거나 하루 범위 밖이면 **입력 오류(`ValueError`)**. 시간 안에 갈 수 없으면 `Infeasible(reason="fixed_unreachable")` |
+| Q35 | `total_travel_min`은 **숙소 복귀 포함**. `seq`는 1부터. 두 안이 같으면 `relaxed`만 남긴다 |
+| Q37 | 넣을 곳이 0곳이면 **빈 코스 1안**(`items=[]`, 숙소 복귀만). 빈 묶음은 `pick_directions`가 빈 목록 |
+| Q38 | 공개 함수는 `engine/planning.py`. `demo_city.json` 맨 바깥은 `{"places": [...]}` |
+| Q39 | 남은 후보가 5개 미만이면: `direction`은 받은 값 그대로, `direction_relaxed`는 맞지 않는 곳이 하나라도 섞이면 True. 채운 경우도 `direction`은 받은 값. `k`는 5 또는 6만 받는다 (아니면 `ValueError`) |
+| Q40 | SCREEN-001 §5에 추가: 메인 T-03 → 보조 T-02, 메인 X-01 → 보조·칩 없음, 오프라인일 때 칩 없음 |
