@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-03 |
-| 상태 | **대기** — 결정권자 승인 후 `/run-task TASK-002` |
+| 상태 | **v2 (11-04)** — 1차 test-writer 질문 20개 답변 반영. **§7이 §2~§4보다 우선** |
 | 관련 | SRS-001 FR-02a~c·03·07·07a, NFR-04 · SCREEN-001 §2(머무는 시간) · GRAPH-001 §2 · ADR-011 B·C · POC-001 §5-1·§7-1 · DATA-001 |
 | 브랜치 | `feat/task-002-planning-engine` |
 | 다음 | TASK-003 G1 계획 대화 그래프 + `/planning` API (`backend`) · TASK-004 계획 화면 (`frontend`) — **둘은 이 작업의 공개 함수로 동시에 진행 가능** |
@@ -85,7 +85,7 @@
 |---|---|---|---|
 | AC-1 | 전체 | `uv run pytest` | 모두 통과, TASK-001 테스트 포함 |
 | AC-2 | A | 돌연변이 재측정 | `compose` 생존 돌연변이가 "원래와 결과가 같은 것"만 남음 |
-| AC-3 | B, POC-001 §7 측정 데이터(H1~H10, P1~P12, S1~S6)를 테스트 fixture `poc_c.json`으로 | `score_candidates` | 상위 3곳이 측정 때 규칙 결과와 같음: S1 P7·P11·P1 / S2 P7·P1·P11 / S3 P6·P10·P4 / S4 P11·P9·P2 / S5 P11·P8·P1 / S6 P1·P3·P7 (순서 포함, 측정 재현) |
+| AC-3 | B, `docs/poc/poc_c.json`(POC-001 §7 측정 데이터 H1~H10, P1~P12, S1~S6) | `score_candidates` | 상위 3곳이 측정 때 규칙 결과와 같음: S1 P7·P11·P1 / S2 P7·P1·P11 / S3 P6·P10·P4 / S4 P11·P9·P2 / S5 P11·P8·P1 / S6 P1·P3·P7 (순서 포함, 측정 재현) |
 | AC-4 | C, POC-001 §5-1 키워드 | `parse_direction` | 표의 키워드마다 해당 방향, 여러 개면 위 순서, 없으면 None |
 | AC-5 | D | 이미 보여 준 곳 | 다시 나오지 않음, 크기 ≤ k, 동점 id 순 |
 | AC-6 | D, 방향 결과 0개 | `next_batch` | `direction_relaxed=True`, 묶음은 채워짐 |
@@ -118,3 +118,47 @@
 - 같은 입력에 대해 DP vs 탐욕법을 속성 테스트로 비교한 숫자 (넣은 장소 수, 이동 시간 합)
 - 측정 때 쓴 규칙(POC-001)을 그대로 코드로 옮겨 "측정한 것 = 출시한 것"을 테스트로 보장 (AC-3·4)
 - 예상 면접 질문: "여행 코스를 왜 LLM에 맡기지 않았나요?" → "영업시간·고정 일정을 어기면 안 되는 제약 문제라서. DP로 풀고 속성 테스트로 위반 0건을 확인했다. LLM은 설명 문장에만 쓴다"
+
+
+## 7. 질문 답변과 확정 (v2, 2026-11-04) — 이 절이 위보다 우선
+> 1차 test-writer가 질문 20개를 냈다. **PM이 TASK를 덜 구체적으로 쓴 탓**이다. 아래로 확정한다. 1차 test-writer는 저장소 밖 파일과 `Claude outputs/`를 읽어 "문서만 보고 쓴다"를 벗어났으므로, **새 test-writer로 다시 시작**한다
+
+### 7-1. 자료
+| Q | 결정 |
+|---|---|
+| Q1 | `docs/POC-001_Jev-Composition-PoC-Plan.md`와 **`docs/poc/poc_c.json`**(측정 데이터 + 측정된 규칙 상위 3곳)을 추가했다. 이 둘만 근거로 쓴다. 스크립트·저장소 밖 파일은 보지 않는다 |
+| Q2 | 동점은 **id의 숫자 부분 오름차순** (P2 < P10). 가상 도시 id는 `D01`~`D30` (두 자리, 글자 순 = 숫자 순) |
+| Q3 | 종류 대응: 카페→`cafe`, 음식→`food`, 쇼핑→`shop`, 산책→`walk`, 체험→`experience`, 전망→`landmark` (`poc_c.json`의 `category_map`) |
+| Q4 | 시그니처 `score_candidates(reactions, places: dict[id, Place], candidate_ids) -> dict[id, float]`. `places`에는 기록용(H)과 후보(P)가 모두 들어 있고, 점수는 `candidate_ids`만. 종류 규칙: 좋아한 곳 종류에 있으면 **+1(넘김에도 있어도)**, 좋아한 곳 종류에 없고 넘긴 곳 종류에만 있으면 −0.5 |
+| Q9 | 기본 머무는 시간(최소·보통·최대, 가설): `shop` 30·60·120, `experience` 60·90·150, `night` 60·90·150. 나머지: `cafe` 30·60·90, `food` 45·60·90, `walk` 30·60·120, `museum` 60·90·150, `landmark` 60·120·180 (SCREEN-001 표에도 반영) |
+
+### 7-2. 후보 고르기 (B~E)
+| Q | 결정 |
+|---|---|
+| Q5 | 시그니처 확정 (TASK-003·004도 이것을 쓴다):<br>`next_batch(places, reactions, direction, shown, anchor, at, k=6) -> Batch`<br>`pick_directions(batch, remaining, reactions, last_direction, anchor, at) -> list[Direction]`<br>`anchor` = 거리 기준점 `(lat, lng)` (지금 위치, 없으면 숙소). `at` = 계획하는 날짜·시각 (night의 요일·19:00 판정). night: 그 요일에 **닫는 시각이 19:00보다 늦은** 영업 구간이 있으면 |
+| Q6 | `pool` = 아직 안 보여 준 곳. `pool`이 5개 미만이면 `pool` 전부 + `exhausted=True`. 아니면 방향으로 거른 결과가 5개 미만일 때 **나머지를 거르지 않은 `pool`에서 점수순으로 채워** `min(k, len(pool))`개로 만들고 `direction_relaxed=True` (0개일 때도 같은 규칙) |
+| Q7 | 규칙 1 다음 3개 미만이면 규칙 2(그 방향 남은 곳 3곳 이상). 그래도 2개 미만이면 같은 순서로 **1곳 이상**인 방향으로 채운다. 그래도 모자라면 있는 만큼 (0~1개 가능, 앱은 [직접 말할래]를 항상 붙인다) |
+| Q8 | **TASK가 우선** (GRAPH-001의 "가장 차이 나는 속성"은 이 규칙으로 구체화한 것, PM이 GRAPH-001 문구 정리). `Direction = Literal["quieter","closer","cheaper","different","photo","indoor","food","night"]`. `Batch`: `place_ids: list[id]`, `direction: Direction \| None`, `exhausted: bool`, `direction_relaxed: bool` |
+
+### 7-3. 코스 계산 (F)
+| Q | 결정 |
+|---|---|
+| Q10 | 안마다 **쉬는 시간을 넣은 채로** DP 고르기를 따로 한다 (최소 머무는 시간 기준). relaxed = 쉬는 15분으로 고르기 → 남는 시간으로 보통까지 → 그다음 최대 쪽. packed = 쉬는 5분으로 고르기 → 남는 시간으로 보통까지만. 그래서 relaxed는 더 적게 넣을 수 있다 (정상) |
+| Q11 | 두 안이 같으면 **1안 허용**. SRS FR-03 "2~3안"은 R1에서 "1~2안"으로 변경 (PM이 SRS 변경 이력에 기록) |
+| Q12 | 닫는 정각에 끝나는 것 **허용** (`끝 ≤ 닫는 시각`). 일찍 도착하면 **기다릴 수 있다** (항목 시작 = 여는 시각, 기다린 시간은 `wait_min` 필드). 자정 넘어 닫는 곳은 `"26:00"`처럼 24 이상으로 표기(최대 `"29:59"`). `closed_at_time` = 그날 영업 구간 어디에도 최소 머무는 시간이 하루 범위 안에 들어갈 수 없음(그날 휴무 포함). `no_time` = 그 외 이유로 못 넣음 |
+| Q13 | `hours=None`이면 무조건 `unknown`. `hours`가 있으면 데이터의 `hours_status`(`confirmed`/`unverified`)를 쓰고, 값이 `unknown`이면 `unverified`로 본다. 항목에는 이 판정값을 복사 |
+| Q14 | 새 모델 **`PlanFixed`** (기존 `compose`의 `FixedEvent`와 별개): `id`, `title`, `start`, `end`, `place_id: id \| None`, `lat`, `lng` (장소 없으면 좌표도 없음). 장소 없는 고정 일정은 **직전 위치에서 그대로**(이동 0분)로 본다. 하루 시작은 숙소에서 출발, 첫 장소까지 이동 시간 포함 |
+| Q15 | 꼭 갈 곳이 그날 영업시간 밖이면 `Infeasible(reason="must_visit_closed", blocking=[그 곳], suggest_drop=[])`. `Infeasible`에 `blocking: list[id]` 추가 |
+| Q16 | 사용자 값은 범위 밖이어도 **15~300분이면 그대로 지키고**, 그 밖이면 15/300으로 자른다. 두 안 모두 같은 값. 사용자 값 때문에 꼭 갈 곳을 못 넣으면 `Infeasible(reason="user_stay_conflict", blocking=[바꾼 곳], suggest_drop=[...담은 곳])` |
+| Q17 | `compose_greedy(plan, picks, places, buffer_min) -> list[CourseItem]` (한 줄). 숙소에서 시작해 **들어갈 수 있는 곳 중 가장 가까운 곳**을 차례로, 최소 머무는 시간 기준. AC-14는 **packed와 같은 조건(쉬는 5분, 최소 머무는 시간)**으로 비교하고, DP가 `Infeasible`인 입력은 비교에서 뺀다 |
+| Q18 | 12개 = 꼭 갈 곳 + 담은 곳의 **합집합** (고정 일정 제외). 꼭 갈 곳은 담은 곳에 없어도 포함. 1초 기준은 **3번 실행의 중앙값**, `@pytest.mark.slow`로 표시 |
+
+### 7-4. TASK-001 보강과 데이터 (A, fixture)
+| Q | 결정 |
+|---|---|
+| Q19 | `compose_screen`으로 나올 수 없는 짝(T-14 등)은 **시험 대상에서 뺀다**. 비공개 함수는 직접 시험하지 않는다. 나올 수 없는 돌연변이는 "원래와 결과가 같은 것"으로 분류 |
+| Q20 | 30곳 = `cafe` 4 · `food` 4 · `walk` 4 · `museum` 4 · `shop` 4 · `experience` 4 · `landmark` 3 · `night` 3. 중심 `(35.000, 135.000)`(가상), 모두 중심에서 3km 이내. 이름 규칙 `"<한글 설명> <대문자 한 글자>"`(예: "골목 카페 A")로, AC-17은 이 패턴으로 판정. 영업시간 모름 3(`hours=None`), 미확인 5, **나머지 22곳 확인됨** |
+
+### 7-5. 다시 시작하는 방법
+- 1차 테스트 커밋이 있으면 브랜치째 버리고, `main`에서 새 브랜치로 **새 test-writer**에게 맡긴다
+- test-writer는 `docs/`와 저장소 코드만 본다. **저장소 밖 검색, `Claude outputs/` 읽기 금지** (CLAUDE.md)
