@@ -6,7 +6,7 @@
 | 상태 | **대기** — 결정권자 승인 후 `/run-task TASK-002` |
 | 관련 | SRS-001 FR-02a~c·03·07·07a, NFR-04 · SCREEN-001 §2(머무는 시간) · GRAPH-001 §2 · ADR-011 B·C · POC-001 §5-1·§7-1 · DATA-001 |
 | 브랜치 | `feat/task-002-planning-engine` |
-| 다음 | TASK-003 G1 계획 대화 그래프 + `/planning` API (`server-graphs`) · TASK-004 계획 화면 (`mobile`) — **둘은 이 작업의 공개 함수로 동시에 진행 가능** |
+| 다음 | TASK-003 G1 계획 대화 그래프 + `/planning` API (`backend`) · TASK-004 계획 화면 (`frontend`) — **둘은 이 작업의 공개 함수로 동시에 진행 가능** |
 
 ## 0. 배경
 - G1 계획 대화(GRAPH-001 §2)의 **엔진 쪽 부품**을 만든다. 그래프는 TASK-003에서 이 함수들을 부른다
@@ -17,7 +17,7 @@
 | 순서 | 에이전트 | 할 일 |
 |---|---|---|
 | 1 | `test-writer` | §3 A~F의 테스트 + 한국어 요약표 → **승인 대기** |
-| 2 | `server-engine` | §3 구현, 돌연변이 측정 |
+| 2 | `backend` | §3 구현, 돌연변이 측정 (의존: 없음 — 서버만) |
 | 3 | `reviewer` | PR 전 점검 |
 
 ## 2. 데이터 모양 (pydantic, `apps/server/engine/models.py`)
