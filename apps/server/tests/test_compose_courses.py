@@ -12,9 +12,9 @@ from planning_helpers import (
     as_places,
     day_plan,
     distance_km,
-    expected_travel,
     fixed_event,
     hhmm,
+    travel_candidates,
     north_of,
     opening,
     place,
@@ -39,14 +39,14 @@ DEFAULT_STAY = {
 
 def options(result) -> list[CourseOption]:
     assert isinstance(result, list), f"코스 목록이어야 하는데 {result!r}"
-    # 넣을 곳이 0곳이어도 빈 코스 1안 이상을 돌려준다고 임시 가정 (질문 Q37)
+    # 넣을 곳이 0곳이어도 빈 코스 1안 (§8 Q37)
     assert 1 <= len(result) <= 2
     assert len({o.label for o in result}) == len(result)
     return result
 
 
 def option_for(result, label: str) -> CourseOption:
-    """그 이름의 안. 두 안이 같아 하나만 왔으면 그 하나 (§7 Q11)."""
+    """그 이름의 안. 두 안이 같아 relaxed만 왔으면 그 하나 (§7 Q11, §8 Q35)."""
     all_options = options(result)
     for option in all_options:
         if option.label == label:
@@ -82,7 +82,7 @@ def covers(hours: list[Opening], weekday: int, start: int, end: int) -> bool:
 
 
 def assert_course_valid(plan: DayPlan, picks: list[str], places: dict[str, Place], option: CourseOption):
-    """NFR-04와 §3 F·§7의 불변식. 이동 시간은 거리 공식이 문서에 없어 ±1분 허용 (질문 Q26)."""
+    """NFR-04와 §3 F·§7·§8의 불변식."""
     weekday = plan.date.weekday()
     buffer_min = BUFFER[option.label]
     user_stays = {pid: min(300, max(15, v)) for pid, v in plan.stay_overrides.items()}
@@ -94,18 +94,19 @@ def assert_course_valid(plan: DayPlan, picks: list[str], places: dict[str, Place
         assert start < end
         assert item.wait_min >= 0
 
-        if previous is not None:
-            assert item.seq == previous.seq + 1
+        assert item.seq == index + 1  # §8 Q35
         if item.is_fixed:
             event = next(f for f in plan.fixed if (f.start, f.end) == (item.start, item.end))
             target = (event.lat, event.lng) if event.place_id else position
             assert item.place_id == event.place_id
+            if event.place_id is None:  # §8 Q28
+                assert item.hours_status is None
+                assert item.stay_source is None
         else:
             p = places[item.place_id]
             target = (p.lat, p.lng)
 
-        travel = expected_travel(distance_km(position, target)) if target != position else 0
-        assert abs(item.travel_min - travel) <= 1
+        assert item.travel_min in travel_candidates(distance_km(position, target))
         ready = plan_start_or_previous_end(plan, previous) + item.travel_min
         if previous is not None and not previous.is_fixed and not item.is_fixed:
             ready += buffer_min
@@ -122,6 +123,12 @@ def assert_course_valid(plan: DayPlan, picks: list[str], places: dict[str, Place
             else:
                 assert item.stay_source == "auto"
                 assert low <= item.stay_min <= (typical if option.label == "packed" else high)
+                # §8 Q31: 5분씩 늘리고 목표에서 멈춘다
+                assert (
+                    (item.stay_min - low) % 5 == 0
+                    or (item.stay_min - typical) % 5 == 0
+                    or item.stay_min == high
+                )
             if p.hours is None:
                 assert item.hours_status == "unknown"
             else:
@@ -134,8 +141,7 @@ def assert_course_valid(plan: DayPlan, picks: list[str], places: dict[str, Place
     assert sorted((i.start, i.end) for i in fixed_items(option)) == sorted((f.start, f.end) for f in plan.fixed)
 
     # 집까지
-    home = expected_travel(distance_km(position, plan.lodging)) if position != plan.lodging else 0
-    assert abs(option.go_home_min - home) <= 1
+    assert option.go_home_min in travel_candidates(distance_km(position, plan.lodging))
     if option.items:
         assert to_min(option.items[-1].end) + option.go_home_min <= to_min(plan.end)
 
@@ -148,13 +154,13 @@ def assert_course_valid(plan: DayPlan, picks: list[str], places: dict[str, Place
     assert set(visited) | set(dropped) == wanted
     assert not set(visited) & set(dropped)
     assert set(plan.must_visit) <= set(visited)
+    assert set(plan.stay_overrides) & wanted <= set(visited)  # §8 Q32
     for d in option.dropped:
         if places[d.place_id].hours is None:
             assert d.reason != "closed_at_time"
 
-    # 이동 합: 집 가는 시간을 넣는지는 문서에 없다 (질문 Q35)
-    legs = sum(i.travel_min for i in option.items)
-    assert legs <= option.total_travel_min <= legs + option.go_home_min
+    # §8 Q35: 숙소 복귀 포함
+    assert option.total_travel_min == sum(i.travel_min for i in option.items) + option.go_home_min
 
 
 def plan_start_or_previous_end(plan: DayPlan, previous) -> int:
@@ -188,7 +194,33 @@ def test_Q11_두_안이_같으면_1안():
     # 머물 시간이 딱 최소만큼뿐이라 쉬는 시간·늘리기의 차이가 없음
     places = as_places(place("D01", "cafe"))
     plan = day_plan(start="09:00", end="09:30")
-    assert len(options(compose_courses(plan, ["D01"], places))) == 1
+    result = options(compose_courses(plan, ["D01"], places))
+    assert [o.label for o in result] == ["relaxed"]  # §8 Q35
+
+
+def test_Q37_넣을_곳이_없으면_빈_코스_1안():
+    result = options(compose_courses(day_plan(), [], {}))
+    assert len(result) == 1
+    assert result[0].items == []
+    assert result[0].dropped == []
+    assert result[0].go_home_min == 0
+    assert result[0].total_travel_min == 0
+
+
+def test_Q37_모두_못_들어가도_빈_코스_1안에_이유():
+    places = as_places(place("D01", km=0.88))
+    result = options(compose_courses(day_plan(start="09:00", end="09:53"), ["D01"], places))
+    assert len(result) == 1
+    assert result[0].items == []
+    assert dropped_reason(result[0], "D01") == "no_time"
+
+
+def test_Q35_seq는_1부터_total은_숙소복귀_포함():
+    places = as_places(place("D01", km=0.25), place("D02", km=0.25))
+    for option in options(compose_courses(day_plan(), ["D01", "D02"], places)):
+        assert [i.seq for i in option.items] == [1, 2]
+        assert option.go_home_min == 4
+        assert option.total_travel_min == 8  # 오는 길 4 + 같은 자리 0 + 집 4
 
 
 # ---------- §3 F 이동 시간 (1.2km 기준 양쪽) ----------
@@ -196,8 +228,28 @@ def test_Q11_두_안이_같으면_1안():
 
 @pytest.mark.parametrize(
     "km, minutes",
-    [(0.0, 0), (0.25, 4), (0.88, 12), (1.19, 16), (1.21, 14), (2.1, 17), (2.9, 19)],
-    ids=["같은자리", "도보_0점25", "도보_0점88", "도보_기준직전", "대중교통_기준직후", "대중교통_2점1", "대중교통_2점9"],
+    [
+        (0.0, 0),
+        (0.25, 4),
+        (0.88, 12),
+        (1.19, 16),
+        (1.2 - 1e-6, 16),
+        (1.2 + 1e-6, 14),
+        (1.21, 14),
+        (2.1, 17),
+        (2.9, 19),
+    ],
+    ids=[
+        "같은자리",
+        "도보_0점25",
+        "도보_0점88",
+        "도보_1점19",
+        "도보_1점2_바로_안쪽",
+        "대중교통_1점2_바로_바깥",
+        "대중교통_1점21",
+        "대중교통_2점1",
+        "대중교통_2점9",
+    ],
 )
 def test_이동시간_1점2km까지_도보_넘으면_대중교통(km, minutes):
     places = as_places(place("D01", km=km))
@@ -269,12 +321,41 @@ def test_Q10_알찬안은_시간이_남아도_보통까지만():
     assert [i.stay_min for i in option.items] == [60, 60]
 
 
-@pytest.mark.skip(reason="질문 대기 Q31: '고르게'의 정의와 분 단위 반올림")
-def test_질문대기_남는_시간은_같은_범위의_두_곳에_같게_나눔():
+@pytest.mark.parametrize(
+    "label, minutes, stays",
+    [
+        ("relaxed", 115, [50, 50]),
+        ("relaxed", 118, [50, 50]),
+        ("relaxed", 120, [55, 50]),
+        ("relaxed", 140, [65, 60]),
+        ("packed", 69, [30, 30]),
+        ("packed", 70, [35, 30]),
+    ],
+    ids=["여유_40분_고르게", "여유_43분_3분은_남김", "여유_45분_앞곳부터", "여유_65분_보통_넘어", "알찬_4분은_안늘림", "알찬_5분이면_앞곳"],
+)
+def test_Q31_남는_시간은_5분씩_방문순서대로_나눔(label, minutes, stays):
+    # 같은 자리 카페 2곳 (30·60·90). 남는 시간 = 하루 − 쉬는 시간 − 최소 60
     places = as_places(place("D01"), place("D02"))
-    plan = day_plan(start="09:00", end="10:55")
+    plan = day_plan(start="09:00", end=hhmm(to_min("09:00") + minutes))
+    option = option_for(compose_courses(plan, ["D01", "D02"], places), label)
+    assert visits(option) == ["D01", "D02"]
+    assert [i.stay_min for i in option.items] == stays
+
+
+def test_Q31_목표에_닿은_곳은_멈추고_나머지만_늘림():
+    # 남는 40분: D01 +5(보통 35), D02 +30(보통 60), 5분은 남김
+    places = as_places(place("D01", stay=StayRange(min=30, typical=35, max=40)), place("D02"))
+    plan = day_plan(start="09:00", end=hhmm(to_min("09:00") + 105))
+    option = option_for(compose_courses(plan, ["D01", "D02"], places), "packed")
+    assert [i.stay_min for i in option.items] == [35, 60]
+
+
+def test_Q31_사용자가_바꾼_곳은_늘리지_않음():
+    # 45 + 쉬는 15 + 30 = 90, 남는 10분은 D02에만
+    places = as_places(place("D01"), place("D02"))
+    plan = day_plan(start="09:00", end=hhmm(to_min("09:00") + 100), overrides={"D01": 45})
     option = option_for(compose_courses(plan, ["D01", "D02"], places), "relaxed")
-    assert [i.stay_min for i in option.items] == [50, 50]
+    assert [i.stay_min for i in option.items] == [45, 40]
 
 
 # ---------- §3 F, §7 Q10: 쉬는 시간, 안마다 따로 고르기 ----------
@@ -422,13 +503,47 @@ def test_Q12_자정_넘겨_닫는_표기를_읽음(close_at):
         assert visits(option) == ["D01"]
 
 
-@pytest.mark.skip(reason="질문 대기 Q34: closed_at_time의 '하루 범위'에 이동 시간이 들어가는지")
-def test_질문대기_이동_때문에만_못_들어가면_no_time():
+def test_Q34_이동_때문에만_못_들어가면_no_time():
     # 영업 구간 자체는 하루 안이고 이동 16분 때문에 최소 30분이 안 들어간다
     places = as_places(place("D01"), place("D02", km=1.19, hours=opening("10:00", "10:30")))
     plan = day_plan(start="10:00", end="21:00")
     for option in options(compose_courses(plan, ["D01", "D02"], places)):
         assert dropped_reason(option, "D02") == "no_time"
+
+
+@pytest.mark.parametrize(
+    "end, reason",
+    [("20:30", "no_time"), ("20:29", "closed_at_time")],
+    ids=["숙소복귀_때문이면_no_time", "하루끝까지_최소가_안들어가면_closed"],
+)
+def test_Q34_하루_범위는_이동_제외_start에서_end(end, reason):
+    # 20:00~20:30이면 영업·하루 범위 안에 30분이 들어가지만 숙소까지 16분을 못 뺀다
+    places = as_places(place("D01"), place("D02", km=1.19, hours=opening("20:00", "22:00")))
+    plan = day_plan(start="19:00", end=end)
+    for option in options(compose_courses(plan, ["D01", "D02"], places)):
+        assert dropped_reason(option, "D02") == reason
+
+
+@pytest.mark.parametrize("value, feasible", [(30, True), (31, False)], ids=["최소와_같음", "1분_넘침"])
+def test_Q34_최소는_들어가는데_사용자값이_안들어가는_꼭갈곳은_user_stay_conflict(value, feasible):
+    places = as_places(place("D01", hours=opening("10:00", "10:30")))
+    plan = day_plan(must=("D01",), overrides={"D01": value})
+    result = compose_courses(plan, [], places)
+    if feasible:
+        assert visits(options(result)[0]) == ["D01"]
+    else:
+        assert isinstance(result, Infeasible)
+        assert result.reason == "user_stay_conflict"
+        assert result.blocking == ["D01"]
+
+
+@pytest.mark.parametrize("close_at", ["26:00", "29:59"])
+def test_Q27_하루_끝이_자정을_넘어도_받음(close_at):
+    places = as_places(place("D01", "night", hours=opening("23:30", close_at)))
+    plan = day_plan(start="23:30", end=close_at)
+    result = compose_courses(plan, ["D01"], places)
+    assert item_of(option_for(result, "packed"), "D01").end == "25:00"  # 23:30 + 보통 90분
+    assert item_of(option_for(result, "relaxed"), "D01").end == "26:00"  # 23:30 + 최대 150분
 
 
 # ---------- §7 Q13: 확인 상태 ----------
@@ -501,14 +616,108 @@ def test_Q14_장소없는_고정일정은_이동0분이고_다음_이동은_직�
         assert (first.place_id, fixed.is_fixed, second.place_id) == ("D01", True, "D02")
         assert fixed.travel_min == 0
         assert second.travel_min == 5  # 숙소에서 오면 16분, D01에서 오면 0.31km 5분
+        assert (fixed.place_id, fixed.hours_status, fixed.stay_source) == (None, None, None)  # §8 Q28
 
 
-def test_고정일정과_시간이_겹쳐서만_못_들어가면_closed가_아님():
-    # 이유가 fixed_conflict인지 no_time인지는 Q12와 §2가 달라 둘 다 허용 (질문 Q29)
-    places = as_places(place("D01"), place("D02", hours=opening("15:00", "16:00")))
+@pytest.mark.parametrize(
+    "with_place, first_stay, second_start",
+    [(False, 60, "10:30"), (True, 55, "10:34")],
+    ids=["장소없음_이동0", "장소있음_이동4분_앞곳은_5분단위라_55분"],
+)
+def test_Q28_고정일정_앞뒤에는_쉬는시간_없이_이동시간만(with_place, first_stay, second_start):
+    venue = place("D09", km=0.25)
+    places = as_places(
+        place("D01", hours=opening("09:00", "10:00")), place("D02", hours=opening("10:30", "20:00")), venue
+    )
+    plan = day_plan(fixed=(fixed_event("10:00", "10:30", venue if with_place else None),))
+    for option in options(compose_courses(plan, ["D01", "D02"], places)):
+        assert visits(option) == ["D01", "D02"]
+        assert item_of(option, "D01").stay_min == first_stay
+        assert item_of(option, "D02").start == second_start
+
+
+@pytest.mark.parametrize(
+    "close_at, reason",
+    [("15:29", "closed_at_time"), ("16:00", "fixed_conflict"), ("16:29", "fixed_conflict"), ("16:30", None)],
+    ids=["최소가_안들어가면_먼저_closed", "영업이_고정일정과_같음", "1분_모자라_모두_겹침", "고정일정_끝나고_딱_들어감"],
+)
+def test_Q29_판정순서_closed_다음_fixed_conflict(close_at, reason):
+    places = as_places(place("D01"), place("D02", hours=opening("15:00", close_at)))
     plan = day_plan(fixed=(fixed_event("15:00", "16:00"),))
     for option in options(compose_courses(plan, ["D01", "D02"], places)):
-        assert dropped_reason(option, "D02") in ("fixed_conflict", "no_time")
+        if reason is None:
+            assert item_of(option, "D02").start == "16:00"
+        else:
+            assert dropped_reason(option, "D02") == reason
+
+
+def test_Q29_겹치지_않는_시간대가_있는데_이동으로_못가면_no_time():
+    # 16:00~16:30은 고정 일정과 안 겹치지만 이동 16분이면 최소 30분이 안 들어간다
+    places = as_places(place("D01"), place("D02", km=1.19, hours=opening("15:00", "16:30")))
+    plan = day_plan(fixed=(fixed_event("15:00", "16:00"),))
+    for option in options(compose_courses(plan, ["D01", "D02"], places)):
+        assert dropped_reason(option, "D02") == "no_time"
+
+
+# ---------- §8 Q30: 고정 일정 입력 검사 ----------
+
+
+@pytest.mark.parametrize(
+    "events",
+    [
+        (("09:30", "10:30"), ("10:00", "11:00")),
+        (("10:00", "11:00"), ("10:59", "11:30")),
+        (("08:59", "10:00"),),
+        (("20:00", "21:01"),),
+    ],
+    ids=["겹침", "1분_겹침", "시작이_1분_이름", "끝이_1분_늦음"],
+)
+def test_Q30_고정일정끼리_겹치거나_하루_밖이면_ValueError(events):
+    fixed = tuple(fixed_event(s, e, fid=f"F{i}") for i, (s, e) in enumerate(events))
+    with pytest.raises(ValueError):
+        compose_courses(day_plan(fixed=fixed), [], {})
+
+
+@pytest.mark.parametrize(
+    "events",
+    [
+        (("10:00", "11:00"), ("11:00", "11:30")),
+        (("09:00", "10:00"),),
+        (("20:00", "21:00"),),
+    ],
+    ids=["맞닿음", "시작_정각", "끝_정각"],
+)
+def test_Q30_맞닿거나_하루_시작_끝_정각이면_입력_오류가_아님(events):
+    fixed = tuple(fixed_event(s, e, fid=f"F{i}") for i, (s, e) in enumerate(events))
+    result = compose_courses(day_plan(fixed=fixed), [], {})
+    assert [(i.start, i.end) for i in options(result)[0].items] == list(events)
+
+
+@pytest.mark.parametrize("start, reachable", [("09:14", True), ("09:13", False)], ids=["딱_맞음", "1분_모자람"])
+def test_Q30_숙소에서_고정일정까지_시간_안에_못가면_fixed_unreachable(start, reachable):
+    venue = place("D09", km=1.21)  # 이동 14분
+    plan = day_plan(fixed=(fixed_event(start, "10:00", venue),))
+    result = compose_courses(plan, [], as_places(venue))
+    if reachable:
+        assert fixed_items(options(result)[0])[0].start == start
+    else:
+        assert isinstance(result, Infeasible)
+        assert result.reason == "fixed_unreachable"
+
+
+@pytest.mark.parametrize("start, reachable", [("10:14", True), ("10:13", False)], ids=["딱_맞음", "1분_모자람"])
+def test_Q30_고정일정_사이를_시간_안에_못가면_fixed_unreachable(start, reachable):
+    first_venue, second_venue = place("D08"), place("D09", km=1.21)  # 사이 14분
+    fixed = (
+        fixed_event("09:00", "10:00", first_venue, fid="F1"),
+        fixed_event(start, "11:00", second_venue, fid="F2"),
+    )
+    result = compose_courses(day_plan(fixed=fixed), [], as_places(first_venue, second_venue))
+    if reachable:
+        assert len(fixed_items(options(result)[0])) == 2
+    else:
+        assert isinstance(result, Infeasible)
+        assert result.reason == "fixed_unreachable"
 
 
 # ---------- AC-11, §7 Q15: 꼭 갈 곳이 영업시간 밖 ----------
@@ -550,13 +759,25 @@ def test_FR07_꼭갈곳끼리_시간이_모자라면_Infeasible():
     assert result.reason
 
 
-@pytest.mark.skip(reason="질문 대기 Q33: 시간 부족 Infeasible의 reason 값과 suggest_drop에 꼭 갈 곳이 들어가는지")
-def test_질문대기_꼭갈곳끼리_시간이_모자라면_빼면_되는_곳을_제안():
+def test_Q33_꼭갈곳끼리_시간이_모자라면_must_visit_overflow():
     places = as_places(place("D01", "landmark"), place("D02", "landmark"))
     plan = day_plan(start="09:00", end="10:30", must=("D01", "D02"))
     result = compose_courses(plan, ["D01", "D02"], places)
-    assert result.suggest_drop
-    assert set(result.suggest_drop) <= {"D01", "D02"}
+    assert isinstance(result, Infeasible)
+    assert result.reason == "must_visit_overflow"
+    assert sorted(result.blocking) == ["D01", "D02"]
+    assert sorted(result.suggest_drop) == ["D01", "D02"]
+
+
+def test_Q33_빼면_나머지가_들어가는_꼭갈곳만_제안():
+    # 하루 94분. 큰 명소 D01(60)을 빼면 카페 둘(65분)이 들어가고, 카페를 빼면 95분이라 안 들어간다
+    places = as_places(place("D01", "landmark"), place("D02"), place("D03"))
+    plan = day_plan(start="09:00", end="10:34", must=("D01", "D02", "D03"))
+    result = compose_courses(plan, [], places)
+    assert isinstance(result, Infeasible)
+    assert result.reason == "must_visit_overflow"
+    assert sorted(result.blocking) == ["D01", "D02", "D03"]
+    assert result.suggest_drop == ["D01"]
 
 
 # ---------- AC-12, §7 Q16: 사용자가 바꾼 머무는 시간 ----------
@@ -581,13 +802,30 @@ def test_AC12_카페를_120분으로_바꾸면_지키고_넘친_곳은_no_time()
     assert_all_valid(plan, picks, places, after)
 
 
-@pytest.mark.skip(reason="질문 대기 Q32: 사용자가 바꾼 담은 곳을 '가장 많이 넣기'보다 먼저 지키는지")
-def test_질문대기_바꾼_카페를_빼면_더_많이_들어가도_다른_곳을_뺀다():
-    # D01을 빼면 세 곳이 들어가지만 AC-12 문구는 "다른 곳이 dropped"
+def test_Q32_바꾼_곳은_빼면_더_많이_들어가도_유지():
+    # D01을 빼면 세 곳이 들어가지만 꼭 갈 곳처럼 유지한다. 나머지는 id 순으로 한 곳
     places = as_places(*[place(f"D{i:02d}") for i in range(1, 5)])
     plan = day_plan(start="09:00", end="11:50", overrides={"D01": 120})
     for option in options(compose_courses(plan, ["D01", "D02", "D03", "D04"], places)):
-        assert "D01" in visits(option)
+        assert visits(option) == ["D01", "D02"]
+        assert dropped_reason(option, "D03") == "no_time"
+        assert dropped_reason(option, "D04") == "no_time"
+
+
+@pytest.mark.parametrize("value, feasible", [(75, True), (86, False)], ids=["두_안_모두_들어감", "알찬안도_1분_넘침"])
+def test_Q32_바꾼_담은곳과_꼭갈곳이_함께_못들어가면_user_stay_conflict(value, feasible):
+    # 하루 150분. 꼭 갈 큰 명소 60분 + 쉬는 시간 + 사용자 값
+    places = as_places(place("D01", "landmark"), place("D02"), place("D03"))
+    plan = day_plan(start="09:00", end="11:30", must=("D01",), overrides={"D02": value})
+    result = compose_courses(plan, ["D02", "D03"], places)
+    if feasible:
+        for option in options(result):
+            assert visits(option) == ["D01", "D02"]
+    else:
+        assert isinstance(result, Infeasible)
+        assert result.reason == "user_stay_conflict"
+        assert result.blocking == ["D02"]
+        assert "D03" in result.suggest_drop
 
 
 @pytest.mark.parametrize(
@@ -686,7 +924,7 @@ def scenarios(draw, allow_must=True, allow_overrides=True):
     start = draw(st.integers(8, 11)) * 60 + draw(st.sampled_from([0, 30]))
     end = draw(st.integers(18, 23)) * 60  # 고정 일정은 늦어도 17:00에 끝난다
 
-    # 고정 일정은 숙소에서 갈 수 있고 집에 돌아올 수 있는 시각으로만 만든다 (질문 Q30)
+    # 고정 일정은 하루 안이고 숙소에서 갈 수 있는 시각으로 만든다 (§8 Q30)
     fixed: list[PlanFixed] = []
     if draw(st.booleans()):
         fixed_start = draw(st.integers(12 * 4, 15 * 4)) * 15
@@ -700,8 +938,10 @@ def scenarios(draw, allow_must=True, allow_overrides=True):
     must = draw(st.lists(st.sampled_from(ids), unique=True, max_size=2)) if allow_must else []
     picks = draw(st.lists(st.sampled_from(ids), unique=True))
     overrides = {}
-    if allow_overrides:
-        for pid in draw(st.lists(st.sampled_from(ids), unique=True, max_size=2)):
+    wanted = sorted(set(picks) | set(must))
+    if allow_overrides and wanted:
+        # 담지 않은 곳의 사용자 값은 문서에 없어 만들지 않는다 (남은 질문 Q43)
+        for pid in draw(st.lists(st.sampled_from(wanted), unique=True, max_size=2)):
             overrides[pid] = draw(st.integers(1, 400))
     plan = DayPlan(
         date=MONDAY,
@@ -733,19 +973,6 @@ def test_AC14_임의_입력에서_DP가_넣은_장소수는_탐욕법_이상(sce
     result = compose_courses(plan, picks, places)
     if isinstance(result, Infeasible):
         return  # §7 Q17: DP가 Infeasible이면 비교에서 뺀다
-    packed = option_for(result, "packed")
-    greedy = compose_greedy(plan, picks, places, 5)
-    assert len(visits(packed)) >= len([i for i in greedy if not i.is_fixed])
-
-
-@pytest.mark.skip(reason="질문 대기 Q36: 꼭 갈 곳이 있으면 DP가 탐욕법보다 적게 넣을 수 있음")
-@settings(max_examples=200, deadline=None)
-@given(scenarios(allow_overrides=False))
-def test_질문대기_AC14_꼭갈곳이_있어도_DP가_탐욕법_이상(scenario):
-    plan, picks, places = scenario
-    result = compose_courses(plan, picks, places)
-    if isinstance(result, Infeasible):
-        return
     packed = option_for(result, "packed")
     greedy = compose_greedy(plan, picks, places, 5)
     assert len(visits(packed)) >= len([i for i in greedy if not i.is_fixed])

@@ -70,7 +70,7 @@ class CourseItem(BaseModel):
     start: str
     end: str
     stay_min: int
-    stay_source: Literal["auto", "user"]
+    stay_source: Literal["auto", "user"] | None  # 장소 없는 고정 일정이면 None (§8 Q28)
     travel_min: int  # 앞에서 오는 시간
     wait_min: int  # 일찍 도착해 기다린 시간 (§7 Q12)
     is_fixed: bool

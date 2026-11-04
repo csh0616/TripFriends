@@ -528,6 +528,36 @@ def test_TASK002_A_짝표_보조카드(extra, main, subs):
     assert screen.subs == subs
 
 
+def test_TASK002_Q40_대화가_고른_T03의_보조는_T02():
+    screen = compose_screen(snap(chat_pick="T-03"))
+    assert screen.main == "T-03"
+    assert screen.subs == ["T-02"]
+
+
+WEAK_SIGNALS = [
+    dict(walked_km=8.0),
+    dict(now="11:10"),
+    dict(next_item=next_item(at("10:00"), starts_in=40, travel_min=10)),
+]
+WEAK_IDS = ["7_10km", "식사전", "여유30분"]
+
+
+@pytest.mark.parametrize("kw", WEAK_SIGNALS, ids=WEAK_IDS)
+def test_TASK002_Q40_SOS는_보조와_칩이_없음(kw):
+    screen = compose_screen(snap(safety=True, **kw))
+    assert screen.main == "X-01"
+    assert screen.subs == []
+    assert screen.chip is None
+
+
+@pytest.mark.parametrize("kw", WEAK_SIGNALS, ids=WEAK_IDS)
+def test_TASK002_Q40_오프라인이면_약한신호가_있어도_칩이_없음(kw):
+    screen = compose_screen(snap(offline=True, **kw))
+    assert screen.main == "T-01"
+    assert screen.subs == ["X-02", "T-02", "T-03"]
+    assert screen.chip is None
+
+
 @pytest.mark.parametrize("pick", ["T-01", "T-05", "T-14", "X-01"])
 def test_TASK002_A_대화가_고를수_없는_카드는_무시(pick):
     assert compose_screen(snap(chat_pick=pick)).main == "T-01"

@@ -41,6 +41,7 @@ def pick_directions(
     batch: list[Place],
     remaining: list[Place],
     reactions: Reactions,
+    places: dict[PlaceId, Place],
     last_direction: Direction | None,
     anchor: tuple[float, float],
     at: datetime,

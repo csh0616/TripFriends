@@ -71,6 +71,45 @@ def test_Q6_남은후보_5개_미만이면_방향과_상관없이_전부():
     batch = batch_of(places, direction="quieter")
     assert batch.place_ids == ["D01", "D02", "D03", "D04"]
     assert batch.exhausted is True
+    assert batch.direction == "quieter"
+    assert batch.direction_relaxed is True
+
+
+@pytest.mark.parametrize(
+    "crowds, direction, relaxed",
+    [
+        ([1, 1, 1, 1], "quieter", False),
+        ([1, 1, 1, 5], "quieter", True),
+        ([5, 5, 5, 5], "quieter", True),
+        ([], "quieter", False),
+        ([5, 5, 5, 5], None, False),
+    ],
+    ids=["모두_맞음", "하나_안맞음", "모두_안맞음", "남은후보_없음", "방향_없음"],
+)
+def test_Q39_남은후보_5개_미만이면_안맞는_곳이_섞일때만_relaxed(crowds, direction, relaxed):
+    places = as_places(*[place(f"D{i:02d}", crowd=c) for i, c in enumerate(crowds, start=1)])
+    batch = batch_of(places, direction=direction)
+    assert set(batch.place_ids) == set(places)
+    assert batch.exhausted is True
+    assert batch.direction == direction
+    assert batch.direction_relaxed is relaxed
+
+
+@pytest.mark.parametrize("k, allowed", [(4, False), (5, True), (6, True), (7, False)])
+def test_Q39_k는_5또는_6만_받음(k, allowed):
+    places = as_places(*many(8))
+    if allowed:
+        assert len(batch_of(places, k=k).place_ids) == k
+    else:
+        with pytest.raises(ValueError):
+            batch_of(places, k=k)
+
+
+def test_Q24_좋아한_곳이_없으면_different는_맞는_곳이_없어_거르지_않고_채움():
+    batch = batch_of(as_places(*many(8)), direction="different")
+    assert batch.direction == "different"
+    assert batch.direction_relaxed is True
+    assert batch.place_ids == ["D01", "D02", "D03", "D04", "D05", "D06"]
 
 
 # ---------- AC-6, §7 Q6: 방향 결과가 모자랄 때 ----------
@@ -87,12 +126,14 @@ def quiet_and_crowded(quiet_count, crowded_count=8):
 def test_AC06_방향_결과_0개면_무시하고_점수순으로_채움():
     batch = batch_of(quiet_and_crowded(0), direction="quieter")
     assert batch.direction_relaxed is True
+    assert batch.direction == "quieter"
     assert batch.place_ids == ["D01", "D02", "D03", "D04", "D05", "D06"]
 
 
 def test_Q6_방향_결과_4개면_그것부터_넣고_나머지로_채움():
     batch = batch_of(quiet_and_crowded(4), direction="quieter")
     assert batch.direction_relaxed is True
+    assert batch.direction == "quieter"
     assert batch.place_ids == ["D09", "D10", "D11", "D12", "D01", "D02"]
 
 
@@ -125,7 +166,11 @@ TUESDAY_ID = 1
 FILTER_CASES = {
     "quieter_붐빔2_3": ("quieter", [dict(crowd=2)] * 3 + [dict(crowd=1)] * 2, [dict(crowd=3)] * 3),
     "cheaper_가격2_3": ("cheaper", [dict(price=2)] * 3 + [dict(price=1)] * 2, [dict(price=3)] * 3),
-    "closer_1점19_1점21km": ("closer", [dict(km=1.19)] * 3 + [dict(km=0.0)] * 2, [dict(km=1.21)] * 3),
+    "closer_1점2km_바로_안쪽과_바깥쪽": (
+        "closer",
+        [dict(km=1.2 - 1e-6)] * 3 + [dict(km=0.0)] * 2,
+        [dict(km=1.2 + 1e-6)] * 3,
+    ),
     "photo_사진_감성": (
         "photo",
         [dict(tags=("사진",))] * 3 + [dict(tags=("감성",))] * 2,
@@ -221,6 +266,9 @@ def test_AC05_임의_입력에서_묶음_규칙을_지킴(raw, direction, k, dat
     assert len(batch.place_ids) == len(set(batch.place_ids))
     assert set(batch.place_ids) <= set(pool)
     assert batch.exhausted is (len(pool) < 5)
+    assert batch.direction == direction
+    if direction is None:
+        assert batch.direction_relaxed is False
     if len(pool) < 5:
         assert set(batch.place_ids) == set(pool)
     else:

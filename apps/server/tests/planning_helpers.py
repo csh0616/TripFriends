@@ -6,7 +6,8 @@ from datetime import date, datetime, time
 from engine.models import DayPlan, Opening, Place, PlanFixed, StayRange
 
 BASE = (35.0, 135.0)
-KM_PER_DEGREE = 111.195  # 지구 반지름 약 6371km. 거리 공식은 문서에 없음 (질문 Q26)
+EARTH_KM = 6371.0  # §8 Q26
+KM_PER_DEGREE = math.radians(1.0) * EARTH_KM
 MONDAY = date(2026, 11, 9)
 MONDAY_EVENING = datetime(2026, 11, 9, 18, 0)
 
@@ -32,12 +33,17 @@ def north_of(km: float, east_km: float = 0.0, base: tuple[float, float] = BASE) 
 def distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     lat1, lng1, lat2, lng2 = map(math.radians, (a[0], a[1], b[0], b[1]))
     h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2
-    return 2 * 6371.0088 * math.asin(math.sqrt(h))
+    return 2 * EARTH_KM * math.asin(math.sqrt(h))
 
 
 def expected_travel(km: float) -> int:
     """TASK-002 §3 F 이동 시간 식."""
     return math.ceil(km / 4.5 * 60) if km <= 1.2 else 10 + math.ceil(km / 20 * 60)
+
+
+def travel_candidates(km: float) -> set[int]:
+    """식의 올림·1.2km 경계에 정확히 걸린 거리만 부동소수점 오차로 두 값을 허용한다. 그 외에는 한 값."""
+    return {expected_travel(max(0.0, km - 1e-9)), expected_travel(km + 1e-9)} if km > 0 else {0}
 
 
 def opening(open_at: str, close_at: str, weekday: int = 0) -> list[Opening]:
@@ -73,7 +79,7 @@ def place(
 
 
 def as_places(*items: Place) -> dict[str, Place]:
-    """next_batch·compose_courses의 places 모양. dict[id, Place]로 가정 (질문 Q21)."""
+    """places 모양은 dict[id, Place] (§8 Q21)."""
     return {p.id: p for p in items}
 
 
@@ -96,9 +102,9 @@ def day_plan(
     )
 
 
-def fixed_event(start: str, end: str, at_place: Place | None = None) -> PlanFixed:
+def fixed_event(start: str, end: str, at_place: Place | None = None, fid: str = "F1") -> PlanFixed:
     return PlanFixed(
-        id="F1",
+        id=fid,
         title="고정 일정",
         start=start,
         end=end,

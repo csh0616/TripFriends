@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from planning_helpers import BASE, MONDAY_EVENING, north_of, opening, place
+from planning_helpers import BASE, MONDAY_EVENING, as_places, north_of, opening, place
 
 from engine.models import Reactions
 from engine.planning import pick_directions
@@ -31,9 +31,10 @@ def only(direction, count, start=1):
     return [place(f"{direction}{i}", **kw) for i in range(start, start + count)]
 
 
-def pick(batch, remaining=(), last=None, reactions=NOBODY, anchor=BASE, at=MONDAY_EVENING):
-    # batch·remaining을 Place 목록으로 넘기는 것은 임시 가정 (질문 Q22)
-    return pick_directions(list(batch), list(remaining), reactions, last, anchor, at)
+def pick(batch, remaining=(), last=None, reactions=NOBODY, anchor=BASE, at=MONDAY_EVENING, known=()):
+    """§8 Q22·Q23: batch·remaining은 Place 목록, places에는 이전 묶음의 장소(known)까지 들어 있다."""
+    places = as_places(*batch, *remaining, *known)
+    return pick_directions(list(batch), list(remaining), reactions, places, last, anchor, at)
 
 
 # ---------- 규칙 1: 묶음 평균 (기준 양쪽) ----------
@@ -61,8 +62,13 @@ def test_AC07_규칙1_평균_가격_3_이상이면_cheaper(prices, expected):
 
 @pytest.mark.parametrize(
     "distances, expected",
-    [([1.01, 1.01], ["closer"]), ([0.4, 1.7], ["closer"]), ([0.99, 0.99], []), ([0.3, 1.6], [])],
-    ids=["1점01", "평균1점05", "0점99", "평균0점95"],
+    [
+        ([1.0 + 1e-6, 1.0 + 1e-6], ["closer"]),
+        ([0.4, 1.7], ["closer"]),
+        ([1.0 - 1e-6, 1.0 - 1e-6], []),
+        ([0.3, 1.6], []),
+    ],
+    ids=["1km_바로_바깥", "평균1점05", "1km_바로_안쪽", "평균0점95"],
 )
 def test_AC07_규칙1_평균_거리_1km_넘으면_closer(distances, expected):
     batch = [calm(f"B{i}", km=km) for i, km in enumerate(distances)]
@@ -134,30 +140,62 @@ def test_different는_묶음에서_좋아한_곳_태그와_겹치면_세지_않�
     assert "different" in pick([liked], fresh, reactions=reactions)
 
 
-@pytest.mark.skip(reason="질문 대기 Q23: 이전 묶음에서 좋아한 곳의 태그를 pick_directions가 받을 방법이 없음")
-def test_질문대기_different는_이전_묶음에서_좋아한_곳도_따짐():
-    reactions = Reactions(liked=["H1"], skipped=[])  # H1(태그 골목)은 batch·remaining 어디에도 없음
+def test_Q23_different는_이전_묶음에서_좋아한_곳도_places에서_찾아_따짐():
+    liked = place("H1", "walk", tags=("골목",))  # batch·remaining에는 없고 places에만 있음
+    reactions = Reactions(liked=["H1"], skipped=[])
     overlapping = [place(f"O{i}", "walk", tags=("골목",)) for i in range(3)]
-    assert "different" not in pick([calm()], overlapping, reactions=reactions)
+    fresh = [place(f"F{i}", "walk", tags=("자연",)) for i in range(3)]
+    assert "different" not in pick([calm()], overlapping, reactions=reactions, known=[liked])
+    assert "different" in pick([calm()], fresh, reactions=reactions, known=[liked])
 
 
-@pytest.mark.skip(reason="질문 대기 Q24: 좋아한 곳이 없을 때 different가 모든 곳에 맞는지")
-def test_질문대기_좋아한_곳이_없으면_different는_남은_곳_모두에_맞음():
+def test_Q24_좋아한_곳이_없으면_different에_맞는_곳_없음():
     remaining = [place(f"R{i}", "walk") for i in range(3)]
-    assert pick([calm()], remaining) == ["different"]
+    assert pick([calm()], remaining) == []
+
+
+@pytest.mark.parametrize(
+    "count, expected",
+    [(2, ["quieter", "closer"]), (3, ["quieter", "closer", "different"])],
+)
+def test_Q24_different도_규칙2_남은후보_3곳_경계(count, expected):
+    liked = place("H1", "walk", tags=("골목",))
+    reactions = Reactions(liked=["H1"], skipped=[])
+    remaining = [place(f"F{i}", "walk", tags=("자연",)) for i in range(count)]
+    batch = [calm("B1", crowd=4, km=2.0)]
+    assert pick(batch, remaining, reactions=reactions, known=[liked]) == expected
+
+
+def test_Q24_규칙2에서_different가_photo보다_먼저():
+    liked = place("H1", "walk", tags=("골목",))
+    reactions = Reactions(liked=["H1"], skipped=[])
+    # 사진 태그 3곳은 좋아한 태그와 안 겹쳐 different에도 photo에도 맞는다
+    result = pick([calm()], only("photo", 3), reactions=reactions, known=[liked])
+    assert result == ["different", "photo"]
+
+
+@pytest.mark.parametrize(
+    "remaining",
+    [[], only("photo", 3)],
+    ids=["남은후보_없음", "남은후보_있음"],
+)
+def test_Q37_빈_묶음이면_빈_목록(remaining):
+    assert pick([], remaining, last="different") == []
 
 
 # ---------- §7 Q7: 그래도 2개 미만이면 1곳 이상으로 ----------
 
 
-def test_Q7_0개면_1곳_이상인_방향을_순서대로_2개까지():
+def test_Q7_0개면_1곳_이상인_방향을_순서대로_채움():
     remaining = only("photo", 1) + only("food", 1) + only("night", 1)
-    assert pick([calm()], remaining, last="different") == ["photo", "food"]
+    # 2개에서 멈추는지 3개까지 채우는지는 남은 질문 Q41. 둘 다 허용
+    assert pick([calm()], remaining, last="different") in (["photo", "food"], ["photo", "food", "night"])
 
 
-def test_Q7_규칙2로_1개면_1곳_이상으로_하나_더():
+def test_Q7_규칙2로_1개면_1곳_이상으로_채움():
     remaining = only("photo", 3) + only("indoor", 1) + only("food", 1)
-    assert pick([calm()], remaining, last="different") == ["photo", "indoor"]
+    # 남은 질문 Q41. 둘 다 허용
+    assert pick([calm()], remaining, last="different") in (["photo", "indoor"], ["photo", "indoor", "food"])
 
 
 def test_Q7_규칙1로_1개면_1곳_이상으로_하나_더():
@@ -194,31 +232,27 @@ def test_AC07_직전_방향은_규칙1에서_빠짐(last, batch_kw, expected):
     assert pick([calm("B1", **batch_kw)], last=last) == expected
 
 
-@pytest.mark.parametrize("last", ["photo", "indoor", "food"])
-def test_AC07_직전_방향은_규칙2에서_빠지고_다음_방향으로_3개(last):
+@pytest.mark.parametrize(
+    "last, expected",
+    [
+        ("photo", ["indoor", "food", "night"]),
+        ("indoor", ["photo", "food", "night"]),
+        ("food", ["photo", "indoor", "night"]),
+    ],
+)
+def test_AC07_직전_방향은_규칙2에서_빠지고_다음_방향으로_3개(last, expected):
     remaining = only("photo", 3) + only("indoor", 3) + only("food", 3) + only("night", 3)
-    # different가 끼지 않도록 좋아한 곳 태그를 모두 겹치게 하는 대신 결과에서 제외해 비교한다 (질문 Q24)
-    result = pick([calm()], remaining, last=last)
-    assert last not in result
-    assert [d for d in result if d != "different"] == [
-        d for d in ["photo", "indoor", "food", "night"] if d != last
-    ][: len([d for d in result if d != "different"])]
-    assert len(result) == 3
+    assert pick([calm()], remaining, last=last) == expected
 
 
 def test_AC07_규칙1이_셋이고_하나가_직전이면_나머지는_순서대로_남음():
     batch = [calm("B1", crowd=4, price=4, km=2.0)]
-    result = pick(batch, last="quieter")
-    assert "quieter" not in result
-    assert result[:2] == ["closer", "cheaper"]
-    assert len(result) in (2, 3)
+    assert pick(batch, last="quieter") == ["closer", "cheaper"]
 
 
-@pytest.mark.skip(reason="질문 대기 Q25: 직전 방향을 빼는 것이 규칙 2로 채우기 전인지 후인지")
-def test_질문대기_직전을_빼고_모자란_자리를_규칙2로_채우는지():
+def test_Q25_직전을_먼저_빼고_모자란_자리를_규칙2로_채움():
     batch = [calm("B1", crowd=4, price=4, km=2.0)]
-    result = pick(batch, only("photo", 3), last="quieter")
-    assert result == ["closer", "cheaper"]
+    assert pick(batch, only("photo", 3), last="quieter") == ["closer", "cheaper", "photo"]
 
 
 # ---------- 속성 ----------

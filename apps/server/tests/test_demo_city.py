@@ -16,10 +16,14 @@ TIME = re.compile(r"^(?:[01]\d|2\d):[0-5]\d$")
 
 
 def load() -> list[Place]:
-    # 파일의 맨 바깥 모양(목록 또는 {"places": [...]})은 문서에 없다 (질문 Q38)
     data = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    rows = data["places"] if isinstance(data, dict) else data
-    return [Place.model_validate(row) for row in rows]
+    return [Place.model_validate(row) for row in data["places"]]
+
+
+def test_Q38_파일_맨_바깥은_places_키_하나():
+    data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    assert isinstance(data["places"], list)
 
 
 def test_AC17_30곳_id는_D01부터_D30():
