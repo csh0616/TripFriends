@@ -1227,6 +1227,75 @@ def test_S10_4_Q60_고정일정으로_채웠으면_최소가_하루보다_길어
     assert [(i.start, i.end) for i in fixed_items(option)] == [("09:04", "09:40")]
 
 
+@pytest.mark.parametrize(
+    "minutes, feasible",
+    [(53, False), (54, False), (63, False), (64, True)],
+    ids=["최소로도_1분_모자람", "최소면_딱_맞음", "사용자값은_1분_모자람", "사용자값도_딱_맞음"],
+)
+def test_S10_2_4_바꾼_담은곳이_최소로도_못들어가도_user_stay_conflict(minutes, feasible):
+    # 0.88km: 왕복 24분. 최소 30분이면 54분, 사용자 값 40분이면 64분
+    places = as_places(place("D01", km=0.88))
+    plan = day_plan(start="09:00", end=hhmm(to_min("09:00") + minutes), overrides={"D01": 40})
+    result = compose_courses(plan, ["D01"], places)
+    if feasible:
+        item = item_of(options(result)[0], "D01")
+        assert (item.stay_min, item.stay_source) == (40, "user")
+    else:
+        assert isinstance(result, Infeasible)
+        assert result.reason == "user_stay_conflict"
+        assert result.blocking == ["D01"]
+        assert "D01" in result.suggest_drop
+
+
+@pytest.mark.parametrize("value", [30, 45], ids=["각_30분_최소와_같음", "각_45분"])
+def test_S10_4_Q57_바꾼_담은곳_둘이_최소로도_함께_못들어가도_둘_다_blocking(value):
+    # 하루 50분. 각각은 들어가지만 30+5+30=65분이라 최소로도 함께 못 들어간다
+    places = as_places(place("D01"), place("D02"))
+    plan = day_plan(start="09:00", end="09:50", overrides={"D01": value, "D02": value})
+    result = compose_courses(plan, ["D01", "D02"], places)
+    assert isinstance(result, Infeasible)
+    assert result.reason == "user_stay_conflict"
+    assert sorted(result.blocking) == ["D01", "D02"]
+    assert sorted(result.suggest_drop) == ["D01", "D02"]
+
+
+def test_S10_2_4_바꾼_담은곳이_고정일정과_겹쳐_못들어가도_user_stay_conflict():
+    places = as_places(place("D01", hours=opening("10:00", "11:00")))
+    plan = day_plan(fixed=(fixed_event("10:00", "11:00"),), overrides={"D01": 30})
+    result = compose_courses(plan, ["D01"], places)
+    assert isinstance(result, Infeasible)
+    assert result.reason == "user_stay_conflict"
+    assert result.blocking == ["D01"]
+    assert "D01" in result.suggest_drop
+
+
+def test_S10_2_2_꼭갈곳이_1곳이면_바꾼_담은곳이_있어도_혼자_안들어가는_형식():
+    places = as_places(place("D01", "landmark"), place("D02"))
+    plan = day_plan(start="09:00", end="09:50", must=("D01",), overrides={"D02": 30})
+    assert compose_courses(plan, ["D02"], places) == Infeasible(
+        reason="must_visit_overflow", blocking=["D01"], suggest_drop=[]
+    )
+
+
+def test_S10_2_7_고정일정_장소는_suggest_drop_후보가_아님():
+    # 사용자 값 200분은 하루 2시간보다 길다. 최소 30분이면 고정 일정 전에 들어간다
+    venue = place("D09", km=0.25)
+    places = as_places(place("D01"), venue)
+    plan = day_plan(
+        start="09:00",
+        end="11:00",
+        fixed=(fixed_event("10:00", "10:30", venue),),
+        must=("D01",),
+        overrides={"D01": 200},
+    )
+    result = compose_courses(plan, ["D09"], places)
+    assert isinstance(result, Infeasible)
+    assert result.reason == "user_stay_conflict"
+    assert result.blocking == ["D01"]
+    assert "D01" in result.suggest_drop
+    assert "D09" not in result.suggest_drop
+
+
 def test_Q44_꼭갈곳_1곳이_혼자서_못들어가면_must_visit_overflow_제안없음():
     places = as_places(place("D01"))
     plan = day_plan(start="09:00", end="09:29", must=("D01",))
