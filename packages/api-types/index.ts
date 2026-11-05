@@ -370,7 +370,7 @@ export interface components {
         };
         /**
          * ErrorBody
-         * @description 공통 오류 (§5, §10 Q24). code는 이 4개뿐.
+         * @description 공통 오류 (§5). code는 NOT_FOUND·INVALID_REQUEST·STATE_CONFLICT·COURSE_INFEASIBLE·INTERNAL_ERROR 5개뿐 (§10 Q24, §10-10 R3).
          */
         ErrorBody: {
             /**
