@@ -1,0 +1,22 @@
+{
+  "cases": 1000,
+  "dp_places_mean": 6.644,
+  "greedy_places_mean": 5.241,
+  "diff_distribution": {
+    "0": 457,
+    "1": 205,
+    "2": 138,
+    "3": 64,
+    "4": 45,
+    "5": 37,
+    "6": 25,
+    "7": 21,
+    "8": 5,
+    "9": 2,
+    "10": 1
+  },
+  "dp_more_ratio": 0.543,
+  "dp_fewer_count": 0,
+  "dp_travel_mean": 101.309,
+  "greedy_travel_mean": 85.984
+}
