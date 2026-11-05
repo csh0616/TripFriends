@@ -23,27 +23,27 @@ from engine.models import (
 class Limits(NamedTuple):
     """기준 값. mutmut이 바꿔 볼 수 있도록 모듈 상수가 아니라 함수 안에 둔다."""
 
-    earth_km: float  # §8 Q26 하버사인
+    earth_km: float  # TASK-002 §8 Q26 하버사인
     walk_max_km: float  # 도보 상한 1.2km
     walk_kmh: float
     transit_base_min: int
     transit_kmh: float
     relaxed_buffer_min: int  # 쉬는 시간 (§3 F)
     packed_buffer_min: int
-    step_min: int  # 남는 시간 나누기 단위 (§8 Q31)
-    user_stay_low: int  # 사용자 값 자르기 (§7 Q16)
+    step_min: int  # 남는 시간 나누기 단위 (TASK-002 §8 Q31)
+    user_stay_low: int  # 사용자 값 자르기 (TASK-002 §7 Q16)
     user_stay_high: int
-    last_minute: int  # "29:59" (§7 Q12)
+    last_minute: int  # "29:59" (TASK-002 §7 Q12)
     crowd_avg: float  # 방향 버튼 규칙 1 (§3 E)
     far_avg_km: float
     price_avg: float
     enough_remaining: int  # 규칙 2: 남은 후보 3곳 이상
-    min_pool: int  # 묶음 최소 크기 (§7 Q6)
+    min_pool: int  # 묶음 최소 크기 (TASK-002 §7 Q6)
     quiet_crowd: int  # 거르기 표 (§3 C)
     near_km: float
     cheap_price: int
     night_after_min: int  # 19:00
-    batch_sizes: tuple[int, ...]  # §8 Q39
+    batch_sizes: tuple[int, ...]  # TASK-002 §8 Q39
 
 
 def _limits() -> Limits:
@@ -85,7 +85,7 @@ def _hhmm(minutes: int) -> str:
 
 
 def _id_key(pid: PlaceId) -> tuple[int, str]:
-    """동점은 id의 숫자 부분 오름차순 (§7 Q2)."""
+    """동점은 id의 숫자 부분 오름차순 (TASK-002 §7 Q2)."""
     digits = re.search(r"\d+", pid)
     return (int(digits.group()) if digits else -1, pid)
 
@@ -109,7 +109,7 @@ def _check_hours(places: dict[PlaceId, Place]) -> None:
 
 def _check_ids(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place]) -> None:
     """TASK-002 §10 #9, §10-4 Q59: 담은 곳·꼭 갈 곳·고정 일정 장소가 places에 없으면 ValueError.
-    stay_overrides의 없는 id는 검사하지 않고 무시한다 (§9 Q43)."""
+    stay_overrides의 없는 id는 검사하지 않고 무시한다 (TASK-002 §9 Q43)."""
     for pid in [*picks, *plan.must_visit, *(f.place_id for f in plan.fixed if f.place_id)]:
         if pid not in places:
             raise ValueError(f"없는 장소 id: {pid}")
@@ -128,7 +128,7 @@ def _travel_min(km: float) -> int:
 def score_candidates(
     reactions: Reactions, places: dict[PlaceId, Place], candidate_ids: list[PlaceId]
 ) -> dict[PlaceId, float]:
-    """POC-001 §7-1 고정식. 붐빔·가격은 절댓값 (§8 B6)."""
+    """POC-001 §7-1 고정식. 붐빔·가격은 절댓값 (TASK-002 §8 B6)."""
     liked = [places[i] for i in reactions.liked if i in places]
     skipped = [places[i] for i in reactions.skipped if i in places]
     weights: Counter[str] = Counter()
@@ -200,7 +200,7 @@ def _matches(
     if direction == "cheaper":
         return p.price_level <= lim.cheap_price
     if direction == "different":
-        # §8 Q24: 좋아한 곳이 없으면 맞는 곳 없음
+        # TASK-002 §8 Q24: 좋아한 곳이 없으면 맞는 곳 없음
         return has_liked and not (set(p.mood_tags) & liked_tags)
     if direction == "photo":
         return "사진" in p.mood_tags or "감성" in p.mood_tags
@@ -208,7 +208,7 @@ def _matches(
         return "실내" in p.mood_tags or p.category in ("museum", "shop")
     if direction == "food":
         return p.category == "food"
-    # night: 태그, 또는 그 요일에 19:00보다 늦게 닫는 영업 구간 (§7 Q5)
+    # night: 태그, 또는 그 요일에 19:00보다 늦게 닫는 영업 구간 (TASK-002 §7 Q5)
     if "밤" in p.mood_tags or "야경" in p.mood_tags:
         return True
     weekday = at.weekday()
@@ -245,7 +245,7 @@ def next_batch(
     rest = [pid for pid in ranked if pid not in set(matching)]
 
     if len(pool) < lim.min_pool:
-        # §8 Q39·§9 Q47: 있는 만큼 전부, 맞는 곳 먼저
+        # TASK-002 §8 Q39·§9 Q47: 있는 만큼 전부, 맞는 곳 먼저
         return Batch(
             place_ids=matching + rest,
             direction=direction,
@@ -254,7 +254,7 @@ def next_batch(
         )
     if len(matching) >= lim.min_pool:
         return Batch(place_ids=matching[:k], direction=direction, exhausted=False, direction_relaxed=False)
-    # §7 Q6: 방향 결과가 모자라면 나머지를 점수순으로 채운다
+    # TASK-002 §7 Q6: 방향 결과가 모자라면 나머지를 점수순으로 채운다
     return Batch(
         place_ids=(matching + rest)[: min(k, len(pool))],
         direction=direction,
@@ -277,7 +277,7 @@ def pick_directions(
 ) -> list[Direction]:
     lim = _limits()
     if not batch:
-        return []  # §8 Q37
+        return []  # TASK-002 §8 Q37
     count = len(batch)
     rule1: list[Direction] = []
     if sum(p.crowd_level for p in batch) / count >= lim.crowd_avg:
@@ -287,7 +287,7 @@ def pick_directions(
     if sum(p.price_level for p in batch) / count >= lim.price_avg:
         rule1.append("cheaper")
 
-    # §8 Q25: 직전 방향을 먼저 빼고 채운다
+    # TASK-002 §8 Q25: 직전 방향을 먼저 빼고 채운다
     chosen: list[Direction] = [d for d in rule1 if d != last_direction]
 
     liked_tags = _liked_tags(reactions, places)
@@ -296,7 +296,7 @@ def pick_directions(
     fits = {
         d: sum(1 for p in remaining if _matches(d, p, liked_tags, has_liked, anchor, at)) for d in rule2
     }
-    # 규칙 2: 남은 후보 3곳 이상, 그다음 1곳 이상 (§7 Q7, §9 Q41: 3개가 될 때까지)
+    # 규칙 2: 남은 후보 3곳 이상, 그다음 1곳 이상 (TASK-002 §7 Q7, §9 Q41: 3개가 될 때까지)
     for need in (lim.enough_remaining, 1):
         for d in rule2:
             if len(chosen) >= 3:
@@ -310,7 +310,7 @@ def pick_directions(
 
 
 def _default_stay(category: str) -> tuple[int, int, int]:
-    """SCREEN-001 §2 종류별 기본 (최소, 보통, 최대) (§7 Q9)."""
+    """SCREEN-001 §2 종류별 기본 (최소, 보통, 최대) (TASK-002 §7 Q9)."""
     table = {
         "cafe": (30, 60, 90),
         "food": (45, 60, 90),
@@ -325,7 +325,7 @@ def _default_stay(category: str) -> tuple[int, int, int]:
 
 
 def _hours_status(p: Place) -> str:
-    """§7 Q13."""
+    """TASK-002 §7 Q13."""
     if p.hours is None:
         return "unknown"
     return "unverified" if p.hours_status == "unknown" else p.hours_status
@@ -358,7 +358,8 @@ class _Day:
         self.weekday = plan.date.weekday()
         self.lodging = plan.lodging
         # TASK-002 §9 Q45 ③: 시작 >= 끝이거나 29:59를 넘는 시각은 ValueError
-        # Q53 미정: 시각 형식 밖의 값(좌표 범위, 붐빔·가격 범위)은 검사하지 않음
+        # Q53 미정: 시각 형식 밖의 값(좌표 범위, 붐빔·가격 범위)은 검사하지 않음.
+        #   빈틈: 분이 60 이상인 시각("10:75")은 통과한다 (문서 예시에 없어 검사를 추가하지 않음)
         _check_ids_fixed = [f.place_id for f in plan.fixed if f.place_id and f.place_id not in places]
         if _check_ids_fixed:
             raise ValueError(f"없는 장소 id: {_check_ids_fixed[0]}")  # TASK-002 §10 #9
@@ -434,12 +435,13 @@ class _Model:
 
         places = day.places
         coords: list[tuple[float, float] | None] = [(places[pid].lat, places[pid].lng) for pid in ids]
+        # TASK-002 §7 Q14: 하루는 숙소에서 출발. 장소 없는 고정 일정은 좌표가 없어 직전 위치 그대로 (이동 0분, 아래 tf)
         coords.append(day.lodging)
         coords.extend(ev.coord for ev in fixed)
         P = self.P
         self.dist = [[0.0] * n for _ in range(P)]
         self.tv = [[0] * n for _ in range(P)]  # 위치 p -> 후보 i
-        self.tf = [[0] * self.F for _ in range(P)]  # 위치 p -> 고정 일정 f (장소 없으면 0분, 그 자리 그대로)
+        self.tf = [[0] * self.F for _ in range(P)]  # 위치 p -> 고정 일정 f (TASK-002 §7 Q14: 장소 없으면 0분, 그 자리 그대로)
         self.home = [0] * P
         for p in range(P):
             here = coords[p]
@@ -492,6 +494,7 @@ class _Model:
             else:
                 i = token - 1
                 tt = self.tv[pos][i]
+                # TASK-002 §8 Q28: 쉬는 시간은 앞 항목이 방문일 때만 (하루 시작·고정 일정 뒤에는 이동 시간만)
                 ready = t + tt + (self.buffer if last < n else 0)
                 start = self.earliest(i, ready, stays[i])
                 if start is None or start + stays[i] > self.deadline[f][i]:
@@ -539,7 +542,7 @@ class _Model:
                 deadline_f = self.deadline[f]
                 for last, labels in list(slot[f].items()):
                     pos = last if last < P else last - P
-                    gap = buf if last < n else 0
+                    gap = buf if last < n else 0  # TASK-002 §8 Q28: 고정 일정 앞뒤·하루 시작에는 쉬는 시간 없음
                     tvp = self.tv[pos]
                     for t, trv, key in labels:
                         for i in range(n):
@@ -589,9 +592,9 @@ class _Model:
 class _Wanted(NamedTuple):
     ids: list[PlaceId]  # 꼭 갈 곳 + 담은 곳, id 순
     infos: dict[PlaceId, _Stay]
-    closed: set[PlaceId]  # 하루는 충분한데 영업 구간 어디에도 필요 시간이 안 들어감 (§10-1 #2)
-    short: set[PlaceId]  # 필요 시간이 하루 길이보다 김 (§10-1 #1)
-    mandatory: set[PlaceId]  # 꼭 갈 곳 + 사용자 값을 지켜야 하는 담은 곳 (§8 Q32)
+    closed: set[PlaceId]  # 하루는 충분한데 영업 구간 어디에도 필요 시간이 안 들어감 (TASK-002 §10-1 #2)
+    short: set[PlaceId]  # 필요 시간이 하루 길이보다 김 (TASK-002 §10-1 #1)
+    mandatory: set[PlaceId]  # 꼭 갈 곳 + 사용자 값을 지켜야 하는 담은 곳 (TASK-002 §8 Q32)
 
 
 def _wanted(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], day: _Day) -> _Wanted:
@@ -608,17 +611,17 @@ def _wanted(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], d
         p = places[pid]
         low, typical, high = (p.stay.min, p.stay.typical, p.stay.max) if p.stay else _default_stay(p.category)
         user = None
-        if pid in plan.stay_overrides:  # §9 Q43: 담은 곳·꼭 갈 곳이 아니면 무시 (ids에 없으면 여기 안 옴)
+        if pid in plan.stay_overrides:  # TASK-002 §9 Q43: 담은 곳·꼭 갈 곳이 아니면 무시 (ids에 없으면 여기 안 옴)
             user = min(lim.user_stay_high, max(lim.user_stay_low, plan.stay_overrides[pid]))
         # TASK-002 §10-2 #6: 사용자 값이 최소보다 짧으면 그 값이 필요 시간 (eff_low)
         # Q62 미정: 영업 20분, 최소 30, 사용자 21분처럼 사용자 값도 영업 구간에 안 들어가면 "닫힘"으로 본다
-        #   (사용자 값 때문에만 안 들어가는 경우가 아니라 §10-4의 user_stay_conflict 대상이 아님)
-        # Q63 미정: 최소·사용자 값이 모두 하루보다 길면 하루가 짧음(§10-1 #1), 최소만 길고 사용자 값이 하루 안이면 사용자 값으로 들어감(#6)
+        #   (사용자 값 때문에만 안 들어가는 경우가 아니라 TASK-002 §10-4의 user_stay_conflict 대상이 아님)
+        # Q63 미정: 최소·사용자 값이 모두 하루보다 길면 하루가 짧음(TASK-002 §10-1 #1), 최소만 길고 사용자 값이 하루 안이면 사용자 값으로 들어감(#6)
         info = _Stay(low, typical, high, user, low if user is None else min(user, low))
         infos[pid] = info
         if info.eff_low > day_len:  # TASK-002 §10-1 #1: m > L 이면 하루가 짧음 (닫힘보다 먼저)
             short.add(pid)
-        elif p.hours is not None and not day.fits(p, info.eff_low, with_fixed=False):  # §10-1 #2
+        elif p.hours is not None and not day.fits(p, info.eff_low, with_fixed=False):  # TASK-002 §10-1 #2
             closed.add(pid)
     must = set(plan.must_visit) - fixed_places
     # TASK-002 §10-1 #1: 담은 곳이 하루보다 길면 Infeasible이 아니라 dropped(no_time)이라 꼭 지킬 대상에서 뺀다
@@ -631,7 +634,7 @@ def _mask(ids: list[PlaceId], chosen: set[PlaceId]) -> int:
 
 
 def _chain_check(day: _Day) -> Infeasible | None:
-    """§8 Q30·§9 Q45: 고정 일정만으로 하루가 이어지는가."""
+    """TASK-002 §8 Q30·§9 Q45: 고정 일정만으로 하루가 이어지는가."""
     t, pos = day.start, day.lodging
     for ev in day.fixed:
         target = ev.coord or pos
@@ -649,13 +652,13 @@ def _build_option(
     lim = _limits()
     stays = list(model.stays)
     order = [t - 1 for t in tokens if t > 0]
-    grow = [i for i in order if model.stay_info[i].user is None]  # 사용자 값은 늘리지 않음 (§8 Q31)
+    grow = [i for i in order if model.stay_info[i].user is None]  # 사용자 값은 늘리지 않음 (TASK-002 §8 Q31)
     stages = [lambda s: s.typical] + ([lambda s: s.high] if targets_high else [])
     if not expand:
         stages = []
     for target in stages:
         progress = True
-        while progress:  # §8 Q31: 방문 순서대로 돌아가며 5분씩
+        while progress:  # TASK-002 §8 Q31: 방문 순서대로 돌아가며 5분씩
             progress = False
             for i in grow:
                 goal = target(model.stay_info[i])
@@ -685,7 +688,7 @@ def _build_option(
             )
         else:
             ev = plan_day.fixed[idx]
-            # TASK-002 §10-3 주석 지정: 고정 일정은 시각 그대로라 기다림이 없다 -> wait_min=0 (§7 Q12, §8 Q28)
+            # TASK-002 §10-3 주석 지정: 고정 일정은 시각 그대로라 기다림이 없다 -> wait_min=0 (TASK-002 §7 Q12, §8 Q28)
             # Q54 미정: 장소 있는 고정 일정이 영업시간 밖이어도 그대로 둔다 (시각 그대로가 우선, 영업은 검사하지 않음)
             items.append(
                 CourseItem(
@@ -715,12 +718,13 @@ def compose_courses(
 
     want = _wanted(plan, picks, places, day)
     closed_must = sorted((pid for pid in plan.must_visit if pid in want.closed), key=_id_key)
-    if closed_must:  # §7 Q15, TASK-002 §10-1 #2 (하루가 짧은 꼭 갈 곳은 아래 overflow)
+    if closed_must:  # TASK-002 §7 Q15, §10-1 #2 (하루가 짧은 꼭 갈 곳은 아래 overflow)
         return Infeasible(reason="must_visit_closed", blocking=closed_must, suggest_drop=[])
 
     # 닫힌 곳과 하루보다 긴 담은 곳은 넣을 수 없으니 후보에서 뺀다 (dropped로 간다)
     candidates = [pid for pid in want.ids if pid not in want.closed and (pid not in want.short or pid in want.mandatory)]
     required = _mask(candidates, want.mandatory)
+    # TASK-002 §7 Q10: 안마다 쉬는 시간을 넣은 채로 DP 고르기를 따로 한다 (packed 5분, relaxed 15분)
     packed_model = _Model(day, candidates, want.infos, lim.packed_buffer_min)
     packed = packed_model.solve(required)
     if packed is None:
@@ -739,42 +743,49 @@ def compose_courses(
         return option.model_copy(update={"dropped": dropped})
 
     packed_option = finish(packed_model, packed, "packed", False)
-    if relaxed is None:  # §9 Q42 (Q48 미정: 바꾼 곳이 packed에만 들어갈 때도 같은 규칙으로 packed 1안)
+    if relaxed is None:  # TASK-002 §9 Q42 (Q48 미정: 바꾼 곳이 packed에만 들어갈 때도 같은 규칙으로 packed 1안)
         return [packed_option]
     relaxed_option = finish(relaxed_model, relaxed, "relaxed", True)
     same = packed_option.model_copy(update={"label": "relaxed"}) == relaxed_option
-    return [relaxed_option] if same else [relaxed_option, packed_option]  # §8 Q35
+    return [relaxed_option] if same else [relaxed_option, packed_option]  # TASK-002 §8 Q35
 
 
 def _why_infeasible(day: _Day, plan: DayPlan, picks: list[PlaceId], want: _Wanted, candidates: list[PlaceId]) -> Infeasible:
-    """§9 Q44 ③: must_visit_closed(앞에서 처리) -> must_visit_overflow -> user_stay_conflict."""
+    """TASK-002 §9 Q44 ③: must_visit_closed(앞에서 처리) -> must_visit_overflow -> user_stay_conflict."""
     lim = _limits()
     mandatory = sorted(want.mandatory, key=_id_key)
+    # TASK-002 §10 #2: 형식은 "꼭 갈 곳" 수로 가른다 (사용자 값을 지켜야 하는 담은 곳은 세지 않음)
+    musts = sorted((pid for pid in mandatory if pid in set(plan.must_visit)), key=_id_key)
 
     def feasible(ids: list[PlaceId], needed: list[PlaceId]) -> bool:
-        # 사용자 값이 최소보다 길어도 최소로 본다 (eff): 최소만으로도 안 들어가면 overflow
+        # 사용자 값 대신 필요 시간의 최소(eff)로 본다: 최소로도 안 들어가는지 가르기 위해
         model = _Model(day, ids, want.infos, lim.packed_buffer_min, eff=True)
         return model.solve(_mask(ids, set(needed))) is not None
 
-    if not feasible(candidates, mandatory):
+    # TASK-002 §10 #4, §10-4 Q57: overflow는 꼭 갈 곳끼리의 문제일 때만. 바꾼 담은 곳은 최소로도 안 들어가도 아래 user_stay_conflict
+    # Q65 미정: 바꾼 담은 곳이 최소로도 못 들어가는 경우(예: 이동 포함 53분)도 테스트 기준대로 user_stay_conflict
+    if musts and not feasible(candidates, musts):
         # Q50 미정: 이동·고정 일정 때문에 못 들어가는 경우도 must_visit_overflow
-        if len(mandatory) >= 2:
-            # TASK-002 §10 #2 (Q33 형식): 둘 이상이면 blocking은 전부, suggest_drop은 빼면 나머지가 들어가는 곳
-            # Q52 미정: 사용자 값을 지켜야 하는 담은 곳이 섞여도 같은 기준으로 판단
+        if len(musts) >= 2:
+            # TASK-002 §10 #2 (§8 Q33 형식): 꼭 갈 곳이 둘 이상이면 blocking은 전부, suggest_drop은 빼면 나머지가 들어가는 곳
             suggest = [
                 pid
-                for pid in mandatory
-                if feasible([q for q in mandatory if q != pid], [q for q in mandatory if q != pid])
+                for pid in musts
+                if feasible([q for q in musts if q != pid], [q for q in musts if q != pid])
             ]
-            return Infeasible(reason="must_visit_overflow", blocking=mandatory, suggest_drop=suggest)
-        # TASK-002 §9 Q44 ②, §10 #2: 1곳이 혼자서도 안 들어감 -> blocking=[그 곳], suggest_drop=[]
-        return Infeasible(reason="must_visit_overflow", blocking=mandatory, suggest_drop=[])
+            return Infeasible(reason="must_visit_overflow", blocking=musts, suggest_drop=suggest)
+        # TASK-002 §9 Q44 ②, §10 #2: 꼭 갈 곳 1곳이 혼자서도 안 들어감 (바꾼 담은 곳이 있어도) -> blocking=[그 곳], suggest_drop=[]
+        return Infeasible(reason="must_visit_overflow", blocking=musts, suggest_drop=[])
 
-    # TASK-002 §10 #3·#4, §10-4 Q55~Q57: 사용자 값 때문에만 안 들어가면 (영업 구간·하루보다 길어도, 꼭 갈 곳 유무·여럿이어도)
-    # 항상 user_stay_conflict. blocking은 바꾼 곳 전부 (Q57)
+    # TASK-002 §10 #3·#4, §10-4 Q55~Q57: 사용자 값(또는 바꾼 담은 곳)이 걸린 문제는 항상 user_stay_conflict.
+    # 꼭 갈 곳이 있든 없든, 하나든 여럿이든 같다. blocking은 바꾼 곳 전부 (Q57)
+    # Q52 미정: 꼭 갈 곳끼리는 들어가는데 바꾼 담은 곳과 함께 최소로 못 들어가면 (꼭 갈 곳 1~2곳 + 바꾼 담은 곳)
+    #   overflow가 아니라 user_stay_conflict, blocking은 바꾼 곳만 (꼭 갈 곳은 넣지 않음)
     changed = [pid for pid in mandatory if want.infos[pid].user is not None]
-    others = [pid for pid in picks if pid not in set(plan.must_visit)]
+    fixed_places = {ev.place_id for ev in day.fixed if ev.place_id}
+    others = [pid for pid in picks if pid not in set(plan.must_visit) and pid not in fixed_places]
     # TASK-002 §9 Q44 ④, §10 #3: suggest_drop에 바꾼 곳 자신 포함 (되돌리거나 빼는 선택지)
+    # TASK-002 §10 #7: 고정 일정 장소는 담은 곳에서 빠졌으므로 제안에도 넣지 않음
     # Q52 미정: 나머지는 꼭 갈 곳이 아닌 담은 곳 전부 (도움이 되는 곳만 가리지 않음)
     suggest = sorted(set(others) | set(changed), key=_id_key)
     return Infeasible(reason="user_stay_conflict", blocking=changed, suggest_drop=suggest)
@@ -783,7 +794,7 @@ def _why_infeasible(day: _Day, plan: DayPlan, picks: list[PlaceId], want: _Wante
 def compose_greedy(
     plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], buffer_min: int
 ) -> list[CourseItem]:
-    """비교용 탐욕법 (§7 Q17): 숙소에서 시작해 들어갈 수 있는 곳 중 가장 가까운 곳, 최소 머무는 시간."""
+    """비교용 탐욕법 (TASK-002 §7 Q17): 숙소에서 시작해 들어갈 수 있는 곳 중 가장 가까운 곳, 최소 머무는 시간."""
     day = _Day(plan, places)
     _check_ids(plan, picks, places)  # TASK-002 §10-4 Q59
     want = _wanted(plan, picks, places, day)
@@ -824,7 +835,7 @@ def compose_greedy(
         tokens.append(0)
         f += 1
     result = model.simulate(tokens, model.stays)
-    if result is None:  # 마지막 숙소 복귀가 하루 끝을 넘는 경우: 방문만 남기고 고정 일정이 없는 것으로
+    if result is None:  # 마지막 숙소 복귀가 하루 끝을 넘는 경우 등 시간표가 안 만들어지면 빈 목록을 돌려준다
         return []
     option = _build_option(model, tokens, "packed", False, day, expand=False)
     return option.items
