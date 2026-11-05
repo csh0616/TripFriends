@@ -36,10 +36,22 @@ MSG_FIRST = "이런 곳들 어때? 마음에 들면 담아 줘"
 MSG_NO_DIRECTION = "다른 곳들도 찾아봤어"
 MSG_CLARIFY = "이 중에 있어?"
 MSG_EXHAUSTED = "더 보여 줄 곳이 거의 없어. 이제 코스 짜 볼까?"
-QUESTION_TEXT = "둘째 날은 어떤 하루면 좋겠어? 끌리는 거 다 골라 줘!"
+QUESTION_TAIL = " 어떤 하루면 좋겠어? 끌리는 거 다 골라 줘!"
+QUESTION_TEXT = "둘째 날은" + QUESTION_TAIL
+# TASK-003 §10 Q4: 칩 ID와 보내는 순서
+CHOICES = [
+    {"id": "walk_alley", "label": "골목 산책"},
+    {"id": "food_tour", "label": "맛집 투어"},
+    {"id": "shopping", "label": "쇼핑"},
+    {"id": "night_view", "label": "야경"},
+    {"id": "cafe", "label": "카페"},
+    {"id": "museum_experience", "label": "전시·체험"},
+]
+# TASK-003 §10 Q24: 오류 code는 이 4개뿐
+ERROR_CODES = {404: "NOT_FOUND", 400: "INVALID_REQUEST", 409: "STATE_CONFLICT", 422: "COURSE_INFEASIBLE"}
 WHY_NONE = "이런 곳도 있어요"
 UNKNOWN_TEXT = "그냥 아무거나"  # POC-001 §5-1 키워드가 하나도 없는 문장
-FIXED_STAY = StayRange(min=60, typical=60, max=60)  # 두 안에서 머문 시간이 같아지는 장소 (Q14 회피)
+FIXED_STAY = StayRange(min=60, typical=60, max=60)  # 두 안에서 머문 시간이 같아지는 장소
 
 SESSION_KEYS = {"session_id", "stage", "question"}
 QUESTION_KEYS = {"text", "choices", "allow_text", "allow_auto"}
@@ -135,10 +147,10 @@ class PlanningEnv:
     def graph(self):
         return self.app.state.planning_graph
 
-    def plant_day(self, places: dict[str, Place], plan: DayPlan | None = None) -> str:
+    def plant_day(self, places: dict[str, Place], plan: DayPlan | None = None, day_number: int = 1) -> str:
         self.day_count += 1
         day_id = f"day-{self.day_count}"
-        self.repo.save_day(day_id, plan or day_plan(), places)
+        self.repo.save_day(day_id, plan or day_plan(), places, day_number)
         return day_id
 
     def seed(self) -> dict:
@@ -183,8 +195,9 @@ class PlanningEnv:
     def compose(self, sid: str):
         return self.client.post(f"/planning/{sid}/compose")
 
-    def adjust(self, sid: str, place_id: str, delta: int):
-        return self.client.post(f"/planning/{sid}/adjust", json={"place_id": place_id, "delta": delta})
+    def adjust(self, sid: str, option_id: str, place_id: str, delta: int):
+        body = {"option_id": option_id, "place_id": place_id, "delta": delta}
+        return self.client.post(f"/planning/{sid}/adjust", json=body)
 
     def back(self, sid: str):
         return self.client.post(f"/planning/{sid}/back")
@@ -231,15 +244,13 @@ def course_place_ids(option: dict) -> set[str]:
 
 
 def assert_error(response, status: int, code: str | None = None) -> dict:
-    """공통 오류 모양 `{"error": {"code", "message", "detail"}}` (TASK-003 §5)."""
+    """공통 오류 모양 `{"error": {"code", "message", "detail"}}` (TASK-003 §5). code 값은 §10 Q24."""
     assert response.status_code == status, response.text
     body = response.json()
     assert set(body) == {"error"}
     assert set(body["error"]) == {"code", "message", "detail"}
-    assert type(body["error"]["code"]) is str and body["error"]["code"]
+    assert body["error"]["code"] == (code or ERROR_CODES[status])
     assert type(body["error"]["message"]) is str and body["error"]["message"]
-    if code is not None:
-        assert body["error"]["code"] == code
     return body["error"]
 
 
@@ -349,6 +360,10 @@ def assert_course_shape(data: dict) -> None:
             assert set(dropped_entry) == {"place_id", "reason"}
             assert dropped_entry["reason"] in {"closed_at_time", "no_time", "fixed_conflict"}
     CourseResult.model_validate(data)
+
+
+def first_option_id(course: dict) -> str:
+    return course["options"][0]["option_id"]
 
 
 def ctx(**kw) -> SimpleNamespace:

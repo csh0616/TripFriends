@@ -9,11 +9,12 @@ from engine.models import DayPlan, Place, PlaceId, Reactions
 class DayRecord(NamedTuple):
     plan: DayPlan
     places: dict[PlaceId, Place]
+    day_number: int  # trip 안에서 몇째 날인지, 1부터 (TASK-003 §10 Q5)
 
 
 class PlanningRepo(ABC):
     @abstractmethod
-    def save_day(self, day_id: str, plan: DayPlan, places: dict[PlaceId, Place]) -> None: ...
+    def save_day(self, day_id: str, plan: DayPlan, places: dict[PlaceId, Place], day_number: int = 1) -> None: ...
 
     @abstractmethod
     def get_day(self, day_id: str) -> DayRecord | None: ...
@@ -32,7 +33,7 @@ class PlanningRepo(ABC):
 
 
 class MemoryPlanningRepo(PlanningRepo):
-    def save_day(self, day_id: str, plan: DayPlan, places: dict[PlaceId, Place]) -> None:
+    def save_day(self, day_id: str, plan: DayPlan, places: dict[PlaceId, Place], day_number: int = 1) -> None:
         raise NotImplementedError
 
     def get_day(self, day_id: str) -> DayRecord | None:

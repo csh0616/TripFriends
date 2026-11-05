@@ -1,4 +1,4 @@
-"""첫 묶음. 근거: TASK-003 §4-1, AC-3, TASK-002 §3 C 거르기 표, §7 Q2·Q5, §8 Q21·Q24."""
+"""첫 묶음. 근거: TASK-003 §4-1, AC-3, §10 Q11·Q12·Q13, TASK-002 §3 C 거르기 표, §7 Q2·Q5, §8 Q21·Q24."""
 
 import pytest
 from hypothesis import given, settings
@@ -6,7 +6,7 @@ from hypothesis import strategies as st
 from planning_api_helpers import CHIP_CATEGORIES, demo_places, ids
 from planning_helpers import BASE, MONDAY_EVENING, as_places, opening, place
 
-from engine.models import Batch
+from engine.models import Batch, Opening
 from engine.planning import first_batch
 
 CATEGORIES = ["cafe", "food", "walk", "museum", "landmark", "shop", "experience", "night"]
@@ -154,39 +154,78 @@ def test_A13_AC03_칩과_방향_둘다_맞는_곳이_5곳_미만이면_그_곳�
     both = [place(f"P{i}", category="cafe", crowd=1) for i in (101, 102)]
     rest = [place(f"P{i}", category="food", crowd=5) for i in range(1, 8)]
     result = run(as_places(*rest, *both), ["cafe"], "quieter").place_ids
-    assert result[:2] == ["P101", "P102"]
-    assert len(result) == 6
+    assert result == ["P101", "P102", "P1", "P2", "P3", "P4"]
 
 
-@pytest.mark.skip(reason="질문 대기 Q12: 칩·방향이 함께 있을 때 채우는 순서")
-def test_A14_칩과_방향_함께_채울_때_한쪽만_맞는_곳의_순서():
-    only_cafe = place("P1", category="cafe", crowd=5)
-    only_quiet = place("P2", category="food", crowd=1)
-    neither = place("P3", category="food", crowd=5)
-    result = run(as_places(neither, only_quiet, only_cafe), ["cafe"], "quieter").place_ids
-    assert result == ["P1", "P2", "P3"]  # 임시 가정: id 순
+def test_A14_칩과_방향_함께_채우는_순서는_둘다_칩만_방향만_나머지():
+    # 번호는 일부러 기대 순서의 반대로 둔다 (id순이면 실패)
+    neither = [place(f"P{i}", category="food", crowd=5) for i in (1, 2)]
+    only_quiet = [place(f"P{i}", category="food", crowd=1) for i in (3, 4)]
+    only_cafe = [place(f"P{i}", category="cafe", crowd=5) for i in (5, 10)]
+    both = [place("P20", category="cafe", crowd=1)]
+    result = run(as_places(*neither, *only_quiet, *only_cafe, *both), ["cafe"], "quieter").place_ids
+    assert result == ["P20", "P5", "P10", "P3", "P4", "P1"]
 
 
-@pytest.mark.skip(reason="질문 대기 Q11: first_batch의 exhausted·direction_relaxed·direction 값")
+def crowd_places(quiet, busy):
+    return [place(f"P{i}", crowd=1) for i in range(1, quiet + 1)] + [
+        place(f"P{i}", crowd=5) for i in range(quiet + 1, quiet + busy + 1)
+    ]
+
+
 @pytest.mark.parametrize(
     ("places", "categories", "direction", "exhausted", "relaxed"),
     [
+        ([], [], None, True, False),
+        (cat_places(1, 3, "cafe"), [], None, True, False),
         (cat_places(1, 4, "cafe"), ["cafe"], None, True, False),
         (cat_places(1, 5, "cafe"), ["cafe"], None, False, False),
         (cat_places(1, 4, "cafe") + cat_places(5, 4, "food"), ["cafe"], None, False, True),
+        (cat_places(1, 5, "cafe") + cat_places(6, 4, "food"), ["cafe"], None, False, False),
+        (crowd_places(4, 0), [], "quieter", True, False),
+        (crowd_places(2, 2), [], "quieter", True, True),
+        (crowd_places(4, 4), [], "quieter", False, True),
+        (crowd_places(5, 3), [], "quieter", False, False),
     ],
-    ids=["전체_4곳", "전체_5곳", "칩_4곳_채움"],
+    ids=[
+        "전체_0곳",
+        "칩없음_전체_3곳",
+        "전체_4곳",
+        "전체_5곳",
+        "칩_4곳_채움",
+        "칩_5곳_안채움",
+        "방향_전체_4곳_모두_맞음",
+        "방향_전체_4곳_일부만_맞음",
+        "방향_4곳_채움",
+        "방향_5곳_안채움",
+    ],
 )
 def test_A15_첫_묶음의_표시값(places, categories, direction, exhausted, relaxed):
     batch = run(as_places(*places), categories, direction)
     assert (batch.exhausted, batch.direction_relaxed, batch.direction) == (exhausted, relaxed, direction)
 
 
-@pytest.mark.skip(reason="질문 대기 Q13: first_batch의 k 검사와 영업시간 검사 범위")
 @pytest.mark.parametrize("k", [4, 7])
 def test_A16_k가_5나_6이_아니면_ValueError(k):
     with pytest.raises(ValueError):
         run(as_places(place("P1")), k=k)
+
+
+@pytest.mark.parametrize(
+    ("weekday", "open_at", "close_at"),
+    [(0, "10:75", "18:00"), (0, "31:00", "32:00"), (0, "18:00", "10:00"), (7, "10:00", "18:00")],
+    ids=["분_75", "시각_범위_밖", "여는시각이_더_늦음", "요일_범위_밖"],
+)
+def test_A24_Q13_영업시간이_잘못되면_next_batch처럼_ValueError(weekday, open_at, close_at):
+    with pytest.raises(ValueError):
+        hours = [Opening(weekday=weekday, open=open_at, close=close_at)]
+        run(as_places(place("P1", hours=hours)))
+
+
+def test_A25_Q12_둘_다_맞는_곳이_5곳이면_채우지_않는다():
+    both = [place(f"P{i}", category="cafe", crowd=1) for i in range(101, 106)]
+    only_cafe = [place(f"P{i}", category="cafe", crowd=5) for i in range(1, 4)]
+    assert run(as_places(*only_cafe, *both), ["cafe"], "quieter").place_ids == [p.id for p in both]
 
 
 # ---------- Hypothesis ----------
@@ -239,6 +278,27 @@ def test_A19_AC03_결정적_같은_입력은_같은_결과_넣은_순서가_달�
     first = run(places, categories, direction, k)
     assert run(places, categories, direction, k) == first
     assert run(dict(reversed(list(places.items()))), categories, direction, k) == first
+
+
+@settings(max_examples=200, deadline=None)
+@given(places_strategy, categories_strategy, k_strategy)
+def test_A26_Q12_칩과_방향이_있으면_채우는_순서까지_규칙과_같다(places, categories, k):
+    in_order = sorted(places, key=number)
+
+    def chip(p):
+        return not categories or places[p].category in categories
+
+    def quiet(p):
+        return places[p].crowd_level <= 2
+
+    both = [p for p in in_order if chip(p) and quiet(p)]
+    expected = both[:k]
+    if len(both) < 5:
+        chip_only = [p for p in in_order if chip(p) and not quiet(p)]
+        quiet_only = [p for p in in_order if quiet(p) and not chip(p)]
+        neither = [p for p in in_order if not chip(p) and not quiet(p)]
+        expected = (both + chip_only + quiet_only + neither)[:k]
+    assert run(places, categories, "quieter", k).place_ids == expected
 
 
 # ---------- API에서 칩·글이 첫 묶음으로 이어지는지 (§4-1) ----------

@@ -16,6 +16,7 @@ from planning_api_helpers import (
     cafes,
     course_place_ids,
     dumped,
+    first_option_id,
     ids,
     without_option_id,
 )
@@ -61,7 +62,7 @@ def test_B02_AC04_줄02_시작_자동모드는_꼭_갈곳과_6곳으로_코스�
     places = city()
     plan = day_plan(must=("P20",))
     response = env.start(env.plant_day(places, plan), mode="auto")
-    assert response.status_code == 201  # Q1 임시 가정
+    assert response.status_code == 201  # §10-2 Q1
     data = response.json()
     assert_course_shape(data)
     assert env.stage(data["session_id"]) == "composing"
@@ -200,8 +201,8 @@ def test_B09_AC04_줄09_코스짜기는_skip_기록_후_담은_곳으로_계산�
 def test_B10_AC04_줄10_시간조정은_다시_계산하고_composing(env):
     places = city()
     plan = day_plan()
-    sid, _ = env.composing(env.plant_day(places, plan), likes=("P01", "P02"))
-    response = env.adjust(sid, "P01", 15)
+    sid, course = env.composing(env.plant_day(places, plan), likes=("P01", "P02"))
+    response = env.adjust(sid, first_option_id(course), "P01", 15)
     assert response.status_code == 200
     data = response.json()
     assert_course_shape(data)
@@ -244,6 +245,18 @@ def test_B13_AC04_줄13_그_외_조합은_409_대표_경우_전체는_C01(env):
     assert response.json()["error"]["code"] == "STATE_CONFLICT"
     assert env.stage(sid) == "browsing"
     assert env.repo.snapshot() == before
+
+
+def test_B17_Q22_빈_next와_더_고를래_뒤에는_직전_방향이_없다(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.next(sid, direction_id="closer")
+    assert env.values(sid)["last_direction"] == "closer"
+    env.next(sid)
+    assert env.values(sid)["last_direction"] is None
+    env.next(sid, direction_id="closer")
+    assert env.compose(sid).status_code == 200
+    assert env.back(sid).status_code == 200
+    assert env.values(sid)["last_direction"] is None
 
 
 def test_B14_S3_PlanningState_필드는_문서의_11개뿐():

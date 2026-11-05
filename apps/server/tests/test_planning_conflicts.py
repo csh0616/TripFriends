@@ -12,7 +12,7 @@ EVENTS = {
     "next_text": lambda env, c: env.next(c.sid, text="그냥 아무거나"),
     "next_empty": lambda env, c: env.next(c.sid),
     "compose": lambda env, c: env.compose(c.sid),
-    "adjust": lambda env, c: env.adjust(c.sid, "P01", 15),
+    "adjust": lambda env, c: env.adjust(c.sid, c.option_id, "P01", 15),
     "back": lambda env, c: env.back(c.sid),
     "select": lambda env, c: env.select(c.option_id),
 }
@@ -81,7 +81,7 @@ AUTO_EVENTS = ["answer", "auto", "reaction", "next_direction", "next_text", "nex
 @pytest.mark.parametrize("event", AUTO_EVENTS)
 def test_C02_AC05_자동모드_composing도_표에_없는_이벤트는_409(env, event):
     response = env.start(env.plant_day(city()), mode="auto")
-    assert response.status_code == 201  # Q1 임시 가정
+    assert response.status_code == 201  # §10-2 Q1
     c = ctx(sid=response.json()["session_id"], option_id="없음")
     assert_conflict_keeps_everything(env, c, lambda: EVENTS[event](env, c))
     assert env.stage(c.sid) == "composing"

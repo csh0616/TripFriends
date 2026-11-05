@@ -1,4 +1,4 @@
-"""되묻기와 해석 기록. 근거: TASK-003 §4-3, AC-8, AC-9, TASK-002 §8 Q25."""
+"""되묻기와 해석 기록. 근거: TASK-003 §4-3, AC-8, AC-9, §10 Q19·Q22·Q28·Q30, TASK-002 §8 Q25."""
 
 import pytest
 from planning_api_helpers import (
@@ -6,10 +6,12 @@ from planning_api_helpers import (
     MSG_CLARIFY,
     MSG_NO_DIRECTION,
     UNKNOWN_TEXT,
+    WHY_NONE,
     as_dict,
     assert_batch_shape,
     at_of,
     cafes,
+    candidate,
     ids,
 )
 from planning_helpers import BASE, day_plan, place
@@ -136,13 +138,56 @@ def test_D08_S4_3_되묻기_뒤_반응해도_횟수는_유지되어_다음엔_�
     assert not set(ids(data)) & set(FIRST_SIX)
 
 
-@pytest.mark.skip(reason="질문 대기 Q19: 두 번째 못 알아들었을 때 반응 없는 곳을 skip으로 기록하는지")
 def test_D09_두번째_못알아들음도_반응_없는_곳을_skip으로_기록(env):
     sid, _ = env.browse(env.plant_day(city()))
     env.react(sid, "P01")
     env.next(sid, text=UNKNOWN_TEXT)
     env.next(sid, text=UNKNOWN_TEXT)
-    assert env.repo.reactions(sid) == Reactions(liked=["P01"], skipped=FIRST_SIX[1:])  # 임시 가정
+    assert env.repo.reactions(sid) == Reactions(liked=["P01"], skipped=FIRST_SIX[1:])
+
+
+def test_D14_Q30_되묻기의_why와_담은_수는_지금_상태로_다시_계산(env):
+    places = as_dict([place("P01", tags=("골목",)), place("P02", tags=("골목",)), *cafes(10, start=3)])
+    sid, batch = env.browse(env.plant_day(places))
+    assert candidate(batch, "P02")["why"] == WHY_NONE
+    env.react(sid, "P01")
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert ids(data) == ids(batch)
+    assert candidate(data, "P02")["why"] == "골목 좋아해서 골랐어요"
+    assert data["picks_count"] == 1
+
+
+def test_D15_Q30_되묻기의_directions_clarify_why_exhausted는_지금_상태로_계산(env):
+    places = as_dict(cafes(30, price=1))
+    plan = day_plan()
+    sid, _ = env.browse(env.plant_day(places, plan))
+    batch = env.next(sid, direction_id="cheaper").json()
+    shown = FIRST_SIX + ids(batch)
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    expected = pick_directions(
+        [places[p] for p in ids(batch)],
+        [p for pid, p in places.items() if pid not in shown],
+        Reactions(liked=[], skipped=FIRST_SIX),
+        places,
+        "cheaper",
+        BASE,
+        at_of(plan),
+    )
+    choices = [{"id": d, "label": LABELS[d]} for d in expected]
+    assert "cheaper" not in expected
+    assert data["directions"] == choices
+    assert data["clarify"] == choices
+    assert data["exhausted"] is False
+    assert env.values(sid)["last_direction"] == "cheaper"
+    assert {c["why"] for c in data["candidates"]} == {f"{LABELS['cheaper']} 쪽이에요"}
+
+
+def test_D16_Q22_Q19_두번째_못알아들음_뒤에는_직전_방향이_없다(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.next(sid, direction_id="closer")
+    env.next(sid, text=UNKNOWN_TEXT)
+    env.next(sid, text=UNKNOWN_TEXT)
+    assert env.values(sid)["last_direction"] is None
 
 
 def parser_logs(env):
@@ -183,6 +228,24 @@ def test_D12_AC09_첫_질문의_글_해석도_기록(env, text, direction, under
     assert [log["output"] for log in parser_logs(env)] == [
         {"text": text, "direction": direction, "understood": understood}
     ]
+
+
+def test_D17_Q28_기록의_message_id는_null(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.next(sid, text=UNKNOWN_TEXT)
+    assert parser_logs(env)[0]["message_id"] is None
+
+
+@pytest.mark.parametrize(
+    ("length", "saved"),
+    [(199, 199), (200, 200), (201, 200), (500, 200)],
+    ids=["199자", "200자_경계", "201자_경계", "500자"],
+)
+def test_D18_Q28_글_원문은_200자까지_저장(env, length, saved):
+    text = "아" * length  # POC-001 §5-1 키워드 없음
+    sid, _ = env.browse(env.plant_day(city()))
+    assert env.next(sid, text=text).status_code == 200
+    assert parser_logs(env)[0]["output"] == {"text": "아" * saved, "direction": None, "understood": False}
 
 
 @pytest.mark.parametrize("body", [{}, {"direction_id": "closer"}], ids=["빈_next", "방향버튼"])

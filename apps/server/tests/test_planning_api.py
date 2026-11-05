@@ -1,9 +1,10 @@
-"""완료 기준과 오류. 근거: TASK-003 §4, §5, AC-6·7·10~16·18~20, DATA-001 C·D, TASK-002 §7 Q15·Q16, §8 Q37."""
+"""완료 기준과 오류. 근거: TASK-003 §4, §5, §10, AC-6·7·10~16·18~20, DATA-001 C·D, TASK-002 §7 Q15·Q16, §8 Q37."""
 
 import ast
 import importlib
 import json
 import sys
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -20,10 +21,12 @@ from planning_api_helpers import (
     assert_batch_shape,
     assert_course_shape,
     assert_error,
+    at_of,
     cafes,
     course_place_ids,
     demo_places,
     dumped,
+    first_option_id,
     ids,
     week_hours,
     without_option_id,
@@ -32,7 +35,7 @@ from planning_helpers import BASE, MONDAY, day_plan, opening, place
 
 from deciders import JevDecider
 from engine.models import Reactions, StayRange
-from engine.planning import compose_courses
+from engine.planning import compose_courses, next_batch
 
 FIRST_SIX = [f"P{i:02d}" for i in range(1, 7)]
 SERVER = Path(__file__).parents[1]
@@ -100,19 +103,52 @@ def test_F06_S4_취소_뒤_다시_좋아하면_담긴다(env):
     assert env.react(sid, "P01").json() == {"picks": ["P01"], "picks_count": 1}
 
 
-@pytest.mark.skip(reason="질문 대기 Q18: 좋아한 곳을 skip하면 담은 곳에서 빠지는지")
-def test_F07_좋아한_곳을_넘기면(env):
+def test_F07_Q18_좋아한_곳을_넘기면_담은_곳에서_빠진다(env):
     sid, _ = env.browse(env.plant_day(city()))
     env.react(sid, "P01")
-    assert env.react(sid, "P01", "skip").json() == {"picks": [], "picks_count": 0}  # 임시 가정
+    assert env.react(sid, "P01", "skip").json() == {"picks": [], "picks_count": 0}
+    assert env.repo.reactions(sid) == Reactions(liked=[], skipped=["P01"])
 
 
-@pytest.mark.skip(reason="질문 대기 Q17: 이전 묶음에서 담은 곳을 unlike할 수 있는지 (§5 400과 FR-02a)")
-def test_F08_이전_묶음에서_담은_곳_취소(env):
+def test_F08_Q17_이전_묶음에서_담은_곳도_취소할_수_있다(env):
     sid, _ = env.browse(env.plant_day(city()))
     env.react(sid, "P01")
     env.next(sid)
-    assert env.react(sid, "P01", "unlike").json() == {"picks": [], "picks_count": 0}  # 임시 가정
+    assert env.react(sid, "P01", "unlike").json() == {"picks": [], "picks_count": 0}
+    reactions = env.repo.reactions(sid)
+    assert "P01" not in reactions.liked
+    assert "P01" not in reactions.skipped
+
+
+@pytest.mark.parametrize("action", ["like", "skip"])
+def test_F57_Q17_like와_skip은_지금_묶음만(env, action):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.next(sid)
+    before = env.repo.snapshot()
+    assert_error(env.react(sid, "P01", action), 400)
+    assert env.repo.snapshot() == before
+
+
+def test_F58_Q17_이전_묶음에서_담지_않은_곳은_unlike해도_400(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.next(sid)
+    before = env.repo.snapshot()
+    assert_error(env.react(sid, "P01", "unlike"), 400)
+    assert env.repo.snapshot() == before
+
+
+def test_F59_Q18_picks는_담은_순서(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.react(sid, "P03")
+    assert env.react(sid, "P01").json()["picks"] == ["P03", "P01"]
+    env.react(sid, "P03", "unlike")
+    assert env.react(sid, "P03").json()["picks"] == ["P01", "P03"]
+
+
+def test_F60_Q18_넘긴_곳을_다시_좋아하면_담긴다(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.react(sid, "P01", "skip")
+    assert env.react(sid, "P01").json() == {"picks": ["P01"], "picks_count": 1}
 
 
 # ---------- AC-10, AC-11: 코스 계산 경계 ----------
@@ -165,27 +201,39 @@ def test_F13_AC11_꼭_갈_곳이_하루보다_길면_422_detail에_이유(env):
     assert error["detail"] == {"reason": "must_visit_overflow", "blocking": ["P20"], "suggest_drop": []}
 
 
-@pytest.mark.skip(reason="질문 대기 Q3: compose 422 뒤의 stage와 skip 기록")
-def test_F14_compose_422_뒤_상태(env):
+def test_F14_Q3_compose_422면_browsing_유지_skip_기록_안함(env):
     plan = day_plan(must=("P20",))
     sid, _ = env.browse(env.plant_day(closed_monday_city(), plan))
     env.react(sid, "P01")
-    env.compose(sid)
-    assert env.stage(sid) == "browsing"  # 임시 가정: 실패면 아무것도 바뀌지 않음
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.compose(sid), 422)
+    assert env.stage(sid) == "browsing"
     assert env.repo.reactions(sid) == Reactions(liked=["P01"], skipped=[])
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
 
 
-@pytest.mark.skip(reason="질문 대기 Q2: 자동 모드에서 코스를 못 만들 때 (§5 실패 목록에 422 없음)")
-@pytest.mark.parametrize("via", ["start", "answer"])
-def test_F15_자동_모드에서_꼭_갈_곳_휴무(env, via):
-    plan = day_plan(must=("P20",))
-    day_id = env.plant_day(closed_monday_city(), plan)
-    if via == "start":
-        response = env.start(day_id, mode="auto")
-    else:
-        sid = env.session(day_id)["session_id"]
-        response = env.client.post(f"/planning/{sid}/answer", json={"auto": True})
-    assert_error(response, 422, "COURSE_INFEASIBLE")  # 임시 가정
+def test_F15_Q2_자동_시작에서_코스를_못_만들면_422_세션_안_만듦(env):
+    day_id = env.plant_day(closed_monday_city(), day_plan(must=("P20",)))
+    before = env.repo.snapshot()
+    error = assert_error(env.start(day_id, mode="auto"), 422)
+    assert error["detail"]["reason"] == "must_visit_closed"
+    assert env.repo.snapshot() == before
+
+
+def test_F61_Q2_asking의_자동에서_코스를_못_만들면_422_asking_유지_대화로_이어감(env):
+    day_id = env.plant_day(closed_monday_city(), day_plan(must=("P20",)))
+    session = env.session(day_id)
+    sid = session["session_id"]
+    state, repo = env.values(sid), env.repo.snapshot()
+    response = env.client.post(f"/planning/{sid}/answer", json={"auto": True})
+    error = assert_error(response, 422)
+    assert error["detail"]["reason"] == "must_visit_closed"
+    assert env.stage(sid) == "asking"
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+    assert env.answer(session).status_code == 200
+    assert env.stage(sid) == "browsing"
 
 
 # ---------- AC-12: 시간 조정 ----------
@@ -198,10 +246,10 @@ def item_of(option, pid):
 def test_F16_AC12_플러스_15_두번이면_30분_늘고_다시_계산(env):
     places = city()
     plan = day_plan()
-    sid, _ = env.composing(env.plant_day(places, plan), likes=("P01", "P02"))
-    first = env.adjust(sid, "P01", 15).json()
+    sid, course = env.composing(env.plant_day(places, plan), likes=("P01", "P02"))
+    first = env.adjust(sid, first_option_id(course), "P01", 15).json()
     assert {item_of(o, "P01")["stay_min"] for o in first["options"]} == {FIXED_STAY.typical + 15}
-    second = env.adjust(sid, "P01", 15)
+    second = env.adjust(sid, first_option_id(first), "P01", 15)
     assert second.status_code == 200
     data = second.json()
     assert_course_shape(data)
@@ -214,19 +262,19 @@ def test_F16_AC12_플러스_15_두번이면_30분_늘고_다시_계산(env):
 
 
 def test_F17_AC12_마이너스_15와_되돌리기(env):
-    sid, _ = env.composing(env.plant_day(city()), likes=("P01",))
-    down = env.adjust(sid, "P01", -15).json()
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    down = env.adjust(sid, first_option_id(course), "P01", -15).json()
     assert {item_of(o, "P01")["stay_min"] for o in down["options"]} == {45}
     assert {item_of(o, "P01")["stay_source"] for o in down["options"]} == {"user"}
-    back_up = env.adjust(sid, "P01", 15).json()
+    back_up = env.adjust(sid, first_option_id(down), "P01", 15).json()
     assert {item_of(o, "P01")["stay_min"] for o in back_up["options"]} == {60}
     assert {item_of(o, "P01")["stay_source"] for o in back_up["options"]} == {"user"}
 
 
 def test_F18_AC12_두_곳을_따로_조정(env):
-    sid, _ = env.composing(env.plant_day(city()), likes=("P01", "P02"))
-    env.adjust(sid, "P01", 15)
-    data = env.adjust(sid, "P02", -15).json()
+    sid, course = env.composing(env.plant_day(city()), likes=("P01", "P02"))
+    first = env.adjust(sid, first_option_id(course), "P01", 15).json()
+    data = env.adjust(sid, first_option_id(first), "P02", -15).json()
     for option in data["options"]:
         assert item_of(option, "P01")["stay_min"] == 75
         assert item_of(option, "P02")["stay_min"] == 45
@@ -242,14 +290,29 @@ def test_F19_AC12_사용자_값_경계_15분과_300분(env, minutes, delta, expe
     stay = StayRange(min=minutes, typical=minutes, max=minutes)
     places = as_dict([*cafes(5, start=2), place("P01", hours=week_hours("00:00", "29:00"), stay=stay)])
     plan = day_plan(start="09:00", end="23:00")
-    sid, _ = env.composing(env.plant_day(places, plan), likes=("P01",))
-    data = env.adjust(sid, "P01", delta).json()
+    sid, course = env.composing(env.plant_day(places, plan), likes=("P01",))
+    data = env.adjust(sid, first_option_id(course), "P01", delta).json()
+    assert {item_of(o, "P01")["stay_min"] for o in data["options"]} == {expected}
+
+
+@pytest.mark.parametrize(
+    ("minutes", "first_delta", "second_delta", "expected"),
+    [(300, 15, -15, 285), (15, -15, 15, 30)],
+    ids=["300에서_더한_뒤_빼면_285", "15에서_뺀_뒤_더하면_30"],
+)
+def test_F56_Q14_잘린_값을_저장하므로_다음_조정은_자른_값_기준(env, minutes, first_delta, second_delta, expected):
+    stay = StayRange(min=minutes, typical=minutes, max=minutes)
+    places = as_dict([*cafes(5, start=2), place("P01", hours=week_hours("00:00", "29:00"), stay=stay)])
+    plan = day_plan(start="09:00", end="23:00")
+    sid, course = env.composing(env.plant_day(places, plan), likes=("P01",))
+    first = env.adjust(sid, first_option_id(course), "P01", first_delta).json()
+    data = env.adjust(sid, first_option_id(first), "P01", second_delta).json()
     assert {item_of(o, "P01")["stay_min"] for o in data["options"]} == {expected}
 
 
 def test_F20_DATA001_D_조정한_시간은_다시_짜도_지킨다(env):
-    sid, _ = env.composing(env.plant_day(city()), likes=("P01",))
-    env.adjust(sid, "P01", 15)
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    env.adjust(sid, first_option_id(course), "P01", 15)
     env.back(sid)
     data = env.compose(sid).json()
     for option in data["options"]:
@@ -263,35 +326,85 @@ def test_F21_S5_조정해서_꼭_갈_곳이_못_들어가면_422(env):
     plan = day_plan(must=("P20",))
     sid, course = env.composing(env.plant_day(places, plan))
     assert course["options"]
-    error = assert_error(env.adjust(sid, "P20", 15), 422, "COURSE_INFEASIBLE")
+    error = assert_error(env.adjust(sid, first_option_id(course), "P20", 15), 422, "COURSE_INFEASIBLE")
     assert error["detail"]["reason"] == "user_stay_conflict"
     assert error["detail"]["blocking"] == ["P20"]
 
 
+def test_F62_Q3_adjust_422면_바꾼_값을_되돌리고_composing_유지(env):
+    places = as_dict([*cafes(6), place("P20", hours=week_hours("09:00", "10:00"), stay=FIXED_STAY)])
+    sid, course = env.composing(env.plant_day(places, day_plan(must=("P20",))))
+    option_id = first_option_id(course)
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.adjust(sid, option_id, "P20", 15), 422)
+    assert env.stage(sid) == "composing"
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+    # 같은 코스안이 그대로 살아 있고, 저장된 값이 없으니 기준은 다시 60분 → 45분
+    data = env.adjust(sid, option_id, "P20", -15).json()
+    assert {item_of(o, "P20")["stay_min"] for o in data["options"]} == {45}
+
+
 @pytest.mark.parametrize("delta", [0, 14, 16, 30, -30], ids=str)
 def test_F22_S5_delta는_15나_마이너스_15만(env, delta):
-    sid, _ = env.composing(env.plant_day(city()), likes=("P01",))
-    assert_error(env.adjust(sid, "P01", delta), 400)
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.adjust(sid, first_option_id(course), "P01", delta), 400)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
 
 
 def test_F23_S5_플러스_15_마이너스_15_양쪽은_정상(env):
-    sid, _ = env.composing(env.plant_day(city()), likes=("P01",))
-    assert env.adjust(sid, "P01", 15).status_code == 200
-    assert env.adjust(sid, "P01", -15).status_code == 200
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    up = env.adjust(sid, first_option_id(course), "P01", 15)
+    assert up.status_code == 200
+    assert env.adjust(sid, first_option_id(up.json()), "P01", -15).status_code == 200
 
 
-@pytest.mark.skip(reason="질문 대기 Q14: relaxed·packed의 머문 시간이 다를 때 adjust의 기준값")
-def test_F24_두_안의_시간이_다를_때_조정_기준(env):
+@pytest.mark.parametrize("label", ["relaxed", "packed"])
+def test_F24_Q14_기준은_고른_안의_머문_시간이고_결과는_두_안_모두에_적용(env, label):
     places = as_dict(cafes(6, stay=StayRange(min=30, typical=60, max=90)))
-    sid, _ = env.composing(env.plant_day(places), likes=("P01",))
-    data = env.adjust(sid, "P01", 15).json()
-    assert data["options"]  # 기대값은 답을 받은 뒤 정한다
+    sid, course = env.composing(env.plant_day(places), likes=("P01",))
+    by_label = {o["label"]: o for o in course["options"]}
+    assert set(by_label) == {"relaxed", "packed"}
+    assert item_of(by_label["relaxed"], "P01")["stay_min"] != item_of(by_label["packed"], "P01")["stay_min"]
+    option = by_label[label]
+    expected = item_of(option, "P01")["stay_min"] + 15
+    response = env.adjust(sid, option["option_id"], "P01", 15)
+    assert response.status_code == 200
+    data = response.json()
+    for result in data["options"]:
+        assert item_of(result, "P01")["stay_min"] == expected
+        assert item_of(result, "P01")["stay_source"] == "user"
+    changed = day_plan(overrides={"P01": expected})
+    assert without_option_id(data) == dumped(compose_courses(changed, ["P01"], places))
 
 
-@pytest.mark.skip(reason="질문 대기 Q15: adjust의 400 조건 (코스에 없는 곳, 뺀 곳)")
-def test_F25_코스에_없는_장소_조정(env):
-    sid, _ = env.composing(env.plant_day(city()), likes=("P01",))
-    assert_error(env.adjust(sid, "P20", 15), 400)  # 임시 가정
+@pytest.mark.parametrize("place_id", ["P20", "없는장소"], ids=["담지_않은_곳", "아예_없는_곳"])
+def test_F25_Q15_그_안의_items에_없는_장소는_400(env, place_id):
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.adjust(sid, first_option_id(course), place_id, 15), 400)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+
+
+def test_F63_Q15_뺀_곳_다른_안에만_있는_곳은_400_그_안에_있으면_정상(env):
+    # 60분 2곳: 쉬는 15분이면 135분이라 안 들어가고, 쉬는 5분이면 125분이라 들어간다 (하루 130분)
+    plan = day_plan(start="09:00", end="11:10")
+    sid, course = env.composing(env.plant_day(city(), plan), likes=("P01", "P02"))
+    by_label = {o["label"]: o for o in course["options"]}
+    assert set(by_label) == {"relaxed", "packed"}
+    relaxed, packed = by_label["relaxed"], by_label["packed"]
+    only_packed = {i["place_id"] for i in packed["items"]} - {i["place_id"] for i in relaxed["items"]}
+    assert len(only_packed) == 1
+    target = only_packed.pop()
+    assert target in {d["place_id"] for d in relaxed["dropped"]}
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.adjust(sid, relaxed["option_id"], target, -15), 400)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+    assert env.adjust(sid, packed["option_id"], target, -15).status_code == 200
 
 
 # ---------- AC-13, AC-14: 되돌아가기, 고르기 ----------
@@ -338,13 +451,42 @@ def test_F28_AC14_안이_둘이면_어느_쪽이든_고른_것이_저장된다(e
     assert env.repo.chosen_option(day_id) == packed
 
 
-@pytest.mark.skip(reason="질문 대기 Q16: adjust 전의 옛 코스안 ID로 select하면")
-def test_F29_조정_전의_코스안을_고르면(env):
-    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
-    old = course["options"][0]["option_id"]
-    new = env.adjust(sid, "P01", 15).json()["options"][0]["option_id"]
+def test_F29_Q16_조정하면_새_ID이고_옛_ID로_고르면_404(env):
+    day_id = env.plant_day(city())
+    sid, course = env.composing(day_id, likes=("P01",))
+    old = first_option_id(course)
+    data = env.adjust(sid, old, "P01", 15).json()
+    new = first_option_id(data)
     assert old != new
-    assert_error(env.select(old), 404)  # 임시 가정
+    assert env.values(sid)["option_ids"] == [o["option_id"] for o in data["options"]]
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.select(old), 404)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+    assert env.select(new).status_code == 200
+    assert env.repo.chosen_option(day_id) == new
+
+
+def test_F64_Q16_옛_ID로_조정하면_404(env):
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    old = first_option_id(course)
+    assert env.adjust(sid, old, "P01", 15).status_code == 200
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.adjust(sid, old, "P01", 15), 404)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+
+
+def test_F66_Q21_코스안_ID만으로_그_세션을_찾는다(env):
+    day_a = env.plant_day(city())
+    day_b = env.plant_day(city())
+    a, _ = env.composing(day_a, likes=("P01",))
+    b, course_b = env.composing(day_b, likes=("P01",))
+    option_id = first_option_id(course_b)
+    assert env.select(option_id).json() == {"day_id": day_b, "option_id": option_id}
+    assert env.stage(b) == "done"
+    assert env.stage(a) == "composing"
+    assert env.repo.chosen_option(day_a) is None
 
 
 # ---------- AC-15: 자동 ----------
@@ -356,7 +498,7 @@ def test_F30_AC15_자동_모드는_바로_코스이고_꼭_갈_곳_포함_가상
     must = env.repo.get_day(day_id).plan.must_visit
     assert len(must) == 1
     response = env.start(day_id, mode="auto")
-    assert response.status_code == 201  # Q1 임시 가정
+    assert response.status_code == 201  # §10-2 Q1
     data = response.json()
     assert_course_shape(data)
     for option in data["options"]:
@@ -369,7 +511,7 @@ def test_F31_AC15_자동_코스도_조정하면_같은_곳으로_다시_계산(e
     plan = day_plan()
     response = env.start(env.plant_day(places, plan), mode="auto")
     sid = response.json()["session_id"]
-    data = env.adjust(sid, "P01", 15).json()
+    data = env.adjust(sid, first_option_id(response.json()), "P01", 15).json()
     changed = day_plan(overrides={"P01": 75})
     assert without_option_id(data) == dumped(compose_courses(changed, FIRST_SIX, places))
 
@@ -382,13 +524,30 @@ def test_F32_AC15_자동_코스도_고를_수_있다(env):
     assert env.stage(data["session_id"]) == "done"
 
 
-@pytest.mark.skip(reason="질문 대기 Q20: 자동 코스에서 더 고를래를 누르면 담은 곳과 보여 준 곳")
-def test_F33_자동_코스에서_더_고른_뒤_다시_짜면(env):
+def test_F33_Q20_자동_코스에서_더_고르면_처음부터_담은_곳_0(env):
+    places = city()
+    plan = day_plan()
+    data = env.start(env.plant_day(places, plan), mode="auto").json()
+    sid = data["session_id"]
+    assert env.values(sid)["shown"] == []
+    batch = env.back(sid).json()
+    assert_batch_shape(batch)
+    assert batch["picks_count"] == 0
+    assert batch["round"] == 1
+    assert ids(batch) == next_batch(places, Reactions(liked=[], skipped=[]), None, [], BASE, at_of(plan)).place_ids
+    assert ids(batch) == FIRST_SIX  # 자동 코스의 6곳은 보여 준 곳이 아니다
+    assert env.stage(sid) == "browsing"
+    assert env.repo.reactions(sid) == Reactions(liked=[], skipped=[])
+
+
+def test_F67_Q20_자동_코스에서_더_고른_뒤_다시_짜면_고른_곳으로만(env):
     data = env.start(env.plant_day(city()), mode="auto").json()
     sid = data["session_id"]
-    batch = env.back(sid).json()
-    assert batch["picks_count"] == 0  # 임시 가정: 반응 기록이 없으므로 담은 곳 0
-    assert not set(ids(batch)) & set(FIRST_SIX)
+    env.back(sid)
+    env.react(sid, "P02")
+    course = env.compose(sid).json()
+    for option in course["options"]:
+        assert course_place_ids(option) == {"P02"}
 
 
 # ---------- AC-16: 멈춘 자리에서 이어 가기 ----------
@@ -518,13 +677,13 @@ def run_every_event(env):
     env.next(sid, text=UNKNOWN_TEXT)
     env.next(sid, direction_id="closer")
     env.next(sid)
-    env.compose(sid)
-    env.adjust(sid, "P01", 15)
+    composed = env.compose(sid).json()
+    env.adjust(sid, first_option_id(composed), "P01", 15)
     env.back(sid)
     course = env.compose(sid).json()
     env.select(course["options"][0]["option_id"])
     auto = env.start(env.plant_day(city()), mode="auto")
-    assert auto.status_code == 201  # Q1 임시 가정
+    assert auto.status_code == 201  # §10-2 Q1
     second = env.session(env.plant_day(city()))
     env.client.post(f"/planning/{second['session_id']}/answer", json={"auto": True})
 
@@ -614,12 +773,34 @@ def test_F47_S5_시드는_가상_도시_3일_숙소_중심_둘째_날만_꼭_갈
     seed = env.seed()
     days = [env.repo.get_day(day_id) for day_id in seed["day_ids"]]
     assert len(days) == 3
-    assert len({d.plan.date for d in days}) == 3
+    assert [d.plan.date for d in days] == [date(2026, 12, 1), date(2026, 12, 2), date(2026, 12, 3)]
+    assert [d.day_number for d in days] == [1, 2, 3]
     for day in days:
         assert set(day.places) == set(demo_places())
         assert day.plan.lodging == BASE
+        assert (day.plan.start, day.plan.end) == ("10:00", "20:00")
     assert [len(d.plan.must_visit) for d in days] == [0, 1, 0]
-    assert days[1].plan.must_visit[0] in days[1].places
+
+
+def test_F68_Q26_꼭_갈_곳은_둘째_날_여는_곳_중_id가_가장_작은_곳(env):
+    seed = env.seed()
+    second = env.repo.get_day(seed["day_ids"][1])
+    weekday = date(2026, 12, 2).weekday()
+    opening_ids = [p.id for p in demo_places().values() if any(o.weekday == weekday for o in p.hours or [])]
+    assert second.plan.must_visit == [min(opening_ids)]
+    assert second.plan.must_visit == ["D01"]
+
+
+def test_F69_Q26_Q33_시드_묶음은_at이_그날_시작_시각이고_꼭_갈_곳이_빠진다(env):
+    seed = env.seed()
+    day_id = seed["day_ids"][1]
+    sid, first = env.browse(day_id)
+    assert "D01" not in ids(first)
+    places = {pid: p for pid, p in demo_places().items() if pid != "D01"}
+    reactions = Reactions(liked=[], skipped=ids(first))
+    at = datetime(2026, 12, 2, 10, 0)
+    data = env.next(sid, direction_id="night").json()
+    assert ids(data) == next_batch(places, reactions, "night", ids(first), BASE, at).place_ids
 
 
 def test_F48_S6_시드_데이터의_출처는_demo(env):
@@ -630,6 +811,43 @@ def test_F48_S6_시드_데이터의_출처는_demo(env):
 
 
 # ---------- 오류 (§5) ----------
+
+
+def test_F70_Q33_꼭_갈_곳은_첫_묶음과_다음_묶음과_더_고를래에서_빠진다(env):
+    places = city(30)
+    plan = day_plan(must=("P03",))
+    sid, first = env.browse(env.plant_day(places, plan))
+    assert ids(first) == ["P01", "P02", "P04", "P05", "P06", "P07"]
+    without_must = {pid: p for pid, p in places.items() if pid != "P03"}
+    reactions = Reactions(liked=[], skipped=ids(first))
+    second = env.next(sid).json()
+    assert ids(second) == next_batch(without_must, reactions, None, ids(first), BASE, at_of(plan)).place_ids
+    assert "P03" not in ids(second)
+    assert env.compose(sid).status_code == 200
+    assert "P03" not in ids(env.back(sid).json())
+
+
+def test_F71_Q33_꼭_갈_곳에는_반응할_수_없다(env):
+    sid, _ = env.browse(env.plant_day(city(), day_plan(must=("P03",))))
+    before = env.repo.snapshot()
+    assert_error(env.react(sid, "P03"), 400)
+    assert env.repo.snapshot() == before
+
+
+@pytest.mark.parametrize("via", ["start", "answer"])
+def test_F72_Q33_자동의_6곳은_꼭_갈_곳_제외_6곳(env, via):
+    places = city()
+    plan = day_plan(must=("P03",))
+    day_id = env.plant_day(places, plan)
+    if via == "start":
+        data = env.start(day_id, mode="auto").json()
+    else:
+        sid = env.session(day_id)["session_id"]
+        data = env.client.post(f"/planning/{sid}/answer", json={"auto": True}).json()
+    six = ["P01", "P02", "P04", "P05", "P06", "P07"]
+    assert without_option_id(data) == dumped(compose_courses(plan, six, places))
+    for option in data["options"]:
+        assert course_place_ids(option) == {*six, "P03"}
 
 
 def test_F49_S5_없는_날로_세션을_시작하면_404(env):
@@ -684,7 +902,6 @@ def test_F54_S5_없는_direction_id는_400이고_저장소_그대로(env):
     assert env.values(sid)["round"] == 1
 
 
-@pytest.mark.skip(reason="질문 대기 Q23: 본문이 잘못된 요청의 상태 코드와 오류 모양")
 @pytest.mark.parametrize(
     ("path", "body"),
     [
@@ -692,10 +909,69 @@ def test_F54_S5_없는_direction_id는_400이고_저장소_그대로(env):
         ("/days/{day}/planning", {}),
         ("/planning/{sid}/reactions", {"place_id": "P01", "action": "love"}),
         ("/planning/{sid}/reactions", {"action": "like"}),
+        ("/planning/{sid}/next", {"direction_id": "closer", "text": "근처로"}),
+        ("/planning/{sid}/next", {"text": ""}),
+        ("/planning/{sid}/next", {"text": 123}),
     ],
-    ids=["없는_mode", "mode_없음", "없는_action", "place_id_없음"],
+    ids=["없는_mode", "mode_없음", "없는_action", "place_id_없음", "방향과_글_동시", "빈_글", "글이_숫자"],
 )
-def test_F55_본문이_잘못되면_공통_오류_400(env, path, body):
+def test_F55_Q23_본문이_잘못되면_공통_오류_400_아무것도_안_바뀜(env, path, body):
     day = env.plant_day(city())
     sid, _ = env.browse(day)
-    assert_error(env.client.post(path.format(day=day, sid=sid), json=body), 400)  # 임시 가정
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.client.post(path.format(day=day, sid=sid), json=body), 400)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"auto": True, "choice_ids": []},
+        {"auto": True, "choice_ids": ["cafe"]},
+        {"choice_ids": [], "text": ""},
+        {"choice_ids": ["없는칩"]},
+        {},
+    ],
+    ids=["자동과_빈_칩", "자동과_칩", "빈_글", "없는_칩", "빈_본문"],
+)
+def test_F73_Q23_첫_답의_본문이_잘못되면_400_asking_유지(env, body):
+    sid = env.session(env.plant_day(city()))["session_id"]
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.client.post(f"/planning/{sid}/answer", json=body), 400)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+
+
+@pytest.mark.parametrize(
+    "change",
+    [{"option_id": None}, {"place_id": None}, {"delta": None}, {"delta": "15"}],
+    ids=["option_id_없음", "place_id_없음", "delta_없음", "delta가_글"],
+)
+def test_F74_Q23_Q14_adjust_본문이_잘못되면_400(env, change):
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    body = {"option_id": first_option_id(course), "place_id": "P01", "delta": 15}
+    for key, value in change.items():
+        if value is None:
+            del body[key]
+        else:
+            body[key] = value
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.client.post(f"/planning/{sid}/adjust", json=body), 400)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+
+
+def test_F75_Q23_빈_글은_해석_기록을_남기지_않는다(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    assert_error(env.next(sid, text=""), 400)
+    assert env.repo.decision_logs() == []
+
+
+def test_F76_Q24_오류_코드는_4개_값까지(env):
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    assert env.client.post("/planning/없는-세션/back").json()["error"]["code"] == "NOT_FOUND"
+    assert env.adjust(sid, first_option_id(course), "P01", 30).json()["error"]["code"] == "INVALID_REQUEST"
+    assert env.compose(sid).json()["error"]["code"] == "STATE_CONFLICT"
+    closed = env.plant_day(closed_monday_city(), day_plan(must=("P20",)))
+    assert env.start(closed, mode="auto").json()["error"]["code"] == "COURSE_INFEASIBLE"

@@ -1,4 +1,4 @@
-"""시각 형식 검사. 근거: TASK-003 §0, AC-2, TASK-002 §7 Q12, §9 Q45, §10 #5, §10-4 Q58."""
+"""시각 형식 검사. 근거: TASK-003 §0, AC-2, §10-3 Q29, TASK-002 §7 Q12, §9 Q45, §10 #5, §10-4 Q58."""
 
 import pytest
 from planning_helpers import BASE, MONDAY_EVENING, as_places, day_plan, fixed_event, place
@@ -23,6 +23,9 @@ BAD_TIMES = [
     pytest.param("", id="빈_문자열"),
     pytest.param("10:00:00", id="초까지"),
     pytest.param(" 10:00", id="앞_공백"),
+    pytest.param("10:00\n", id="끝_줄바꿈"),
+    pytest.param("１０:００", id="전각_숫자"),
+    pytest.param("١٠:٠٠", id="아라비아_숫자"),
 ]
 
 

@@ -1,4 +1,4 @@
-"""응답 모양과 대본. 근거: TASK-003 §5, §6, AC-17, TASK-002 §7 Q13, §8 Q25."""
+"""응답 모양과 대본. 근거: TASK-003 §5, §6, §10, AC-17, TASK-002 §7 Q13, §8 Q25."""
 
 import uuid
 from datetime import date
@@ -6,12 +6,14 @@ from datetime import date
 import pytest
 from planning_api_helpers import (
     CHIP_CATEGORIES,
+    CHOICES,
     DIRECTION_GROUPS,
     LABELS,
     MSG_CLARIFY,
     MSG_EXHAUSTED,
     MSG_FIRST,
     MSG_NO_DIRECTION,
+    QUESTION_TAIL,
     QUESTION_TEXT,
     UNKNOWN_TEXT,
     WHY_NONE,
@@ -26,6 +28,7 @@ from planning_api_helpers import (
     candidate,
     demo_places,
     direction_city,
+    first_option_id,
     ids,
     opening_fact,
     week_hours,
@@ -68,7 +71,7 @@ def full_flow(env, day_id):
     record("like2", env.react(sid, pick), 200, assert_picks_shape)
     course = record("compose", env.compose(sid), 200, assert_course_shape)
     in_course = course["options"][0]["items"][0]["place_id"]  # 코스에 들어간 곳만 조정한다 (Q15)
-    record("adjust", env.adjust(sid, in_course, 15), 200, assert_course_shape)
+    record("adjust", env.adjust(sid, first_option_id(course), in_course, 15), 200, assert_course_shape)
     record("back", env.back(sid), 200, assert_batch_shape)
     record("compose2", env.compose(sid), 200, assert_course_shape)
     return results, sid
@@ -112,10 +115,8 @@ def test_E03_S6_첫_질문_내용(env):
     data = env.start(seed["day_ids"][1]).json()
     assert_session_shape(data)
     assert data["question"]["text"] == QUESTION_TEXT
-    labels = {c["label"]: c["id"] for c in data["question"]["choices"]}
-    assert set(labels) == set(CHIP_CATEGORIES)
-    assert labels["골목 산책"] == "walk_alley"
-    assert len(set(labels.values())) == 6
+    assert data["question"]["choices"] == CHOICES
+    assert {c["label"] for c in CHOICES} == set(CHIP_CATEGORIES)
 
 
 def test_E04_S5_세션과_코스안_ID는_uuid4(env):
@@ -229,20 +230,28 @@ def test_E09_S6_가상_도시의_세_상태(env):
     assert (facts["D03"]["value"], facts["D03"]["status"]) == (None, "unknown")
 
 
-@pytest.mark.skip(reason="질문 대기 Q9: 그날 휴무인 곳의 facts.value (모름과 다름)")
-@pytest.mark.parametrize("hours", [[at(TUE, "10:00", "18:00")], []], ids=["그날만_휴무", "빈_목록"])
-def test_E10_그날_휴무인_곳의_값(env, hours):
-    places = as_dict([place("P01", hours=hours, status="confirmed"), *cafes(6, start=2)])
+@pytest.mark.parametrize(
+    ("hours", "status"),
+    [
+        ([at(TUE, "10:00", "18:00")], "confirmed"),
+        ([], "confirmed"),
+        ([at(TUE, "10:00", "18:00")], "unverified"),
+        ([at(TUE, "10:00", "18:00")], "unknown"),
+    ],
+    ids=["그날만_휴무", "빈_목록", "미확인_데이터도_휴무면_confirmed", "unknown_데이터도_휴무면_confirmed"],
+)
+def test_E10_Q9_그날_휴무면_null과_confirmed(env, hours, status):
+    places = as_dict([place("P01", hours=hours, status=status), *cafes(6, start=2)])
     _, batch = env.browse(env.plant_day(places))
     fact = opening_fact(candidate(batch, "P01")["place"])
-    assert (fact["value"], fact["status"]) == (None, "confirmed")  # 임시 가정
+    assert (fact["value"], fact["status"]) == (None, "confirmed")
 
 
-@pytest.mark.skip(reason="질문 대기 Q10: 영업시간이 있는데 hours_status가 unknown인 곳의 facts.status")
-def test_E11_영업시간이_있는데_상태가_unknown(env):
+def test_E11_Q10_영업시간이_있는데_상태가_unknown이면_unverified(env):
     places = as_dict([place("P01", hours=week_hours(), status="unknown"), *cafes(6, start=2)])
     _, batch = env.browse(env.plant_day(places))
-    assert opening_fact(candidate(batch, "P01")["place"])["status"] == "unverified"  # 임시 가정: TASK-002 Q13
+    fact = opening_fact(candidate(batch, "P01")["place"])
+    assert (fact["value"], fact["status"]) == ("08:00-18:00", "unverified")
 
 
 # ---------- 방향 이름표 8개와 message 대본 ----------
@@ -334,29 +343,33 @@ def test_E18_S6_대본_더_볼_곳이_없을_때_경계(env, total, exhausted, s
     assert data["message"] == message
 
 
-@pytest.mark.skip(reason="질문 대기 Q6: exhausted와 다른 대본이 함께 맞을 때의 우선순위")
-def test_E19_방향이_있어도_더_볼_곳이_없으면_exhausted_대본(env):
+def test_E19_Q6_방향이_있어도_더_볼_곳이_없으면_exhausted_대본(env):
     sid, _ = env.browse(env.plant_day(city(10)))
-    assert env.next(sid, direction_id="closer").json()["message"] == MSG_EXHAUSTED  # 임시 가정
+    assert env.next(sid, direction_id="closer").json()["message"] == MSG_EXHAUSTED
 
 
-@pytest.mark.skip(reason="질문 대기 Q6: exhausted와 다른 대본이 함께 맞을 때의 우선순위")
-def test_E20_첫_묶음이_4곳뿐이면_exhausted_대본(env):
-    _, batch = env.browse(env.plant_day(city(4)))
-    assert batch["message"] == MSG_EXHAUSTED  # 임시 가정
+@pytest.mark.parametrize(
+    ("total", "message", "exhausted"),
+    [(4, MSG_EXHAUSTED, True), (5, MSG_FIRST, False)],
+    ids=["전체_4곳", "전체_5곳_경계"],
+)
+def test_E20_Q6_첫_묶음이_5곳_미만이면_exhausted_대본(env, total, message, exhausted):
+    _, batch = env.browse(env.plant_day(city(total)))
+    assert batch["message"] == message
+    assert batch["exhausted"] is exhausted
 
 
-@pytest.mark.skip(reason="질문 대기 Q6: 첫 묶음에 방향이 있을 때의 대본")
-def test_E21_글로_방향을_말한_첫_묶음의_대본(env):
+def test_E21_Q6_글로_방향을_말한_첫_묶음은_첫_묶음_대본(env):
     places = as_dict(cafes(8, crowd=1))
     _, batch = env.browse(env.plant_day(places), [], "조용한 데")
-    assert batch["message"] == MSG_FIRST  # 임시 가정
+    assert batch["message"] == MSG_FIRST
 
 
-@pytest.mark.skip(reason="질문 대기 Q6: 되묻기 때 묶음이 이미 exhausted일 때의 대본")
-def test_E22_되묻기와_exhausted가_함께면_되묻기_대본(env):
+def test_E22_Q6_되묻기와_exhausted가_함께면_되묻기_대본(env):
     sid, _ = env.browse(env.plant_day(city(4)))
-    assert env.next(sid, text=UNKNOWN_TEXT).json()["message"] == MSG_CLARIFY  # 임시 가정
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert data["message"] == MSG_CLARIFY
+    assert data["exhausted"] is True
 
 
 @pytest.mark.parametrize(
@@ -371,12 +384,15 @@ def test_E23_S6_direction_relaxed_경계(env, matching, relaxed):
     assert data["direction_relaxed"] is relaxed
 
 
-@pytest.mark.skip(reason="질문 대기 Q7: 방향을 못 지켜 채운 곳의 message와 why")
-def test_E24_방향을_못_지켜_채운_곳의_why(env):
+def test_E24_Q7_방향을_못_지켜_채운_곳은_기본_문장(env):
     items = cafes(6, crowd=5) + cafes(4, start=7, crowd=1) + cafes(8, start=30, crowd=5)
     sid, _ = env.browse(env.plant_day(as_dict(items)))
     data = env.next(sid, direction_id="quieter").json()
-    assert candidate(data, "P30")["why"] == WHY_NONE  # 임시 가정: 안 맞는 곳에 이름표를 달지 않음
+    label = LABELS["quieter"]
+    assert data["direction_relaxed"] is True
+    assert data["message"] == f"{label} 쪽으로 다시 찾아봤어!"
+    assert candidate(data, "P07")["why"] == f"{label} 쪽이에요"
+    assert candidate(data, "P30")["why"] == WHY_NONE
 
 
 # ---------- why 대본 3갈래 ----------
@@ -475,8 +491,7 @@ def test_E34_S6_why_두번째_못알아들음_묶음은_방향이_없다(env):
     assert {c["why"] for c in data["candidates"]} == {WHY_NONE}
 
 
-@pytest.mark.skip(reason="질문 대기 Q8: 겹치는 태그가 여럿일 때 '첫 태그'의 기준")
-def test_E35_겹치는_태그가_여럿이면_후보_태그_순서의_첫번째(env):
+def test_E35_Q8_겹치는_태그가_여럿이면_후보_태그_순서의_첫번째(env):
     places = as_dict(
         [
             place("P01", tags=("골목", "조용"), hours=week_hours()),
@@ -486,7 +501,72 @@ def test_E35_겹치는_태그가_여럿이면_후보_태그_순서의_첫번째(
     )
     sid, _ = env.browse(env.plant_day(places))
     env.react(sid, "P01")
-    assert candidate(env.next(sid).json(), "P07")["why"] == "조용 좋아해서 골랐어요"  # 임시 가정
+    assert candidate(env.next(sid).json(), "P07")["why"] == "조용 좋아해서 골랐어요"
+
+
+# ---------- §10에서 새로 정한 값 ----------
+
+DAY_WORDS = {1: "첫째 날은", 2: "둘째 날은", 3: "셋째 날은", 4: "넷째 날은", 5: "다섯째 날은"}
+
+
+@pytest.mark.parametrize("number", list(DAY_WORDS))
+def test_E39_Q5_첫_질문의_날짜_말_다섯째까지(env, number):
+    data = env.session(env.plant_day(city(), day_number=number))
+    assert data["question"]["text"] == DAY_WORDS[number] + QUESTION_TAIL
+
+
+@pytest.mark.parametrize("number", [6, 7, 10])
+def test_E40_Q5_여섯째부터는_n일째(env, number):
+    text = env.session(env.plant_day(city(), day_number=number))["question"]["text"]
+    assert text.startswith(f"{number}일째")
+    assert text.endswith(QUESTION_TAIL)
+
+
+def test_E41_Q5_시드의_세_날은_trip_순서대로(env):
+    day_ids = env.seed()["day_ids"]
+    assert [env.session(d)["question"]["text"] for d in day_ids] == [
+        DAY_WORDS[n] + QUESTION_TAIL for n in (1, 2, 3)
+    ]
+
+
+def test_E42_Q31_빈_묶음이면_round_그대로_exhausted(env):
+    sid, first = env.browse(env.plant_day(city(6)))
+    data = env.next(sid).json()
+    assert_batch_shape(data)
+    assert data["candidates"] == []
+    assert data["exhausted"] is True
+    assert data["round"] == first["round"] == 1
+    assert env.values(sid)["round"] == 1
+    assert env.values(sid)["batch"] == []
+    assert env.next(sid).json()["round"] == 1
+
+
+def test_E43_Q31_더_고를래도_빈_묶음이면_round_그대로(env):
+    sid, _ = env.composing(env.plant_day(city(6)))
+    data = env.back(sid).json()
+    assert data["candidates"] == []
+    assert data["exhausted"] is True
+    assert data["round"] == 1
+
+
+def test_E44_Q6_더_고를래도_더_볼_곳이_없으면_exhausted_대본(env):
+    sid, _ = env.composing(env.plant_day(city(10)))
+    assert env.back(sid).json()["message"] == MSG_EXHAUSTED
+
+
+def test_E45_Q6_두번째_못알아들음도_더_볼_곳이_없으면_exhausted_대본(env):
+    sid, _ = env.browse(env.plant_day(city(10)))
+    env.next(sid, text=UNKNOWN_TEXT)
+    assert env.next(sid, text=UNKNOWN_TEXT).json()["message"] == MSG_EXHAUSTED
+
+
+def test_E46_Q7_첫_묶음에서_방향을_못_지켜_채운_곳도_기본_문장(env):
+    places = as_dict(cafes(2, crowd=1) + cafes(6, start=3, crowd=5))
+    _, batch = env.browse(env.plant_day(places), [], "조용한 데")
+    assert batch["direction_relaxed"] is True
+    assert batch["message"] == MSG_FIRST
+    assert candidate(batch, "P01")["why"] == f"{LABELS['quieter']} 쪽이에요"
+    assert candidate(batch, "P03")["why"] == WHY_NONE
 
 
 # ---------- 묶음의 값 ----------
