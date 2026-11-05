@@ -44,9 +44,10 @@
 - 커밋: `feat:` `fix:` `chore:` `docs:` `test:` + 한국어 설명. `main`에 직접 커밋하지 않고 브랜치 → PR
 - 막히면: 에러 원문, 세운 가설, 확인한 것을 남긴다 (학습 자료가 된다)
 - 단계마다 보고: 무엇을 했는지 / 승현이 실행할 명령 / 확인 방법
+- 프로세스 종료: 자기가 띄운 프로세스만 PID로 끈다. `pkill` 같은 이름 기반 종료 금지
 
 ## 자주 쓰는 명령 (생기면 갱신)
 - 서버 테스트: `cd apps/server && uv run pytest`
-- 서버 실행: `cd apps/server && uv run fastapi dev`
+- 서버 실행: `cd apps/server && uv run fastapi dev api/main.py`
 - 앱 테스트: `pnpm --filter mobile test`
 - 타입 생성: `pnpm --filter api-types generate`
