@@ -32,6 +32,8 @@
 | GET `/places/search?city_code&q` | 장소 이름 검색 (꼭 갈 곳·숙소 입력용) | `Place[]` | FR-01 |
 
 ### 2-2. 계획 대화 (FR-02~03)
+> **11-05**: 계획 API의 경로·요청·응답·오류는 **TASK-003 §5·§6·§10이 정본**이다. 아래와 다르면 TASK-003을 따른다
+
 | 메서드·경로 | 요청 | 응답 | FR·AC |
 |---|---|---|---|
 | POST `/days/{day_id}/planning` | `{mode: "conversation" \| "auto"}` | 201 `PlanningSession` (첫 질문과 보기) | FR-02·05, AC-16 |
@@ -40,7 +42,7 @@
 | POST `/planning/{session_id}/next` | `{direction_id?, text?}` (없으면 추정만으로) | `CandidateBatch` + `directions[]`(다음 방향 버튼) 또는 `{clarify: Direction[]}` | FR-02c, AC-17·17a |
 | POST `/planning/{session_id}/compose` | — | `CourseOption[]` (2~3안) 또는 422 `COURSE_INFEASIBLE` + 뺄 후보 | FR-03·07, AC-18 |
 | POST `/course-options/{option_id}/select` | — | `TripDay` (선택 코스 반영) | FR-03 |
-| POST `/planning/{session_id}/adjust` | `{place_id, delta: 15\|-15}` | `CourseResult` (머무는 시간 조정 후 다시 계산) | FR-07a (11-05 추가, TASK-003) |
+| POST `/planning/{session_id}/adjust` | `{option_id, place_id, delta: 15\|-15}` | `CourseResult` (머무는 시간 조정 후 다시 계산) | FR-07a (11-05 추가, TASK-003) |
 | POST `/planning/{session_id}/back` | — | `CandidateBatch` ([더 고를래]) | FR-02 (11-05 추가, TASK-003) |
 | POST `/debug/seed-demo` | — | `{trip_id, day_ids[]}` (개발 전용, 운영에서 404) | TASK-003 |
 | POST `/days/{day_id}/items/{item_id}/alternatives` | — | 같은 종류 대안 3곳 + 동선 변화(분) | FR-06, AC-04 |

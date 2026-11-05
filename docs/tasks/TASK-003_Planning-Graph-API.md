@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-05 |
-| 상태 | **v1** — 결정권자 승인 후 `/run-task TASK-003` |
+| 상태 | **v2** — 11-05 test-writer 질문 35개 답을 §10에 추가 (§5·§6 일부 수정). **§10이 §4~§6보다 우선** |
 | 관련 | GRAPH-001 §1·§2 · API-001 §2-2·§3 · SRS-001 FR-02~03·07a · SCREEN-001 §3-1 · TASK-002(엔진 함수) · DATA-001 C·D |
 | 브랜치 | `feat/task-003-planning-graph` |
 | 다음 | TASK-004 계획 화면 (`frontend`, **디자인 시스템 확정 후**). 이 TASK의 API 응답 모양이 TASK-004의 계약 |
@@ -28,7 +28,7 @@
 | 메모리 저장소 `PlanningRepo`(인터페이스 + 메모리 구현) | Supabase 연결 (별도 TASK). 인터페이스만 나중에 바꿔 끼운다 |
 | 체크포인터 `MemorySaver` | Postgres 체크포인터 (Supabase TASK에서) |
 | 개발용 데모 여행 `POST /debug/seed-demo` | `POST /trips` 정식 구현 (별도 TASK) |
-| `/planning` 엔드포인트 6개 (§5) | 앱 화면 (TASK-004) |
+| 엔드포인트 9개 (§5 표) | 앱 화면 (TASK-004) |
 
 - LangGraph 사용법은 **작업 시점의 공식 문서**를 확인한다 (`StateGraph`, `interrupt()`, `Command(resume=...)`, 체크포인터). 고른 방식을 PR에 적는다
 
@@ -88,12 +88,12 @@
 | 메서드·경로 | 요청 | 성공 | 실패 |
 |---|---|---|---|
 | POST `/debug/seed-demo` | — | 201 `{trip_id, day_ids[]}` (demo_city, 3일, 숙소 = 중심점, 둘째 날 꼭 갈 곳 1곳) | `APP_ENV=production`이면 404 |
-| POST `/days/{day_id}/planning` | `{mode}` | 201 `PlanningSession` | 404 day 없음 |
-| POST `/planning/{session_id}/answer` | `{choice_ids[], text?}` 또는 `{auto: true}` | 200 `CandidateBatch` 또는 `CourseResult` | 404, 409 |
+| POST `/days/{day_id}/planning` | `{mode}` | 201 `PlanningSession` (auto면 201 `CourseResult`) | 404 day 없음, 422(auto에서 코스 불가, 세션 안 만듦) |
+| POST `/planning/{session_id}/answer` | `{choice_ids[], text?}` 또는 `{auto: true}` | 200 `CandidateBatch` 또는 `CourseResult` | 404, 409, 422(auto에서 코스 불가) |
 | POST `/planning/{session_id}/reactions` | `{place_id, action}` | 200 `Picks` | 404, 409, 400(묶음에 없는 place_id) |
 | POST `/planning/{session_id}/next` | `{direction_id?}` 또는 `{text?}` | 200 `CandidateBatch` (되묻기면 `clarify` 채움) | 404, 409, 400(없는 direction_id) |
 | POST `/planning/{session_id}/compose` | — | 200 `CourseResult` | 404, 409, **422 `COURSE_INFEASIBLE`**(Infeasible 내용을 `detail`에) |
-| POST `/planning/{session_id}/adjust` | `{place_id, delta: 15 \| -15}` | 200 `CourseResult` | 404, 409, 400, 422 |
+| POST `/planning/{session_id}/adjust` | `{option_id, place_id, delta: 15 \| -15}` | 200 `CourseResult` | 404, 409, 400, 422 |
 | POST `/planning/{session_id}/back` | — | 200 `CandidateBatch` | 404, 409 |
 | POST `/course-options/{option_id}/select` | — | 200 `{day_id, option_id}` | 404, 409 |
 
@@ -110,7 +110,7 @@
 
 // CandidateBatch
 { "session_id": "…", "stage": "browsing", "round": 2,
-  "message": "조용한 쪽으로 다시 찾아봤어!",
+  "message": "좀 더 한적한 데 쪽으로 다시 찾아봤어!",
   "candidates": [ { "place": Place, "why": "골목 좋아해서 골랐어요" } ],
   "directions": [ {"id": "quieter", "label": "좀 더 한적한 데"} ],
   "clarify": null,
@@ -170,6 +170,56 @@
 2. **핵심 개념**: 상태 기계(전이표 = 테스트 목록) · 그래프 상태 vs 저장소(맥락만 vs 원본 데이터) · 409(지금 단계에서 할 수 없는 요청)
 3. **직접 해보기**: `/debug/seed-demo` → 세션 시작 → 좋아 2번 → 코스 짜기를 `curl` 또는 `/docs` 화면에서 눌러 본다
 4. **내 말로**: "왜 반응은 그래프 상태가 아니라 저장소에 두나?" / "R2에서 LLM으로 바꿀 때 어디만 바꾸면 되나?"
+
+## 10. 질문 답 (11-05, test-writer Q1~Q35)
+원칙 두 가지를 먼저 정한다. 아래 답은 모두 이 원칙에서 나온다
+- **실패한 요청은 아무것도 바꾸지 않는다** (4xx면 그래프 상태·저장소 모두 요청 전과 같음)
+- **응답 문구·값은 그 응답을 만들 때의 상태로 매번 새로 계산한다** (why, directions, exhausted)
+
+### 10-1. 구현을 막던 질문
+| Q | 답 |
+|---|---|
+| Q2 | 자동 모드에서 코스를 못 만들면 **422 `COURSE_INFEASIBLE`**. 시작(`mode="auto"`)이면 **세션을 만들지 않는다**. asking의 `answer{auto}`이면 stage는 asking 그대로 (앱은 대화 모드로 이어 간다) |
+| Q3 | compose·adjust가 422면 **전부 그대로**: compose는 browsing 유지, skip 기록 안 함. adjust는 `stay_overrides`를 되돌리고 composing 유지 |
+| Q4 | 칩 ID (이 순서로 보낸다): `walk_alley` 골목 산책 · `food_tour` 맛집 투어 · `shopping` 쇼핑 · `night_view` 야경 · `cafe` 카페 · `museum_experience` 전시·체험. **TASK-004 계약** |
+| Q6 | `message` 우선순위: **되묻기 > exhausted > 첫 묶음 > 방향 있음 > 방향 없음** (위에서 처음 맞는 하나) |
+| Q9 | 그날 휴무(`hours=[]` 포함): `value=null`, `status="confirmed"`. **뜻: confirmed + null = 그날 휴무, unknown + null = 모름**. 앱은 이 둘을 다르게 보여 준다 |
+| Q14 | adjust 요청에 **`option_id`를 추가**한다 (§5 수정). 기준값 = `stay_overrides[place_id]`가 있으면 그 값, 없으면 **그 안(option_id)에서의 머문 시간**. 결과를 15~300으로 자른 뒤 저장. 저장된 값은 장소 단위라 다시 계산할 때 두 안 모두에 적용 |
+| Q19 | 2번째 못 알아들음도 **반응 없는 곳을 skip 기록** (줄08과 같음) |
+| Q20 | 자동 코스는 반응·shown을 남기지 않는다 (①). 자동 코스의 장소 목록은 코스안에 저장하고, adjust는 그 목록으로 다시 계산. 자동 세션에서 back → `next_batch(None)`, 담은 곳 0. **가설**: 사용자가 "더 고를래"에서 처음부터 고르는 게 괜찮은지 TASK-004 사용성 확인 때 본다 |
+
+### 10-2. 임시 가정을 그대로 확정 (테스트 그대로)
+Q1 ①(201 + CourseResult) · Q7 ②(채운 곳은 기본 문장) · Q8 후보의 `mood_tags` 순서 · Q10 unverified · Q11 next_batch 규칙과 같음 · Q13 next_batch와 같은 검사 · Q16 ①(adjust마다 새 ID, 옛 ID 404) · Q17 ①(unlike는 담은 곳 어디든, like·skip은 지금 묶음만) · Q18 반응 skip이면 담은 곳에서 빠짐, picks는 담은 순서 · Q21 저장소가 option_id로 찾음 · Q25 새 세션 (이전 세션도 유지) · Q34 대본 유지 (§6 예시 고침) · Q35 9개
+
+### 10-3. 임시 가정과 다르게 정함 (테스트 고침)
+| Q | 답 |
+|---|---|
+| Q12 | 칩 + 방향으로 채울 때 순서: **둘 다 맞는 곳 → 칩만 맞는 곳 → 방향만 맞는 곳 → 나머지**, 각 묶음 안은 점수순·id 숫자 순 (칩은 사용자가 직접 고른 것이라 먼저) |
+| Q15 | 400 조건: `option_id`의 `items`에 없는 장소 (dropped 포함, 다른 안에만 있는 곳 포함) |
+| Q29 | 형식은 **ASCII 숫자만** (`re.fullmatch(r"[0-9]{2}:[0-9]{2}", s)`). `"10:00\n"`, 전각 숫자도 `ValueError` 테스트 추가. `DayPlan`은 이번 범위 밖 |
+
+### 10-4. 비어 있던 값
+| Q | 답 |
+|---|---|
+| Q5 | 첫 질문의 날짜 말: 첫째·둘째·셋째·넷째·다섯째 날, 6일째부터 "{n}일째" (trip 안 순서) |
+| Q22 | `next{}`·back 뒤 `last_direction = None` |
+| Q23 | 본문 오류는 모두 **400 `INVALID_REQUEST`** 공통 형식 (FastAPI 기본 422를 바꿔 끼움). `direction_id`+`text` 동시, 빈 글, `auto`+`choice_ids`도 400 |
+| Q24 | `code` 값: `NOT_FOUND` · `INVALID_REQUEST` · `STATE_CONFLICT` · `COURSE_INFEASIBLE` (이 4개뿐) |
+| Q26 | 시드: 날짜 **2026-12-01~12-03 고정**, 하루 10:00~20:00, `at` = 그날 시작 시각. 꼭 갈 곳은 둘째 날 여는 곳 중 id가 가장 작은 곳. 고른 id를 PR에 적는다 |
+| Q28 | R1은 `decision_logs`만. `message_id=null`, 글 원문은 200자까지 저장 (데모 데이터라 R1만 허용, 개인정보 처리는 Supabase TASK에서 정함) |
+| Q30 | 되묻기 응답: 묶음 그대로, directions·exhausted·why는 원칙대로 지금 상태로 계산 |
+| Q31 | 빈 묶음이면 round 그대로, `exhausted=true` |
+| Q32 | §4대로 즉시 다시 계산. "빠지는 곳"은 앱이 `dropped`로 보여 주고 -15로 되돌릴 수 있게 한다 (TASK-004) |
+| Q33 | 꼭 갈 곳은 **후보에서 뺀다**. 그래프가 꼭 갈 곳을 뺀 장소 목록을 `first_batch`·`next_batch`에 넘긴다. 자동의 6곳도 꼭 갈 곳 제외 6곳 |
+
+### 10-5. 다음 TASK로
+- Q27 현재 상태 조회 `GET /planning/{session_id}` (앱 재시작 이어 가기) → TASK-004 시작 전 `backend` 소작업
+
+### 10-6. 문서끼리 다른 곳
+test-writer가 찾은 11곳은 **TASK-003이 정본**이다. API-001 §2-2·§3, GRAPH-001 §1-1·§2, SRS-001 AC-16에 "계획 부분은 TASK-003이 정본" 표시를 PM이 넣었다. 전체 정리는 TASK-004 문서와 함께 한다
+
+### 10-7. PM 메모
+- 표를 먼저 고정해도 질문이 35개 나왔다. 대부분 **표의 줄끼리 겹치는 곳**(대본 충돌, 실패 뒤 상태, 자동 + back)이었다 → 다음 TASK부터 "실패하면 어떻게 되나"와 "두 규칙이 겹치면 무엇이 이기나"를 처음부터 적는다
 
 ## 포트폴리오 포인트
 - 전이표 한 줄 = 테스트 하나. 그래프 흐름이 문서·테스트·코드에서 같다
