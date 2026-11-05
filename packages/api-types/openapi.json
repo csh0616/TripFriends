@@ -5,6 +5,551 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/days/{day_id}/planning": {
+      "post": {
+        "summary": "계획 대화 시작 (mode=auto면 바로 코스)",
+        "operationId": "start_planning_days__day_id__planning_post",
+        "parameters": [
+          {
+            "name": "day_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Day Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PlanningSession"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CourseResult"
+                    }
+                  ],
+                  "title": "Response Start Planning Days  Day Id  Planning Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/planning/{session_id}/answer": {
+      "post": {
+        "summary": "첫 질문의 답 또는 알아서 짜 줘",
+        "operationId": "answer_planning__session_id__answer_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CandidateBatch"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CourseResult"
+                    }
+                  ],
+                  "title": "Response Answer Planning  Session Id  Answer Post"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/planning/{session_id}/reactions": {
+      "post": {
+        "summary": "좋아·넘김·취소",
+        "operationId": "reactions_planning__session_id__reactions_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReactionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Picks"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/planning/{session_id}/next": {
+      "post": {
+        "summary": "다음 묶음 (방향 버튼·직접 입력·빈 요청)",
+        "operationId": "next_batch_planning__session_id__next_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/NextRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateBatch"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/planning/{session_id}/compose": {
+      "post": {
+        "summary": "코스 짜기",
+        "operationId": "compose_planning__session_id__compose_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/planning/{session_id}/adjust": {
+      "post": {
+        "summary": "머무는 시간 ±15분",
+        "operationId": "adjust_planning__session_id__adjust_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjustRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/planning/{session_id}/back": {
+      "post": {
+        "summary": "더 고를래",
+        "operationId": "back_planning__session_id__back_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateBatch"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/course-options/{option_id}/select": {
+      "post": {
+        "summary": "코스안 고르기",
+        "operationId": "select_course_options__option_id__select_post",
+        "parameters": [
+          {
+            "name": "option_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Option Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -82,10 +627,206 @@
           }
         }
       }
+    },
+    "/debug/seed-demo": {
+      "post": {
+        "summary": "Debug Seed Demo",
+        "description": "개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.",
+        "operationId": "debug_seed_demo_debug_seed_demo_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedResult"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AdjustRequest": {
+        "properties": {
+          "option_id": {
+            "type": "string",
+            "title": "Option Id"
+          },
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "delta": {
+            "type": "integer",
+            "enum": [
+              15,
+              -15
+            ],
+            "title": "Delta"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "option_id",
+          "place_id",
+          "delta"
+        ],
+        "title": "AdjustRequest"
+      },
+      "AnswerRequest": {
+        "properties": {
+          "choice_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "walk_alley",
+                    "food_tour",
+                    "shopping",
+                    "night_view",
+                    "cafe",
+                    "museum_experience"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice Ids"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "auto": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AnswerRequest",
+        "description": "`{choice_ids[], text?}` 또는 `{auto: true}` (§5). 섞거나 `{auto: false}`, 빈 본문은 400."
+      },
+      "Candidate": {
+        "properties": {
+          "place": {
+            "$ref": "#/components/schemas/Place"
+          },
+          "why": {
+            "type": "string",
+            "title": "Why"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place",
+          "why"
+        ],
+        "title": "Candidate"
+      },
+      "CandidateBatch": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "asking",
+              "browsing",
+              "composing",
+              "done"
+            ],
+            "title": "Stage"
+          },
+          "round": {
+            "type": "integer",
+            "title": "Round"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/Candidate"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "directions": {
+            "items": {
+              "$ref": "#/components/schemas/DirectionChoice"
+            },
+            "type": "array",
+            "title": "Directions"
+          },
+          "clarify": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DirectionChoice"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clarify"
+          },
+          "picks_count": {
+            "type": "integer",
+            "title": "Picks Count"
+          },
+          "exhausted": {
+            "type": "boolean",
+            "title": "Exhausted"
+          },
+          "direction_relaxed": {
+            "type": "boolean",
+            "title": "Direction Relaxed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "stage",
+          "round",
+          "message",
+          "candidates",
+          "directions",
+          "clarify",
+          "picks_count",
+          "exhausted",
+          "direction_relaxed"
+        ],
+        "title": "CandidateBatch"
+      },
       "CardInfo": {
         "properties": {
           "id": {
@@ -119,6 +860,335 @@
           "props_schema"
         ],
         "title": "CardInfo"
+      },
+      "Choice": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "Choice"
+      },
+      "CourseItem": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "stay_min": {
+            "type": "integer",
+            "title": "Stay Min"
+          },
+          "stay_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "user"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stay Source"
+          },
+          "travel_min": {
+            "type": "integer",
+            "title": "Travel Min"
+          },
+          "wait_min": {
+            "type": "integer",
+            "title": "Wait Min"
+          },
+          "is_fixed": {
+            "type": "boolean",
+            "title": "Is Fixed"
+          },
+          "hours_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "confirmed",
+                  "unverified",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "place_id",
+          "start",
+          "end",
+          "stay_min",
+          "stay_source",
+          "travel_min",
+          "wait_min",
+          "is_fixed",
+          "hours_status"
+        ],
+        "title": "CourseItem"
+      },
+      "CourseResult": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "asking",
+              "browsing",
+              "composing",
+              "done"
+            ],
+            "title": "Stage"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/CourseResultOption"
+            },
+            "type": "array",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "stage",
+          "options"
+        ],
+        "title": "CourseResult"
+      },
+      "CourseResultOption": {
+        "properties": {
+          "option_id": {
+            "type": "string",
+            "title": "Option Id"
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "relaxed",
+              "packed"
+            ],
+            "title": "Label"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CourseItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "dropped": {
+            "items": {
+              "$ref": "#/components/schemas/Dropped"
+            },
+            "type": "array",
+            "title": "Dropped"
+          },
+          "go_home_min": {
+            "type": "integer",
+            "title": "Go Home Min"
+          },
+          "total_travel_min": {
+            "type": "integer",
+            "title": "Total Travel Min"
+          }
+        },
+        "type": "object",
+        "required": [
+          "option_id",
+          "label",
+          "items",
+          "dropped",
+          "go_home_min",
+          "total_travel_min"
+        ],
+        "title": "CourseResultOption"
+      },
+      "DirectionChoice": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "quieter",
+              "closer",
+              "cheaper",
+              "different",
+              "photo",
+              "indoor",
+              "food",
+              "night"
+            ],
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "DirectionChoice"
+      },
+      "Dropped": {
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "closed_at_time",
+              "no_time",
+              "fixed_conflict"
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place_id",
+          "reason"
+        ],
+        "title": "Dropped"
+      },
+      "ErrorBody": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "NOT_FOUND",
+              "INVALID_REQUEST",
+              "STATE_CONFLICT",
+              "COURSE_INFEASIBLE"
+            ],
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "detail": {
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorBody",
+        "description": "공통 오류 (§5, §10 Q24). code는 이 4개뿐."
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
+      },
+      "Fact": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "unverified",
+              "unknown"
+            ],
+            "title": "Status"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "value",
+          "status",
+          "source_type",
+          "checked_at"
+        ],
+        "title": "Fact"
       },
       "FixedEvent": {
         "properties": {
@@ -171,6 +1241,45 @@
         ],
         "title": "Health"
       },
+      "NextRequest": {
+        "properties": {
+          "direction_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "quieter",
+                  "closer",
+                  "cheaper",
+                  "different",
+                  "photo",
+                  "indoor",
+                  "food",
+                  "night"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direction Id"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "NextRequest"
+      },
       "OpenEvent": {
         "properties": {
           "kind": {
@@ -188,6 +1297,97 @@
         ],
         "title": "OpenEvent",
         "description": "열린 사건. delay = 미응답 대안이 있는 늦어짐, closed = 닫힘 확인됨."
+      },
+      "Picks": {
+        "properties": {
+          "picks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Picks"
+          },
+          "picks_count": {
+            "type": "integer",
+            "title": "Picks Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "picks",
+          "picks_count"
+        ],
+        "title": "Picks"
+      },
+      "Place": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "cafe",
+              "food",
+              "walk",
+              "museum",
+              "landmark",
+              "shop",
+              "experience",
+              "night"
+            ],
+            "title": "Category"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "title": "Lng"
+          },
+          "crowd_level": {
+            "type": "integer",
+            "title": "Crowd Level"
+          },
+          "price_level": {
+            "type": "integer",
+            "title": "Price Level"
+          },
+          "mood_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Mood Tags"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            },
+            "type": "array",
+            "title": "Facts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "category",
+          "lat",
+          "lng",
+          "crowd_level",
+          "price_level",
+          "mood_tags",
+          "facts"
+        ],
+        "title": "Place",
+        "description": "앱에 보내는 모양. engine.models.Place와 별개."
       },
       "PlanItem": {
         "properties": {
@@ -235,6 +1435,89 @@
         "title": "PlanItem",
         "description": "오늘 코스의 일정 한 개."
       },
+      "PlanningSession": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "asking",
+              "browsing",
+              "composing",
+              "done"
+            ],
+            "title": "Stage"
+          },
+          "question": {
+            "$ref": "#/components/schemas/Question"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "stage",
+          "question"
+        ],
+        "title": "PlanningSession"
+      },
+      "Question": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "allow_text": {
+            "type": "boolean",
+            "title": "Allow Text"
+          },
+          "allow_auto": {
+            "type": "boolean",
+            "title": "Allow Auto"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "choices",
+          "allow_text",
+          "allow_auto"
+        ],
+        "title": "Question"
+      },
+      "ReactionRequest": {
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "like",
+              "skip",
+              "unlike"
+            ],
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "place_id",
+          "action"
+        ],
+        "title": "ReactionRequest"
+      },
       "Screen": {
         "properties": {
           "main": {
@@ -280,6 +1563,45 @@
         ],
         "title": "Screen",
         "description": "compose_screen 출력."
+      },
+      "SeedResult": {
+        "properties": {
+          "trip_id": {
+            "type": "string",
+            "title": "Trip Id"
+          },
+          "day_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Day Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trip_id",
+          "day_ids"
+        ],
+        "title": "SeedResult"
+      },
+      "SelectResult": {
+        "properties": {
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "option_id": {
+            "type": "string",
+            "title": "Option Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_id",
+          "option_id"
+        ],
+        "title": "SelectResult"
       },
       "Snapshot": {
         "properties": {
@@ -388,6 +1710,24 @@
         ],
         "title": "Snapshot",
         "description": "compose_screen 입력: 지금 상황 (TASK-001 §2 engine/compose.py)."
+      },
+      "StartRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "conversation",
+              "auto"
+            ],
+            "title": "Mode"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "title": "StartRequest"
       },
       "SuggestionChip": {
         "properties": {
