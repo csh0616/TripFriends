@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-03 |
-| 상태 | **v3 (11-04)** — 질문 Q1~Q40 답변 반영. **§8 > §7 > §2~§4 순서로 우선** |
+| 상태 | **v4 (11-04)** — 질문 Q1~Q47 답변 반영. **§9 > §8 > §7 > §2~§4 순서로 우선** |
 | 관련 | SRS-001 FR-02a~c·03·07·07a, NFR-04 · SCREEN-001 §2(머무는 시간) · GRAPH-001 §2 · ADR-011 B·C · POC-001 §5-1·§7-1 · DATA-001 |
 | 브랜치 | `feat/task-002-planning-engine` |
 | 디자인 | **TASK-004 시작 전에 디자인 시스템(토큰·기본 부품)을 결정권자와 함께 만든다** (11-04 결정, PM이 먼저 알림) |
@@ -191,3 +191,15 @@ test-writer 2차가 테스트 403개를 쓰고 남긴 질문 Q21~Q40과 B6에 �
 | Q38 | 공개 함수는 `engine/planning.py`. `demo_city.json` 맨 바깥은 `{"places": [...]}` |
 | Q39 | 남은 후보가 5개 미만이면: `direction`은 받은 값 그대로, `direction_relaxed`는 맞지 않는 곳이 하나라도 섞이면 True. 채운 경우도 `direction`은 받은 값. `k`는 5 또는 6만 받는다 (아니면 `ValueError`) |
 | Q40 | SCREEN-001 §5에 추가: 메인 T-03 → 보조 T-02, 메인 X-01 → 보조·칩 없음, 오프라인일 때 칩 없음 |
+
+
+## 9. 마지막 질문 답변 (v4, 2026-11-04) — 이 절이 가장 우선
+| Q | 결정 |
+|---|---|
+| Q41 | "1곳 이상" 단계는 **3개가 될 때까지** 채운다 (Q25 "최대 3개가 되게"와 같은 뜻). E9·E13·E14를 이 기준으로 고친다 |
+| Q42 | 꼭 갈 곳이 `packed`에는 들어가고 `relaxed`에는 안 들어가면 **`packed` 1안만** 돌려준다 |
+| Q43 | 담은 곳·꼭 갈 곳이 아닌 장소의 `stay_overrides`는 **무시** |
+| Q44 | ① 시간을 바꾼 담은 곳이 그날 휴무면 `dropped(closed_at_time)` (꼭 갈 곳이 아니므로 Infeasible 아님) ② 꼭 갈 곳 1곳이 혼자서도 하루에 안 들어가면 `must_visit_overflow`, `blocking=[그 곳]`, `suggest_drop=[]` ③ Infeasible이 여러 이유에 걸리면 **`fixed_unreachable` → `must_visit_closed` → `must_visit_overflow` → `user_stay_conflict`** 순서로 첫 번째 ④ `user_stay_conflict`의 `suggest_drop`에는 **바꾼 곳 자신도 포함** (되돌리거나 빼는 선택지) |
+| Q45 | ① `fixed_unreachable`: `blocking=[갈 수 없는 고정 일정 id]`, `suggest_drop=[]` ② 고정 일정 뒤 숙소 복귀가 하루 끝을 넘으면 `fixed_unreachable` ③ 시작 ≥ 끝이거나 `"29:59"`를 넘는 시각은 `ValueError` |
+| Q46 | 장소 있는 고정 일정 항목: `hours_status`는 그 장소의 판정값(Q13), `stay_source=None` |
+| Q47 | 남은 후보가 5개 미만일 때도 **방향에 맞는 곳을 먼저(점수순), 그다음 나머지(점수순)** |
