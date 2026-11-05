@@ -2,7 +2,7 @@
 
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
 
 from engine.models import Category, CourseItem, Direction, Dropped, HoursStatus, PlaceId
 
@@ -13,7 +13,8 @@ ChipId = Literal["walk_alley", "food_tour", "shopping", "night_view", "cafe", "m
 
 
 # ---------- 요청 (§5) ----------
-# 본문 오류는 모두 400 INVALID_REQUEST (§10 Q23). 모르는 필드는 거부한다 (TASK-003 미정: 오타가 빈 요청으로 읽히면 일정 기록이 바뀐다)
+# 본문 오류는 모두 400 INVALID_REQUEST (§10 Q23). 모르는 필드는 거부한다 (§10-10 그대로 받아들인 것:
+# 오타가 빈 요청으로 읽히면 반응 기록이 바뀐다)
 
 
 class _Request(BaseModel):
@@ -30,20 +31,24 @@ class StartRequest(_Request):
 
 
 class AnswerRequest(_Request):
-    """`{choice_ids[], text?}` 또는 `{auto: true}` (§5). 섞거나 `{auto: false}`, 빈 본문은 400."""
+    """`{choice_ids[], text?}` 또는 `{auto: true}` (§5). 섞거나 `{auto: false}`, 빈 본문은 400.
+
+    §10-10 R7: `choice_ids`를 빼고 글만 보내면 `[]`로 본다 ("직접 말할래"). R8: auto는 JSON `true`만.
+    """
 
     choice_ids: list[ChipId] | None = None
     text: str | None = None
-    auto: bool | None = None
+    auto: StrictBool | None = None
 
     @model_validator(mode="after")
     def _one_form(self) -> Self:
         _not_blank(self.text)
         if self.auto is not None:
             if self.auto is not True or self.choice_ids is not None or self.text is not None:
+                # TASK-003 미정 (Q48): `{"auto": true, "text": "…"}`도 지금처럼 400으로 둔다 (문서에 답 없음)
                 raise ValueError("auto는 true 하나만 보낸다")  # §10 Q23·Q42
-        elif self.choice_ids is None:
-            raise ValueError("choice_ids 또는 auto가 필요함")
+        elif self.choice_ids is None and self.text is None:
+            raise ValueError("choice_ids, text, auto 중 하나가 필요함")
         return self
 
 
@@ -68,6 +73,14 @@ class AdjustRequest(_Request):
     option_id: str  # §10 Q14: §5 표에 추가
     place_id: PlaceId
     delta: Literal[15, -15]
+
+    @field_validator("delta", mode="before")
+    @classmethod
+    def _integer_only(cls, value: object) -> object:
+        # §10-10 R8: delta는 정수만. pydantic의 Literal은 15.0도 15로 받아들이므로 값 검사 전에 종류를 본다
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("delta는 정수 15 또는 -15")
+        return value
 
 
 # ---------- 응답 (§6) ----------
@@ -169,7 +182,7 @@ class SeedResult(BaseModel):
 class ErrorBody(BaseModel):
     """공통 오류 (§5, §10 Q24). code는 이 4개뿐."""
 
-    code: Literal["NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE"]
+    code: Literal["NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE", "INTERNAL_ERROR"]  # §10 Q24, §10-10 R3
     message: str
     detail: Any = None
 

@@ -318,13 +318,13 @@ def fits_direction(
 ) -> bool:
     """이 장소가 방향 거르기 표(§3 C)에 맞는가. 후보의 "왜" 문장이 방향 이름표를 쓸지 가르는 데 쓴다 (TASK-003 §6).
 
-    새로 추가한 공개 함수. 거르는 규칙은 `next_batch`와 같은 `_matches` 그대로다.
+    새로 추가한 공개 함수 (TASK-003 §10-10 "그대로 받아들인 것": §8 예외로 승인). 거르는 규칙은 `next_batch`와 같은 `_matches` 그대로다.
     """
     return _matches(direction, place, _liked_tags(reactions, places), any(i in places for i in reactions.liked), anchor, at)
 
 
 def clamp_user_stay(minutes: int) -> int:
-    """사용자가 정한 머무는 시간을 15~300분으로 자른다 (TASK-002 §7 Q16). 새로 추가한 공개 함수, 값은 `_limits()` 그대로."""
+    """사용자가 정한 머무는 시간을 15~300분으로 자른다 (TASK-002 §7 Q16). 새로 추가한 공개 함수 (TASK-003 §10-10 승인), 값은 `_limits()` 그대로."""
     lim = _limits()
     return min(lim.user_stay_high, max(lim.user_stay_low, minutes))
 

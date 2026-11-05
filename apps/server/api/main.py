@@ -7,7 +7,8 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 
 from catalog import get_catalog
@@ -36,6 +37,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     예열은 뒤에서 돌고 서버 시작은 기다리지 않는다 (§9-3). 예열 중 요청도 판단 시간 제한(0.8초)을 따른다.
     """
     # TASK-003: 저장소·그래프(MemorySaver)는 서버 시작 때 한 번 만들고 요청 사이에 이어 쓴다 (AC-16)
+    # TASK-003 §10-10 R10: R1은 LangGraph 추적(langsmith) 전송을 끈다. 이미 정해 둔 값(켜기 포함)은 존중한다
+    os.environ.setdefault("LANGSMITH_TRACING", "false")
     app.state.planning_repo = MemoryPlanningRepo()
     app.state.planning_graph = build_planning_graph(app.state.planning_repo)
     app.state.planning_service = PlanningService(app.state.planning_repo, app.state.planning_graph)
@@ -57,6 +60,16 @@ async def validation_handler(request: Request, exc: RequestValidationError):
     if is_planning_path(request.url.path):
         return planning_validation_handler(request, exc)
     return await request_validation_exception_handler(request, exc)
+
+
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, exc: StarletteHTTPException):
+    """TASK-003 §10-10 R2: 없는 경로를 포함한 모든 404를 공통 형식으로. 다른 상태 코드는 FastAPI 기본 그대로."""
+    if exc.status_code == 404:
+        return planning_error_handler(request, PlanningError("NOT_FOUND", "찾을 수 없어요"))
+    return await http_exception_handler(request, exc)
 
 
 app.include_router(planning_router)
