@@ -266,6 +266,18 @@ def next_batch(
 # ---------- E. 방향 버튼 고르기 ----------
 
 
+def first_batch(
+    places: dict[PlaceId, Place],
+    categories: list[str],
+    direction: Direction | None,
+    anchor: tuple[float, float],
+    at: datetime,
+    k: int = 6,
+) -> Batch:
+    """TASK-003 §4-1 첫 묶음. 껍데기."""
+    raise NotImplementedError
+
+
 def pick_directions(
     batch: list[Place],
     remaining: list[Place],
