@@ -274,8 +274,38 @@ def first_batch(
     at: datetime,
     k: int = 6,
 ) -> Batch:
-    """TASK-003 §4-1 첫 묶음. 껍데기."""
-    raise NotImplementedError
+    """TASK-003 §4-1 첫 묶음. 반응이 없으니 점수는 모두 같고, 순서는 id 숫자 순이다.
+
+    고른 종류(categories)와 방향을 함께 맞는 곳이 min_pool(5)곳 미만이면 TASK-003 §10 Q12 순서로 채운다:
+    둘 다 맞는 곳 -> 칩만 맞는 곳 -> 방향만 맞는 곳 -> 나머지. 방향이 없으면 "방향만 맞는 곳"은 칩 밖의 곳 전부.
+    """
+    lim = _limits()
+    if k not in lim.batch_sizes:
+        raise ValueError(f"k는 {lim.batch_sizes}만 받는다: {k}")  # TASK-003 §10 Q13: next_batch와 같은 검사
+    _check_hours(places)
+    ids = list(places)
+    scores = score_candidates(Reactions(liked=[], skipped=[]), places, ids)
+    ranked = sorted(ids, key=lambda pid: (-scores[pid], _id_key(pid)))
+
+    def chip(pid: PlaceId) -> bool:
+        return not categories or places[pid].category in categories
+
+    def fits_direction(pid: PlaceId) -> bool:
+        # TASK-003 §4-1: 반응이 없어 좋아한 곳이 없다 (different는 맞는 곳 없음, TASK-002 §8 Q24)
+        return direction is None or _matches(direction, places[pid], set(), False, anchor, at)
+
+    both = [pid for pid in ranked if chip(pid) and fits_direction(pid)]
+    chip_only = [pid for pid in ranked if chip(pid) and not fits_direction(pid)]
+    direction_only = [pid for pid in ranked if not chip(pid) and fits_direction(pid)]
+    neither = [pid for pid in ranked if not chip(pid) and not fits_direction(pid)]
+    filled = both + chip_only + direction_only + neither
+
+    if len(ranked) < lim.min_pool:
+        # TASK-003 §4-1·§10 Q11: 장소가 5곳 미만이면 있는 만큼 전부, 맞는 곳 먼저 (next_batch와 같은 규칙)
+        return Batch(place_ids=filled, direction=direction, exhausted=True, direction_relaxed=len(both) < len(ranked))
+    if len(both) >= lim.min_pool:
+        return Batch(place_ids=both[:k], direction=direction, exhausted=False, direction_relaxed=False)
+    return Batch(place_ids=filled[:k], direction=direction, exhausted=False, direction_relaxed=True)
 
 
 def pick_directions(
