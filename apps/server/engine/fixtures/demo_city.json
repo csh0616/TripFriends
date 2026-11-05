@@ -1,0 +1,1469 @@
+{
+ "places": [
+  {
+   "id": "D01",
+   "name": "골목 카페 A",
+   "category": "cafe",
+   "lat": 34.99556,
+   "lng": 135.00497,
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "조용",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 1,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 2,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 3,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 4,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 5,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 6,
+     "open": "08:00",
+     "close": "19:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   }
+  },
+  {
+   "id": "D02",
+   "name": "언덕 카페 B",
+   "category": "cafe",
+   "lat": 35.00082,
+   "lng": 134.98863,
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "사진",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 1,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 2,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 3,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 4,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 5,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 6,
+     "open": "08:00",
+     "close": "19:00"
+    }
+   ],
+   "hours_status": "unverified",
+   "stay": null
+  },
+  {
+   "id": "D03",
+   "name": "정원 카페 C",
+   "category": "cafe",
+   "lat": 35.00772,
+   "lng": 135.01229,
+   "crowd_level": 5,
+   "price_level": 3,
+   "mood_tags": [
+    "골목",
+    "조용"
+   ],
+   "hours": null,
+   "hours_status": "unknown",
+   "stay": null
+  },
+  {
+   "id": "D04",
+   "name": "강변 카페 D",
+   "category": "cafe",
+   "lat": 34.98424,
+   "lng": 134.9966,
+   "crowd_level": 3,
+   "price_level": 1,
+   "mood_tags": [
+    "실내",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 1,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 2,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 3,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 4,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 5,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 6,
+     "open": "08:00",
+     "close": "19:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D05",
+   "name": "국수집 A",
+   "category": "food",
+   "lat": 35.01632,
+   "lng": 134.98733,
+   "crowd_level": 1,
+   "price_level": 3,
+   "mood_tags": [
+    "골목",
+    "현지"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 90
+   }
+  },
+  {
+   "id": "D06",
+   "name": "덮밥집 B",
+   "category": "food",
+   "lat": 34.99412,
+   "lng": 135.02672,
+   "crowd_level": 4,
+   "price_level": 1,
+   "mood_tags": [
+    "현지"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D07",
+   "name": "꼬치집 C",
+   "category": "food",
+   "lat": 34.99838,
+   "lng": 134.9962,
+   "crowd_level": 2,
+   "price_level": 3,
+   "mood_tags": [
+    "골목",
+    "유명"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 90
+   }
+  },
+  {
+   "id": "D08",
+   "name": "빵집 D",
+   "category": "food",
+   "lat": 35.00642,
+   "lng": 135.00286,
+   "crowd_level": 5,
+   "price_level": 1,
+   "mood_tags": [
+    "유명"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D09",
+   "name": "강변 산책로 A",
+   "category": "walk",
+   "lat": 34.99061,
+   "lng": 135.00473,
+   "crowd_level": 3,
+   "price_level": 3,
+   "mood_tags": [
+    "자연",
+    "조용"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "06:00",
+     "close": "20:00"
+    }
+   ],
+   "hours_status": "unverified",
+   "stay": null
+  },
+  {
+   "id": "D10",
+   "name": "공원 길 B",
+   "category": "walk",
+   "lat": 35.00572,
+   "lng": 134.98508,
+   "crowd_level": 1,
+   "price_level": 1,
+   "mood_tags": [
+    "자연",
+    "사진"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "06:00",
+     "close": "20:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 120
+   }
+  },
+  {
+   "id": "D11",
+   "name": "숲길 C",
+   "category": "walk",
+   "lat": 35.00503,
+   "lng": 135.01959,
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "조용"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "06:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "06:00",
+     "close": "20:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D12",
+   "name": "옛 거리 D",
+   "category": "walk",
+   "lat": 34.98257,
+   "lng": 134.98767,
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "골목",
+    "사진"
+   ],
+   "hours": null,
+   "hours_status": "unknown",
+   "stay": null
+  },
+  {
+   "id": "D13",
+   "name": "작은 박물관 A",
+   "category": "museum",
+   "lat": 35.02293,
+   "lng": 134.99385,
+   "crowd_level": 5,
+   "price_level": 3,
+   "mood_tags": [
+    "실내",
+    "조용"
+   ],
+   "hours": [
+    {
+     "weekday": 1,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:30",
+     "close": "17:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 55,
+    "typical": 90,
+    "max": 150
+   }
+  },
+  {
+   "id": "D14",
+   "name": "미술관 B",
+   "category": "museum",
+   "lat": 34.99752,
+   "lng": 135.00431,
+   "crowd_level": 3,
+   "price_level": 1,
+   "mood_tags": [
+    "실내",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 1,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:30",
+     "close": "17:00"
+    }
+   ],
+   "hours_status": "unverified",
+   "stay": null
+  },
+  {
+   "id": "D15",
+   "name": "역사관 C",
+   "category": "museum",
+   "lat": 34.99902,
+   "lng": 134.99074,
+   "crowd_level": 1,
+   "price_level": 3,
+   "mood_tags": [
+    "실내"
+   ],
+   "hours": [
+    {
+     "weekday": 1,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:30",
+     "close": "17:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D16",
+   "name": "과학관 D",
+   "category": "museum",
+   "lat": 35.00839,
+   "lng": 135.00863,
+   "crowd_level": 4,
+   "price_level": 1,
+   "mood_tags": [
+    "실내",
+    "유명"
+   ],
+   "hours": [
+    {
+     "weekday": 1,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:30",
+     "close": "17:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:30",
+     "close": "17:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 55,
+    "typical": 90,
+    "max": 150
+   }
+  },
+  {
+   "id": "D17",
+   "name": "잡화점 A",
+   "category": "shop",
+   "lat": 34.98571,
+   "lng": 135.00072,
+   "crowd_level": 2,
+   "price_level": 3,
+   "mood_tags": [
+    "골목",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D18",
+   "name": "서점 B",
+   "category": "shop",
+   "lat": 35.01249,
+   "lng": 134.98482,
+   "crowd_level": 5,
+   "price_level": 1,
+   "mood_tags": [
+    "실내",
+    "조용"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D19",
+   "name": "시장 C",
+   "category": "shop",
+   "lat": 34.99903,
+   "lng": 135.02555,
+   "crowd_level": 3,
+   "price_level": 3,
+   "mood_tags": [
+    "유명"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "hours_status": "unverified",
+   "stay": null
+  },
+  {
+   "id": "D20",
+   "name": "소품 가게 D",
+   "category": "shop",
+   "lat": 34.98444,
+   "lng": 134.97724,
+   "crowd_level": 1,
+   "price_level": 1,
+   "mood_tags": [
+    "골목",
+    "현지"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 120
+   }
+  },
+  {
+   "id": "D21",
+   "name": "도자기 공방 A",
+   "category": "experience",
+   "lat": 35.00508,
+   "lng": 135.00083,
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "실내",
+    "현지"
+   ],
+   "hours": null,
+   "hours_status": "unknown",
+   "stay": null
+  },
+  {
+   "id": "D22",
+   "name": "향초 교실 B",
+   "category": "experience",
+   "lat": 34.99306,
+   "lng": 135.00589,
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "실내",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "18:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D23",
+   "name": "요리 교실 C",
+   "category": "experience",
+   "lat": 35.00259,
+   "lng": 134.98597,
+   "crowd_level": 5,
+   "price_level": 3,
+   "mood_tags": [
+    "실내"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "18:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D24",
+   "name": "염색 공방 D",
+   "category": "experience",
+   "lat": 35.00751,
+   "lng": 135.016,
+   "crowd_level": 3,
+   "price_level": 1,
+   "mood_tags": [
+    "현지",
+    "사진"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "18:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 55,
+    "typical": 90,
+    "max": 150
+   }
+  },
+  {
+   "id": "D25",
+   "name": "전망대 A",
+   "category": "landmark",
+   "lat": 34.98244,
+   "lng": 134.99316,
+   "crowd_level": 1,
+   "price_level": 3,
+   "mood_tags": [
+    "사진",
+    "유명"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "22:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D26",
+   "name": "옛 성문 B",
+   "category": "landmark",
+   "lat": 35.01976,
+   "lng": 134.98886,
+   "crowd_level": 4,
+   "price_level": 1,
+   "mood_tags": [
+    "사진",
+    "현지"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "22:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 55,
+    "typical": 120,
+    "max": 180
+   }
+  },
+  {
+   "id": "D27",
+   "name": "시계탑 C",
+   "category": "landmark",
+   "lat": 34.99031,
+   "lng": 135.02826,
+   "crowd_level": 2,
+   "price_level": 3,
+   "mood_tags": [
+    "유명"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "22:00"
+    }
+   ],
+   "hours_status": "unverified",
+   "stay": null
+  },
+  {
+   "id": "D28",
+   "name": "야시장 A",
+   "category": "night",
+   "lat": 34.99799,
+   "lng": 134.99318,
+   "crowd_level": 5,
+   "price_level": 1,
+   "mood_tags": [
+    "밤",
+    "유명"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 1,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 2,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 3,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 4,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 5,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 6,
+     "open": "18:00",
+     "close": "26:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  },
+  {
+   "id": "D29",
+   "name": "재즈 바 B",
+   "category": "night",
+   "lat": 35.0082,
+   "lng": 135.00526,
+   "crowd_level": 3,
+   "price_level": 3,
+   "mood_tags": [
+    "밤",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 1,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 2,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 3,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 4,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 5,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 6,
+     "open": "18:00",
+     "close": "26:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 55,
+    "typical": 90,
+    "max": 150
+   }
+  },
+  {
+   "id": "D30",
+   "name": "야경 다리 C",
+   "category": "night",
+   "lat": 34.98782,
+   "lng": 135.00392,
+   "crowd_level": 1,
+   "price_level": 1,
+   "mood_tags": [
+    "야경",
+    "사진"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 1,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 2,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 3,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 4,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 5,
+     "open": "18:00",
+     "close": "26:00"
+    },
+    {
+     "weekday": 6,
+     "open": "18:00",
+     "close": "26:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": null
+  }
+ ]
+}
