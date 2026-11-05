@@ -248,6 +248,32 @@ def test_D18_Q28_글_원문은_200자까지_저장(env, length, saved):
     assert parser_logs(env)[0]["output"] == {"text": "아" * saved, "direction": None, "understood": False}
 
 
+@pytest.mark.parametrize(
+    ("text", "direction", "saved"),
+    [
+        ("아" * 199 + "밤", "night", "아" * 199 + "밤"),
+        ("아" * 200 + "밤", "night", "아" * 200),
+        ("아" * 300 + "근처", "closer", "아" * 200),
+    ],
+    ids=["키워드가_200번째", "키워드가_201번째", "키워드가_301번째"],
+)
+def test_D19_Q43_해석은_글_전체_저장은_200자까지(env, text, direction, saved):
+    sid, _ = env.browse(env.plant_day(city()))
+    data = env.next(sid, text=text).json()
+    assert data["clarify"] is None
+    assert data["message"] == f"{LABELS[direction]} 쪽으로 다시 찾아봤어!"
+    assert env.values(sid)["last_direction"] == direction
+    assert parser_logs(env)[0]["output"] == {"text": saved, "direction": direction, "understood": True}
+
+
+def test_D20_Q43_첫_질문의_글도_전체를_해석하고_200자까지_저장(env):
+    busy = cafes(6, crowd=5)
+    quiet = cafes(6, start=7, crowd=1)
+    _, batch = env.browse(env.plant_day(as_dict(busy + quiet)), [], "아" * 200 + "조용")
+    assert ids(batch) == [p.id for p in quiet]
+    assert parser_logs(env)[0]["output"] == {"text": "아" * 200, "direction": "quieter", "understood": True}
+
+
 @pytest.mark.parametrize("body", [{}, {"direction_id": "closer"}], ids=["빈_next", "방향버튼"])
 def test_D13_AC09_글이_없으면_해석_기록_없음(env, body):
     sid, _ = env.browse(env.plant_day(city()))

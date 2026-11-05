@@ -13,6 +13,8 @@ from planning_api_helpers import (
     BATCH_KEYS,
     COURSE_KEYS,
     FIXED_STAY,
+    MSG_EXHAUSTED,
+    MSG_NO_DIRECTION,
     PICKS_KEYS,
     PLACE_KEYS,
     SESSION_KEYS,
@@ -859,7 +861,7 @@ SESSION_POSTS = [
     pytest.param("reactions", {"place_id": "P01", "action": "like"}, id="reactions"),
     pytest.param("next", {}, id="next"),
     pytest.param("compose", None, id="compose"),
-    pytest.param("adjust", {"place_id": "P01", "delta": 15}, id="adjust"),
+    pytest.param("adjust", {"option_id": "없는-코스안", "place_id": "P01", "delta": 15}, id="adjust"),
     pytest.param("back", None, id="back"),
 ]
 
@@ -912,8 +914,20 @@ def test_F54_S5_없는_direction_id는_400이고_저장소_그대로(env):
         ("/planning/{sid}/next", {"direction_id": "closer", "text": "근처로"}),
         ("/planning/{sid}/next", {"text": ""}),
         ("/planning/{sid}/next", {"text": 123}),
+        ("/planning/{sid}/next", {"text": "   "}),
+        ("/planning/{sid}/next", {"text": "\t\n "}),
     ],
-    ids=["없는_mode", "mode_없음", "없는_action", "place_id_없음", "방향과_글_동시", "빈_글", "글이_숫자"],
+    ids=[
+        "없는_mode",
+        "mode_없음",
+        "없는_action",
+        "place_id_없음",
+        "방향과_글_동시",
+        "빈_글",
+        "글이_숫자",
+        "공백만",
+        "탭과_줄바꿈만",
+    ],
 )
 def test_F55_Q23_본문이_잘못되면_공통_오류_400_아무것도_안_바뀜(env, path, body):
     day = env.plant_day(city())
@@ -932,8 +946,10 @@ def test_F55_Q23_본문이_잘못되면_공통_오류_400_아무것도_안_바�
         {"choice_ids": [], "text": ""},
         {"choice_ids": ["없는칩"]},
         {},
+        {"auto": False},
+        {"choice_ids": [], "text": "   "},
     ],
-    ids=["자동과_빈_칩", "자동과_칩", "빈_글", "없는_칩", "빈_본문"],
+    ids=["자동과_빈_칩", "자동과_칩", "빈_글", "없는_칩", "빈_본문", "auto_false", "공백만"],
 )
 def test_F73_Q23_첫_답의_본문이_잘못되면_400_asking_유지(env, body):
     sid = env.session(env.plant_day(city()))["session_id"]
@@ -962,10 +978,80 @@ def test_F74_Q23_Q14_adjust_본문이_잘못되면_400(env, change):
     assert env.repo.snapshot() == repo
 
 
-def test_F75_Q23_빈_글은_해석_기록을_남기지_않는다(env):
+@pytest.mark.parametrize("text", ["", "   "], ids=["빈_글", "공백만"])
+def test_F75_Q23_Q42_빈_글은_해석_기록을_남기지_않는다(env, text):
     sid, _ = env.browse(env.plant_day(city()))
-    assert_error(env.next(sid, text=""), 400)
+    assert_error(env.next(sid, text=text), 400)
     assert env.repo.decision_logs() == []
+
+
+@pytest.mark.parametrize(
+    ("total", "message", "exhausted"),
+    [(24, MSG_NO_DIRECTION, False), (5, MSG_NO_DIRECTION, False), (4, MSG_EXHAUSTED, True)],
+    ids=["충분함", "5곳_경계", "4곳_소진"],
+)
+def test_F77_Q38_자동_뒤_더_고를래는_방향_없음_문장_소진이면_소진_문장_round_1(env, total, message, exhausted):
+    data = env.start(env.plant_day(city(total)), mode="auto").json()
+    batch = env.back(data["session_id"]).json()
+    assert batch["message"] == message
+    assert batch["exhausted"] is exhausted
+    assert batch["round"] == 1
+
+
+def test_F78_Q39_지금_묶음의_안_담은_곳_unlike는_변화_없고_다음_next에서_skip(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.react(sid, "P02")
+    state, repo = env.values(sid), env.repo.snapshot()
+    response = env.react(sid, "P01", "unlike")
+    assert response.status_code == 200
+    assert response.json() == {"picks": ["P02"], "picks_count": 1}
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+    env.next(sid)
+    reactions = env.repo.reactions(sid)
+    assert "P01" in reactions.skipped
+    assert reactions.liked == ["P02"]
+
+
+def test_F79_Q39_넘긴_곳_unlike도_변화_없다(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    env.react(sid, "P01", "skip")
+    repo = env.repo.snapshot()
+    assert env.react(sid, "P01", "unlike").json() == {"picks": [], "picks_count": 0}
+    assert env.repo.snapshot() == repo
+    assert env.repo.reactions(sid).skipped == ["P01"]
+
+
+def test_F80_Q41_다른_세션의_코스안으로_adjust하면_404(env):
+    a, _ = env.composing(env.plant_day(city()), likes=("P01",))
+    b, course_b = env.composing(env.plant_day(city()), likes=("P01",))
+    state_a, state_b, repo = env.values(a), env.values(b), env.repo.snapshot()
+    assert_error(env.adjust(a, first_option_id(course_b), "P01", 15), 404)
+    assert env.values(a) == state_a
+    assert env.values(b) == state_b
+    assert env.repo.snapshot() == repo
+
+
+def test_F81_Q41_코스를_다시_계산한_뒤_옛_ID로_adjust하면_404(env):
+    sid, old = env.composing(env.plant_day(city()), likes=("P01",))
+    env.back(sid)
+    new = env.compose(sid).json()
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.adjust(sid, first_option_id(old), "P01", 15), 404)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+    assert env.adjust(sid, first_option_id(new), "P01", 15).status_code == 200
+
+
+def test_F82_Q41_더_고를래_뒤_옛_ID로_adjust는_404_select는_409(env):
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    option_id = first_option_id(course)
+    env.back(sid)
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.adjust(sid, option_id, "P01", 15), 404)
+    assert_error(env.select(option_id), 409)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
 
 
 def test_F76_Q24_오류_코드는_4개_값까지(env):

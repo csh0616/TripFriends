@@ -1,4 +1,4 @@
-"""표에 없는 조합. 근거: TASK-003 §4 마지막 줄, §5, AC-5."""
+"""표에 없는 조합. 근거: TASK-003 §4 마지막 줄, §5, AC-5, §10-8 Q40·Q41·Q42."""
 
 import pytest
 from planning_api_helpers import as_dict, assert_error, cafes, ctx
@@ -28,9 +28,9 @@ IN_TABLE = {
     ("composing", "back"),
     ("composing", "select"),
 }
-# 코스안이 만들어지기 전이라 select의 경로에 넣을 option_id가 있을 수 없는 조합 (C03)
-UNREACHABLE = {("asking", "select")}
-COMBOS = [(s, e) for s in STAGES for e in EVENTS if (s, e) not in IN_TABLE | UNREACHABLE]
+# 쓸 수 있는 option_id가 있을 수 없어 stage 검사까지 가지 못하고 404가 먼저인 조합 (§10-8 Q40·Q41, C03·C07)
+NOT_FOUND_FIRST = {("asking", "select"), ("asking", "adjust"), ("browsing", "adjust")}
+COMBOS = [(s, e) for s in STAGES for e in EVENTS if (s, e) not in IN_TABLE | NOT_FOUND_FIRST]
 
 
 def city():
@@ -64,7 +64,8 @@ def assert_conflict_keeps_everything(env, c, send):
 
 
 def test_C00_AC05_조합_수는_표_밖_30개():
-    assert len(COMBOS) + len(UNREACHABLE) == 30
+    assert len(COMBOS) + len(NOT_FOUND_FIRST) == 30
+    assert len(COMBOS) == 27
 
 
 @pytest.mark.parametrize(("stage", "event"), COMBOS, ids=[f"{s}×{e}" for s, e in COMBOS])
@@ -115,3 +116,62 @@ def test_C06_AC05_409_뒤에도_표에_있는_이벤트로_그대로_이어진�
     assert env.back(sid).status_code == 409
     assert env.react(sid, "P01").status_code == 200
     assert env.stage(sid) == "browsing"
+
+
+@pytest.mark.parametrize("stage", ["asking", "browsing"])
+def test_C07_Q40_코스안이_없는_단계의_adjust는_409가_아니라_404(env, stage):
+    c = prepare(env, stage)
+    state_before = env.values(c.sid)
+    repo_before = env.repo.snapshot()
+    assert_error(env.adjust(c.sid, "없는-코스안", "P01", 15), 404)
+    assert env.values(c.sid) == state_before
+    assert env.repo.snapshot() == repo_before
+
+
+BAD_BODIES = [
+    pytest.param("asking", "next", {"text": ""}, id="asking_next_빈_글"),
+    pytest.param("asking", "next", {"direction_id": "closer", "text": "근처"}, id="asking_next_방향과_글"),
+    pytest.param("asking", "reactions", {"action": "like"}, id="asking_반응_place_id_없음"),
+    pytest.param("browsing", "answer", {"auto": True, "choice_ids": []}, id="browsing_answer_자동과_칩"),
+    pytest.param("browsing", "answer", {"auto": False}, id="browsing_answer_auto_false"),
+    pytest.param("browsing", "adjust", {"place_id": "P01", "delta": 15}, id="browsing_adjust_option_id_없음"),
+    pytest.param("composing", "next", {"text": "   "}, id="composing_next_공백만"),
+    pytest.param("composing", "answer", {"auto": False}, id="composing_answer_auto_false"),
+    pytest.param("done", "next", {"text": ""}, id="done_next_빈_글"),
+    pytest.param("done", "adjust", {"place_id": "P01", "delta": 15}, id="done_adjust_option_id_없음"),
+]
+
+
+@pytest.mark.parametrize(("stage", "path", "body"), BAD_BODIES)
+def test_C08_Q40_틀린_단계에_잘못된_본문이면_409가_아니라_400(env, stage, path, body):
+    c = prepare(env, stage)
+    state_before = env.values(c.sid)
+    repo_before = env.repo.snapshot()
+    assert_error(env.client.post(f"/planning/{c.sid}/{path}", json=body), 400)
+    assert env.values(c.sid) == state_before
+    assert env.repo.snapshot() == repo_before
+
+
+@pytest.mark.parametrize(
+    ("url", "body"),
+    [
+        ("/days/없는-날/planning", {}),
+        ("/planning/없는-세션/answer", {"auto": True, "choice_ids": []}),
+        ("/planning/없는-세션/answer", {"auto": False}),
+        ("/planning/없는-세션/reactions", {"action": "like"}),
+        ("/planning/없는-세션/next", {"text": ""}),
+        ("/planning/없는-세션/next", {"direction_id": "closer", "text": "근처"}),
+        ("/planning/없는-세션/adjust", {"place_id": "P01", "delta": 15}),
+    ],
+    ids=["없는_날_mode_없음", "자동과_칩", "auto_false", "place_id_없음", "빈_글", "방향과_글", "option_id_없음"],
+)
+def test_C09_Q40_없는_세션에_잘못된_본문이면_404가_아니라_400(env, url, body):
+    repo_before = env.repo.snapshot()
+    assert_error(env.client.post(url, json=body), 400)
+    assert env.repo.snapshot() == repo_before
+
+
+def test_C10_Q40_없는_코스안에_잘못된_본문이면_404가_아니라_400(env):
+    c = prepare(env, "composing")
+    body = {"option_id": "없는-코스안", "delta": 15}
+    assert_error(env.client.post(f"/planning/{c.sid}/adjust", json=body), 400)

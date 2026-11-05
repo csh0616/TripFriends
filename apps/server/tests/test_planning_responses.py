@@ -236,15 +236,26 @@ def test_E09_S6_가상_도시의_세_상태(env):
         ([at(TUE, "10:00", "18:00")], "confirmed"),
         ([], "confirmed"),
         ([at(TUE, "10:00", "18:00")], "unverified"),
+        ([], "unverified"),
         ([at(TUE, "10:00", "18:00")], "unknown"),
+        ([], "unknown"),
     ],
-    ids=["그날만_휴무", "빈_목록", "미확인_데이터도_휴무면_confirmed", "unknown_데이터도_휴무면_confirmed"],
+    ids=["확인됨_그날만_휴무", "확인됨_빈_목록", "미확인_그날만_휴무", "미확인_빈_목록", "모름_그날만_휴무", "모름_빈_목록"],
 )
-def test_E10_Q9_그날_휴무면_null과_confirmed(env, hours, status):
+def test_E10_Q9_그날_휴무면_null이고_상태는_데이터_그대로_미확인을_확인됨으로_내보내지_않음(env, hours, status):
     places = as_dict([place("P01", hours=hours, status=status), *cafes(6, start=2)])
     _, batch = env.browse(env.plant_day(places))
     fact = opening_fact(candidate(batch, "P01")["place"])
-    assert (fact["value"], fact["status"]) == (None, "confirmed")
+    assert (fact["value"], fact["status"]) == (None, status)
+
+
+def test_E48_Q9_가상_도시_월요일_휴무_박물관도_데이터의_상태_그대로(env):
+    # D13·D14는 화~일만 연다. 계획한 날은 월요일 (day_plan 기본값)
+    _, batch = env.browse(env.plant_day(demo_places()), ["전시·체험"])
+    facts = {pid: opening_fact(candidate(batch, pid)["place"]) for pid in ("D13", "D14", "D21")}
+    assert (facts["D13"]["value"], facts["D13"]["status"]) == (None, "confirmed")
+    assert (facts["D14"]["value"], facts["D14"]["status"]) == (None, "unverified")
+    assert (facts["D21"]["value"], facts["D21"]["status"]) == (None, "unknown")
 
 
 def test_E11_Q10_영업시간이_있는데_상태가_unknown이면_unverified(env):
@@ -370,6 +381,21 @@ def test_E22_Q6_되묻기와_exhausted가_함께면_되묻기_대본(env):
     data = env.next(sid, text=UNKNOWN_TEXT).json()
     assert data["message"] == MSG_CLARIFY
     assert data["exhausted"] is True
+
+
+@pytest.mark.parametrize(
+    ("total", "exhausted"),
+    [(10, True), (11, False)],
+    ids=["안_보여준_곳_4", "안_보여준_곳_5_경계"],
+)
+def test_E47_Q37_되묻기의_exhausted는_지금_안_보여준_곳_5_미만인지(env, total, exhausted):
+    sid, first = env.browse(env.plant_day(city(total)))
+    assert first["exhausted"] is False  # 첫 묶음을 만들 때는 안 보여 준 곳이 10곳 이상
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert data["exhausted"] is exhausted
+    assert data["message"] == MSG_CLARIFY
+    assert ids(data) == ids(first)
+    assert data["clarify"]
 
 
 @pytest.mark.parametrize(
@@ -516,10 +542,9 @@ def test_E39_Q5_첫_질문의_날짜_말_다섯째까지(env, number):
 
 
 @pytest.mark.parametrize("number", [6, 7, 10])
-def test_E40_Q5_여섯째부터는_n일째(env, number):
+def test_E40_Q36_여섯째부터는_n일째는(env, number):
     text = env.session(env.plant_day(city(), day_number=number))["question"]["text"]
-    assert text.startswith(f"{number}일째")
-    assert text.endswith(QUESTION_TAIL)
+    assert text == f"{number}일째는" + QUESTION_TAIL
 
 
 def test_E41_Q5_시드의_세_날은_trip_순서대로(env):
