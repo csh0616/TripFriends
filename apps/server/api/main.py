@@ -7,13 +7,13 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exception_handlers import request_validation_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel
 
 from catalog import get_catalog
 from deciders import JevDecider, RuleDecider
-from api.planning import drop_default_422, is_planning_path, planning_error_handler, planning_validation_handler, router as planning_router
+from api.planning import drop_default_422, http_error_response, is_planning_path, planning_error_handler, planning_validation_handler, router as planning_router
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
 from planning.repo import MemoryPlanningRepo
@@ -37,8 +37,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     예열은 뒤에서 돌고 서버 시작은 기다리지 않는다 (§9-3). 예열 중 요청도 판단 시간 제한(0.8초)을 따른다.
     """
     # TASK-003: 저장소·그래프(MemorySaver)는 서버 시작 때 한 번 만들고 요청 사이에 이어 쓴다 (AC-16)
-    # TASK-003 §10-10 R10: R1은 LangGraph 추적(langsmith) 전송을 끈다. 이미 정해 둔 값(켜기 포함)은 존중한다
-    os.environ.setdefault("LANGSMITH_TRACING", "false")
+    # TASK-003 §10-11 R13: R1은 추적(langsmith) 전송을 강제로 끈다. 켜진 값이 있어도 덮어쓴다 (켜는 것은 나중에 ADR로 결정)
+    for name in ("LANGSMITH_TRACING", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING_V2"):
+        os.environ[name] = "false"
     app.state.planning_repo = MemoryPlanningRepo()
     app.state.planning_graph = build_planning_graph(app.state.planning_repo)
     app.state.planning_service = PlanningService(app.state.planning_repo, app.state.planning_graph)
@@ -66,10 +67,23 @@ async def validation_handler(request: Request, exc: RequestValidationError):
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error_handler(request: Request, exc: StarletteHTTPException):
-    """TASK-003 §10-10 R2: 없는 경로를 포함한 모든 404를 공통 형식으로. 다른 상태 코드는 FastAPI 기본 그대로."""
-    if exc.status_code == 404:
-        return planning_error_handler(request, PlanningError("NOT_FOUND", "찾을 수 없어요"))
-    return await http_exception_handler(request, exc)
+    """TASK-003 §10-10 R2·§10-11 R14: 없는 경로(404)와 405 등 모든 HTTP 오류를 공통 형식으로 (이미 만든 PlanningError는 아래 처리기).
+
+    code는 404 NOT_FOUND, 405 INVALID_REQUEST만 문서가 정했다.
+    # TASK-003 미정: 그 밖의 4xx는 INVALID_REQUEST, 5xx는 INTERNAL_ERROR로 둔다 (문서에 없는 새 code 값을 만들지 않으려고)
+    """
+    code = "NOT_FOUND" if exc.status_code == 404 else "INTERNAL_ERROR" if exc.status_code >= 500 else "INVALID_REQUEST"
+    response = http_error_response(exc.status_code, code, str(exc.detail))
+    if exc.headers:
+        response.headers.update(exc.headers)  # 405의 Allow 등
+    return response
+
+
+@app.exception_handler(Exception)
+async def unexpected_error_handler(request: Request, exc: Exception):
+    """TASK-003 §10-11 R11: 처리 중 예기치 못한 예외도 500 공통 형식. 원인은 로그에만 남기고 응답에는 담지 않는다."""
+    log.exception("처리되지 않은 예외: %s %s", request.method, request.url.path)
+    return http_error_response(500, "INTERNAL_ERROR", "서버에서 문제가 생겼어요. 잠시 뒤 다시 해 주세요")
 
 
 app.include_router(planning_router)

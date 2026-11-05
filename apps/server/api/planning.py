@@ -39,6 +39,10 @@ def _error(status: int, code: str, message: str, detail: object = None) -> JSONR
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message, "detail": detail}})
 
 
+def http_error_response(status: int, code: str, message: str) -> JSONResponse:
+    return _error(status, code, message, None)
+
+
 def planning_error_handler(_request: Request, exc: PlanningError) -> JSONResponse:
     return _error(exc.status, exc.code, exc.message, exc.detail)
 

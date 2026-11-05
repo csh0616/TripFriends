@@ -45,7 +45,7 @@ class AnswerRequest(_Request):
         _not_blank(self.text)
         if self.auto is not None:
             if self.auto is not True or self.choice_ids is not None or self.text is not None:
-                # TASK-003 미정 (Q48): `{"auto": true, "text": "…"}`도 지금처럼 400으로 둔다 (문서에 답 없음)
+                # TASK-003 §10-11 (받아들임): `{"auto": true, "text": "…"}`도 400으로 확정
                 raise ValueError("auto는 true 하나만 보낸다")  # §10 Q23·Q42
         elif self.choice_ids is None and self.text is None:
             raise ValueError("choice_ids, text, auto 중 하나가 필요함")
@@ -180,7 +180,7 @@ class SeedResult(BaseModel):
 
 
 class ErrorBody(BaseModel):
-    """공통 오류 (§5, §10 Q24). code는 이 4개뿐."""
+    """공통 오류 (§5). code는 NOT_FOUND·INVALID_REQUEST·STATE_CONFLICT·COURSE_INFEASIBLE·INTERNAL_ERROR 5개뿐 (§10 Q24, §10-10 R3)."""
 
     code: Literal["NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE", "INTERNAL_ERROR"]  # §10 Q24, §10-10 R3
     message: str
