@@ -371,7 +371,8 @@ class _Day:
         self.lodging = plan.lodging
         # TASK-002 §9 Q45 ③: 시작 >= 끝이거나 29:59를 넘는 시각은 ValueError
         # TASK-002 §10-5 Q53: DayPlan의 start·end에서 분이 60 이상인 시각("10:75")은 ValueError
-        # Q53 미정: 고정 일정·영업시간의 분 60 이상과 좌표·붐빔·가격 범위는 검사하지 않음 (문서에 답 없음)
+        # TASK-003 §0·§10 Q29: 고정 일정(PlanFixed)·영업시간(Opening)의 형식과 분 60 이상은 모델이 거부한다 (engine/models.py).
+        # DayPlan의 start·end는 이번 범위 밖이라 위 검사 그대로. 좌표·붐빔·가격 범위는 검사하지 않음 (문서에 답 없음)
         if any(int(value.split(":")[1]) >= 60 for value in (plan.start, plan.end)):
             raise ValueError(f"하루 시각의 분이 60 이상: {plan.start}~{plan.end}")
         _check_ids_fixed = [f.place_id for f in plan.fixed if f.place_id and f.place_id not in places]
@@ -614,7 +615,8 @@ class _Wanted(NamedTuple):
 def _wanted(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], day: _Day) -> _Wanted:
     lim = _limits()
     # TASK-002 §10 #7, §10-4 Q60: 고정 일정으로 가는 장소는 한 번만 방문 -> 담은 곳·꼭 갈 곳에서 뺀다
-    # TASK-002 §10-5 Q64: 그 장소가 꼭 갈 곳인데 그날 휴무여도 Infeasible로 보지 않는다 (Q60: 고정 일정 방문으로 채운 것, 영업은 Q54처럼 안 봄)
+    # TASK-002 §10-5 Q64: 고정 일정 장소가 그날 휴무여도 정상 코스 (고정 일정은 사용자가 확인한 예약으로 본다).
+    #   꼭 갈 곳이어도 Infeasible로 보지 않는다 (Q60: 고정 일정 방문으로 채운 것, 영업은 Q54처럼 안 봄)
     fixed_places = {ev.place_id for ev in day.fixed if ev.place_id}
     ids = sorted((set(picks) | set(plan.must_visit)) - fixed_places, key=_id_key)
     day_len = day.end - day.start
@@ -630,7 +632,8 @@ def _wanted(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], d
         # TASK-002 §10-2 #6: 사용자 값이 최소보다 짧으면 그 값이 필요 시간 (eff_low)
         # TASK-002 §10-5 Q62: 영업 20분, 최소 30, 사용자 21분처럼 사용자 값도 영업 구간에 안 들어가면 "닫힘"으로 본다
         #   (사용자 값 때문에만 안 들어가는 경우가 아니라 TASK-002 §10-4의 user_stay_conflict 대상이 아님)
-        # TASK-002 §10-5 Q63: 최소·사용자 값이 모두 하루보다 길면 하루가 짧음(TASK-002 §10-1 #1), 최소만 길고 사용자 값이 하루 안이면 사용자 값으로 들어감(#6)
+        # TASK-002 §10-5 Q63: 최소가 하루보다 긴데 사용자 값은 들어가면 사용자 값으로 들어감 (사용자 값이 더 짧아 들어가면 존중, #6).
+        #   최소·사용자 값이 모두 하루보다 길면 하루가 짧음(TASK-002 §10-1 #1)
         info = _Stay(low, typical, high, user, low if user is None else min(user, low))
         infos[pid] = info
         if info.eff_low > day_len:  # TASK-002 §10-1 #1: m > L 이면 하루가 짧음 (닫힘보다 먼저)
@@ -777,7 +780,7 @@ def _why_infeasible(day: _Day, plan: DayPlan, picks: list[PlaceId], want: _Wante
         return model.solve(_mask(ids, set(needed))) is not None
 
     # TASK-002 §10 #4, §10-4 Q57: overflow는 꼭 갈 곳끼리의 문제일 때만. 바꾼 담은 곳은 최소로도 안 들어가도 아래 user_stay_conflict
-    # TASK-002 §10-5 Q65: 바꾼 담은 곳이 최소로도 못 들어가는 경우(예: 이동 포함 53분)도 테스트 기준대로 user_stay_conflict
+    # TASK-002 §10-5 Q65: 바꾼 곳이 이동·고정 일정 때문에 못 들어가는 경우(예: 이동 포함 53분)도 user_stay_conflict
     if musts and not feasible(candidates, musts):
         # TASK-002 §10-5 Q50: 이동·고정 일정 때문에 못 들어가는 경우도 must_visit_overflow
         if len(musts) >= 2:
