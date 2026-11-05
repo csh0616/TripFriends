@@ -1296,6 +1296,28 @@ def test_S10_2_7_고정일정_장소는_suggest_drop_후보가_아님():
     assert "D09" not in result.suggest_drop
 
 
+def test_S10_5_Q52_꼭갈곳은_들어가고_바꾼_담은곳이_함께_못들어가면_user_stay_conflict():
+    # 하루 90분. 큰 명소 60 + 쉬는 5 + 사용자 값 30 = 95분
+    places = as_places(place("D01", "landmark"), place("D02"), place("D03"))
+    plan = day_plan(start="09:00", end="10:30", must=("D01",), overrides={"D02": 30})
+    assert compose_courses(plan, ["D02", "D03"], places) == Infeasible(
+        reason="user_stay_conflict", blocking=["D02"], suggest_drop=["D02", "D03"]
+    )
+
+
+@pytest.mark.parametrize("field", ["start", "end"])
+@pytest.mark.parametrize("value", ["10:75", "09:60"])
+def test_S10_5_Q53_하루_시각의_분이_60_이상이면_ValueError(field, value):
+    with pytest.raises(ValueError):
+        compose_courses(day_plan(**{field: value}), [], {})
+
+
+@pytest.mark.parametrize("field", ["start", "end"])
+def test_S10_5_Q53_하루_시각의_분이_59면_정상(field):
+    plan = day_plan(**{field: "09:59"})
+    assert isinstance(compose_courses(plan, [], {}), list)
+
+
 def test_Q44_꼭갈곳_1곳이_혼자서_못들어가면_must_visit_overflow_제안없음():
     places = as_places(place("D01"))
     plan = day_plan(start="09:00", end="09:29", must=("D01",))
