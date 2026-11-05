@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from planning_helpers import distance_km, expected_travel
+
 from engine.models import Place
 from engine.planning import compose_courses, compose_greedy
 from evals.dp_vs_greedy import RESULT_PATH, generate_cases, measure
@@ -42,6 +44,21 @@ def place_counts(plan, picks, places) -> tuple[int, int]:
     return (
         len([i for i in packed.items if not i.is_fixed]),
         len([i for i in greedy if not i.is_fixed]),
+    )
+
+
+def travel_sums(plan, picks, places) -> tuple[int, int, int, int]:
+    """(packed 이동, packed 복귀, 탐욕법 이동, 탐욕법 복귀). 복귀는 마지막 장소에서 숙소까지 (§3 F, §7 Q14)."""
+    result = compose_courses(plan, picks, places)
+    packed = next((o for o in result if o.label == "packed"), result[0])
+    greedy = compose_greedy(plan, picks, places, 5)
+    last = next((i.place_id for i in reversed(greedy) if i.place_id), None)
+    home = 0 if last is None else expected_travel(distance_km((places[last].lat, places[last].lng), plan.lodging))
+    return (
+        sum(i.travel_min for i in packed.items),
+        packed.go_home_min,
+        sum(i.travel_min for i in greedy),
+        home,
     )
 
 
@@ -95,12 +112,21 @@ def test_AC18_숫자가_같은_입력을_packed와_탐욕법으로_돌린_값과
     assert result["dp_more_ratio"] == pytest.approx(sum(dp > g for dp, g in pairs) / SMALL)
     assert result["dp_fewer_count"] == sum(dp < g for dp, g in pairs)
 
+    # §10-4 Q61: 이동 합은 DP·탐욕법 모두 숙소 복귀 포함
+    sums = [travel_sums(plan, picks, places) for plan, picks in generate_cases(SMALL)]
+    assert result["dp_travel_mean"] == pytest.approx(sum(legs + home for legs, home, _, _ in sums) / SMALL)
+    assert result["greedy_travel_mean"] == pytest.approx(sum(legs + home for _, _, legs, home in sums) / SMALL)
 
-def test_AC18_이동_합_평균은_0_이상의_숫자():
+
+def test_AC18_Q61_이동_합_평균은_복귀를_뺀_값이_아님():
+    places = demo_places()
+    sums = [travel_sums(plan, picks, places) for plan, picks in generate_cases(SMALL)]
     result = measure(SMALL)
-    # 탐욕법 이동 합에 숙소 복귀를 넣는지는 문서에 없어 값은 고정하지 않는다 (남은 질문)
-    assert result["dp_travel_mean"] >= 0
-    assert result["greedy_travel_mean"] >= 0
+    # 입력 20건에 복귀가 있으면 복귀를 뺀 평균과 달라야 한다
+    assert sum(home for _, home, _, _ in sums) > 0
+    assert sum(home for _, _, _, home in sums) > 0
+    assert result["dp_travel_mean"] > sum(legs for legs, _, _, _ in sums) / SMALL
+    assert result["greedy_travel_mean"] > sum(legs for _, _, legs, _ in sums) / SMALL
 
 
 @pytest.mark.slow

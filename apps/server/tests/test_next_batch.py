@@ -5,7 +5,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from planning_helpers import BASE, MONDAY_EVENING, as_places, north_of, opening, place
 
-from engine.models import Reactions
+from engine.models import Opening, Reactions
 from engine.planning import next_batch, score_candidates
 
 NOBODY = Reactions(liked=[], skipped=[])
@@ -250,6 +250,26 @@ def test_거르기표_closer는_넘겨받은_기준점에서_잰다():
     near_anchor = many(5, start=4, km=2.0)
     batch = next_batch(as_places(*near_base, *near_anchor), NOBODY, "closer", [], north_of(2.0), MONDAY_EVENING)
     assert batch.place_ids == [p.id for p in near_anchor]
+
+
+# ---------- §10-4 Q58: places 전부의 영업시간 검사 ----------
+
+
+@pytest.mark.parametrize(
+    "weekday, open_at, close_at",
+    [(0, "09:00", "31:00"), (0, "10:00", "10:00"), (7, "09:00", "20:00")],
+    ids=["닫는시각_31시", "여닫는_시각_같음", "요일_7"],
+)
+@pytest.mark.parametrize("shown", [[], ["D09"]], ids=["안_보여준_곳", "이미_보여준_곳"])
+def test_S10_4_Q58_places에_잘못된_영업시간이_있으면_ValueError(shown, weekday, open_at, close_at):
+    with pytest.raises(ValueError):
+        bad = place("D09", hours=[Opening(weekday=weekday, open=open_at, close=close_at)])
+        batch_of(as_places(*many(6), bad), shown=shown)
+
+
+def test_S10_4_Q58_영업시간이_범위_끝이면_정상():
+    fine = place("D09", hours=opening("09:00", "29:59", 6))
+    assert batch_of(as_places(*many(6), fine)).place_ids == ["D01", "D02", "D03", "D04", "D05", "D06"]
 
 
 # ---------- AC-5 속성 ----------
