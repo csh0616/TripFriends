@@ -47,8 +47,14 @@ CHOICES = [
     {"id": "cafe", "label": "카페"},
     {"id": "museum_experience", "label": "전시·체험"},
 ]
-# TASK-003 §10 Q24: 오류 code는 이 4개뿐
-ERROR_CODES = {404: "NOT_FOUND", 400: "INVALID_REQUEST", 409: "STATE_CONFLICT", 422: "COURSE_INFEASIBLE"}
+# TASK-003 §10 Q24, §10-10 R3: 오류 code는 이 5개뿐
+ERROR_CODES = {
+    404: "NOT_FOUND",
+    400: "INVALID_REQUEST",
+    409: "STATE_CONFLICT",
+    422: "COURSE_INFEASIBLE",
+    500: "INTERNAL_ERROR",
+}
 WHY_NONE = "이런 곳도 있어요"
 UNKNOWN_TEXT = "그냥 아무거나"  # POC-001 §5-1 키워드가 하나도 없는 문장
 FIXED_STAY = StayRange(min=60, typical=60, max=60)  # 두 안에서 머문 시간이 같아지는 장소

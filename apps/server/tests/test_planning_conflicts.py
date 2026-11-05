@@ -28,8 +28,9 @@ IN_TABLE = {
     ("composing", "back"),
     ("composing", "select"),
 }
-# 쓸 수 있는 option_id가 있을 수 없어 stage 검사까지 가지 못하고 404가 먼저인 조합 (§10-8 Q40·Q41, C03·C07)
-NOT_FOUND_FIRST = {("asking", "select"), ("asking", "adjust"), ("browsing", "adjust")}
+# 지금 option_ids에 있는 ID가 있을 수 없어 stage 검사까지 가지 못하고 404가 먼저인 조합
+# (§10-8 Q40·Q41, §10-10 R5, C03·C07·C11)
+NOT_FOUND_FIRST = {("asking", "select"), ("asking", "adjust"), ("browsing", "adjust"), ("browsing", "select")}
 COMBOS = [(s, e) for s in STAGES for e in EVENTS if (s, e) not in IN_TABLE | NOT_FOUND_FIRST]
 
 
@@ -65,7 +66,7 @@ def assert_conflict_keeps_everything(env, c, send):
 
 def test_C00_AC05_조합_수는_표_밖_30개():
     assert len(COMBOS) + len(NOT_FOUND_FIRST) == 30
-    assert len(COMBOS) == 27
+    assert len(COMBOS) == 26
 
 
 @pytest.mark.parametrize(("stage", "event"), COMBOS, ids=[f"{s}×{e}" for s, e in COMBOS])
@@ -128,6 +129,15 @@ def test_C07_Q40_코스안이_없는_단계의_adjust는_409가_아니라_404(en
     state_before = env.values(c.sid)
     repo_before = env.repo.snapshot()
     assert_error(env.adjust(c.sid, "없는-코스안", "P01", 15), 404)
+    assert env.values(c.sid) == state_before
+    assert env.repo.snapshot() == repo_before
+
+
+def test_C11_R5_더_고를래_뒤_옛_코스안으로_select하면_409가_아니라_404(env):
+    c = prepare(env, "browsing", "select")
+    state_before = env.values(c.sid)
+    repo_before = env.repo.snapshot()
+    assert_error(env.select(c.option_id), 404)
     assert env.values(c.sid) == state_before
     assert env.repo.snapshot() == repo_before
 

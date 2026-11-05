@@ -190,6 +190,45 @@ def test_D16_Q22_Q19_두번째_못알아들음_뒤에는_직전_방향이_없다
     assert env.values(sid)["last_direction"] is None
 
 
+def relaxed_by_chip(env):
+    places = as_dict(cafes(4) + cafes(8, start=5, category="food"))
+    return env.browse(env.plant_day(places), ["카페"])
+
+
+def relaxed_by_first_text(env):
+    places = as_dict(cafes(2, crowd=1) + cafes(10, start=3, crowd=5))
+    return env.browse(env.plant_day(places), [], "조용한 데")
+
+
+def relaxed_by_direction(env):
+    places = as_dict(cafes(6, crowd=5) + cafes(2, start=7, crowd=1) + cafes(10, start=9, crowd=5))
+    sid, _ = env.browse(env.plant_day(places))
+    return sid, env.next(sid, direction_id="quieter").json()
+
+
+def not_relaxed(env):
+    return env.browse(env.plant_day(city()))
+
+
+@pytest.mark.parametrize(
+    ("make", "relaxed"),
+    [
+        (relaxed_by_chip, True),
+        (relaxed_by_first_text, True),
+        (relaxed_by_direction, True),
+        (not_relaxed, False),
+    ],
+    ids=["칩으로_채운_첫_묶음", "글_방향으로_채운_첫_묶음", "방향으로_채운_다음_묶음", "채우지_않은_묶음"],
+)
+def test_D21_R4_되묻기의_direction_relaxed는_묶음을_만들_때_값_그대로(env, make, relaxed):
+    sid, batch = make(env)
+    assert batch["direction_relaxed"] is relaxed
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert data["clarify"]
+    assert ids(data) == ids(batch)
+    assert data["direction_relaxed"] is relaxed
+
+
 def parser_logs(env):
     return [log for log in env.repo.decision_logs() if log["kind"] == "parser"]
 

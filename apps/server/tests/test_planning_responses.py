@@ -594,6 +594,46 @@ def test_E46_Q7_첫_묶음에서_방향을_못_지켜_채운_곳도_기본_문�
     assert candidate(batch, "P03")["why"] == WHY_NONE
 
 
+# ---------- §10-10 R9: 겹침은 자기를 뺀 좋아한 곳과 ----------
+
+
+def test_E49_R9_담은_곳이_자기_태그로만_겹치면_기본_문장(env):
+    places = as_dict([place("P01", tags=("골목",)), place("P02", tags=("골목",)), *cafes(10, start=3)])
+    sid, _ = env.browse(env.plant_day(places))
+    env.react(sid, "P01")
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert candidate(data, "P01")["why"] == WHY_NONE
+    assert candidate(data, "P02")["why"] == "골목 좋아해서 골랐어요"
+
+
+def test_E50_R9_다른_좋아한_곳과_겹치면_담은_곳도_태그_문장(env):
+    places = as_dict([place("P01", tags=("골목",)), place("P02", tags=("골목",)), *cafes(10, start=3)])
+    sid, _ = env.browse(env.plant_day(places))
+    env.react(sid, "P01")
+    env.react(sid, "P02")
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert candidate(data, "P01")["why"] == "골목 좋아해서 골랐어요"
+    assert candidate(data, "P02")["why"] == "골목 좋아해서 골랐어요"
+
+
+def test_E51_R9_Q8_자기만_가진_태그는_첫_태그가_되지_않는다(env):
+    places = as_dict([place("P01", tags=("골목", "조용")), place("P02", tags=("조용",)), *cafes(10, start=3)])
+    sid, _ = env.browse(env.plant_day(places))
+    env.react(sid, "P01")
+    env.react(sid, "P02")
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert candidate(data, "P01")["why"] == "조용 좋아해서 골랐어요"
+
+
+def test_E52_R9_자기_태그로만_겹치고_방향이_있으면_이름표(env):
+    items = cafes(6) + [place("P07", tags=("골목",), price=1), *cafes(10, start=8, price=1)]
+    sid, _ = env.browse(env.plant_day(as_dict(items)))
+    assert env.next(sid, direction_id="cheaper").status_code == 200
+    env.react(sid, "P07")
+    data = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert candidate(data, "P07")["why"] == f"{LABELS['cheaper']} 쪽이에요"
+
+
 # ---------- 묶음의 값 ----------
 
 
