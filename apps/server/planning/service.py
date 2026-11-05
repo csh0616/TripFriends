@@ -14,8 +14,9 @@ from typing import Any
 from langgraph.types import Command
 
 from engine.models import Infeasible
+from pydantic import BaseModel
+
 from graphs.planning import Outbox, Outcome, PlanningState, build_planning_graph, can_handle, check_event, new_state
-from planning import presenter
 from planning.repo import PlanningRepo
 from planning.schemas import (
     AdjustRequest,
@@ -77,8 +78,11 @@ class PlanningService:
         values = self.graph.get_state(self._config(session_id)).values
         return PlanningState(**values)
 
-    def _resume(self, state: PlanningState, event: dict[str, Any]) -> tuple[Outcome, PlanningState]:
-        """stage 409 -> 값 오류 400을 가린 뒤 그래프를 멈춘 자리에서 이어 간다."""
+    def _resume(self, state: PlanningState, event: dict[str, Any]) -> BaseModel:
+        """stage 409 -> 값 오류 400을 가린 뒤 그래프를 멈춘 자리에서 이어 가고, 줄 함수가 **이미 만들어 둔** 응답을 돌려준다.
+
+        응답은 그래프 안에서 새 상태와 함께 계산된다 (TASK-003 §10-11 R12). 여기서는 값을 다시 계산하지 않는다.
+        """
         if not can_handle(state.stage, event["kind"]):
             raise PlanningError("STATE_CONFLICT", f"지금 단계({state.stage})에서는 할 수 없어요", {"stage": state.stage})
         problem = check_event(self.repo, state, event)
@@ -86,19 +90,18 @@ class PlanningService:
             raise PlanningError("INVALID_REQUEST", problem, None)
         box = Outbox()
         self.graph.invoke(Command(resume=event), self._config(state.session_id, box))
-        outcome = box.outcome
+        return self._response(box.outcome)
+
+    @staticmethod
+    def _response(outcome: Outcome | None) -> BaseModel:
         assert outcome is not None
         if outcome.kind == "error":
             raise _internal()  # 그래프가 실패한 이벤트를 버리고 같은 자리에서 기다리는 중이다 (graphs/planning.py)
         if outcome.kind == "infeasible":
             assert outcome.infeasible is not None
             raise _infeasible(outcome.infeasible)
-        return outcome, self._state(state.session_id)
-
-    def _batch(self, state: PlanningState, outcome: Outcome) -> CandidateBatch:
-        day = self.repo.get_day(state.day_id)
-        assert day is not None
-        return presenter.batch_response(state, self.repo, outcome, day)
+        assert outcome.response is not None
+        return outcome.response
 
     # ---- 엔드포인트 ----
 
@@ -115,48 +118,34 @@ class PlanningService:
             box = Outbox()
             self.graph.invoke(new_state(session_id, day_id, mode), self._config(session_id, box))  # type: ignore[arg-type]
             outcome = box.outcome
-            assert outcome is not None
-            if outcome.kind == "error":
-                self.graph.checkpointer.delete_thread(session_id)  # §10-10 R1: 세션을 안 만든다
-                raise _internal()
-            if outcome.kind == "infeasible":
-                # §10 Q2: 시작에서 코스를 못 만들면 세션을 만들지 않는다 (그래프가 저장소에 쓰기 전에 끝났고, 스레드도 지운다)
+            if outcome is not None and outcome.kind in ("error", "infeasible"):
+                # §10 Q2·§10-10 R1: 시작에서 코스를 못 만들거나 예외가 나면 세션을 만들지 않는다 (저장소엔 안 썼고, 스레드도 지운다)
                 self.graph.checkpointer.delete_thread(session_id)
-                assert outcome.infeasible is not None
-                raise _infeasible(outcome.infeasible)
-            state = self._state(session_id)
-            if mode == "auto":
-                return presenter.course_response(state, self.repo)
-            return PlanningSession(session_id=session_id, stage="asking", question=presenter.question(day.day_number))
+            return self._response(outcome)  # type: ignore[return-value]
 
     def answer(self, session_id: str, body: AnswerRequest) -> CandidateBatch | CourseResult:
         with self._lock:
             state = self._state(session_id)
             if body.auto:
-                _, state = self._resume(state, {"kind": "auto"})
-                return presenter.course_response(state, self.repo)
+                return self._resume(state, {"kind": "auto"})  # type: ignore[return-value]
             event = {"kind": "answer", "choice_ids": body.choice_ids or [], "text": body.text}
-            outcome, state = self._resume(state, event)
-            return self._batch(state, outcome)
+            return self._resume(state, event)  # type: ignore[return-value]
 
     def react(self, session_id: str, body: ReactionRequest) -> Picks:
         with self._lock:
             state = self._state(session_id)
-            _, state = self._resume(state, {"kind": "reaction", "place_id": body.place_id, "action": body.action})
-            return presenter.picks_response(state, self.repo)
+            return self._resume(state, {"kind": "reaction", "place_id": body.place_id, "action": body.action})  # type: ignore[return-value]
 
     def next(self, session_id: str, body: NextRequest) -> CandidateBatch:
         with self._lock:
             state = self._state(session_id)
             event = {"kind": "next", "direction_id": body.direction_id, "text": body.text}
-            outcome, state = self._resume(state, event)
-            return self._batch(state, outcome)
+            return self._resume(state, event)  # type: ignore[return-value]
 
     def compose(self, session_id: str) -> CourseResult:
         with self._lock:
             state = self._state(session_id)
-            _, state = self._resume(state, {"kind": "compose"})
-            return presenter.course_response(state, self.repo)
+            return self._resume(state, {"kind": "compose"})  # type: ignore[return-value]
 
     def adjust(self, session_id: str, body: AdjustRequest) -> CourseResult:
         with self._lock:
@@ -165,14 +154,12 @@ class PlanningService:
             if body.option_id not in state.option_ids:
                 raise PlanningError("NOT_FOUND", "없는 코스안이에요", {"option_id": body.option_id})
             event = {"kind": "adjust", "option_id": body.option_id, "place_id": body.place_id, "delta": body.delta}
-            _, state = self._resume(state, event)
-            return presenter.course_response(state, self.repo)
+            return self._resume(state, event)  # type: ignore[return-value]
 
     def back(self, session_id: str) -> CandidateBatch:
         with self._lock:
             state = self._state(session_id)
-            outcome, state = self._resume(state, {"kind": "back"})
-            return self._batch(state, outcome)
+            return self._resume(state, {"kind": "back"})  # type: ignore[return-value]
 
     def select(self, option_id: str) -> SelectResult:
         with self._lock:
@@ -185,5 +172,4 @@ class PlanningService:
                 raise PlanningError("NOT_FOUND", "지금 보여 주는 코스안이 아니에요", {"option_id": option_id})
             if state.stage != "composing":
                 raise PlanningError("STATE_CONFLICT", f"지금 단계({state.stage})에서는 고를 수 없어요", {"stage": state.stage})
-            self._resume(state, {"kind": "select", "option_id": option_id})
-            return SelectResult(day_id=state.day_id, option_id=option_id)
+            return self._resume(state, {"kind": "select", "option_id": option_id})  # type: ignore[return-value]

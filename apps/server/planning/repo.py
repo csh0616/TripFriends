@@ -54,6 +54,10 @@ class PlanningRepo(ABC):
     def reactions(self, session_id: str) -> Reactions: ...
 
     @abstractmethod
+    def reactions_after_react(self, session_id: str, place_id: PlaceId, action: ReactionAction) -> Reactions:
+        """`react`를 한 뒤의 반응을 **저장하지 않고** 돌려준다 (응답을 먼저 만들기 위해: TASK-003 §10-11 R12)."""
+
+    @abstractmethod
     def react(self, session_id: str, place_id: PlaceId, action: ReactionAction) -> None:
         """like·skip·unlike를 반영한다 (TASK-003 §4 줄05, §10 Q17·Q18·Q39)."""
 
@@ -82,8 +86,9 @@ class PlanningRepo(ABC):
 
     # ---- 코스안과 선택 ----
     @abstractmethod
-    def save_options(self, session_id: str, picks: list[PlaceId], courses: list[CourseOption]) -> list[OptionRecord]:
-        """새 ID(uuid4)를 붙여 저장한다. 옛 코스안은 지우지 않는다 (옛 ID는 상태의 option_ids에서 빠질 뿐, §10 Q41)."""
+    def save_options(self, records: list[OptionRecord]) -> None:
+        """코스안을 저장한다. 옛 코스안은 지우지 않는다 (옛 ID는 상태의 option_ids에서 빠질 뿐, §10 Q41).
+        ID는 `new_option_records`로 미리 만든다 (응답을 저장보다 먼저 만들기 위해: §10-11 R12)."""
 
     @abstractmethod
     def get_option(self, option_id: str) -> OptionRecord | None: ...
@@ -152,26 +157,18 @@ class MemoryPlanningRepo(PlanningRepo):
         with self._lock:
             return Reactions(liked=list(self._liked.get(session_id, [])), skipped=list(self._skipped.get(session_id, [])))
 
+    def reactions_after_react(self, session_id: str, place_id: PlaceId, action: ReactionAction) -> Reactions:
+        with self._lock:
+            liked, skipped, _ = _apply_reaction(
+                list(self._liked[session_id]), list(self._skipped[session_id]), list(self._unliked[session_id]), place_id, action
+            )
+            return Reactions(liked=liked, skipped=skipped)
+
     def react(self, session_id: str, place_id: PlaceId, action: ReactionAction) -> None:
         with self._lock:
-            liked, skipped, unliked = self._liked[session_id], self._skipped[session_id], self._unliked[session_id]
-            if action == "like":
-                # §10 Q18: 넘긴 곳을 다시 좋아하면 담긴다. 이미 담은 곳이면 순서 그대로
-                _remove(skipped, place_id)
-                _remove(unliked, place_id)
-                if place_id not in liked:
-                    liked.append(place_id)
-            elif action == "skip":
-                # §10 Q18: 좋아한 곳을 넘기면 담은 곳에서 빠진다
-                _remove(liked, place_id)
-                _remove(unliked, place_id)
-                if place_id not in skipped:
-                    skipped.append(place_id)
-            elif place_id in liked:
-                # unlike: 담은 곳에서만 뺀다 (skip으로 바꾸지 않음, AC-7). 담은 곳이 아니면 변화 없음 (§10 Q39)
-                _remove(liked, place_id)
-                if place_id not in unliked:
-                    unliked.append(place_id)
+            self._liked[session_id], self._skipped[session_id], self._unliked[session_id] = _apply_reaction(
+                self._liked[session_id], self._skipped[session_id], self._unliked[session_id], place_id, action
+            )
 
     def _unreacted(self, session_id: str, batch: list[PlaceId]) -> list[PlaceId]:
         reacted = {*self._liked[session_id], *self._skipped[session_id], *self._unliked[session_id]}
@@ -202,12 +199,10 @@ class MemoryPlanningRepo(PlanningRepo):
         with self._lock:
             self._overrides[session_id][place_id] = minutes
 
-    def save_options(self, session_id: str, picks: list[PlaceId], courses: list[CourseOption]) -> list[OptionRecord]:
+    def save_options(self, records: list[OptionRecord]) -> None:
         with self._lock:
-            records = [OptionRecord(str(uuid.uuid4()), session_id, list(picks), course) for course in courses]
             for record in records:
                 self._options[record.option_id] = record
-            return records
 
     def get_option(self, option_id: str) -> OptionRecord | None:
         with self._lock:
@@ -249,6 +244,35 @@ class MemoryPlanningRepo(PlanningRepo):
                     "logs": self._logs,
                 }
             )
+
+
+def new_option_records(session_id: str, picks: list[PlaceId], courses: list[CourseOption]) -> list[OptionRecord]:
+    """새 ID(uuid4)를 붙인 코스안 레코드. 저장은 하지 않는다."""
+    return [OptionRecord(str(uuid.uuid4()), session_id, list(picks), course) for course in courses]
+
+
+def _apply_reaction(
+    liked: list[PlaceId], skipped: list[PlaceId], unliked: list[PlaceId], place_id: PlaceId, action: ReactionAction
+) -> tuple[list[PlaceId], list[PlaceId], list[PlaceId]]:
+    """like·skip·unlike 규칙 한 곳. 받은 목록을 바꿔서 돌려준다 (호출하는 쪽이 복사본을 넘기면 저장 없이 계산만 된다)."""
+    if action == "like":
+        # §10 Q18: 넘긴 곳을 다시 좋아하면 담긴다. 이미 담은 곳이면 순서 그대로
+        _remove(skipped, place_id)
+        _remove(unliked, place_id)
+        if place_id not in liked:
+            liked.append(place_id)
+    elif action == "skip":
+        # §10 Q18: 좋아한 곳을 넘기면 담은 곳에서 빠진다
+        _remove(liked, place_id)
+        _remove(unliked, place_id)
+        if place_id not in skipped:
+            skipped.append(place_id)
+    elif place_id in liked:
+        # unlike: 담은 곳에서만 뺀다 (skip으로 바꾸지 않음, AC-7). 담은 곳이 아니면 변화 없음 (§10 Q39)
+        _remove(liked, place_id)
+        if place_id not in unliked:
+            unliked.append(place_id)
+    return liked, skipped, unliked
 
 
 def _remove(items: list[PlaceId], place_id: PlaceId) -> None:

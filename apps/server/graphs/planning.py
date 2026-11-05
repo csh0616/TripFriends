@@ -8,17 +8,17 @@
     course --adjust--> course | --back--> browse | --select--> END
 각 대기 노드는 `interrupt()`로 멈췄다가 `Command(resume=이벤트)`로 이어지면 §4 전이표의 줄(`TRANSITIONS`)을 한 번 실행한다.
 
-원칙 (TASK-003 §10)
-- 실패한 요청은 아무것도 바꾸지 않는다: 줄 함수는 **먼저 계산하고 성공했을 때만** 저장소에 쓴다. 실패하면 상태 갱신 없이
-  같은 대기 노드로 돌아온다 (상태 값·저장소 그대로).
-- 상태에는 대화 맥락만 (§3). 반응·코스안·선택은 저장소.
-- 응답을 만드는 데 필요한 결과는 요청마다 `config["configurable"]["outbox"]`에 담아 돌려준다 (체크포인트에 남기지 않음).
+원칙 (TASK-003 §10, §10-10, §10-11)
+- 줄 함수의 순서는 **계산 -> 응답 만들기 -> 저장 -> 상태 갱신**이다 (§10-11 R12). 새 상태와 응답 값을 함께 계산하고,
+  응답을 만드는 데서 예외가 나면 둘 다 버린다. 저장소에는 응답까지 다 만든 뒤에만 쓴다.
+- 줄 함수에서 예외가 나도 그래프는 같은 interrupt 자리에서 기다리고 실패한 이벤트는 버린다 (§10-10 R1, `wait` 노드).
+- 상태에는 대화 맥락만 (§3, 11개). 반응·코스안·선택은 저장소.
+- 응답은 `config["configurable"]["outbox"]`에 담아 API에 돌려준다 (체크포인트에 남기지 않음).
 """
 
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, time
 from typing import Any, Literal
 
 from langchain_core.runnables import RunnableConfig
@@ -27,13 +27,14 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel
 
-from engine.models import Batch, CourseOption, Direction, Infeasible, Place, PlaceId
+from engine.models import Batch, CourseOption, Direction, Infeasible, PlaceId
 from engine.planning import clamp_user_stay, compose_courses, first_batch, next_batch, parse_direction
-from planning.repo import DayRecord, PlanningRepo
+from planning import presenter
+from planning.repo import DayRecord, PlanningRepo, new_option_records
+from planning.schemas import PlanningSession, SelectResult
+from planning.state import DEFAULT_CLARIFY, PlanningState, Stage, candidates, day_start  # noqa: F401  (re-export)
 
 log = logging.getLogger(__name__)
-
-Stage = Literal["asking", "browsing", "composing", "done"]
 
 # TASK-003 §4-1, §10 Q4: 칩 ID -> 종류
 CHIP_CATEGORIES: dict[str, list[str]] = {
@@ -44,24 +45,7 @@ CHIP_CATEGORIES: dict[str, list[str]] = {
     "cafe": ["cafe"],
     "museum_experience": ["museum", "experience"],
 }
-DEFAULT_CLARIFY: list[Direction] = ["quieter", "food", "night"]  # TASK-003 §4-3: 보기가 0개일 때
 PARSER_TEXT_LIMIT = 200  # TASK-003 §10 Q28: 글 원문은 200자까지 저장
-
-
-class PlanningState(BaseModel):
-    """TASK-003 §3. 대화 맥락만 담는다. 반응·코스안·선택 결과는 PlanningRepo에 둔다."""
-
-    session_id: str
-    day_id: str
-    mode: Literal["conversation", "auto"]
-    stage: Stage = "asking"
-    round: int = 0
-    categories: list[str] = []
-    shown: list[PlaceId] = []
-    batch: list[PlaceId] = []
-    last_direction: Direction | None = None
-    clarify_count: int = 0
-    option_ids: list[str] = []
 
 
 # ---------- 요청이 돌려받는 결과 ----------
@@ -69,12 +53,10 @@ class PlanningState(BaseModel):
 
 @dataclass
 class Outcome:
-    """그래프가 한 번 돌고 나서 API가 응답을 만들 때 필요한 것. 값 계산은 API가 그때 상태로 다시 한다 (TASK-003 §10 원칙 2)."""
+    """줄 함수가 만든 결과. `response`는 새 상태로 **이미 계산해 둔** 응답 모델이다 (§10-11 R12)."""
 
-    kind: Literal["question", "batch", "picks", "course", "selected", "infeasible", "invalid", "conflict", "error"]
-    first: bool = False  # 첫 묶음 (message 대본)
-    clarify: bool = False  # 되묻기 (§4-3)
-    exhausted: bool = False  # 엔진이 이 묶음을 만들 때 낸 값
+    kind: Literal["ok", "infeasible", "invalid", "conflict", "error"]
+    response: BaseModel | None = None
     infeasible: Infeasible | None = None
     problem: str = ""  # invalid일 때 이유
 
@@ -102,34 +84,18 @@ def _day(run: _Run, state: PlanningState) -> DayRecord:
     return day
 
 
-def candidates(day: DayRecord) -> dict[PlaceId, Place]:
-    """TASK-003 §10 Q33: 꼭 갈 곳은 후보에서 뺀다. §10-10 R6: 고정 일정 장소도 뺀다 (장소 없는 고정 일정은 뺄 것이 없음)."""
-    excluded = {*day.plan.must_visit, *(f.place_id for f in day.plan.fixed if f.place_id)}
-    return {pid: p for pid, p in day.places.items() if pid not in excluded}
-
-
-def day_start(day: DayRecord) -> datetime:
-    """`at` = 그날 시작 시각 (TASK-003 §10 Q26)."""
-    hour, minute = day.plan.start.split(":")
-    return datetime.combine(day.plan.date, time(int(hour), int(minute)))
-
-
 def _compose(day: DayRecord, picks: list[PlaceId], overrides: dict[PlaceId, int]) -> list[CourseOption] | Infeasible:
     plan = day.plan.model_copy(update={"stay_overrides": {**day.plan.stay_overrides, **overrides}})
     return compose_courses(plan, picks, day.places)
 
 
-def _with_courses(run: _Run, state: PlanningState, picks: list[PlaceId], courses: list[CourseOption], **update: Any) -> PlanningState:
-    records = run.repo.save_options(state.session_id, picks, courses)
+def _course_state(state: PlanningState, records: list[Any], **update: Any) -> PlanningState:
+    """새 코스안을 보여 주는 상태 (저장하지 않는 계산)."""
     return state.model_copy(update={"stage": "composing", "option_ids": [r.option_id for r in records], **update})
 
 
-def _with_batch(run: _Run, state: PlanningState, batch: Batch, direction: Direction | None, **update: Any) -> PlanningState:
-    """새 묶음을 보여 줌. 빈 묶음이면 round 그대로 (TASK-003 §10 Q31·Q45), 새 묶음이면 clarify_count 0 (§4-3).
-
-    TASK-003 §10-10 R4: `direction_relaxed`는 묶음의 성질이라 묶음을 만들 때 값을 저장소에 둔다 (§3 상태 필드 11개는 그대로).
-    """
-    run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)
+def _batch_state(state: PlanningState, batch: Batch, direction: Direction | None, **update: Any) -> PlanningState:
+    """새 묶음을 보여 주는 상태 (저장하지 않는 계산). 빈 묶음이면 round 그대로 (TASK-003 §10 Q31·Q45), 새 묶음이면 clarify_count 0 (§4-3)."""
     return state.model_copy(
         update={
             "stage": "browsing",
@@ -151,8 +117,14 @@ def _log_parse(run: _Run, text: str, direction: Direction | None) -> None:
     )
 
 
+def _finish(run: _Run, response: BaseModel, new: PlanningState | None) -> PlanningState | None:
+    run.done(Outcome("ok", response=response))
+    return new
+
+
 # ---------- §4 전이표 한 줄 한 줄 ----------
-# 반환: (새 상태 또는 None=그대로, 다음 노드 stage). 실패하면 outcome만 남기고 상태·저장소는 그대로 둔다.
+# 반환: 새 상태 (None = 상태 그대로). 실패하면 outcome만 남기고 상태·저장소는 그대로 둔다.
+# 순서: 계산 -> 응답 만들기 -> 저장 -> 상태 갱신 (§10-11 R12). 아래 "저장" 줄 앞에서는 저장소에 쓰지 않는다.
 
 
 def _row_auto(run: _Run, state: PlanningState, _event: dict[str, Any]) -> PlanningState | None:
@@ -163,8 +135,11 @@ def _row_auto(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Planni
     if isinstance(result, Infeasible):
         run.done(Outcome("infeasible", infeasible=result))  # §10 Q2: 422, 상태는 그대로
         return None
-    run.done(Outcome("course"))
-    return _with_courses(run, state, picks, result, round=0, shown=[], batch=[], last_direction=None, clarify_count=0)
+    records = new_option_records(state.session_id, picks, result)
+    new = _course_state(state, records, round=0, shown=[], batch=[], last_direction=None, clarify_count=0)
+    response = presenter.course_response(new, records)
+    run.repo.save_options(records)  # 저장
+    return _finish(run, response, new)
 
 
 def _row_answer(run: _Run, state: PlanningState, event: dict[str, Any]) -> PlanningState | None:
@@ -177,19 +152,24 @@ def _row_answer(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plann
     if text is not None:
         direction = parse_direction(text)  # 못 알아들으면 무시하고 진행, 첫 질문에서는 되묻지 않음 (§4-1)
     batch = first_batch(candidates(day), categories, direction, day.plan.lodging, day_start(day))
-    # TASK-003 §10-10 R1: 계산(first_batch)이 끝난 뒤에만 기록·저장한다
-    if text is not None:
-        _log_parse(run, text, direction)
-    run.done(Outcome("batch", first=True, exhausted=batch.exhausted))
     # TASK-003 §10-10 (그대로 받아들인 것): 첫 묶음에 글로 말한 방향이 있으면 last_direction으로 둔다
-    return _with_batch(run, state, batch, direction, categories=categories)
+    new = _batch_state(state, batch, direction, categories=categories)
+    response = presenter.batch_response(
+        new, run.repo.reactions(state.session_id), batch.direction_relaxed, day,
+        first=True, clarify=False, exhausted=batch.exhausted,
+    )
+    if text is not None:  # 저장
+        _log_parse(run, text, direction)
+    run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)
+    return _finish(run, response, new)
 
 
 def _row_reaction(run: _Run, state: PlanningState, event: dict[str, Any]) -> PlanningState | None:
     """줄05 browsing × reaction: 저장소에 반영, 묶음은 그대로."""
-    run.repo.react(state.session_id, event["place_id"], event["action"])
-    run.done(Outcome("picks"))
-    return None
+    after = run.repo.reactions_after_react(state.session_id, event["place_id"], event["action"])
+    response = presenter.picks_response(after)
+    run.repo.react(state.session_id, event["place_id"], event["action"])  # 저장
+    return _finish(run, response, None)
 
 
 def _row_next(run: _Run, state: PlanningState, event: dict[str, Any]) -> PlanningState | None:
@@ -201,19 +181,26 @@ def _row_next(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plannin
         direction = parse_direction(text)
         if direction is None and state.clarify_count == 0:
             # §4-3: 첫 번째 못 알아들음은 묶음 그대로 되묻기 (skip 기록 없음)
-            _log_parse(run, text, direction)
-            run.done(Outcome("batch", clarify=True))
-            return state.model_copy(update={"clarify_count": 1})
-        # 두 번째 못 알아들음은 방향 없이 진행 (direction은 None 그대로, clarify_count는 _with_batch가 0으로)
-    # TASK-003 §10-10 R1: skip 기록을 한 뒤 계산하지 않는다. "skip이 기록된 뒤의 반응"을 저장 없이 먼저 계산하고,
-    # 계산이 끝난 다음에만 해석 기록과 skip을 저장한다 (§10 Q19: 두 번째 못 알아들음도 skip 기록)
+            new = state.model_copy(update={"clarify_count": 1})
+            response = presenter.batch_response(
+                new, run.repo.reactions(state.session_id), run.repo.batch_relaxed(state.session_id), day,
+                first=False, clarify=True, exhausted=False,
+            )
+            _log_parse(run, text, direction)  # 저장
+            return _finish(run, response, new)
+        # 두 번째 못 알아들음은 방향 없이 진행 (direction은 None 그대로, clarify_count는 _batch_state가 0으로)
+    # 줄 함수 순서(R12): skip이 기록된 뒤의 반응을 **저장 없이** 계산 -> 다음 묶음 -> 응답 -> 그다음에야 기록·skip 저장 (§10 Q19)
     reactions = run.repo.reactions_after_skip(state.session_id, state.batch)
     batch = next_batch(candidates(day), reactions, direction, state.shown, day.plan.lodging, day_start(day))
-    if text is not None:
+    new = _batch_state(state, batch, direction)
+    response = presenter.batch_response(
+        new, reactions, batch.direction_relaxed, day, first=False, clarify=False, exhausted=batch.exhausted
+    )
+    if text is not None:  # 저장
         _log_parse(run, text, direction)
     run.repo.skip_unreacted(state.session_id, state.batch)
-    run.done(Outcome("batch", exhausted=batch.exhausted))
-    return _with_batch(run, state, batch, direction)
+    run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)
+    return _finish(run, response, new)
 
 
 def _row_compose(run: _Run, state: PlanningState, _event: dict[str, Any]) -> PlanningState | None:
@@ -225,10 +212,13 @@ def _row_compose(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Pla
     if isinstance(result, Infeasible):
         run.done(Outcome("infeasible", infeasible=result))
         return None
-    # TASK-003 미정 (Q47): 저장 도중(skip 기록 뒤 save_options)에 예외가 나면 앞서 쓴 skip은 되돌리지 않는다. 지금 동작 그대로 둠
+    records = new_option_records(state.session_id, picks, result)
+    new = _course_state(state, records)
+    response = presenter.course_response(new, records)
+    # 저장. TASK-003 §10-11 R12: 저장 도중의 예외(부분 저장)는 R1 메모리 저장소의 알려진 한계 (Supabase TASK에서 트랜잭션으로)
     run.repo.skip_unreacted(state.session_id, state.batch)
-    run.done(Outcome("course"))
-    return _with_courses(run, state, picks, result)
+    run.repo.save_options(records)
+    return _finish(run, response, new)
 
 
 def _row_adjust(run: _Run, state: PlanningState, event: dict[str, Any]) -> PlanningState | None:
@@ -245,27 +235,34 @@ def _row_adjust(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plann
     if isinstance(result, Infeasible):
         run.done(Outcome("infeasible", infeasible=result))
         return None
-    # TASK-003 미정 (Q47): 저장 도중(override 저장 뒤 save_options)에 예외가 나면 저장된 override는 되돌리지 않는다. 지금 동작 그대로 둠
+    records = new_option_records(state.session_id, option.picks, result)
+    new = _course_state(state, records)
+    response = presenter.course_response(new, records)
+    # 저장. 부분 저장은 R1 메모리 저장소의 알려진 한계 (§10-11 R12)
     run.repo.set_stay_override(state.session_id, place_id, minutes)
-    run.done(Outcome("course"))
-    return _with_courses(run, state, option.picks, result)
+    run.repo.save_options(records)
+    return _finish(run, response, new)
 
 
 def _row_back(run: _Run, state: PlanningState, _event: dict[str, Any]) -> PlanningState | None:
     """줄11 composing × back: next_batch(None) -> browsing. 자동 세션이면 shown이 비어 있어 처음부터 (§10 Q20)."""
     day = _day(run, state)
-    batch = next_batch(
-        candidates(day), run.repo.reactions(state.session_id), None, state.shown, day.plan.lodging, day_start(day)
+    reactions = run.repo.reactions(state.session_id)
+    batch = next_batch(candidates(day), reactions, None, state.shown, day.plan.lodging, day_start(day))
+    new = _batch_state(state, batch, None)
+    response = presenter.batch_response(
+        new, reactions, batch.direction_relaxed, day, first=False, clarify=False, exhausted=batch.exhausted
     )
-    run.done(Outcome("batch", exhausted=batch.exhausted))
-    return _with_batch(run, state, batch, None)
+    run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)  # 저장
+    return _finish(run, response, new)
 
 
 def _row_select(run: _Run, state: PlanningState, event: dict[str, Any]) -> PlanningState | None:
     """줄12 composing × select: 저장소에 선택 저장 -> done."""
-    run.repo.choose_option(state.day_id, event["option_id"])
-    run.done(Outcome("selected"))
-    return state.model_copy(update={"stage": "done"})
+    new = state.model_copy(update={"stage": "done"})
+    response = SelectResult(day_id=state.day_id, option_id=event["option_id"])
+    run.repo.choose_option(state.day_id, event["option_id"])  # 저장
+    return _finish(run, response, new)
 
 
 _Row = Callable[[_Run, PlanningState, dict[str, Any]], PlanningState | None]
@@ -335,9 +332,13 @@ def build_planning_graph(repo: PlanningRepo):
                 if nxt is None:
                     return Command(goto=END)  # §10 Q2: 세션을 만들지 않는다 (API가 스레드도 지운다)
                 repo.create_session(state.session_id, state.day_id)
-                return Command(goto="course", update=nxt.model_dump())
-            repo.create_session(state.session_id, state.day_id)
-            run.done(Outcome("question"))
+                return Command(goto="course", update=nxt.model_dump())  # 응답은 _row_auto가 이미 만들어 두었다
+            day = _day(run, state)
+            response = PlanningSession(
+                session_id=state.session_id, stage="asking", question=presenter.question(day.day_number)
+            )
+            repo.create_session(state.session_id, state.day_id)  # 응답을 만든 뒤 저장 (R12)
+            run.done(Outcome("ok", response=response))
             return Command(goto="ask", update=state.model_dump())
         except Exception:
             # TASK-003 §10-10 R1: 예외도 실패한 요청. 세션을 만들지 않고 끝낸다 (API가 500으로 답하고 스레드를 지운다)

@@ -3,10 +3,10 @@
 사실 값(영업시간·확인 상태)은 장소 데이터에서만 가져오고, 문구는 §6의 고정 대본만 쓴다 (LLM 없음).
 """
 
-from engine.models import Direction, Place as EnginePlace, PlaceId
+from engine.models import Direction, Place as EnginePlace, PlaceId, Reactions
 from engine.planning import fits_direction, next_batch, pick_directions
-from graphs.planning import DEFAULT_CLARIFY, Outcome, PlanningState, candidates, day_start
-from planning.repo import DayRecord, PlanningRepo
+from planning.repo import DayRecord, OptionRecord
+from planning.state import DEFAULT_CLARIFY, PlanningState, candidates, day_start
 from planning.schemas import (
     Candidate,
     CandidateBatch,
@@ -95,29 +95,38 @@ def _choices(directions: list[Direction]) -> list[DirectionChoice]:
     return [DirectionChoice(id=d, label=DIRECTION_LABELS[d]) for d in directions]
 
 
-def batch_response(state: PlanningState, repo: PlanningRepo, outcome: Outcome, day: DayRecord) -> CandidateBatch:
-    """§6 CandidateBatch. 되묻기도 같은 모양이고 값은 지금 상태로 계산한다 (§10 Q30)."""
+def batch_response(
+    state: PlanningState,
+    reactions: Reactions,
+    relaxed: bool,
+    day: DayRecord,
+    *,
+    first: bool,
+    clarify: bool,
+    exhausted: bool,
+) -> CandidateBatch:
+    """§6 CandidateBatch. 되묻기도 같은 모양이고 값은 **넘겨 받은 새 상태·반응**으로 계산한다 (§10 Q30).
+
+    TASK-003 §10-11 R12: 그래프가 상태·저장소를 바꾸기 전에 호출된다. 그래서 저장소를 읽지 않고 값을 인자로 받는다.
+    """
     cand = candidates(day)
-    reactions = repo.reactions(state.session_id)
     anchor, at, weekday = day.plan.lodging, day_start(day), day.plan.date.weekday()
     shown = set(state.shown)
     batch = [cand[pid] for pid in state.batch]
     remaining = [p for pid, p in cand.items() if pid not in shown]
     directions = pick_directions(batch, remaining, reactions, cand, state.last_direction, anchor, at)
 
-    exhausted = outcome.exhausted
-    if outcome.clarify:
+    if clarify:
         # §10 Q37: 되묻기의 exhausted는 지금 안 보여 준 곳이 5곳 미만인지 (엔진의 next_batch 정의 그대로)
         exhausted = next_batch(cand, reactions, None, state.shown, anchor, at).exhausted
-    # §10-10 R4: direction_relaxed는 묶음을 만들 때의 값 그대로 (묶음의 성질). 되묻기에서도 바뀌지 않는다
-    relaxed = repo.batch_relaxed(state.session_id)
+    # relaxed(§10-10 R4)는 묶음을 만들 때의 값 그대로 (묶음의 성질). 되묻기에서도 바뀌지 않는다
 
     # §10 Q6: 되묻기 > exhausted > 첫 묶음 > 방향 있음 > 방향 없음
-    if outcome.clarify:
+    if clarify:
         message = MSG_CLARIFY
     elif exhausted:
         message = MSG_EXHAUSTED
-    elif outcome.first:
+    elif first:
         message = MSG_FIRST
     elif state.last_direction:
         message = f"{DIRECTION_LABELS[state.last_direction]} 쪽으로 다시 찾아봤어!"
@@ -137,10 +146,6 @@ def batch_response(state: PlanningState, repo: PlanningRepo, outcome: Outcome, d
             why = WHY_NONE
         candidates_out.append(Candidate(place=place_view(p, weekday), why=why))
 
-    clarify = None
-    if outcome.clarify:
-        clarify = _choices(directions or DEFAULT_CLARIFY)  # §4-3: 0개면 기본 3개
-
     return CandidateBatch(
         session_id=state.session_id,
         stage=state.stage,
@@ -148,32 +153,28 @@ def batch_response(state: PlanningState, repo: PlanningRepo, outcome: Outcome, d
         message=message,
         candidates=candidates_out,
         directions=_choices(directions),
-        clarify=clarify,
+        clarify=_choices(directions or DEFAULT_CLARIFY) if clarify else None,  # §4-3: 0개면 기본 3개
         picks_count=len(reactions.liked),
         exhausted=exhausted,
         direction_relaxed=relaxed,
     )
 
 
-def picks_response(state: PlanningState, repo: PlanningRepo) -> Picks:
-    liked: list[PlaceId] = repo.reactions(state.session_id).liked
+def picks_response(reactions: Reactions) -> Picks:
+    liked: list[PlaceId] = list(reactions.liked)
     return Picks(picks=liked, picks_count=len(liked))
 
 
-def course_response(state: PlanningState, repo: PlanningRepo) -> CourseResult:
-    options = []
-    for option_id in state.option_ids:
-        record = repo.get_option(option_id)
-        assert record is not None
-        course = record.course
-        options.append(
-            CourseResultOption(
-                option_id=option_id,
-                label=course.label,
-                items=course.items,
-                dropped=course.dropped,
-                go_home_min=course.go_home_min,
-                total_travel_min=course.total_travel_min,
-            )
+def course_response(state: PlanningState, records: list[OptionRecord]) -> CourseResult:
+    options = [
+        CourseResultOption(
+            option_id=record.option_id,
+            label=record.course.label,
+            items=record.course.items,
+            dropped=record.course.dropped,
+            go_home_min=record.course.go_home_min,
+            total_travel_min=record.course.total_travel_min,
         )
+        for record in records
+    ]
     return CourseResult(session_id=state.session_id, stage=state.stage, options=options)
