@@ -219,7 +219,7 @@ erDiagram
 | 테이블 | 핵심 열 | 규칙 |
 |---|---|---|
 | places | name, category, lat/lng, crowd_level(1~5), price_level(1~4), mood_tags | 후보 추천·취향 추정에 쓰는 속성. 원문 리뷰·사진 복제 금지, 사진은 라이선스 확인된 것만 |
-| place_facts | field(`opening_hours`, `closed_days`, `stay_min`(머무는 시간 범위 `{min, typical, max}`, FR-07a), …), value, **status**(`confirmed`/`unverified`/`unknown`), **source_type**(`official`/`api`/`collected`/`user`/`estimate`), source_url, checked_at | 장소의 사실 값은 항상 여기서. 화면 신뢰 순서: official·user > collected > estimate > unknown (NFR-07) |
+| place_facts | field(`opening_hours`, `closed_days`, `stay_min`(머무는 시간 범위 `{min, typical, max}`, FR-07a), …), value, **status**(`confirmed`/`unverified`/`unknown`), **source_type**(`official`/`api`/`collected`/`user`/`estimate`/`demo`(개발용 가상 데이터, 11-05)), source_url, checked_at | 장소의 사실 값은 항상 여기서. 화면 신뢰 순서: official·user > collected > estimate > unknown (NFR-07) |
 
 ### C. 계획 대화 (FR-02~02c)
 | 테이블 | 핵심 열 | 규칙 |
