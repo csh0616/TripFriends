@@ -173,7 +173,7 @@ def _pairs(main: str, s: Snapshot) -> list[str]:
         return (["T-05"] if need_check else []) + ["T-03"]
     if main == "T-04":
         return (["T-07"] if s.fixed_event else []) + ["T-03"]
-    if main in ("T-05", "T-07"):
+    if main in ("T-03", "T-05", "T-07"):  # T-03은 대화가 고른 경우 (SCREEN-001 §5, §8 Q40)
         return ["T-02"]
     if main in ("T-06", "T-12"):
         return ["T-03"]
