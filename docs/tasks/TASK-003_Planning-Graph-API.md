@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-05 |
-| 상태 | **v3** — 11-05 test-writer 질문 35개 답을 §10에, 2차 질문 Q36~Q43 답을 §10-8에, 3차 Q44~Q46을 §10-9에, 구현 점검 반영을 §10-10에 추가. **§10이 §4~§6보다 우선**, Q9는 §10-8이 고침 |
+| 상태 | **v3** — 11-05 test-writer 질문 35개 답을 §10에, 2차 질문 Q36~Q43 답을 §10-8에, 3차 Q44~Q46을 §10-9에, 구현 점검 반영을 §10-10·§10-11에 추가. **§10이 §4~§6보다 우선**, Q9는 §10-8이 고침 |
 | 관련 | GRAPH-001 §1·§2 · API-001 §2-2·§3 · SRS-001 FR-02~03·07a · SCREEN-001 §3-1 · TASK-002(엔진 함수) · DATA-001 C·D |
 | 브랜치 | `feat/task-003-planning-graph` |
 | 다음 | TASK-004 계획 화면 (`frontend`, **디자인 시스템 확정 후**). 이 TASK의 API 응답 모양이 TASK-004의 계약 |
@@ -256,6 +256,17 @@ test-writer가 찾은 11곳은 **TASK-003이 정본**이다. API-001 §2-2·§3,
 | R10 | `langchain_core`를 import하는데 의존성 선언 없음, `langsmith` 전송 가능성 | `pyproject.toml`에 선언. R1은 **추적 전송 끔**: 서버 시작 때 `LANGSMITH_TRACING`이 없으면 `false`로 두고, `.env.example`에 적는다. 테스트로 확인 |
 
 그대로 받아들인 것 (PR에 기록): 엔진 공개 함수 `fits_direction`·`clamp_user_stay` 추가 (§8 예외로 승인), 422 때 체크포인트 1개 증가, `exhausted`는 보여 주기 전 기준 (TASK-002 규칙. 마지막 묶음 뒤 한 번 더 next하면 빈 묶음 + exhausted. R1 데이터 30곳에서는 드묾, TASK-004 사용성에서 다시 봄), 모르는 필드 400, 같은 칩 한 번, 첫 묶음 글 방향을 `last_direction`에, 취소 목록 저장, back 뒤 `option_ids` 비움, round 규칙, `latency_ms`·`cost_usd` None, 오류 `message` 문구
+
+### 10-11. 2차 구현 점검 반영 (11-06)
+| # | 정한 것 |
+|---|---|
+| R11 | 응답을 만드는 단계의 예외도 500 공통 형식 `INTERNAL_ERROR` (일반 예외 처리기). `ErrorBody` 설명을 code 5개로 고치고 타입 재생성 |
+| R12 (Q47) | **응답 만들기는 그래프를 진행하기 전에 끝낸다**: 줄 함수가 새 상태와 응답 값을 함께 계산하고, 예외가 나면 둘 다 버린다 (원칙 1). 저장 도중의 예외(부분 저장)는 **Supabase TASK에서 트랜잭션으로** 해결 — R1 메모리 저장소의 알려진 한계로 PR에 적는다 |
+| R13 | 추적 전송은 R1에서 **강제로 끈다**: `LANGSMITH_TRACING`, `LANGSMITH_TRACING_V2`, `LANGCHAIN_TRACING_V2`를 서버 시작 때 모두 `false`로 덮어쓴다 (켜는 것은 나중에 ADR로 결정). 테스트는 세 변수를 true로 두고 `tracing_is_enabled()`가 False인지 본다 |
+| R14 | 405 등 **모든 HTTP 오류를 공통 형식**으로 (code는 405면 `INVALID_REQUEST`) |
+| R15 | 약한 테스트 보강: `fail_and_keep`에 next 포함, presenter 예외 테스트 추가, F111이 주석 줄을 통과시키지 않게 |
+| 받아들임 | 명시 `null`은 빠진 것과 같게 처리. `{"auto":true,"text":"x"}` 400 확정 |
+| 운영 규칙 | 에이전트는 **자기가 띄운 프로세스만** 끈다 (PID로). `pkill -f` 같은 이름 기반 종료 금지 → CLAUDE.md에 추가. CLAUDE.md의 서버 실행 명령을 `uv run fastapi dev api/main.py`로 고친다 |
 
 ### 10-7. PM 메모
 - 표를 먼저 고정해도 질문이 35개 나왔다. 대부분 **표의 줄끼리 겹치는 곳**(대본 충돌, 실패 뒤 상태, 자동 + back)이었다 → 다음 TASK부터 "실패하면 어떻게 되나"와 "두 규칙이 겹치면 무엇이 이기나"를 처음부터 적는다
