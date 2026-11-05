@@ -1,4 +1,4 @@
-"""방향 버튼 고르기. 근거: TASK-002 §3 E, AC-7, §7 Q5·Q7·Q8."""
+"""방향 버튼 고르기. 근거: TASK-002 §3 E, AC-7, §7 Q5·Q7·Q8, §8 Q22~Q25·Q37, §9 Q41."""
 
 from datetime import datetime
 
@@ -105,10 +105,28 @@ def test_AC07_규칙2_순서는_photo_indoor_food_night_최대3개():
     assert pick([calm()], remaining, last="different") == ["photo", "indoor", "food"]
 
 
-@pytest.mark.parametrize("count, expected", [(2, ["quieter", "closer"]), (3, ["quieter", "closer", "photo"])])
-def test_AC07_규칙2_남은후보_3곳_경계(count, expected):
+@pytest.mark.parametrize(
+    "count, expected",
+    [
+        (0, ["quieter", "closer"]),
+        (1, ["quieter", "closer", "photo"]),
+        (2, ["quieter", "closer", "photo"]),
+        (3, ["quieter", "closer", "photo"]),
+    ],
+)
+def test_Q41_규칙1이_2개면_맞는곳이_1곳이상인_방향으로_3개까지(count, expected):
     batch = [calm("B1", crowd=4, km=2.0)]
     assert pick(batch, only("photo", count), last="different") == expected
+
+
+@pytest.mark.parametrize(
+    "photo_count, expected",
+    [(2, ["indoor", "photo"]), (3, ["photo", "indoor"])],
+    ids=["photo_2곳이면_뒤로", "photo_3곳이면_순서대로"],
+)
+def test_Q41_남은후보_3곳_이상인_방향이_1곳_이상인_방향보다_먼저(photo_count, expected):
+    remaining = only("photo", photo_count) + only("indoor", 3)
+    assert pick([calm()], remaining, last="different") == expected
 
 
 def test_AC07_규칙2는_묶음이_아니라_남은_후보를_센다():
@@ -156,14 +174,15 @@ def test_Q24_좋아한_곳이_없으면_different에_맞는_곳_없음():
 
 @pytest.mark.parametrize(
     "count, expected",
-    [(2, ["quieter", "closer"]), (3, ["quieter", "closer", "different"])],
+    [(2, ["photo", "different"]), (3, ["different", "photo"])],
+    ids=["different_2곳이면_뒤로", "different_3곳이면_맨앞"],
 )
 def test_Q24_different도_규칙2_남은후보_3곳_경계(count, expected):
-    liked = place("H1", "walk", tags=("골목",))
+    # 좋아한 태그가 "사진"이라 photo 3곳은 different에 맞지 않는다
+    liked = place("H1", "walk", tags=("사진",))
     reactions = Reactions(liked=["H1"], skipped=[])
-    remaining = [place(f"F{i}", "walk", tags=("자연",)) for i in range(count)]
-    batch = [calm("B1", crowd=4, km=2.0)]
-    assert pick(batch, remaining, reactions=reactions, known=[liked]) == expected
+    remaining = [place(f"F{i}", "walk", tags=("자연",)) for i in range(count)] + only("photo", 3)
+    assert pick([calm()], remaining, reactions=reactions, known=[liked]) == expected
 
 
 def test_Q24_규칙2에서_different가_photo보다_먼저():
@@ -186,16 +205,19 @@ def test_Q37_빈_묶음이면_빈_목록(remaining):
 # ---------- §7 Q7: 그래도 2개 미만이면 1곳 이상으로 ----------
 
 
-def test_Q7_0개면_1곳_이상인_방향을_순서대로_채움():
+def test_Q41_0개면_1곳_이상인_방향을_순서대로_3개까지():
     remaining = only("photo", 1) + only("food", 1) + only("night", 1)
-    # 2개에서 멈추는지 3개까지 채우는지는 남은 질문 Q41. 둘 다 허용
-    assert pick([calm()], remaining, last="different") in (["photo", "food"], ["photo", "food", "night"])
+    assert pick([calm()], remaining, last="different") == ["photo", "food", "night"]
 
 
-def test_Q7_규칙2로_1개면_1곳_이상으로_채움():
+def test_Q41_1곳_이상인_방향이_넷이어도_3개에서_멈춤():
+    remaining = only("photo", 1) + only("indoor", 1) + only("food", 1) + only("night", 1)
+    assert pick([calm()], remaining, last="different") == ["photo", "indoor", "food"]
+
+
+def test_Q41_규칙2로_1개면_1곳_이상으로_3개까지():
     remaining = only("photo", 3) + only("indoor", 1) + only("food", 1)
-    # 남은 질문 Q41. 둘 다 허용
-    assert pick([calm()], remaining, last="different") in (["photo", "indoor"], ["photo", "indoor", "food"])
+    assert pick([calm()], remaining, last="different") == ["photo", "indoor", "food"]
 
 
 def test_Q7_규칙1로_1개면_1곳_이상으로_하나_더():
@@ -285,3 +307,13 @@ def test_AC07_임의_입력에서_최대3개_중복없음_직전없음(batch_raw
     assert set(result) <= ALL
     assert last not in result
     assert result == pick(batch, remaining, last=last)
+    # §8 Q24: 좋아한 곳이 없으면 different 없음. §9 Q41: 3개 미만이면 맞는 곳이 있는 방향은 모두 들어가 있다
+    assert "different" not in result
+    matching = {
+        "photo": any("사진" in p.mood_tags for p in remaining),
+        "indoor": any("실내" in p.mood_tags or p.category == "museum" for p in remaining),
+        "food": any(p.category == "food" for p in remaining),
+        "night": any("야경" in p.mood_tags for p in remaining),
+    }
+    if len(result) < 3:
+        assert {d for d, found in matching.items() if found and d != last} <= set(result)

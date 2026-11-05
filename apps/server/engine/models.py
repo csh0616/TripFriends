@@ -92,7 +92,7 @@ class CourseOption(BaseModel):
 
 class Infeasible(BaseModel):
     reason: str
-    blocking: list[PlaceId]  # §7 Q15
+    blocking: list[str]  # 장소 id (§7 Q15). fixed_unreachable이면 고정 일정 id (§9 Q45)
     suggest_drop: list[PlaceId]
 
 

@@ -95,6 +95,26 @@ def test_Q39_남은후보_5개_미만이면_안맞는_곳이_섞일때만_relaxe
     assert batch.direction_relaxed is relaxed
 
 
+def test_Q47_남은후보_5개_미만이면_맞는_곳이_id가_뒤여도_먼저():
+    places = as_places(*[place(f"D{i:02d}", crowd=c) for i, c in enumerate([5, 5, 1, 1], start=1)])
+    assert batch_of(places, direction="quieter").place_ids == ["D03", "D04", "D01", "D02"]
+
+
+def test_Q47_남은후보_5개_미만이면_맞는_곳_점수순_다음_나머지_점수순():
+    # 좋아한 곳: 붐빔 3, 가격 3, 태그 골목. 점수 D01 −0.5, D02 +0.5, D03 0, D04 +1
+    liked = place("H1", "walk", crowd=3, tags=("골목",))
+    places = as_places(
+        liked,
+        place("D01", crowd=2),
+        place("D02", crowd=2, tags=("골목",)),
+        place("D03", crowd=3),
+        place("D04", crowd=3, tags=("골목",)),
+    )
+    batch = batch_of(places, direction="quieter", shown=["H1"], reactions=Reactions(liked=["H1"], skipped=[]))
+    assert batch.place_ids == ["D02", "D01", "D04", "D03"]
+    assert batch.direction_relaxed is True
+
+
 @pytest.mark.parametrize("k, allowed", [(4, False), (5, True), (6, True), (7, False)])
 def test_Q39_k는_5또는_6만_받음(k, allowed):
     places = as_places(*many(8))
