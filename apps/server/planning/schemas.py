@@ -1,12 +1,76 @@
-"""/planning 응답 모양 (TASK-003 §6). 필드 선언만 둔다."""
+"""/planning 요청·응답 모양 (TASK-003 §5·§6). OpenAPI → packages/api-types로 이어지는 계약."""
 
-from typing import Literal
+from typing import Any, Literal, Self
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from engine.models import Category, CourseItem, Direction, Dropped, HoursStatus, PlaceId
 
 Stage = Literal["asking", "browsing", "composing", "done"]
+Mode = Literal["conversation", "auto"]
+# TASK-003 §10 Q4: 칩 ID
+ChipId = Literal["walk_alley", "food_tour", "shopping", "night_view", "cafe", "museum_experience"]
+
+
+# ---------- 요청 (§5) ----------
+# 본문 오류는 모두 400 INVALID_REQUEST (§10 Q23). 모르는 필드는 거부한다 (TASK-003 미정: 오타가 빈 요청으로 읽히면 일정 기록이 바뀐다)
+
+
+class _Request(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+def _not_blank(text: str | None) -> None:
+    if text is not None and not text.strip():
+        raise ValueError("글이 비어 있음")  # §10 Q23·Q42: 빈 글·공백만
+
+
+class StartRequest(_Request):
+    mode: Mode
+
+
+class AnswerRequest(_Request):
+    """`{choice_ids[], text?}` 또는 `{auto: true}` (§5). 섞거나 `{auto: false}`, 빈 본문은 400."""
+
+    choice_ids: list[ChipId] | None = None
+    text: str | None = None
+    auto: bool | None = None
+
+    @model_validator(mode="after")
+    def _one_form(self) -> Self:
+        _not_blank(self.text)
+        if self.auto is not None:
+            if self.auto is not True or self.choice_ids is not None or self.text is not None:
+                raise ValueError("auto는 true 하나만 보낸다")  # §10 Q23·Q42
+        elif self.choice_ids is None:
+            raise ValueError("choice_ids 또는 auto가 필요함")
+        return self
+
+
+class NextRequest(_Request):
+    direction_id: Direction | None = None
+    text: str | None = None
+
+    @model_validator(mode="after")
+    def _one_of(self) -> Self:
+        _not_blank(self.text)
+        if self.direction_id is not None and self.text is not None:
+            raise ValueError("direction_id와 text는 함께 보내지 않는다")  # §10 Q23
+        return self
+
+
+class ReactionRequest(_Request):
+    place_id: PlaceId
+    action: Literal["like", "skip", "unlike"]
+
+
+class AdjustRequest(_Request):
+    option_id: str  # §10 Q14: §5 표에 추가
+    place_id: PlaceId
+    delta: Literal[15, -15]
+
+
+# ---------- 응답 (§6) ----------
 
 
 class Choice(BaseModel):
@@ -100,3 +164,15 @@ class SelectResult(BaseModel):
 class SeedResult(BaseModel):
     trip_id: str
     day_ids: list[str]
+
+
+class ErrorBody(BaseModel):
+    """공통 오류 (§5, §10 Q24). code는 이 4개뿐."""
+
+    code: Literal["NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE"]
+    message: str
+    detail: Any = None
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorBody
