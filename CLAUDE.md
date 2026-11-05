@@ -26,7 +26,8 @@
 | 요구사항 FR·NFR·AC | `docs/SRS-001_Requirements-Specification.md` |
 | 테이블, API | `docs/DATA-001_Data-Model.md`, `docs/API-001_API-Specification.md` |
 
-**`docs/`는 PM이 관리한다. 직접 고치지 않는다** (결과·질문은 PR 초안에 쓴다).
+**`docs/`는 PM이 관리한다. 내용을 직접 고치지 않는다** (결과·질문은 PR 초안에 쓴다). PM이 바꾼 `docs/` 파일은 내용 그대로 `docs:` 커밋해도 된다.
+**근거는 저장소 안 `docs/`와 코드뿐이다.** 저장소 밖(`~/Documents`, `~/Downloads` 등) 검색·읽기 금지. `Claude outputs/`는 진행 담당(메인)이 PR 초안을 쓰는 곳이고, test-writer·backend·frontend는 읽지 않는다. 필요한 자료가 없으면 찾으러 가지 말고 질문으로 돌려준다.
 **문서에 없는 규칙을 지어내지 않는다.** 문서끼리 다르거나 비어 있으면 멈추고 승현에게 묻는다.
 
 ## 절대 규칙

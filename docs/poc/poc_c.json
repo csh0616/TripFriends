@@ -1,0 +1,413 @@
+{
+ "source": "POC-001 §7 역할 C 측정 (2026-11-02). 가상 데이터",
+ "category_map": {
+  "카페": "cafe",
+  "음식": "food",
+  "쇼핑": "shop",
+  "산책": "walk",
+  "체험": "experience",
+  "전망": "landmark"
+ },
+ "history_places": {
+  "H1": {
+   "id": "H1",
+   "name": "골목 로스터리",
+   "category": "cafe",
+   "category_ko": "카페",
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "골목",
+    "조용함",
+    "현지"
+   ],
+   "description": "주택가 골목 안 6석짜리 카페. 주인이 직접 원두를 볶는다"
+  },
+  "H2": {
+   "id": "H2",
+   "name": "헌책방 거리",
+   "category": "shop",
+   "category_ko": "쇼핑",
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "레트로",
+    "골목",
+    "조용함"
+   ],
+   "description": "오래된 헌책방 10여 곳이 늘어선 좁은 거리"
+  },
+  "H3": {
+   "id": "H3",
+   "name": "네온 먹자골목",
+   "category": "food",
+   "category_ko": "음식",
+   "crowd_level": 5,
+   "price_level": 2,
+   "mood_tags": [
+    "번화가",
+    "유명",
+    "야경"
+   ],
+   "description": "대형 간판과 노점이 모인 대표 관광 거리. 걸으며 먹는다"
+  },
+  "H4": {
+   "id": "H4",
+   "name": "대형 쇼핑몰",
+   "category": "shop",
+   "category_ko": "쇼핑",
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "쇼핑",
+    "실내"
+   ],
+   "description": "브랜드 매장 200곳이 있는 역 직결 쇼핑몰"
+  },
+  "H5": {
+   "id": "H5",
+   "name": "고층 전망대",
+   "category": "landmark",
+   "category_ko": "전망",
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "야경",
+    "유명"
+   ],
+   "description": "도시 전체가 보이는 300m 전망대"
+  },
+  "H6": {
+   "id": "H6",
+   "name": "동네 목욕탕",
+   "category": "experience",
+   "category_ko": "체험",
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "현지",
+    "레트로"
+   ],
+   "description": "1950년대부터 운영한 주민용 대중목욕탕"
+  },
+  "H7": {
+   "id": "H7",
+   "name": "줄 서는 라멘집",
+   "category": "food",
+   "category_ko": "음식",
+   "crowd_level": 5,
+   "price_level": 2,
+   "mood_tags": [
+    "유명",
+    "맛집"
+   ],
+   "description": "가이드북 1순위. 평균 대기 1시간"
+  },
+  "H8": {
+   "id": "H8",
+   "name": "강변 산책로",
+   "category": "walk",
+   "category_ko": "산책",
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "자연",
+    "산책",
+    "조용함"
+   ],
+   "description": "벚나무가 늘어선 4km 강변길"
+  },
+  "H9": {
+   "id": "H9",
+   "name": "테마파크",
+   "category": "experience",
+   "category_ko": "체험",
+   "crowd_level": 5,
+   "price_level": 4,
+   "mood_tags": [
+    "액티비티",
+    "유명"
+   ],
+   "description": "놀이기구 중심의 대형 테마파크"
+  },
+  "H10": {
+   "id": "H10",
+   "name": "이자카야 골목",
+   "category": "food",
+   "category_ko": "음식",
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "현지",
+    "골목",
+    "밤"
+   ],
+   "description": "퇴근한 직장인이 모이는 작은 술집 골목"
+  }
+ },
+ "candidates": {
+  "P1": {
+   "id": "P1",
+   "name": "빈티지 골목",
+   "category": "shop",
+   "category_ko": "쇼핑",
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "골목",
+    "레트로",
+    "쇼핑"
+   ],
+   "description": "오래된 목조 건물에 빈티지 옷가게와 작은 카페가 모여 있다. 주말 오후엔 젊은 관광객이 꽤 온다"
+  },
+  "P2": {
+   "id": "P2",
+   "name": "신사 뒤 정원",
+   "category": "walk",
+   "category_ko": "산책",
+   "crowd_level": 1,
+   "price_level": 1,
+   "mood_tags": [
+    "자연",
+    "조용함"
+   ],
+   "description": "안내서에 잘 안 나오는 작은 정원. 벤치 몇 개뿐"
+  },
+  "P3": {
+   "id": "P3",
+   "name": "백화점 식품관",
+   "category": "food",
+   "category_ko": "음식",
+   "crowd_level": 5,
+   "price_level": 3,
+   "mood_tags": [
+    "실내",
+    "쇼핑",
+    "맛집"
+   ],
+   "description": "역 앞 백화점 지하. 도시락과 디저트가 수백 종"
+  },
+  "P4": {
+   "id": "P4",
+   "name": "파르페 카페",
+   "category": "cafe",
+   "category_ko": "카페",
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "유명",
+    "사진"
+   ],
+   "description": "SNS에서 유명해진 곳. 예약 필수, 사진용 인테리어"
+  },
+  "P5": {
+   "id": "P5",
+   "name": "정육점 고로케",
+   "category": "food",
+   "category_ko": "음식",
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "현지",
+    "레트로",
+    "맛집"
+   ],
+   "description": "60년 된 정육점에서 파는 고로케. 주민들이 서서 먹는다"
+  },
+  "P6": {
+   "id": "P6",
+   "name": "항구 대관람차",
+   "category": "landmark",
+   "category_ko": "전망",
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "야경",
+    "유명"
+   ],
+   "description": "항구 야경 명소. 커플이 많다"
+  },
+  "P7": {
+   "id": "P7",
+   "name": "재즈 킷사텐",
+   "category": "cafe",
+   "category_ko": "카페",
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "레트로",
+    "조용함",
+    "밤"
+   ],
+   "description": "1970년대부터 운영. LP를 틀고 조용히 대화하는 곳"
+  },
+  "P8": {
+   "id": "P8",
+   "name": "대형 오락실",
+   "category": "experience",
+   "category_ko": "체험",
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "실내",
+    "액티비티",
+    "번화가"
+   ],
+   "description": "번화가 5층 건물 전체가 게임센터"
+  },
+  "P9": {
+   "id": "P9",
+   "name": "운하 자전거",
+   "category": "walk",
+   "category_ko": "산책",
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "자연",
+    "산책",
+    "액티비티"
+   ],
+   "description": "자전거를 빌려 운하를 따라 달린다"
+  },
+  "P10": {
+   "id": "P10",
+   "name": "미슐랭 라멘",
+   "category": "food",
+   "category_ko": "음식",
+   "crowd_level": 5,
+   "price_level": 2,
+   "mood_tags": [
+    "유명",
+    "맛집"
+   ],
+   "description": "미슐랭 가이드에 오른 라멘집. 대기 1시간 이상"
+  },
+  "P11": {
+   "id": "P11",
+   "name": "골목 사케 바",
+   "category": "food",
+   "category_ko": "음식",
+   "crowd_level": 2,
+   "price_level": 3,
+   "mood_tags": [
+    "현지",
+    "골목",
+    "밤"
+   ],
+   "description": "8석. 주인과 대화하며 마신다. 메뉴는 일본어뿐"
+  },
+  "P12": {
+   "id": "P12",
+   "name": "현대미술관",
+   "category": "experience",
+   "category_ko": "체험",
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "실내",
+    "조용함"
+   ],
+   "description": "넓고 조용한 미술관. 기획전 위주"
+  }
+ },
+ "travelers": {
+  "S1": {
+   "liked": [
+    "H1"
+   ],
+   "skipped": [],
+   "kind": "신호 적음"
+  },
+  "S2": {
+   "liked": [
+    "H1",
+    "H2",
+    "H6"
+   ],
+   "skipped": [
+    "H3",
+    "H7",
+    "H9"
+   ],
+   "kind": "뚜렷함(민지형)"
+  },
+  "S3": {
+   "liked": [
+    "H5",
+    "H7",
+    "H9"
+   ],
+   "skipped": [
+    "H2",
+    "H8"
+   ],
+   "kind": "뚜렷함(준호형)"
+  },
+  "S4": {
+   "liked": [
+    "H8",
+    "H10"
+   ],
+   "skipped": [
+    "H3",
+    "H4"
+   ],
+   "kind": "섞임"
+  },
+  "S5": {
+   "liked": [
+    "H3",
+    "H10"
+   ],
+   "skipped": [
+    "H5",
+    "H7"
+   ],
+   "kind": "섞임"
+  },
+  "S6": {
+   "liked": [
+    "H2",
+    "H4"
+   ],
+   "skipped": [
+    "H8",
+    "H9"
+   ],
+   "kind": "섞임"
+  }
+ },
+ "rule_top3_measured": {
+  "S1": [
+   "P7",
+   "P11",
+   "P1"
+  ],
+  "S2": [
+   "P7",
+   "P1",
+   "P11"
+  ],
+  "S3": [
+   "P6",
+   "P10",
+   "P4"
+  ],
+  "S4": [
+   "P11",
+   "P9",
+   "P2"
+  ],
+  "S5": [
+   "P11",
+   "P8",
+   "P1"
+  ],
+  "S6": [
+   "P1",
+   "P3",
+   "P7"
+  ]
+ },
+ "tie_break": "동점은 id의 숫자 부분 오름차순 (P2 < P10)"
+}
