@@ -230,6 +230,8 @@ export interface components {
         /**
          * AnswerRequest
          * @description `{choice_ids[], text?}` 또는 `{auto: true}` (§5). 섞거나 `{auto: false}`, 빈 본문은 400.
+         *
+         *     §10-10 R7: `choice_ids`를 빼고 글만 보내면 `[]`로 본다 ("직접 말할래"). R8: auto는 JSON `true`만.
          */
         AnswerRequest: {
             /** Choice Ids */
@@ -375,7 +377,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "NOT_FOUND" | "INVALID_REQUEST" | "STATE_CONFLICT" | "COURSE_INFEASIBLE";
+            code: "NOT_FOUND" | "INVALID_REQUEST" | "STATE_CONFLICT" | "COURSE_INFEASIBLE" | "INTERNAL_ERROR";
             /** Message */
             message: string;
             /** Detail */
