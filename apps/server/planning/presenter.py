@@ -105,14 +105,12 @@ def batch_response(state: PlanningState, repo: PlanningRepo, outcome: Outcome, d
     remaining = [p for pid, p in cand.items() if pid not in shown]
     directions = pick_directions(batch, remaining, reactions, cand, state.last_direction, anchor, at)
 
-    exhausted, relaxed = outcome.exhausted, outcome.direction_relaxed
+    exhausted = outcome.exhausted
     if outcome.clarify:
         # §10 Q37: 되묻기의 exhausted는 지금 안 보여 준 곳이 5곳 미만인지 (엔진의 next_batch 정의 그대로)
         exhausted = next_batch(cand, reactions, None, state.shown, anchor, at).exhausted
-        # TASK-003 미정: 되묻기 응답의 direction_relaxed는 지금 묶음이 직전 방향에 다 맞는지로 다시 계산 (묶음을 만들 때 값은 상태에 없다)
-        relaxed = state.last_direction is not None and any(
-            not fits_direction(state.last_direction, p, reactions, cand, anchor, at) for p in batch
-        )
+    # §10-10 R4: direction_relaxed는 묶음을 만들 때의 값 그대로 (묶음의 성질). 되묻기에서도 바뀌지 않는다
+    relaxed = repo.batch_relaxed(state.session_id)
 
     # §10 Q6: 되묻기 > exhausted > 첫 묶음 > 방향 있음 > 방향 없음
     if outcome.clarify:
@@ -126,9 +124,10 @@ def batch_response(state: PlanningState, repo: PlanningRepo, outcome: Outcome, d
     else:
         message = MSG_NO_DIRECTION
 
-    liked_tags = {tag for pid in reactions.liked if pid in cand for tag in cand[pid].mood_tags}
     candidates_out = []
     for p in batch:
+        # §10-10 R9: 겹침은 자기를 뺀 좋아한 곳과 본다
+        liked_tags = {tag for pid in reactions.liked if pid in cand and pid != p.id for tag in cand[pid].mood_tags}
         overlap = next((tag for tag in p.mood_tags if tag in liked_tags), None)  # §10 Q8: 후보의 mood_tags 순서
         if overlap:
             why = f"{overlap} 좋아해서 골랐어요"

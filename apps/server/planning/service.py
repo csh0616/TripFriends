@@ -31,7 +31,8 @@ from planning.schemas import (
 )
 from planning.seed import seed_demo
 
-STATUS = {"NOT_FOUND": 404, "INVALID_REQUEST": 400, "STATE_CONFLICT": 409, "COURSE_INFEASIBLE": 422}  # §10 Q24
+# §10 Q24, §10-10 R3
+STATUS = {"NOT_FOUND": 404, "INVALID_REQUEST": 400, "STATE_CONFLICT": 409, "COURSE_INFEASIBLE": 422, "INTERNAL_ERROR": 500}
 
 
 class PlanningError(Exception):
@@ -43,6 +44,11 @@ class PlanningError(Exception):
         self.status = STATUS[code]
         self.message = message
         self.detail = detail
+
+
+def _internal() -> PlanningError:
+    """§10-10 R1: 줄 처리 중 예외. 원인은 서버 로그에만 남기고 응답에는 담지 않는다."""
+    return PlanningError("INTERNAL_ERROR", "서버에서 문제가 생겼어요. 잠시 뒤 다시 해 주세요", None)
 
 
 def _infeasible(result: Infeasible) -> PlanningError:
@@ -82,6 +88,8 @@ class PlanningService:
         self.graph.invoke(Command(resume=event), self._config(state.session_id, box))
         outcome = box.outcome
         assert outcome is not None
+        if outcome.kind == "error":
+            raise _internal()  # 그래프가 실패한 이벤트를 버리고 같은 자리에서 기다리는 중이다 (graphs/planning.py)
         if outcome.kind == "infeasible":
             assert outcome.infeasible is not None
             raise _infeasible(outcome.infeasible)
@@ -108,6 +116,9 @@ class PlanningService:
             self.graph.invoke(new_state(session_id, day_id, mode), self._config(session_id, box))  # type: ignore[arg-type]
             outcome = box.outcome
             assert outcome is not None
+            if outcome.kind == "error":
+                self.graph.checkpointer.delete_thread(session_id)  # §10-10 R1: 세션을 안 만든다
+                raise _internal()
             if outcome.kind == "infeasible":
                 # §10 Q2: 시작에서 코스를 못 만들면 세션을 만들지 않는다 (그래프가 저장소에 쓰기 전에 끝났고, 스레드도 지운다)
                 self.graph.checkpointer.delete_thread(session_id)
@@ -169,10 +180,10 @@ class PlanningService:
             if option is None:
                 raise PlanningError("NOT_FOUND", "없는 코스안이에요", {"option_id": option_id})
             state = self._state(option.session_id)  # §10 Q21: 코스안 ID만으로 세션을 찾는다
-            if state.stage != "composing":
-                raise PlanningError("STATE_CONFLICT", f"지금 단계({state.stage})에서는 고를 수 없어요", {"stage": state.stage})
-            # §10 Q41·Q46: 다시 계산해서 지금 보여 주는 안이 아닌 옛 ID는 404
+            # §10-10 R5: 그 세션의 지금 option_ids에 없으면(옛 ID·back 뒤·다시 계산한 뒤) 404, 있는데 composing이 아니면 409
             if option_id not in state.option_ids:
                 raise PlanningError("NOT_FOUND", "지금 보여 주는 코스안이 아니에요", {"option_id": option_id})
+            if state.stage != "composing":
+                raise PlanningError("STATE_CONFLICT", f"지금 단계({state.stage})에서는 고를 수 없어요", {"stage": state.stage})
             self._resume(state, {"kind": "select", "option_id": option_id})
             return SelectResult(day_id=state.day_id, option_id=option_id)

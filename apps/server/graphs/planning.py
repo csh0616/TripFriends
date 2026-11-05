@@ -15,6 +15,7 @@
 - 응답을 만드는 데 필요한 결과는 요청마다 `config["configurable"]["outbox"]`에 담아 돌려준다 (체크포인트에 남기지 않음).
 """
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, time
@@ -29,6 +30,8 @@ from pydantic import BaseModel
 from engine.models import Batch, CourseOption, Direction, Infeasible, Place, PlaceId
 from engine.planning import clamp_user_stay, compose_courses, first_batch, next_batch, parse_direction
 from planning.repo import DayRecord, PlanningRepo
+
+log = logging.getLogger(__name__)
 
 Stage = Literal["asking", "browsing", "composing", "done"]
 
@@ -68,11 +71,10 @@ class PlanningState(BaseModel):
 class Outcome:
     """그래프가 한 번 돌고 나서 API가 응답을 만들 때 필요한 것. 값 계산은 API가 그때 상태로 다시 한다 (TASK-003 §10 원칙 2)."""
 
-    kind: Literal["question", "batch", "picks", "course", "selected", "infeasible", "invalid", "conflict"]
+    kind: Literal["question", "batch", "picks", "course", "selected", "infeasible", "invalid", "conflict", "error"]
     first: bool = False  # 첫 묶음 (message 대본)
     clarify: bool = False  # 되묻기 (§4-3)
     exhausted: bool = False  # 엔진이 이 묶음을 만들 때 낸 값
-    direction_relaxed: bool = False
     infeasible: Infeasible | None = None
     problem: str = ""  # invalid일 때 이유
 
@@ -101,8 +103,9 @@ def _day(run: _Run, state: PlanningState) -> DayRecord:
 
 
 def candidates(day: DayRecord) -> dict[PlaceId, Place]:
-    """TASK-003 §10 Q33: 꼭 갈 곳은 후보에서 뺀다."""
-    return {pid: p for pid, p in day.places.items() if pid not in day.plan.must_visit}
+    """TASK-003 §10 Q33: 꼭 갈 곳은 후보에서 뺀다. §10-10 R6: 고정 일정 장소도 뺀다 (장소 없는 고정 일정은 뺄 것이 없음)."""
+    excluded = {*day.plan.must_visit, *(f.place_id for f in day.plan.fixed if f.place_id)}
+    return {pid: p for pid, p in day.places.items() if pid not in excluded}
 
 
 def day_start(day: DayRecord) -> datetime:
@@ -121,8 +124,12 @@ def _with_courses(run: _Run, state: PlanningState, picks: list[PlaceId], courses
     return state.model_copy(update={"stage": "composing", "option_ids": [r.option_id for r in records], **update})
 
 
-def _with_batch(state: PlanningState, batch: Batch, direction: Direction | None, **update: Any) -> PlanningState:
-    """새 묶음을 보여 줌. 빈 묶음이면 round 그대로 (TASK-003 §10 Q31·Q45), 새 묶음이면 clarify_count 0 (§4-3)."""
+def _with_batch(run: _Run, state: PlanningState, batch: Batch, direction: Direction | None, **update: Any) -> PlanningState:
+    """새 묶음을 보여 줌. 빈 묶음이면 round 그대로 (TASK-003 §10 Q31·Q45), 새 묶음이면 clarify_count 0 (§4-3).
+
+    TASK-003 §10-10 R4: `direction_relaxed`는 묶음의 성질이라 묶음을 만들 때 값을 저장소에 둔다 (§3 상태 필드 11개는 그대로).
+    """
+    run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)
     return state.model_copy(
         update={
             "stage": "browsing",
@@ -164,16 +171,18 @@ def _row_answer(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plann
     """줄03 asking × answer: §4-1 첫 묶음 -> browsing."""
     day = _day(run, state)
     categories = [c for chip in event["choice_ids"] for c in CHIP_CATEGORIES[chip]]
-    categories = list(dict.fromkeys(categories))  # TASK-003 미정: 같은 칩을 두 번 보내면 한 번으로 본다
+    categories = list(dict.fromkeys(categories))  # TASK-003 §10-10 (그대로 받아들인 것): 같은 칩은 한 번으로 본다
     direction: Direction | None = None
     text = event.get("text")
     if text is not None:
         direction = parse_direction(text)  # 못 알아들으면 무시하고 진행, 첫 질문에서는 되묻지 않음 (§4-1)
-        _log_parse(run, text, direction)
     batch = first_batch(candidates(day), categories, direction, day.plan.lodging, day_start(day))
-    run.done(Outcome("batch", first=True, exhausted=batch.exhausted, direction_relaxed=batch.direction_relaxed))
-    # TASK-003 미정: 첫 묶음에 글로 말한 방향이 있으면 last_direction으로 둔다 (왜 문장·방향 버튼에서 직전 방향으로 쓰임)
-    return _with_batch(state, batch, direction, categories=categories)
+    # TASK-003 §10-10 R1: 계산(first_batch)이 끝난 뒤에만 기록·저장한다
+    if text is not None:
+        _log_parse(run, text, direction)
+    run.done(Outcome("batch", first=True, exhausted=batch.exhausted))
+    # TASK-003 §10-10 (그대로 받아들인 것): 첫 묶음에 글로 말한 방향이 있으면 last_direction으로 둔다
+    return _with_batch(run, state, batch, direction, categories=categories)
 
 
 def _row_reaction(run: _Run, state: PlanningState, event: dict[str, Any]) -> PlanningState | None:
@@ -190,18 +199,21 @@ def _row_next(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plannin
     text = event.get("text")
     if text is not None:
         direction = parse_direction(text)
-        _log_parse(run, text, direction)
         if direction is None and state.clarify_count == 0:
             # §4-3: 첫 번째 못 알아들음은 묶음 그대로 되묻기 (skip 기록 없음)
+            _log_parse(run, text, direction)
             run.done(Outcome("batch", clarify=True))
             return state.model_copy(update={"clarify_count": 1})
         # 두 번째 못 알아들음은 방향 없이 진행 (direction은 None 그대로, clarify_count는 _with_batch가 0으로)
-    run.repo.skip_unreacted(state.session_id, state.batch)  # §10 Q19: 두 번째 못 알아들음도 skip 기록
-    batch = next_batch(
-        candidates(day), run.repo.reactions(state.session_id), direction, state.shown, day.plan.lodging, day_start(day)
-    )
-    run.done(Outcome("batch", exhausted=batch.exhausted, direction_relaxed=batch.direction_relaxed))
-    return _with_batch(state, batch, direction)
+    # TASK-003 §10-10 R1: skip 기록을 한 뒤 계산하지 않는다. "skip이 기록된 뒤의 반응"을 저장 없이 먼저 계산하고,
+    # 계산이 끝난 다음에만 해석 기록과 skip을 저장한다 (§10 Q19: 두 번째 못 알아들음도 skip 기록)
+    reactions = run.repo.reactions_after_skip(state.session_id, state.batch)
+    batch = next_batch(candidates(day), reactions, direction, state.shown, day.plan.lodging, day_start(day))
+    if text is not None:
+        _log_parse(run, text, direction)
+    run.repo.skip_unreacted(state.session_id, state.batch)
+    run.done(Outcome("batch", exhausted=batch.exhausted))
+    return _with_batch(run, state, batch, direction)
 
 
 def _row_compose(run: _Run, state: PlanningState, _event: dict[str, Any]) -> PlanningState | None:
@@ -213,6 +225,7 @@ def _row_compose(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Pla
     if isinstance(result, Infeasible):
         run.done(Outcome("infeasible", infeasible=result))
         return None
+    # TASK-003 미정 (Q47): 저장 도중(skip 기록 뒤 save_options)에 예외가 나면 앞서 쓴 skip은 되돌리지 않는다. 지금 동작 그대로 둠
     run.repo.skip_unreacted(state.session_id, state.batch)
     run.done(Outcome("course"))
     return _with_courses(run, state, picks, result)
@@ -232,6 +245,7 @@ def _row_adjust(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plann
     if isinstance(result, Infeasible):
         run.done(Outcome("infeasible", infeasible=result))
         return None
+    # TASK-003 미정 (Q47): 저장 도중(override 저장 뒤 save_options)에 예외가 나면 저장된 override는 되돌리지 않는다. 지금 동작 그대로 둠
     run.repo.set_stay_override(state.session_id, place_id, minutes)
     run.done(Outcome("course"))
     return _with_courses(run, state, option.picks, result)
@@ -243,8 +257,8 @@ def _row_back(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Planni
     batch = next_batch(
         candidates(day), run.repo.reactions(state.session_id), None, state.shown, day.plan.lodging, day_start(day)
     )
-    run.done(Outcome("batch", exhausted=batch.exhausted, direction_relaxed=batch.direction_relaxed))
-    return _with_batch(state, batch, None)
+    run.done(Outcome("batch", exhausted=batch.exhausted))
+    return _with_batch(run, state, batch, None)
 
 
 def _row_select(run: _Run, state: PlanningState, event: dict[str, Any]) -> PlanningState | None:
@@ -278,7 +292,7 @@ def check_event(repo: PlanningRepo, state: PlanningState, event: dict[str, Any])
     """상태를 봐야 아는 값 오류(400)의 이유. 문제 없으면 None. 아무것도 바꾸지 않는다.
 
     - 반응: like·skip은 지금 묶음의 장소만, unlike는 지금 묶음이나 담은 곳 (TASK-003 §10 Q17·Q33)
-    - adjust: 그 안(option_id)의 items에 있는 장소만 (§10 Q15)
+    - adjust: 그 안(option_id)의 items에 있는 장소만 (§10 Q15). 고정 일정 항목(is_fixed)은 안 된다 (§10-10 R6)
     """
     kind = event["kind"]
     if kind == "reaction":
@@ -290,7 +304,7 @@ def check_event(repo: PlanningRepo, state: PlanningState, event: dict[str, Any])
             return f"지금 보여 준 묶음에 없는 장소: {place_id}"
     elif kind == "adjust":
         option = repo.get_option(event["option_id"])
-        if option is None or event["place_id"] not in {i.place_id for i in option.course.items}:
+        if option is None or event["place_id"] not in {i.place_id for i in option.course.items if not i.is_fixed}:
             return f"그 코스안에 없는 장소: {event['place_id']}"
     return None
 
@@ -315,30 +329,44 @@ def build_planning_graph(repo: PlanningRepo):
     def start(state: PlanningState, config: RunnableConfig) -> Command[_Next]:
         """(시작) 줄01 conversation: 첫 질문 -> asking / 줄02 auto: §4-2 -> composing."""
         run = run_of(config)
-        if state.mode == "auto":
-            nxt = _row_auto(run, state, {})
-            if nxt is None:
-                return Command(goto=END)  # §10 Q2: 세션을 만들지 않는다 (API가 스레드도 지운다)
+        try:
+            if state.mode == "auto":
+                nxt = _row_auto(run, state, {})
+                if nxt is None:
+                    return Command(goto=END)  # §10 Q2: 세션을 만들지 않는다 (API가 스레드도 지운다)
+                repo.create_session(state.session_id, state.day_id)
+                return Command(goto="course", update=nxt.model_dump())
             repo.create_session(state.session_id, state.day_id)
-            return Command(goto="course", update=nxt.model_dump())
-        repo.create_session(state.session_id, state.day_id)
-        run.done(Outcome("question"))
-        return Command(goto="ask", update=state.model_dump())
+            run.done(Outcome("question"))
+            return Command(goto="ask", update=state.model_dump())
+        except Exception:
+            # TASK-003 §10-10 R1: 예외도 실패한 요청. 세션을 만들지 않고 끝낸다 (API가 500으로 답하고 스레드를 지운다)
+            log.exception("계획 시작 중 예외")
+            run.done(Outcome("error"))
+            return Command(goto=END)
 
     def wait_node(stage: str) -> Callable[[PlanningState, RunnableConfig], Command[_Next]]:
         def wait(state: PlanningState, config: RunnableConfig) -> Command[_Next]:
             event = interrupt({"waiting_for": stage})  # 멈춘 자리. 앱의 다음 요청이 Command(resume=이벤트)로 이어 준다
             run = run_of(config)
-            row = TRANSITIONS.get((stage, event["kind"]))
-            if row is None:  # 줄13: 표에 없는 조합. 상태 그대로
-                run.done(Outcome("conflict"))
+            # TASK-003 §10-10 R1: interrupt() 뒤에서 예외가 그대로 나가면 LangGraph가 실패한 task를 "옛 resume 값"으로
+            # 다음 요청 때 다시 실행한다 (직접 확인함). 그래서 여기서 예외를 잡아 task를 정상 종료시키고, 같은 자리에서
+            # 다시 기다린다. 실패한 이벤트는 버려지고, 상태 갱신이 없으니 값은 그대로다.
+            try:
+                row = TRANSITIONS.get((stage, event["kind"]))
+                if row is None:  # 줄13: 표에 없는 조합. 상태 그대로 (API가 먼저 걸러서 보통 여기까지 오지 않는다)
+                    run.done(Outcome("conflict"))
+                    return Command(goto=_NODE_OF_STAGE[stage])
+                problem = check_event(repo, state, event)
+                if problem:  # 마찬가지로 API가 먼저 걸러 주는 방어용
+                    run.done(Outcome("invalid", problem=problem))
+                    return Command(goto=_NODE_OF_STAGE[stage])
+                new = row(run, state, event)
+            except Exception:
+                log.exception("계획 그래프 줄 처리 중 예외")
+                run.done(Outcome("error"))
                 return Command(goto=_NODE_OF_STAGE[stage])
-            problem = check_event(repo, state, event)
-            if problem:
-                run.done(Outcome("invalid", problem=problem))
-                return Command(goto=_NODE_OF_STAGE[stage])
-            new = row(run, state, event)
-            if new is None:  # 반응이거나 실패 (§10 원칙 1): 상태 그대로 같은 자리에서 다시 기다림
+            if new is None:  # 반응이거나 코스 불가 (§10 원칙 1): 상태 그대로 같은 자리에서 다시 기다림
                 return Command(goto=_NODE_OF_STAGE[stage])
             return Command(goto=_NODE_OF_STAGE[new.stage], update=new.model_dump())
 

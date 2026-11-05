@@ -58,8 +58,20 @@ class PlanningRepo(ABC):
         """like·skip·unlike를 반영한다 (TASK-003 §4 줄05, §10 Q17·Q18·Q39)."""
 
     @abstractmethod
+    def reactions_after_skip(self, session_id: str, batch: list[PlaceId]) -> Reactions:
+        """`skip_unreacted(batch)`를 한 뒤의 반응을 **저장하지 않고** 돌려준다 (계산 먼저, 저장은 나중에: TASK-003 §10-10 R1)."""
+
+    @abstractmethod
     def skip_unreacted(self, session_id: str, batch: list[PlaceId]) -> None:
         """이번 묶음에서 반응이 없는 곳을 묶음 순서대로 skip으로 기록한다 (TASK-003 §4 줄06~09)."""
+
+    # ---- 묶음의 성질 ----
+    @abstractmethod
+    def save_batch_relaxed(self, session_id: str, relaxed: bool) -> None:
+        """지금 묶음을 만들 때의 direction_relaxed (TASK-003 §10-10 R4). 그래프 상태 필드는 11개로 두려고 저장소에 둔다."""
+
+    @abstractmethod
+    def batch_relaxed(self, session_id: str) -> bool: ...
 
     # ---- 머무는 시간 ----
     @abstractmethod
@@ -103,9 +115,10 @@ class MemoryPlanningRepo(PlanningRepo):
         self._sessions: dict[str, str] = {}
         self._liked: dict[str, list[PlaceId]] = {}
         self._skipped: dict[str, list[PlaceId]] = {}
-        # 좋아했다가 취소한 곳. 반응이 있었으므로 next에서 skip으로 치지 않는다 (TASK-003 §4 줄06, §10 Q17)
+        # 좋아했다가 취소한 곳. 반응이 있었으므로 next에서 skip으로 치지 않는다 (TASK-003 §4 줄06, §10 Q17, §10-10 그대로 받아들인 것)
         self._unliked: dict[str, list[PlaceId]] = {}
         self._overrides: dict[str, dict[PlaceId, int]] = {}
+        self._relaxed: dict[str, bool] = {}
         self._options: dict[str, OptionRecord] = {}
         self._chosen: dict[str, str] = {}
         self._logs: list[dict[str, Any]] = []
@@ -129,6 +142,7 @@ class MemoryPlanningRepo(PlanningRepo):
             self._skipped[session_id] = []
             self._unliked[session_id] = []
             self._overrides[session_id] = {}
+            self._relaxed[session_id] = False
 
     def session_day(self, session_id: str) -> str | None:
         with self._lock:
@@ -159,12 +173,26 @@ class MemoryPlanningRepo(PlanningRepo):
                 if place_id not in unliked:
                     unliked.append(place_id)
 
+    def _unreacted(self, session_id: str, batch: list[PlaceId]) -> list[PlaceId]:
+        reacted = {*self._liked[session_id], *self._skipped[session_id], *self._unliked[session_id]}
+        return [place_id for place_id in batch if place_id not in reacted]
+
+    def reactions_after_skip(self, session_id: str, batch: list[PlaceId]) -> Reactions:
+        with self._lock:
+            skipped = [*self._skipped[session_id], *self._unreacted(session_id, batch)]
+            return Reactions(liked=list(self._liked[session_id]), skipped=skipped)
+
     def skip_unreacted(self, session_id: str, batch: list[PlaceId]) -> None:
         with self._lock:
-            liked, skipped, unliked = self._liked[session_id], self._skipped[session_id], self._unliked[session_id]
-            for place_id in batch:
-                if place_id not in liked and place_id not in skipped and place_id not in unliked:
-                    skipped.append(place_id)
+            self._skipped[session_id].extend(self._unreacted(session_id, batch))
+
+    def save_batch_relaxed(self, session_id: str, relaxed: bool) -> None:
+        with self._lock:
+            self._relaxed[session_id] = relaxed
+
+    def batch_relaxed(self, session_id: str) -> bool:
+        with self._lock:
+            return self._relaxed.get(session_id, False)
 
     def stay_overrides(self, session_id: str) -> dict[PlaceId, int]:
         with self._lock:
@@ -195,7 +223,7 @@ class MemoryPlanningRepo(PlanningRepo):
 
     def log_decision(self, kind: str, model: str, output: dict[str, Any]) -> None:
         with self._lock:
-            # DATA-001 decision_logs. R1은 message_id 없이 이 표만 남긴다 (TASK-003 §10 Q28)
+            # DATA-001 decision_logs. R1은 message_id 없이 이 표만 남긴다 (TASK-003 §10 Q28). latency_ms·cost_usd는 None (§10-10 그대로 받아들인 것)
             self._logs.append(
                 {"message_id": None, "kind": kind, "model": model, "output": dict(output), "latency_ms": None, "cost_usd": None}
             )
@@ -215,6 +243,7 @@ class MemoryPlanningRepo(PlanningRepo):
                     "skipped": self._skipped,
                     "unliked": self._unliked,
                     "overrides": self._overrides,
+                    "relaxed": self._relaxed,
                     "options": {k: (v.session_id, v.picks, v.course.model_dump()) for k, v in self._options.items()},
                     "chosen": self._chosen,
                     "logs": self._logs,
