@@ -4,6 +4,142 @@
  */
 
 export interface paths {
+    "/days/{day_id}/planning": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 계획 대화 시작 (mode=auto면 바로 코스) */
+        post: operations["start_planning_days__day_id__planning_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/{session_id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 첫 질문의 답 또는 알아서 짜 줘 */
+        post: operations["answer_planning__session_id__answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/{session_id}/reactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 좋아·넘김·취소 */
+        post: operations["reactions_planning__session_id__reactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/{session_id}/next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 다음 묶음 (방향 버튼·직접 입력·빈 요청) */
+        post: operations["next_batch_planning__session_id__next_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/{session_id}/compose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 코스 짜기 */
+        post: operations["compose_planning__session_id__compose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/{session_id}/adjust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 머무는 시간 ±15분 */
+        post: operations["adjust_planning__session_id__adjust_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/planning/{session_id}/back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 더 고를래 */
+        post: operations["back_planning__session_id__back_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/course-options/{option_id}/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 코스안 고르기 */
+        post: operations["select_course_options__option_id__select_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -55,10 +191,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debug/seed-demo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Debug Seed Demo
+         * @description 개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.
+         */
+        post: operations["debug_seed_demo_debug_seed_demo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdjustRequest */
+        AdjustRequest: {
+            /** Option Id */
+            option_id: string;
+            /** Place Id */
+            place_id: string;
+            /**
+             * Delta
+             * @enum {integer}
+             */
+            delta: 15 | -15;
+        };
+        /**
+         * AnswerRequest
+         * @description `{choice_ids[], text?}` 또는 `{auto: true}` (§5). 섞거나 `{auto: false}`, 빈 본문은 400.
+         *
+         *     §10-10 R7: `choice_ids`를 빼고 글만 보내면 `[]`로 본다 ("직접 말할래"). R8: auto는 JSON `true`만.
+         */
+        AnswerRequest: {
+            /** Choice Ids */
+            choice_ids?: ("walk_alley" | "food_tour" | "shopping" | "night_view" | "cafe" | "museum_experience")[] | null;
+            /** Text */
+            text?: string | null;
+            /** Auto */
+            auto?: boolean | null;
+        };
+        /** Candidate */
+        Candidate: {
+            place: components["schemas"]["Place"];
+            /** Why */
+            why: string;
+        };
+        /** CandidateBatch */
+        CandidateBatch: {
+            /** Session Id */
+            session_id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "asking" | "browsing" | "composing" | "done";
+            /** Round */
+            round: number;
+            /** Message */
+            message: string;
+            /** Candidates */
+            candidates: components["schemas"]["Candidate"][];
+            /** Directions */
+            directions: components["schemas"]["DirectionChoice"][];
+            /** Clarify */
+            clarify: components["schemas"]["DirectionChoice"][] | null;
+            /** Picks Count */
+            picks_count: number;
+            /** Exhausted */
+            exhausted: boolean;
+            /** Direction Relaxed */
+            direction_relaxed: boolean;
+        };
         /** CardInfo */
         CardInfo: {
             /** Id */
@@ -73,6 +287,121 @@ export interface components {
             props_schema: {
                 [key: string]: unknown;
             };
+        };
+        /** Choice */
+        Choice: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+        };
+        /** CourseItem */
+        CourseItem: {
+            /** Seq */
+            seq: number;
+            /** Place Id */
+            place_id: string | null;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /** Stay Min */
+            stay_min: number;
+            /** Stay Source */
+            stay_source: ("auto" | "user") | null;
+            /** Travel Min */
+            travel_min: number;
+            /** Wait Min */
+            wait_min: number;
+            /** Is Fixed */
+            is_fixed: boolean;
+            /** Hours Status */
+            hours_status: ("confirmed" | "unverified" | "unknown") | null;
+        };
+        /** CourseResult */
+        CourseResult: {
+            /** Session Id */
+            session_id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "asking" | "browsing" | "composing" | "done";
+            /** Options */
+            options: components["schemas"]["CourseResultOption"][];
+        };
+        /** CourseResultOption */
+        CourseResultOption: {
+            /** Option Id */
+            option_id: string;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "relaxed" | "packed";
+            /** Items */
+            items: components["schemas"]["CourseItem"][];
+            /** Dropped */
+            dropped: components["schemas"]["Dropped"][];
+            /** Go Home Min */
+            go_home_min: number;
+            /** Total Travel Min */
+            total_travel_min: number;
+        };
+        /** DirectionChoice */
+        DirectionChoice: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "quieter" | "closer" | "cheaper" | "different" | "photo" | "indoor" | "food" | "night";
+            /** Label */
+            label: string;
+        };
+        /** Dropped */
+        Dropped: {
+            /** Place Id */
+            place_id: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "closed_at_time" | "no_time" | "fixed_conflict";
+        };
+        /**
+         * ErrorBody
+         * @description 공통 오류 (§5). code는 NOT_FOUND·INVALID_REQUEST·STATE_CONFLICT·COURSE_INFEASIBLE·INTERNAL_ERROR 5개뿐 (§10 Q24, §10-10 R3).
+         */
+        ErrorBody: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "NOT_FOUND" | "INVALID_REQUEST" | "STATE_CONFLICT" | "COURSE_INFEASIBLE" | "INTERNAL_ERROR";
+            /** Message */
+            message: string;
+            /** Detail */
+            detail?: unknown;
+        };
+        /** ErrorResponse */
+        ErrorResponse: {
+            error: components["schemas"]["ErrorBody"];
+        };
+        /** Fact */
+        Fact: {
+            /** Field */
+            field: string;
+            /** Value */
+            value: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "confirmed" | "unverified" | "unknown";
+            /** Source Type */
+            source_type: string;
+            /** Checked At */
+            checked_at: string | null;
         };
         /**
          * FixedEvent
@@ -99,6 +428,13 @@ export interface components {
             /** Cards */
             cards: number;
         };
+        /** NextRequest */
+        NextRequest: {
+            /** Direction Id */
+            direction_id?: ("quieter" | "closer" | "cheaper" | "different" | "photo" | "indoor" | "food" | "night") | null;
+            /** Text */
+            text?: string | null;
+        };
         /**
          * OpenEvent
          * @description 열린 사건. delay = 미응답 대안이 있는 늦어짐, closed = 닫힘 확인됨.
@@ -109,6 +445,40 @@ export interface components {
              * @enum {string}
              */
             kind: "delay" | "closed";
+        };
+        /** Picks */
+        Picks: {
+            /** Picks */
+            picks: string[];
+            /** Picks Count */
+            picks_count: number;
+        };
+        /**
+         * Place
+         * @description 앱에 보내는 모양. engine.models.Place와 별개.
+         */
+        Place: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "cafe" | "food" | "walk" | "museum" | "landmark" | "shop" | "experience" | "night";
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
+            /** Crowd Level */
+            crowd_level: number;
+            /** Price Level */
+            price_level: number;
+            /** Mood Tags */
+            mood_tags: string[];
+            /** Facts */
+            facts: components["schemas"]["Fact"][];
         };
         /**
          * PlanItem
@@ -148,6 +518,38 @@ export interface components {
              */
             hours_checked: boolean;
         };
+        /** PlanningSession */
+        PlanningSession: {
+            /** Session Id */
+            session_id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "asking" | "browsing" | "composing" | "done";
+            question: components["schemas"]["Question"];
+        };
+        /** Question */
+        Question: {
+            /** Text */
+            text: string;
+            /** Choices */
+            choices: components["schemas"]["Choice"][];
+            /** Allow Text */
+            allow_text: boolean;
+            /** Allow Auto */
+            allow_auto: boolean;
+        };
+        /** ReactionRequest */
+        ReactionRequest: {
+            /** Place Id */
+            place_id: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "like" | "skip" | "unlike";
+        };
         /**
          * Screen
          * @description compose_screen 출력.
@@ -165,6 +567,20 @@ export interface components {
             move_status: "on_track" | "delayed" | "free";
             /** Reason */
             reason: string;
+        };
+        /** SeedResult */
+        SeedResult: {
+            /** Trip Id */
+            trip_id: string;
+            /** Day Ids */
+            day_ids: string[];
+        };
+        /** SelectResult */
+        SelectResult: {
+            /** Day Id */
+            day_id: string;
+            /** Option Id */
+            option_id: string;
         };
         /**
          * Snapshot
@@ -229,6 +645,14 @@ export interface components {
              */
             arriving: boolean;
         };
+        /** StartRequest */
+        StartRequest: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "conversation" | "auto";
+        };
         /** SuggestionChip */
         SuggestionChip: {
             /** Card */
@@ -258,6 +682,418 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    start_planning_days__day_id__planning_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningSession"] | components["schemas"]["CourseResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    answer_planning__session_id__answer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateBatch"] | components["schemas"]["CourseResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reactions_planning__session_id__reactions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Picks"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    next_batch_planning__session_id__next_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["NextRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateBatch"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    compose_planning__session_id__compose_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseResult"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    adjust_planning__session_id__adjust_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdjustRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    back_planning__session_id__back_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateBatch"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    select_course_options__option_id__select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelectResult"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -327,6 +1163,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    debug_seed_demo_debug_seed_demo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedResult"];
                 };
             };
         };

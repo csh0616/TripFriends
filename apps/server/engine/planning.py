@@ -266,6 +266,69 @@ def next_batch(
 # ---------- E. 방향 버튼 고르기 ----------
 
 
+def first_batch(
+    places: dict[PlaceId, Place],
+    categories: list[str],
+    direction: Direction | None,
+    anchor: tuple[float, float],
+    at: datetime,
+    k: int = 6,
+) -> Batch:
+    """TASK-003 §4-1 첫 묶음. 반응이 없으니 점수는 모두 같고, 순서는 id 숫자 순이다.
+
+    고른 종류(categories)와 방향을 함께 맞는 곳이 min_pool(5)곳 미만이면 TASK-003 §10 Q12 순서로 채운다:
+    둘 다 맞는 곳 -> 칩만 맞는 곳 -> 방향만 맞는 곳 -> 나머지. 방향이 없으면 "방향만 맞는 곳"은 칩 밖의 곳 전부.
+    """
+    lim = _limits()
+    if k not in lim.batch_sizes:
+        raise ValueError(f"k는 {lim.batch_sizes}만 받는다: {k}")  # TASK-003 §10 Q13: next_batch와 같은 검사
+    _check_hours(places)
+    ids = list(places)
+    scores = score_candidates(Reactions(liked=[], skipped=[]), places, ids)
+    ranked = sorted(ids, key=lambda pid: (-scores[pid], _id_key(pid)))
+
+    def chip(pid: PlaceId) -> bool:
+        return not categories or places[pid].category in categories
+
+    def fits_direction(pid: PlaceId) -> bool:
+        # TASK-003 §4-1: 반응이 없어 좋아한 곳이 없다 (different는 맞는 곳 없음, TASK-002 §8 Q24)
+        return direction is None or _matches(direction, places[pid], set(), False, anchor, at)
+
+    both = [pid for pid in ranked if chip(pid) and fits_direction(pid)]
+    chip_only = [pid for pid in ranked if chip(pid) and not fits_direction(pid)]
+    direction_only = [pid for pid in ranked if not chip(pid) and fits_direction(pid)]
+    neither = [pid for pid in ranked if not chip(pid) and not fits_direction(pid)]
+    filled = both + chip_only + direction_only + neither
+
+    if len(ranked) < lim.min_pool:
+        # TASK-003 §4-1·§10 Q11: 장소가 5곳 미만이면 있는 만큼 전부, 맞는 곳 먼저 (next_batch와 같은 규칙)
+        return Batch(place_ids=filled, direction=direction, exhausted=True, direction_relaxed=len(both) < len(ranked))
+    if len(both) >= lim.min_pool:
+        return Batch(place_ids=both[:k], direction=direction, exhausted=False, direction_relaxed=False)
+    return Batch(place_ids=filled[:k], direction=direction, exhausted=False, direction_relaxed=True)
+
+
+def fits_direction(
+    direction: Direction,
+    place: Place,
+    reactions: Reactions,
+    places: dict[PlaceId, Place],
+    anchor: tuple[float, float],
+    at: datetime,
+) -> bool:
+    """이 장소가 방향 거르기 표(§3 C)에 맞는가. 후보의 "왜" 문장이 방향 이름표를 쓸지 가르는 데 쓴다 (TASK-003 §6).
+
+    새로 추가한 공개 함수 (TASK-003 §10-10 "그대로 받아들인 것": §8 예외로 승인). 거르는 규칙은 `next_batch`와 같은 `_matches` 그대로다.
+    """
+    return _matches(direction, place, _liked_tags(reactions, places), any(i in places for i in reactions.liked), anchor, at)
+
+
+def clamp_user_stay(minutes: int) -> int:
+    """사용자가 정한 머무는 시간을 15~300분으로 자른다 (TASK-002 §7 Q16). 새로 추가한 공개 함수 (TASK-003 §10-10 승인), 값은 `_limits()` 그대로."""
+    lim = _limits()
+    return min(lim.user_stay_high, max(lim.user_stay_low, minutes))
+
+
 def pick_directions(
     batch: list[Place],
     remaining: list[Place],
@@ -359,7 +422,8 @@ class _Day:
         self.lodging = plan.lodging
         # TASK-002 §9 Q45 ③: 시작 >= 끝이거나 29:59를 넘는 시각은 ValueError
         # TASK-002 §10-5 Q53: DayPlan의 start·end에서 분이 60 이상인 시각("10:75")은 ValueError
-        # Q53 미정: 고정 일정·영업시간의 분 60 이상과 좌표·붐빔·가격 범위는 검사하지 않음 (문서에 답 없음)
+        # TASK-003 §0·§10 Q29: 고정 일정(PlanFixed)·영업시간(Opening)의 형식과 분 60 이상은 모델이 거부한다 (engine/models.py).
+        # DayPlan의 start·end는 이번 범위 밖이라 위 검사 그대로. 좌표·붐빔·가격 범위는 검사하지 않음 (문서에 답 없음)
         if any(int(value.split(":")[1]) >= 60 for value in (plan.start, plan.end)):
             raise ValueError(f"하루 시각의 분이 60 이상: {plan.start}~{plan.end}")
         _check_ids_fixed = [f.place_id for f in plan.fixed if f.place_id and f.place_id not in places]
@@ -602,7 +666,8 @@ class _Wanted(NamedTuple):
 def _wanted(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], day: _Day) -> _Wanted:
     lim = _limits()
     # TASK-002 §10 #7, §10-4 Q60: 고정 일정으로 가는 장소는 한 번만 방문 -> 담은 곳·꼭 갈 곳에서 뺀다
-    # TASK-002 §10-5 Q64: 그 장소가 꼭 갈 곳인데 그날 휴무여도 Infeasible로 보지 않는다 (Q60: 고정 일정 방문으로 채운 것, 영업은 Q54처럼 안 봄)
+    # TASK-002 §10-5 Q64: 고정 일정 장소가 그날 휴무여도 정상 코스 (고정 일정은 사용자가 확인한 예약으로 본다).
+    #   꼭 갈 곳이어도 Infeasible로 보지 않는다 (Q60: 고정 일정 방문으로 채운 것, 영업은 Q54처럼 안 봄)
     fixed_places = {ev.place_id for ev in day.fixed if ev.place_id}
     ids = sorted((set(picks) | set(plan.must_visit)) - fixed_places, key=_id_key)
     day_len = day.end - day.start
@@ -618,7 +683,8 @@ def _wanted(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], d
         # TASK-002 §10-2 #6: 사용자 값이 최소보다 짧으면 그 값이 필요 시간 (eff_low)
         # TASK-002 §10-5 Q62: 영업 20분, 최소 30, 사용자 21분처럼 사용자 값도 영업 구간에 안 들어가면 "닫힘"으로 본다
         #   (사용자 값 때문에만 안 들어가는 경우가 아니라 TASK-002 §10-4의 user_stay_conflict 대상이 아님)
-        # TASK-002 §10-5 Q63: 최소·사용자 값이 모두 하루보다 길면 하루가 짧음(TASK-002 §10-1 #1), 최소만 길고 사용자 값이 하루 안이면 사용자 값으로 들어감(#6)
+        # TASK-002 §10-5 Q63: 최소가 하루보다 긴데 사용자 값은 들어가면 사용자 값으로 들어감 (사용자 값이 더 짧아 들어가면 존중, #6).
+        #   최소·사용자 값이 모두 하루보다 길면 하루가 짧음(TASK-002 §10-1 #1)
         info = _Stay(low, typical, high, user, low if user is None else min(user, low))
         infos[pid] = info
         if info.eff_low > day_len:  # TASK-002 §10-1 #1: m > L 이면 하루가 짧음 (닫힘보다 먼저)
@@ -765,7 +831,7 @@ def _why_infeasible(day: _Day, plan: DayPlan, picks: list[PlaceId], want: _Wante
         return model.solve(_mask(ids, set(needed))) is not None
 
     # TASK-002 §10 #4, §10-4 Q57: overflow는 꼭 갈 곳끼리의 문제일 때만. 바꾼 담은 곳은 최소로도 안 들어가도 아래 user_stay_conflict
-    # TASK-002 §10-5 Q65: 바꾼 담은 곳이 최소로도 못 들어가는 경우(예: 이동 포함 53분)도 테스트 기준대로 user_stay_conflict
+    # TASK-002 §10-5 Q65: 바꾼 곳이 이동·고정 일정 때문에 못 들어가는 경우(예: 이동 포함 53분)도 user_stay_conflict
     if musts and not feasible(candidates, musts):
         # TASK-002 §10-5 Q50: 이동·고정 일정 때문에 못 들어가는 경우도 must_visit_overflow
         if len(musts) >= 2:

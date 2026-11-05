@@ -6,6 +6,8 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]",
     "httpx",
+    "langchain-core>=1.7.6",
+    "langgraph>=1.2.20",
     "pydantic>=2",
 ]
 

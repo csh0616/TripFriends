@@ -1,9 +1,10 @@
 """계획 엔진 데이터 모양 (TASK-002 §2, §7). 필드 선언만 둔다."""
 
+import re
 from datetime import date as Date
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 PlaceId = str
 Category = Literal["cafe", "food", "walk", "museum", "landmark", "shop", "experience", "night"]
@@ -11,10 +12,27 @@ HoursStatus = Literal["confirmed", "unverified", "unknown"]
 Direction = Literal["quieter", "closer", "cheaper", "different", "photo", "indoor", "food", "night"]
 
 
+def _check_hhmm(value: str) -> str:
+    """TASK-003 §0·§10 Q29: 형식은 ASCII 숫자 `HH:MM`만, 분은 0~59. 전각·아라비아 숫자, 줄바꿈, 음수는 거부.
+
+    시·분 값의 범위(자정 넘김 최대 "29:59" 등)는 엔진이 따로 검사한다 (TASK-002 §7 Q12).
+    """
+    if not re.fullmatch(r"[0-9]{2}:[0-9]{2}", value):
+        raise ValueError(f"시각 형식이 잘못됨(HH:MM): {value!r}")
+    if int(value[3:]) >= 60:
+        raise ValueError(f"시각의 분이 60 이상: {value!r}")
+    return value
+
+
 class Opening(BaseModel):
     weekday: int  # 0=월 ~ 6=일
     open: str  # HH:MM
     close: str  # HH:MM, 자정을 넘기면 "26:00"처럼 24 이상 (최대 "29:59", §7 Q12)
+
+    @field_validator("open", "close")
+    @classmethod
+    def _hhmm(cls, value: str) -> str:
+        return _check_hhmm(value)
 
 
 class StayRange(BaseModel):
@@ -52,6 +70,11 @@ class PlanFixed(BaseModel):
     place_id: PlaceId | None
     lat: float | None
     lng: float | None
+
+    @field_validator("start", "end")
+    @classmethod
+    def _hhmm(cls, value: str) -> str:
+        return _check_hhmm(value)
 
 
 class DayPlan(BaseModel):
