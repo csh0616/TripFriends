@@ -998,6 +998,34 @@ def test_F77_Q38_자동_뒤_더_고를래는_방향_없음_문장_소진이면_�
     assert batch["round"] == 1
 
 
+@pytest.mark.parametrize(
+    ("places", "must"),
+    [({}, ()), (as_dict(cafes(1)), ("P01",))],
+    ids=["장소_없음", "전부_꼭_갈_곳"],
+)
+def test_F83_Q45_자동_뒤_더_고를래에서_후보가_0곳이면_round_0(env, places, must):
+    response = env.start(env.plant_day(places, day_plan(must=must)), mode="auto")
+    assert response.status_code == 201
+    sid = response.json()["session_id"]
+    batch = env.back(sid).json()
+    assert batch["candidates"] == []
+    assert batch["round"] == 0
+    assert env.values(sid)["round"] == 0
+
+
+def test_F84_Q46_코스를_다시_짠_뒤_옛_ID로_고르면_404(env):
+    day_id = env.plant_day(city())
+    sid, old = env.composing(day_id, likes=("P01",))
+    env.back(sid)
+    new = env.compose(sid).json()
+    state, repo = env.values(sid), env.repo.snapshot()
+    assert_error(env.select(first_option_id(old)), 404)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
+    assert env.select(first_option_id(new)).status_code == 200
+    assert env.repo.chosen_option(day_id) == first_option_id(new)
+
+
 def test_F78_Q39_지금_묶음의_안_담은_곳_unlike는_변화_없고_다음_next에서_skip(env):
     sid, _ = env.browse(env.plant_day(city()))
     env.react(sid, "P02")

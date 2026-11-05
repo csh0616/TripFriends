@@ -103,9 +103,13 @@ def test_C04_AC05_묶음에_없는_장소라도_지금_단계에서_못하는_�
 
 
 @pytest.mark.parametrize("stage", ["asking", "composing", "done"])
-def test_C05_AC05_없는_방향이라도_지금_단계에서_못하는_next는_400이_아니라_409(env, stage):
+def test_C05_Q44_없는_방향은_단계가_틀려도_409가_아니라_400(env, stage):
     c = prepare(env, stage)
-    assert_conflict_keeps_everything(env, c, lambda: env.next(c.sid, direction_id="sunny"))
+    state_before = env.values(c.sid)
+    repo_before = env.repo.snapshot()
+    assert_error(env.next(c.sid, direction_id="sunny"), 400)
+    assert env.values(c.sid) == state_before
+    assert env.repo.snapshot() == repo_before
 
 
 def test_C06_AC05_409_뒤에도_표에_있는_이벤트로_그대로_이어진다(env):

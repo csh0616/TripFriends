@@ -231,22 +231,22 @@ def test_E09_S6_가상_도시의_세_상태(env):
 
 
 @pytest.mark.parametrize(
-    ("hours", "status"),
+    ("hours", "status", "expected"),
     [
-        ([at(TUE, "10:00", "18:00")], "confirmed"),
-        ([], "confirmed"),
-        ([at(TUE, "10:00", "18:00")], "unverified"),
-        ([], "unverified"),
-        ([at(TUE, "10:00", "18:00")], "unknown"),
-        ([], "unknown"),
+        ([at(TUE, "10:00", "18:00")], "confirmed", "confirmed"),
+        ([], "confirmed", "confirmed"),
+        ([at(TUE, "10:00", "18:00")], "unverified", "unverified"),
+        ([], "unverified", "unverified"),
+        ([at(TUE, "10:00", "18:00")], "unknown", "unverified"),  # §10-9 Q9·Q10: 영업 구간이 있으면 모든 요일 unverified
+        ([], "unknown", "unknown"),
     ],
     ids=["확인됨_그날만_휴무", "확인됨_빈_목록", "미확인_그날만_휴무", "미확인_빈_목록", "모름_그날만_휴무", "모름_빈_목록"],
 )
-def test_E10_Q9_그날_휴무면_null이고_상태는_데이터_그대로_미확인을_확인됨으로_내보내지_않음(env, hours, status):
+def test_E10_Q9_Q10_그날_휴무면_null이고_미확인을_확인됨으로_내보내지_않음(env, hours, status, expected):
     places = as_dict([place("P01", hours=hours, status=status), *cafes(6, start=2)])
     _, batch = env.browse(env.plant_day(places))
     fact = opening_fact(candidate(batch, "P01")["place"])
-    assert (fact["value"], fact["status"]) == (None, status)
+    assert (fact["value"], fact["status"]) == (None, expected)
 
 
 def test_E48_Q9_가상_도시_월요일_휴무_박물관도_데이터의_상태_그대로(env):
