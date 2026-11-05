@@ -54,6 +54,7 @@ ERROR_CODES = {
     409: "STATE_CONFLICT",
     422: "COURSE_INFEASIBLE",
     500: "INTERNAL_ERROR",
+    405: "INVALID_REQUEST",  # §10-11 R14
 }
 WHY_NONE = "이런 곳도 있어요"
 UNKNOWN_TEXT = "그냥 아무거나"  # POC-001 §5-1 키워드가 하나도 없는 문장

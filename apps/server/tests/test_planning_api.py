@@ -1126,15 +1126,20 @@ def quiet_env(env):
     return env
 
 
+def waiting_at(env, sid):
+    return env.graph.get_state({"configurable": {"thread_id": sid}}).next
+
+
 def fail_and_keep(env, sid, monkeypatch, target, send):
-    """target에 예외를 강제해 send()가 500이고, 상태·저장소가 그대로인지 본다."""
-    state, repo = env.values(sid), env.repo.snapshot()
+    """target에 예외를 강제해 send()가 500이고, 상태·저장소·기다리는 자리가 그대로인지 본다 (R15)."""
+    state, repo, waiting = env.values(sid), env.repo.snapshot(), waiting_at(env, sid)
     with monkeypatch.context() as patch:
         patch.setattr(target, raise_forced)
         response = send()
     assert_error(response, 500)
     assert env.values(sid) == state
     assert env.repo.snapshot() == repo
+    assert waiting_at(env, sid) == waiting
 
 
 def test_F86_R1_compose_예외_뒤_like가_반영되고_옛_compose가_다시_돌지_않는다(quiet_env, monkeypatch):
@@ -1457,17 +1462,17 @@ def test_F110_R10_langchain_core가_의존성에_선언됨():
     assert "langchain-core" in names
 
 
-def test_F111_R10_env_example에_추적_끔이_적혀_있다():
+def test_F111_R10_R15_env_example에_추적_끔이_주석이_아닌_줄로_적혀_있다():
     text = (SERVER / ".env.example").read_text(encoding="utf-8")
-    assert re.search(r"^#?\s*LANGSMITH_TRACING=false\s*$", text, re.MULTILINE)
+    assert re.search(r"^LANGSMITH_TRACING=false\s*$", text, re.MULTILINE)
 
 
 @pytest.mark.parametrize(
     ("before", "after"),
-    [(None, "false"), ("true", "true"), ("false", "false")],
-    ids=["없으면_false", "true면_그대로", "false면_그대로"],
+    [(None, "false"), ("true", "false"), ("false", "false")],
+    ids=["없으면_false", "true도_false로", "false면_false"],
 )
-def test_F112_R10_서버_시작_때_추적_값(monkeypatch, reload_main, before, after):
+def test_F112_R10_R13_서버_시작_때_추적_값(monkeypatch, reload_main, before, after):
     monkeypatch.setenv("LANGSMITH_TRACING", "원래값-복원용")  # 끝나면 monkeypatch가 원래 환경으로 되돌린다
     if before is None:
         monkeypatch.delenv("LANGSMITH_TRACING")
@@ -1475,3 +1480,282 @@ def test_F112_R10_서버_시작_때_추적_값(monkeypatch, reload_main, before,
         monkeypatch.setenv("LANGSMITH_TRACING", before)
     with TestClient(reload_main(None)):
         assert os.environ.get("LANGSMITH_TRACING") == after
+
+
+# ---------- §10-11 R11·R12·R15: 응답을 만드는 단계의 예외 ----------
+
+BATCH_BUILDER = "planning.presenter.pick_directions"
+COURSE_BUILDER = "planning.presenter.CourseResult"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{}, {"direction_id": "closer"}, {"text": "근처로"}],
+    ids=["빈_next", "방향버튼", "알아듣는_글"],
+)
+def test_F113_R11_R12_next_응답_예외면_round와_skip이_그대로_다시_보내면_한번만(quiet_env, monkeypatch, body):
+    env = quiet_env
+    sid, batch = env.browse(env.plant_day(city()))
+    fail_and_keep(env, sid, monkeypatch, BATCH_BUILDER, lambda: env.next(sid, **body))
+    assert env.values(sid)["round"] == 1
+    assert env.values(sid)["batch"] == ids(batch)
+    assert env.repo.reactions(sid) == Reactions(liked=[], skipped=[])
+    assert env.repo.decision_logs() == []
+    assert env.react(sid, "P01").json() == {"picks": ["P01"], "picks_count": 1}
+    retried = env.next(sid, **body)
+    assert retried.status_code == 200
+    assert retried.json()["round"] == 2
+    assert env.repo.reactions(sid) == Reactions(liked=["P01"], skipped=FIRST_SIX[1:])
+    assert env.values(sid)["shown"] == FIRST_SIX + ids(retried.json())
+    assert len(env.repo.decision_logs()) == (1 if "text" in body else 0)
+
+
+def test_F114_R12_되묻기_응답_예외면_횟수와_기록이_그대로_다시_보내면_한번만(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, batch = env.browse(env.plant_day(city()))
+    send = lambda: env.next(sid, text=UNKNOWN_TEXT)  # noqa: E731
+    fail_and_keep(env, sid, monkeypatch, BATCH_BUILDER, send)
+    assert env.values(sid)["clarify_count"] == 0
+    assert env.repo.decision_logs() == []
+    retried = send().json()
+    assert retried["clarify"]
+    assert ids(retried) == ids(batch)
+    assert env.values(sid)["clarify_count"] == 1
+    assert len(env.repo.decision_logs()) == 1
+
+
+def test_F115_R12_두번째_못알아들음_응답_예외면_새_묶음이_버려진다(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, batch = env.browse(env.plant_day(city()))
+    assert env.next(sid, text=UNKNOWN_TEXT).status_code == 200
+    send = lambda: env.next(sid, text=UNKNOWN_TEXT)  # noqa: E731
+    fail_and_keep(env, sid, monkeypatch, BATCH_BUILDER, send)
+    assert env.values(sid)["clarify_count"] == 1
+    assert env.values(sid)["round"] == 1
+    assert env.repo.reactions(sid) == Reactions(liked=[], skipped=[])
+    retried = send().json()
+    assert retried["round"] == 2
+    assert not set(ids(retried)) & set(ids(batch))
+
+
+def test_F116_R11_R12_compose_응답_예외면_browsing_유지_다음_like_정상_다시_보내면_정상(quiet_env, monkeypatch):
+    env = quiet_env
+    places = city()
+    plan = day_plan()
+    sid, _ = env.browse(env.plant_day(places, plan))
+    env.react(sid, "P01")
+    fail_and_keep(env, sid, monkeypatch, COURSE_BUILDER, lambda: env.compose(sid))
+    assert env.stage(sid) == "browsing"
+    assert env.repo.reactions(sid) == Reactions(liked=["P01"], skipped=[])
+    assert env.values(sid)["option_ids"] == []
+    assert env.react(sid, "P02").json() == {"picks": ["P01", "P02"], "picks_count": 2}
+    assert env.stage(sid) == "browsing"
+    retried = env.compose(sid)
+    assert retried.status_code == 200
+    assert without_option_id(retried.json()) == dumped(compose_courses(plan, ["P01", "P02"], places))
+    assert env.stage(sid) == "composing"
+
+
+def test_F117_R12_adjust_응답_예외면_값과_코스안이_그대로_다시_보내면_한번만(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    option_id = first_option_id(course)
+    send = lambda: env.adjust(sid, option_id, "P01", 15)  # noqa: E731
+    fail_and_keep(env, sid, monkeypatch, COURSE_BUILDER, send)
+    assert env.values(sid)["option_ids"] == [o["option_id"] for o in course["options"]]
+    retried = send()
+    assert retried.status_code == 200
+    assert {item_of(o, "P01")["stay_min"] for o in retried.json()["options"]} == {75}
+
+
+def test_F118_R12_answer_응답_예외면_asking_유지_다시_보내면_한번만(quiet_env, monkeypatch):
+    env = quiet_env
+    session = env.session(env.plant_day(city()))
+    sid = session["session_id"]
+    send = lambda: env.answer(session, [], "조용한 데")  # noqa: E731
+    fail_and_keep(env, sid, monkeypatch, BATCH_BUILDER, send)
+    assert env.stage(sid) == "asking"
+    assert env.repo.decision_logs() == []
+    retried = send()
+    assert retried.status_code == 200
+    assert retried.json()["round"] == 1
+    assert env.stage(sid) == "browsing"
+    assert len(env.repo.decision_logs()) == 1
+
+
+def test_F119_R12_back_응답_예외면_composing_유지_다시_보내면_한번만(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, course = env.composing(env.plant_day(city()), likes=("P01",))
+    fail_and_keep(env, sid, monkeypatch, BATCH_BUILDER, lambda: env.back(sid))
+    assert env.stage(sid) == "composing"
+    assert env.values(sid)["round"] == 1
+    assert env.values(sid)["option_ids"] == [o["option_id"] for o in course["options"]]
+    assert env.adjust(sid, first_option_id(course), "P01", 15).status_code == 200
+    retried = env.back(sid)
+    assert retried.status_code == 200
+    assert retried.json()["round"] == 2
+    assert env.stage(sid) == "browsing"
+
+
+def test_F120_R11_R12_자동_시작_응답_예외면_세션을_안_만들고_다음_시작은_정상(quiet_env, monkeypatch):
+    env = quiet_env
+    day_id = env.plant_day(city())
+    before = env.repo.snapshot()
+    with monkeypatch.context() as patch:
+        patch.setattr(COURSE_BUILDER, raise_forced)
+        response = env.start(day_id, mode="auto")
+    assert_error(response, 500)
+    assert env.repo.snapshot() == before
+    retried = env.start(day_id, mode="auto")
+    assert retried.status_code == 201
+    assert_course_shape(retried.json())
+
+
+def test_F121_R12_asking의_자동_응답_예외면_asking_유지_대화로_이어_간다(quiet_env, monkeypatch):
+    env = quiet_env
+    session = env.session(env.plant_day(city()))
+    sid = session["session_id"]
+    send = lambda: env.client.post(f"/planning/{sid}/answer", json={"auto": True})  # noqa: E731
+    fail_and_keep(env, sid, monkeypatch, COURSE_BUILDER, send)
+    assert env.stage(sid) == "asking"
+    assert env.answer(session).status_code == 200
+    assert env.stage(sid) == "browsing"
+
+
+def test_F122_R11_ErrorBody_설명에_code_5개(env):
+    from planning.schemas import ErrorBody
+
+    codes = ["NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE", "INTERNAL_ERROR"]
+    model_text = json.dumps(ErrorBody.model_json_schema(), ensure_ascii=False)
+    committed_text = json.dumps(committed_openapi()["components"]["schemas"]["ErrorBody"], ensure_ascii=False)
+    for code in codes:
+        assert code in model_text
+        assert code in committed_text
+
+
+# ---------- §10-11 R13: 추적 강제로 끔 ----------
+
+TRACING_VARS = ["LANGSMITH_TRACING", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING_V2"]
+
+
+def clear_langsmith_cache():
+    import langsmith.utils
+
+    cached = getattr(langsmith.utils, "get_env_var", None)
+    if hasattr(cached, "cache_clear"):
+        cached.cache_clear()
+
+
+@pytest.mark.parametrize(
+    "turned_on",
+    [TRACING_VARS, *([name] for name in TRACING_VARS)],
+    ids=["셋_다_true", *TRACING_VARS],
+)
+def test_F123_R13_true로_시작해도_세_변수가_false이고_추적이_꺼져_있다(monkeypatch, reload_main, turned_on):
+    from langsmith.utils import tracing_is_enabled
+
+    for name in TRACING_VARS:
+        monkeypatch.setenv(name, "true" if name in turned_on else "원래값-복원용")
+        if name not in turned_on:
+            monkeypatch.delenv(name)
+    clear_langsmith_cache()
+    try:
+        with TestClient(reload_main(None)):
+            assert {name: os.environ.get(name) for name in TRACING_VARS} == dict.fromkeys(TRACING_VARS, "false")
+            assert tracing_is_enabled() is False
+    finally:
+        clear_langsmith_cache()
+
+
+# ---------- §10-11 R14: 모든 HTTP 오류 ----------
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "status"),
+    [
+        ("post", "/health", 405),
+        ("get", "/debug/seed-demo", 405),
+        ("get", "/planning/없는-세션/next", 405),
+        ("delete", "/days/없는-날/planning", 405),
+        ("put", "/course-options/없는-코스안/select", 405),
+        ("post", "/없는-경로", 404),
+    ],
+    ids=["POST_health", "GET_시드", "GET_next", "DELETE_세션_시작", "PUT_select", "없는_경로는_404"],
+)
+def test_F124_R14_R2_없는_메서드와_없는_경로_모두_공통_형식(env, method, path, status):
+    assert_error(getattr(env.client, method)(path), status)
+
+
+# ---------- §10-11 받아들임: 명시 null, 자동 + 글 ----------
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"auto": True, "text": None},
+        {"auto": True, "choice_ids": None},
+        {"auto": True, "choice_ids": None, "text": None},
+    ],
+    ids=["자동과_글_null", "자동과_칩_null", "자동과_둘_다_null"],
+)
+def test_F126_받아들임_자동의_명시_null은_빠진_것과_같다(env, body):
+    sid = env.session(env.plant_day(city()))["session_id"]
+    response = env.client.post(f"/planning/{sid}/answer", json=body)
+    assert response.status_code == 200
+    assert_course_shape(response.json())
+    assert env.stage(sid) == "composing"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"choice_ids": [], "text": None}, {"choice_ids": [], "auto": None}, {"choice_ids": None, "text": "조용한 데"}],
+    ids=["글_null", "auto_null", "칩_null_글_있음"],
+)
+def test_F127_받아들임_첫_답의_명시_null은_빠진_것과_같다(env, body):
+    sid = env.session(env.plant_day(city()))["session_id"]
+    response = env.client.post(f"/planning/{sid}/answer", json=body)
+    assert response.status_code == 200
+    assert_batch_shape(response.json())
+
+
+def test_F128_받아들임_next의_명시_null은_빈_next와_같다(env):
+    sid, _ = env.browse(env.plant_day(city()))
+    response = env.client.post(f"/planning/{sid}/next", json={"direction_id": None, "text": None})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["message"] == "다른 곳들도 찾아봤어"
+    assert data["clarify"] is None
+    assert data["round"] == 2
+    assert env.repo.decision_logs() == []
+
+
+@pytest.mark.parametrize(
+    ("direction_id", "text"),
+    [("closer", None), (None, "근처로")],
+    ids=["방향만_값", "글만_값"],
+)
+def test_F129_받아들임_한쪽만_null이면_다른_쪽으로_처리(env, direction_id, text):
+    sid, _ = env.browse(env.plant_day(city()))
+    response = env.client.post(f"/planning/{sid}/next", json={"direction_id": direction_id, "text": text})
+    assert response.status_code == 200
+    assert env.values(sid)["last_direction"] == "closer"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [{"text": None}, {"choice_ids": None}, {"auto": None}],
+    ids=["글_null만", "칩_null만", "auto_null만"],
+)
+def test_F130_받아들임_전부_null인_첫_답은_빈_본문처럼_400(env, body):
+    sid = env.session(env.plant_day(city()))["session_id"]
+    assert_error(env.client.post(f"/planning/{sid}/answer", json=body), 400)
+    assert env.stage(sid) == "asking"
+
+
+def test_F131_받아들임_자동과_글을_함께_보내면_400(env):
+    sid = env.session(env.plant_day(city()))["session_id"]
+    state, repo = env.values(sid), env.repo.snapshot()
+    response = env.client.post(f"/planning/{sid}/answer", json={"auto": True, "text": "x"})
+    assert_error(response, 400)
+    assert env.values(sid) == state
+    assert env.repo.snapshot() == repo
