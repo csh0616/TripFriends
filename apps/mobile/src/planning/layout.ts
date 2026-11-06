@@ -28,7 +28,6 @@ export const layout = {
   barHeight: 8, // 시간표 막대 굵기
   timeColumn: 48, // P3 시각 칸 폭
   stayColumn: 88, // P3 머문 시간 칸 폭
-  contentMax: 560, // 큰 화면에서 본문 최대 폭
   logoWidth: 200, // S0 확정 로고 (원본 669x373)
   logoHeight: 112,
   markRing: 4, // 담음 표시 둘레에 그려지는 동그라미가 벌어진 정도

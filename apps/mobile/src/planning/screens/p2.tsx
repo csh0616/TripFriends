@@ -23,6 +23,7 @@ import { distanceLabel } from '@/lib/distance-label';
 import { requests, type CandidateBatch } from '@/lib/planning-api';
 import { todayHoursText } from '@/lib/today-hours-text';
 
+import { readReduceMotion } from '../draw';
 import { dayName, daySubtitle, pad2 } from '../format';
 import { layout } from '../layout';
 import { color, control, radius, space, text } from '../theme';
@@ -55,6 +56,10 @@ export function P2Screen({
   const cardWidth = width - layout.cardGutter;
   const step = cardWidth + space['space-3'];
   const scroller = useRef<ScrollViewInstance>(null);
+  const reduceMotion = useRef(false); // 움직임 줄이기가 켜져 있으면 패스 뒤 스크롤도 움직이지 않는다
+  useEffect(() => {
+    void readReduceMotion().then((value) => (reduceMotion.current = value));
+  }, []);
   const { day, candidates } = batch;
   const chips = batch.clarify ?? batch.directions; // §6: clarify가 있으면 그 칩만
   const total = candidates.length;
@@ -81,7 +86,7 @@ export function P2Screen({
   const skip = async (id: string, index: number) => {
     if (busy) return;
     const ok = await onReact(id, 'skip');
-    if (ok) scroller.current?.scrollTo({ x: (index + 1) * step, animated: true });
+    if (ok) scroller.current?.scrollTo({ x: (index + 1) * step, animated: !reduceMotion.current });
   };
 
   return (
@@ -171,6 +176,7 @@ export function P2Screen({
                   onPress={() => void skip(place.id, index)}
                   style={[styles.round, styles.skipButton]}
                 >
+                  {/* 미정(§13): 비활성 아이콘도 muted */}
                   <CloseIcon color={busy ? color.muted : color.ink} />
                 </Pressable>
                 <Pressable

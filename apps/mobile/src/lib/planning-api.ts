@@ -42,6 +42,7 @@ function classify(status: number, body: unknown): Failure {
     return resource === null ? { kind: 'server' } : { kind: 'not_found', resource };
   }
   if (status === 409) return { kind: 'conflict' };
+  // 미정(§13): detail.reason 없는 422는 아래 500 줄과 같다
   if (status === 422 && isRecord(detail) && typeof detail.reason === 'string') {
     const blocking = Array.isArray(detail.blocking) ? detail.blocking.map(String) : [];
     return { kind: 'infeasible', reason: detail.reason, blocking };

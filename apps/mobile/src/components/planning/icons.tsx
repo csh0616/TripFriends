@@ -16,7 +16,6 @@ function Icon({ color, size = control.icon, d }: Props & { d: string }) {
 export const BackIcon = (p: Props) => <Icon {...p} d="M14.5 5.5 8 12l6.5 6.5" />;
 export const CheckIcon = (p: Props) => <Icon {...p} d="M5 12.5l4.5 4.5L19 7.5" />;
 export const PlusIcon = (p: Props) => <Icon {...p} d="M12 5v14M5 12h14" />;
-export const MinusIcon = (p: Props) => <Icon {...p} d="M5 12h14" />;
 export const CloseIcon = (p: Props) => <Icon {...p} d="M6 6l12 12M18 6L6 18" />;
 export const MicIcon = (p: Props) => (
   <Icon {...p} d="M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11.5a6 6 0 0 0 12 0M12 17.5V21" />

@@ -21,7 +21,7 @@ export function timeToMinutes(time: string): number {
   return hours * 60 + minutes;
 }
 
-/** TASK-004 미정: Q40 한글 마지막 글자에 받침이 있으면 "은", 없으면 "는". 한글이 아니면 null (조사를 피한다) */
+/** Q40 한글 마지막 글자에 받침이 있으면 "은", 없으면 "는". 한글이 아니면 null (조사를 피한다) */
 export function topicParticle(name: string): '은' | '는' | null {
   const code = name.trim().charCodeAt(name.trim().length - 1);
   if (!(code >= 0xac00 && code <= 0xd7a3)) return null;

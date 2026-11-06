@@ -32,6 +32,7 @@ export type AnswerBody = Parameters<typeof requests.answer>[1];
 type ChoiceId = NonNullable<AnswerBody['choice_ids']>[number];
 
 /** 고른 타일의 고리. 같은 움직임 부품(useDraw, dur-draw)으로 나타난다 (§13-2 #8, 움직임 줄이기면 0) */
+// 미정(§13): P1 고리는 크기가 커지며 나타난다 (SVG가 아니라서 그리는 움직임 대신 같은 useDraw 시간)
 function Ring() {
   const progress = useDraw();
   const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [layout.ringFrom, 1] });
@@ -148,7 +149,7 @@ export function P1Screen({
             {`${item.start} ${item.name}`}
           </Text>
         ))}
-        {/* TASK-004 미정: Q40 꼭 갈 곳이 여럿이면 조사 없이 쉼표로 이어 쓴다 (mustVisitLine) */}
+        {/* Q40 꼭 갈 곳이 여럿이면 조사 없이 쉼표로 이어 쓴다 (mustVisitLine) */}
         {mustNames.length > 0 ? <Text style={text('body')}>{mustVisitLine(mustNames)}</Text> : null}
       </View>
     </ScreenFrame>

@@ -108,7 +108,11 @@ function Session({
 
   const clearStoredAndReset = useCallback(
     async (notice: string | null) => {
-      await AsyncStorage.removeItem(STORAGE_KEY);
+      try {
+        await AsyncStorage.removeItem(STORAGE_KEY);
+      } catch {
+        console.warn('STORAGE_CLEAR_FAILED'); // 지우기 실패해도 처음으로 돌아간다
+      }
       if (alive.current) onReset(notice);
     },
     [onReset],
@@ -122,7 +126,7 @@ function Session({
     if (reason !== 'must_visit_closed') return INFEASIBLE_OTHER;
     const day = (latest.current.response as { day?: PlanningSession['day'] } | null)?.day;
     const names = blocking.map((id) => day?.must_visits.find((m) => m.place_id === id)?.name ?? INFEASIBLE_FALLBACK_NAME);
-    // TASK-004 미정: Q40 이름이 여럿이면 쉼표로 이어 쓴다 (조사를 피함)
+    // Q40 이름이 여럿이면 쉼표로 이어 쓴다 (조사를 피함)
     return `${(names.length > 0 ? names : [INFEASIBLE_FALLBACK_NAME]).join(', ')}, 그날 쉬어`;
   };
 
@@ -208,13 +212,13 @@ function Session({
       case 'conflict':
         break;
       case 'server':
-        // TASK-004 미정: Q35·Q42 500은 [다시]가 같은 요청 (GET이면 GET)
+        // Q35·Q42 500은 [다시]가 같은 요청 (GET이면 GET)
         fail(OOPS, { tone: 'plain', retry: same });
         return false;
     }
     // 409, 세션이 아닌 404: 서버 기준으로 GET해서 그 화면으로 복구. 따로 안내하지 않는다 (Q21·Q22)
     if (isGet) {
-      // TASK-004 미정: Q36·Q37 GET 자신의 404(세션 밖)·409는 500 줄처럼
+      // Q36·Q37 GET 자신의 404(세션 밖)·409는 500 줄처럼
       fail(OOPS, { tone: 'plain', retry: same });
       return false;
     }
@@ -226,7 +230,12 @@ function Session({
   useEffect(() => {
     if (start !== 'boot') return;
     (async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      let stored: string | null = null;
+      try {
+        stored = await AsyncStorage.getItem(STORAGE_KEY);
+      } catch {
+        console.warn('STORAGE_READ_FAILED'); // 읽기 실패는 저장값 없음처럼 S0
+      }
       if (!alive.current) return;
       if (stored) {
         sid.current = stored;
@@ -253,7 +262,7 @@ function Session({
         console.warn('INVALID_REQUEST', 'S0');
         fail(INVALID, { tone: 'plain', retry: null });
       } else {
-        // TASK-004 미정: Q37 S0의 404 day·그 밖의 실패는 500 줄처럼
+        // Q37 S0의 404 day·그 밖의 실패는 500 줄처럼
         fail(OOPS, { tone: 'plain', retry: again });
       }
     };
@@ -262,7 +271,7 @@ function Session({
         const seeded = await send(requests.seed(), signals.current);
         if (!alive.current) return;
         if (!seeded.ok) return stop(seeded.failure);
-        const dayId = (seeded.data as SeedResult).day_ids?.[1]; // 둘째 날
+        const dayId = (seeded.data as SeedResult | null)?.day_ids?.[1]; // 둘째 날
         if (typeof dayId !== 'string') return stop({ kind: 'server' });
         seedDay.current = dayId;
       }

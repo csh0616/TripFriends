@@ -1,4 +1,4 @@
-// P3 코스안 (TASK-004 §B-4, §12 Q5·Q8·Q14·Q39·Q41, 미정 Q33). CourseResult를 그린다. 숫자·시각은 서버 값 그대로.
+// P3 코스안 (TASK-004 §B-4, §12 Q5·Q8·Q14·Q39·Q41, §13 Q33). CourseResult를 그린다. 숫자·시각은 서버 값 그대로.
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle, Polyline, Text as SvgText } from 'react-native-svg';
@@ -65,7 +65,7 @@ export function P3Screen({
   return (
     <ScreenFrame
       title="코스 짜 봤어"
-      // TASK-004 미정: Q33 P3 부제는 §B-4대로 "{날 이름} · {n}곳" (W40은 skip)
+      // §13 Q33: P3 부제는 "{날 이름} · {n}곳"
       subtitle={`${dayName(day.day_number)} · ${items.length}곳`}
       onBack={back}
       backDisabled={busy}
@@ -198,7 +198,7 @@ function Row({
         <View style={styles.rowText}>
           <Text style={text('heading')}>{item.name}</Text>
           <Text style={text('caption', 'muted')}>{`${kind}이동 ${item.travel_min}분`}</Text>
-          {/* TASK-004 미정: Q39 hours_status가 null(장소 없는 고정 일정)이면 칩을 숨긴다 */}
+          {/* Q39 hours_status가 null(장소 없는 고정 일정)이면 칩을 숨긴다 */}
           {item.hours_status ? <StatusChip status={item.hours_status} /> : null}
         </View>
         {placeId !== null ? (
@@ -289,6 +289,7 @@ function RouteDiagram({
             fontFamily={text('label').fontFamily}
             fontSize={text('label').fontSize}
           >
+            {/* 미정(§13): 번호는 좌표 없는 줄을 빼도 seq 그대로 (목록 번호와 같게) */}
             {String(stop.seq)}
           </SvgText>
         ))}

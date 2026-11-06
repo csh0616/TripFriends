@@ -9,13 +9,22 @@ import { motion } from './theme';
 const [x1, y1, x2, y2] = (/\(([^)]*)\)/.exec(motion['ease-out'])?.[1] ?? '0,0,1,1').split(',').map(Number);
 const easeOut = Easing.bezier(x1, y1, x2, y2);
 
+/** 기기의 움직임 줄이기. 읽기가 실패하면 false */
+export function readReduceMotion(): Promise<boolean> {
+  return AccessibilityInfo.isReduceMotionEnabled().then(
+    (value) => value === true,
+    () => false,
+  );
+}
+
 /** 처음 나타날 때 0 -> 1로 한 번 움직이는 값 */
 export function useDraw(): Animated.Value {
   const progress = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     let live = true;
     let running: Animated.CompositeAnimation | null = null;
-    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+    // 설정을 못 읽으면 움직임을 줄이지 않은 것으로 본다 (끝값까지 그려진다)
+    readReduceMotion().then((reduce) => {
       if (!live) return;
       running = Animated.timing(progress, {
         toValue: 1,

@@ -8,7 +8,7 @@ import { color, control, radius, space, text } from '@/planning/theme';
 
 import { MicIcon } from './icons';
 
-// TASK-004 미정: Q44 입력창 안내 글 문서에 없음 -> "하고 싶은 말을 써 줘"
+// Q44 입력창 안내 글 문서에 없음 -> "하고 싶은 말을 써 줘"
 const PLACEHOLDER = '하고 싶은 말을 써 줘';
 const SOON_MS = 2000;
 
