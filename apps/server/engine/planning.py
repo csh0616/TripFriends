@@ -44,6 +44,7 @@ class Limits(NamedTuple):
     cheap_price: int
     night_after_min: int  # 19:00
     batch_sizes: tuple[int, ...]  # TASK-002 §8 Q39
+    dp_max_places: int  # TASK-005 §9 Q1: DP에 들어가는 N(꼭 갈 곳 + 고정 일정 + 담은 곳) 상한
 
 
 def _limits() -> Limits:
@@ -69,6 +70,7 @@ def _limits() -> Limits:
         cheap_price=2,
         night_after_min=19 * 60,
         batch_sizes=(5, 6),
+        dp_max_places=12,
     )
 
 
@@ -697,6 +699,52 @@ def _wanted(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], d
     return _Wanted(ids, infos, closed, short, mandatory)
 
 
+def _distinct(ids: list[PlaceId]) -> list[PlaceId]:
+    """처음 나온 순서를 지키며 중복을 뺀다 (TASK-005 §9 Q12·Q13)."""
+    return list(dict.fromkeys(ids))
+
+
+def _fixed_count(plan: DayPlan) -> int:
+    """고정 일정 수. 같은 장소의 고정 일정은 한 번만, 장소 없는 것은 각각 센다 (TASK-005 §9 Q12·Q13)."""
+    at_places = {ev.place_id for ev in plan.fixed if ev.place_id}
+    return len(at_places) + sum(1 for ev in plan.fixed if not ev.place_id)
+
+
+def _too_many(plan: DayPlan, picks: list[PlaceId]) -> Infeasible | None:
+    """TASK-005 A4·§9 Q1·Q2·Q5·Q10: 꼭 갈 곳 + 고정 일정 + 머문 시간을 바꾼 담은 곳만으로 상한을 넘으면 계산하지 않는다.
+    닫힘·이동 가능 여부는 보지 않는다 (계산 없이 알 수 있는 것부터, §9 Q11)."""
+    cap = _limits().dp_max_places
+    fixed_places = {ev.place_id for ev in plan.fixed if ev.place_id}
+    musts = [pid for pid in _distinct(plan.must_visit) if pid not in fixed_places]
+    changed = [
+        pid
+        for pid in _distinct(picks)
+        if pid in plan.stay_overrides and pid not in plan.must_visit and pid not in fixed_places
+    ]
+    total = len(musts) + _fixed_count(plan) + len(changed)
+    if total <= cap:
+        return None
+    over = total - cap
+    blocking = _distinct([*plan.must_visit, *(ev.id for ev in plan.fixed), *changed])
+    return Infeasible(reason="too_many_places", blocking=blocking, suggest_drop=musts[max(0, len(musts) - over) :])
+
+
+def _candidates(want: "_Wanted") -> list[PlaceId]:
+    """닫힌 곳과 하루보다 긴 담은 곳은 넣을 수 없으니 후보에서 뺀다 (dropped로 간다)."""
+    return [pid for pid in want.ids if pid not in want.closed and (pid not in want.short or pid in want.mandatory)]
+
+
+def _cut_for_cap(plan: DayPlan, picks: list[PlaceId], want: "_Wanted") -> list[PlaceId]:
+    """TASK-005 A4·§9 Q3·Q5: DP 후보 + 고정 일정이 상한을 넘으면 담은 순서의 뒤부터 자를 곳을 돌려준다.
+    꼭 갈 곳과 머문 시간을 바꾼 곳(mandatory)은 자르지 않는다."""
+    candidates = set(_candidates(want))
+    excess = len(candidates) + _fixed_count(plan) - _limits().dp_max_places
+    if excess <= 0:
+        return []
+    cuttable = [pid for pid in _distinct(picks) if pid in candidates and pid not in want.mandatory]
+    return cuttable[::-1][:excess]
+
+
 def _mask(ids: list[PlaceId], chosen: set[PlaceId]) -> int:
     return sum(1 << i for i, pid in enumerate(ids) if pid in chosen)
 
@@ -780,6 +828,9 @@ def compose_courses(
     lim = _limits()
     day = _Day(plan, places)
     _check_ids(plan, picks, places)
+    too_many = _too_many(plan, picks)  # TASK-005 §9 Q11: ValueError 다음, 나머지 실패보다 앞
+    if too_many:
+        return too_many
     unreachable = _chain_check(day)
     if unreachable:
         return unreachable
@@ -789,14 +840,14 @@ def compose_courses(
     if closed_must:  # TASK-002 §7 Q15, §10-1 #2 (하루가 짧은 꼭 갈 곳은 아래 overflow)
         return Infeasible(reason="must_visit_closed", blocking=closed_must, suggest_drop=[])
 
-    # 닫힌 곳과 하루보다 긴 담은 곳은 넣을 수 없으니 후보에서 뺀다 (dropped로 간다)
-    candidates = [pid for pid in want.ids if pid not in want.closed and (pid not in want.short or pid in want.mandatory)]
+    cut = _cut_for_cap(plan, picks, want)  # TASK-005 A4: 상한을 넘는 담은 곳은 자르고 no_time으로 dropped
+    candidates = [pid for pid in _candidates(want) if pid not in cut]
     required = _mask(candidates, want.mandatory)
     # TASK-002 §7 Q10: 안마다 쉬는 시간을 넣은 채로 DP 고르기를 따로 한다 (packed 5분, relaxed 15분)
     packed_model = _Model(day, candidates, want.infos, lim.packed_buffer_min)
     packed = packed_model.solve(required)
     if packed is None:
-        return _why_infeasible(day, plan, picks, want, candidates)
+        return _why_infeasible(day, plan, [pid for pid in picks if pid not in cut], want, candidates)
     relaxed_model = _Model(day, candidates, want.infos, lim.relaxed_buffer_min)
     relaxed = relaxed_model.solve(required)
 
@@ -804,7 +855,10 @@ def compose_courses(
         option = _build_option(model, tokens, label, high, day)
         visited = {model.ids[t - 1] for t in tokens if t > 0}
         dropped = [
-            Dropped(place_id=pid, reason=day.drop_reason(places[pid], want.infos[pid].eff_low))  # type: ignore[arg-type]
+            Dropped(
+                place_id=pid,
+                reason="no_time" if pid in cut else day.drop_reason(places[pid], want.infos[pid].eff_low),  # type: ignore[arg-type]
+            )
             for pid in want.ids
             if pid not in visited
         ]
@@ -867,7 +921,8 @@ def compose_greedy(
     _check_ids(plan, picks, places)  # TASK-002 §10-4 Q59
     want = _wanted(plan, picks, places, day)
     infos = {pid: info._replace(user=None) for pid, info in want.infos.items()}
-    model = _Model(day, want.ids, infos, buffer_min)
+    cut = _cut_for_cap(plan, picks, want)  # TASK-005 §9 Q20: DP와 같은 입력으로 자른 뒤 비교한다
+    model = _Model(day, [pid for pid in want.ids if pid not in cut], infos, buffer_min)
     n, P, F = model.n, model.P, model.F
     tokens: list[int] = []
     t, last, f = day.start, n + P, 0
