@@ -705,9 +705,8 @@ def _distinct(ids: list[PlaceId]) -> list[PlaceId]:
 
 
 def _fixed_count(plan: DayPlan) -> int:
-    """고정 일정 수. 같은 장소의 고정 일정은 한 번만, 장소 없는 것은 각각 센다 (TASK-005 §9 Q12·Q13)."""
-    at_places = {ev.place_id for ev in plan.fixed if ev.place_id}
-    return len(at_places) + sum(1 for ev in plan.fixed if not ev.place_id)
+    """고정 일정 수. 같은 장소의 고정 일정도 각각 센다 (TASK-005 §9 Q2). 꼭 갈 곳·담은 곳과 겹치는 장소는 후보 쪽에서 빠진다."""
+    return len(plan.fixed)
 
 
 def _too_many(plan: DayPlan, picks: list[PlaceId]) -> Infeasible | None:
