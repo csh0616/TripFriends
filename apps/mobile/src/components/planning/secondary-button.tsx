@@ -24,7 +24,7 @@ export function SecondaryButton({
       onPress={onPress}
       style={[styles.button, small && styles.small, disabled && styles.disabled]}
     >
-      <Text style={text(small ? 'caption' : 'heading', 'ink')}>{label}</Text>
+      <Text style={text(small ? 'caption' : 'heading', disabled ? 'muted' : 'ink')}>{label}</Text>
     </Pressable>
   );
 }
@@ -40,5 +40,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   small: { height: control['btn-sm'], paddingHorizontal: space['space-4'] },
-  disabled: { opacity: 0.5 },
+  disabled: { backgroundColor: color['bg-2'] },
 });

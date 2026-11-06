@@ -33,7 +33,8 @@ export function text(name: TypeName, tone: keyof typeof tokens.color = 'ink'): T
 
 /** 토큰의 그림자 글자("x y 번짐 색(r,g,b,알파)")에서 첫 겹을 RN 그림자로 옮긴다. 색은 같은 값인 on-brand 토큰을 쓴다. */
 function shadowFrom(spec: string): ViewStyle {
-  const first = /(-?\d+(?:\.\d+)?)px\s+(-?\d+(?:\.\d+)?)px\s+(\d+(?:\.\d+)?)px\s+\w+\([^)]*,\s*(\.?\d+(?:\.\d+)?)\)/.exec(spec);
+  // 토큰은 "0 6px 20px ..."처럼 0에는 px가 없다. 그래서 앞 두 값의 px는 있어도 없어도 된다.
+  const first = /(-?\d+(?:\.\d+)?)(?:px)?\s+(-?\d+(?:\.\d+)?)(?:px)?\s+(\d+(?:\.\d+)?)px\s+\w+\([^)]*,\s*(\.?\d+(?:\.\d+)?)\)/.exec(spec);
   if (!first) return {};
   const [, x, y, blur, alpha] = first.map(Number);
   return {

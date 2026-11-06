@@ -35,7 +35,7 @@ export function Header({
               onPress={onBack}
               style={styles.back}
             >
-              <BackIcon color={color.ink} />
+              <BackIcon color={backDisabled ? color.muted : color.ink} />
             </Pressable>
           ) : null}
         </View>

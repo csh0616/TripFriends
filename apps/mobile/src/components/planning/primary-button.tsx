@@ -22,7 +22,7 @@ export function PrimaryButton({
       onPress={onPress}
       style={[styles.button, disabled && styles.disabled]}
     >
-      <Text style={text('heading', 'on-brand')}>{label}</Text>
+      <Text style={text('heading', disabled ? 'muted' : 'on-brand')}>{label}</Text>
     </Pressable>
   );
 }
@@ -37,5 +37,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  disabled: { opacity: 0.5 },
+  // 비활성은 opacity가 아니라 bg-2 바탕 + muted 글자 (TASK-004 §13-3)
+  disabled: { backgroundColor: color['bg-2'] },
 });

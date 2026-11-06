@@ -47,8 +47,8 @@ export function ScreenFrame({
         {input ? <InputBar onSend={input.onSend} disabled={input.disabled} disabledHint={input.hint} /> : null}
       </KeyboardAvoidingView>
       {sosOpen ? (
-        <View style={styles.overlay}>
-          <View style={styles.sheet}>
+        <View testID="sheet-scrim" style={styles.overlay}>
+          <View testID="sos-sheet" style={styles.sheet}>
             <Text style={text('heading')}>긴급 도움은 준비 중이야</Text>
             <SecondaryButton label="닫기" onPress={() => setSosOpen(false)} />
           </View>
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.surface },
   body: { flex: 1 },
   content: { padding: layout.screenMargin, gap: space['space-4'], flexGrow: 1 },
-  overlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', backgroundColor: color.ink + '66' },
+  overlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', backgroundColor: color.scrim },
   sheet: {
     backgroundColor: color.surface,
     borderTopLeftRadius: radius['r-sheet'],

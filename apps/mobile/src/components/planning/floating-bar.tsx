@@ -7,7 +7,7 @@ import { color, radius, shadow, space } from '@/planning/theme';
 export function FloatingBar({ children }: { children: React.ReactNode }) {
   return (
     <View style={styles.outer}>
-      <View style={styles.bar}>{children}</View>
+      <View testID="floating-bar" style={styles.bar}>{children}</View>
     </View>
   );
 }
