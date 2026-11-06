@@ -1,14 +1,14 @@
 // P3 코스안 (TASK-004 §B-4, §12 Q5·Q8·Q14·Q39·Q41, §13 Q33). CourseResult를 그린다. 숫자·시각은 서버 값 그대로.
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Svg, { Circle, G, Path, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Polyline, Text as SvgText } from 'react-native-svg';
 
-import { HOME_PATH } from '@/components/planning/icons';
 import { Notice } from '@/components/planning/notice';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { StatusChip } from '@/components/planning/status-chip';
+import { homeIconLines } from '@/lib/home-icon';
 import { formatStay } from '@/lib/format-stay';
 import type { CourseItem, CourseResult } from '@/lib/planning-api';
 import { projectRoute } from '@/lib/project-route';
@@ -274,7 +274,7 @@ function RouteDiagram({
 }) {
   const height = layout.routeDiagram;
   const points = projectRoute([home, ...stops], width, height, layout.routePad);
-  const homeScale = layout.routeHomeIcon / control.icon;
+  const homeLines = homeIconLines(points[0].x, points[0].y, layout.routeHomeIcon);
   const line = points.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
@@ -300,22 +300,19 @@ function RouteDiagram({
           stroke={color.ink}
           strokeWidth={layout.routeHomeStroke}
         />
-        {/* 24칸 집 선을 14로 줄여 원 가운데에 놓는다. 선 굵기는 줄어든 만큼 키워 icon-stroke 그대로 보이게 한다 */}
-        <G
-          testID="route-home-icon"
-          width={layout.routeHomeIcon}
-          height={layout.routeHomeIcon}
-          transform={`translate(${points[0].x - layout.routeHomeIcon / 2} ${points[0].y - layout.routeHomeIcon / 2}) scale(${homeScale})`}
-        >
-          <Path
-            d={HOME_PATH}
+        {/* 집 아이콘: 변환 없이 좌표를 직접 계산한 Polyline 2개 (G transform은 폰에서 안 그려졌다) */}
+        {homeLines.map((points, i) => (
+          <Polyline
+            key={`home-${i}`}
+            testID={`route-home-icon-${i}`}
+            points={points}
             fill="none"
             stroke={color.ink}
-            strokeWidth={control['icon-stroke'] / homeScale}
+            strokeWidth={control['icon-stroke']}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-        </G>
+        ))}
         {stops.map((stop, i) => (
           <Circle
             key={`n-${stop.seq}`}
