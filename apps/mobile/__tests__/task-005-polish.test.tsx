@@ -8,11 +8,12 @@ import Svg, { G } from 'react-native-svg';
 
 import { contrast } from '@/lib/contrast';
 
+import { layout } from '@/planning/layout';
 import { shadow } from '@/planning/theme';
 
-import { COLORS, STRINGS, TYPE } from '../test-support/design-table';
+import { COLORS, NUMBERS, STRINGS, TYPE } from '../test-support/design-table';
 import { apiError, hang, json, networkDown, type Reply } from '../test-support/fake-server';
-import { happyServer, pressId, pressText, R, resetDevice, startApp, tap, toP1, toP2, toP3, typeAndSend } from '../test-support/planning-driver';
+import { happyServer, pressId, pressText, R, resetDevice, restart, startApp, tap, toP1, toP2, toP3, typeAndSend } from '../test-support/planning-driver';
 import { batch, course, day, packed, picks, relaxed, session } from '../test-support/planning-fixtures';
 
 type Tree = { type: string; props: Record<string, any>; parent: Tree | null; queryAll: (p: (h: Tree) => boolean) => Tree[] };
@@ -21,6 +22,7 @@ type DayTimes = { start: string; end: string; fixed: { start: string; end: strin
 // 아직 없는 파일이라 테스트마다 불러온다 (없으면 그 테스트만 "Cannot find module"로 빨갛다)
 const freeHoursText = (input: DayTimes): string | null => require('@/lib/free-hours').freeHoursText(input);
 const responseChanged = (before: unknown, after: unknown): boolean => require('@/lib/response-changed').responseChanged(before, after);
+const homeIconLines = (cx: number, cy: number, size: number): string[] => require('@/lib/home-icon').homeIconLines(cx, cy, size);
 
 const styleOf = (host: { props: Record<string, any> }) => (StyleSheet.flatten(host.props.style) ?? {}) as Record<string, any>;
 const byId = (id: string) => screen.getByTestId(id) as unknown as Tree;
@@ -42,17 +44,14 @@ function paintedAncestor(host: Tree): Tree | null {
 
 const raised = () => (shadow as unknown as Record<string, Record<string, unknown>>).raise;
 
-/**
- * route-home-icon의 transform = `translate(x y) scale(s)` (s = 14/24, 아이콘은 24칸).
- * 안쪽 Svg의 x·y는 무시되므로 G의 transform으로 놓는다 (TASK-005 B7, §9 Q15).
- */
-function homeIconBox() {
-  const transform = String(byId('route-home-icon').props.transform);
-  const match = /^translate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*\)\s*scale\(\s*([\d.]+)\s*\)$/.exec(transform);
-  if (!match) throw new Error(`route-home-icon의 transform 모양이 다름: ${transform}`);
-  const [x, y, scale] = match.slice(1).map(Number);
-  return { x, y, size: 24 * scale };
-}
+// 집 모양 24칸 좌표 (지붕, 벽). 근거: 폰 확인 뒤 진행 담당 계약, TASK-005 B7, §9 Q15
+const HOME_GRID = [
+  [[4, 11], [12, 4], [20, 11]],
+  [[6, 9.5], [6, 20], [18, 20], [18, 9.5]],
+];
+const parsePoints = (points: string) => points.trim().split(/\s+/).map((pair) => pair.split(',').map(Number));
+const parsePointsEach = (lines: string[]) => lines.map(parsePoints);
+const iconSvgChildren = (): Tree[] => [byId('route-home-icon-0'), byId('route-home-icon-1')];
 
 const MONO = 'DMMono_500Medium';
 const BOLD = 'NotoSansKR_700Bold';
@@ -374,21 +373,118 @@ describe('B7·B9 구조', () => {
     expect(byId('route-home').props.r).toBe(12);
   });
 
-  test('T5_B7_S9_Q15_숙소_원_안의_집_아이콘은_14', async () => {
+  test('T5_B7_S9_Q15_숙소_원_안의_집_아이콘은_14칸으로_줄인_Polyline_2개', async () => {
     happyServer();
     await toP3();
-    const icon = homeIconBox();
-    expect(hasIcon(byId('route-home-icon'))).toBe(true);
-    expect(icon.size).toBeCloseTo(14);
+    const { cx, cy } = byId('route-home').props;
+    const lines = homeIconLines(cx, cy, 14);
+    iconSvgChildren().forEach((icon, index) => {
+      expect(icon.props.svgElement).toBe('Polyline');
+      expect(icon.props.points).toBe(lines[index]);
+    });
+    expect(screen.queryByTestId('route-home-icon')).toBeNull();
   });
 
-  test('T5_B7_S9_Q15_집_아이콘의_가운데는_숙소_원의_가운데', async () => {
+  test('T5_B7_S9_Q15_집_아이콘의_선은_ink_굵기_1점75_둥근_끝_채움_없음', async () => {
     happyServer();
     await toP3();
-    const home = byId('route-home').props;
-    const icon = homeIconBox();
-    expect(icon.x + icon.size / 2).toBeCloseTo(home.cx);
-    expect(icon.y + icon.size / 2).toBeCloseTo(home.cy);
+    for (const icon of iconSvgChildren()) {
+      expect(icon.props.fill).toBe('none');
+      expect(icon.props.stroke).toBe(COLORS.ink);
+      expect(icon.props.strokeWidth).toBe(NUMBERS['icon-stroke']);
+      expect(icon.props.strokeLinecap).toBe('round');
+      expect(icon.props.strokeLinejoin).toBe('round');
+    }
+  });
+
+  test('T5_B7_집_아이콘은_Svg_직계_자식이다', async () => {
+    happyServer();
+    await toP3();
+    for (const icon of iconSvgChildren()) {
+      let up = icon.parent;
+      while (up && up.props.svgElement === undefined) up = up.parent;
+      expect(up?.props.svgElement).toBe('Svg');
+    }
+  });
+
+  const drawOrder = () =>
+    inside(byId('route-diagram'))
+      .map((h) => h.props.testID)
+      .filter((id): id is string => typeof id === 'string' && id !== 'route-diagram');
+
+  test('T5_B7_그리는_순서는_선_숙소_원_집_아이콘_번호_원', async () => {
+    happyServer();
+    await toP3();
+    expect(drawOrder()).toEqual([
+      'route-line',
+      'route-home',
+      'route-home-icon-0',
+      'route-home-icon-1',
+      'route-stop-1',
+      'route-stop-2',
+      'route-stop-3',
+    ]);
+  });
+
+  test('T5_B7_빈_코스에도_숙소_원_뒤에_집_아이콘이_그려진다', async () => {
+    const server = happyServer();
+    server.on(R.compose, json(200, course([relaxed('opt-relaxed', { items: [], dropped: [] })])));
+    await toP3();
+    expect(drawOrder()).toEqual(['route-home', 'route-home-icon-0', 'route-home-icon-1']);
+  });
+
+  test('T5_B7_집_아이콘은_숙소_원_바탕과_다르고_대비_4점5_이상', async () => {
+    happyServer();
+    await toP3();
+    const { fill } = byId('route-home').props;
+    for (const icon of iconSvgChildren()) {
+      expect(icon.props.stroke).not.toBe(fill);
+      expect(contrast(icon.props.stroke, fill)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test('T5_B7_동선_그림에는_폰에서_검증된_Svg_Circle_Polyline_Text만_있고_transform이_없다', async () => {
+    happyServer();
+    await toP3();
+    const hosts = inside(byId('route-diagram')).filter((h) => h.props.svgElement !== undefined);
+    expect(hosts.length).toBeGreaterThan(0);
+    expect([...new Set(hosts.map((h) => h.props.svgElement))].sort()).toEqual(['Circle', 'Polyline', 'Svg', 'Text']);
+    expect(hosts.filter((h) => h.props.transform !== undefined)).toEqual([]);
+  });
+
+  test.each<[string, () => Promise<unknown>]>([
+    [
+      '다시 켠 뒤',
+      async () => {
+        const server = happyServer();
+        server.on(R.get, json(200, course()));
+        const app = await toP3();
+        await restart(app);
+        await screen.findByText('코스 짜 봤어');
+      },
+    ],
+    [
+      '자동 코스',
+      async () => {
+        const server = happyServer();
+        server.on(R.answer, json(200, course()));
+        await toP1();
+        await pressText('알아서 짜 줘');
+        await screen.findByText('코스 짜 봤어');
+      },
+    ],
+    [
+      '코스 종류를 바꾼 뒤',
+      async () => {
+        happyServer();
+        await toP3();
+        await pressId('option-packed');
+      },
+    ],
+  ])('T5_B7_%s에도_집_아이콘이_그려지고_숙소_원에_맞는다', async (_name, go) => {
+    await go();
+    const { cx, cy } = byId('route-home').props;
+    expect(iconSvgChildren().map((icon) => icon.props.points)).toEqual(homeIconLines(cx, cy, 14));
   });
 
   const svgsIn = (host: Tree) => inside(host).filter((h) => h.props.svgElement === 'Svg');
@@ -453,6 +549,61 @@ describe('B7·B9 구조', () => {
     expect(fillOf(back)).toBe(COLORS['bg-2']);
     expect(strokes(back).length).toBeGreaterThan(0);
     for (const stroke of strokes(back)) expect(stroke).toBe(COLORS.muted);
+  });
+});
+
+// ---------- B7: 집 아이콘 좌표 함수 ----------
+
+describe('B7 homeIconLines', () => {
+  const allPoints = (cx: number, cy: number, size = 14) => homeIconLines(cx, cy, size).flatMap(parsePoints);
+  const safeRadius = layout.routeHome - layout.routeHomeStroke / 2 - NUMBERS['icon-stroke'] / 2;
+  const anywhere = fc.double({ min: -1000, max: 1000, noNaN: true });
+
+  test('T5_B7_선은_지붕과_벽_2개이고_점은_3개와_4개', () => {
+    expect(homeIconLines(100, 50, 14).map((line) => parsePoints(line).length)).toEqual([3, 4]);
+  });
+
+  test('T5_B7_크기_24면_24칸_좌표를_가운데로_옮긴_값', () => {
+    parsePointsEach(homeIconLines(12, 12, 24)).forEach((line, l) => {
+      line.forEach(([x, y], p) => {
+        expect(x).toBeCloseTo(HOME_GRID[l][p][0]);
+        expect(y).toBeCloseTo(HOME_GRID[l][p][1]);
+      });
+    });
+  });
+
+  test('T5_B7_속성_임의의_가운데와_크기에서_좌표는_칸_비율대로', () => {
+    fc.assert(
+      fc.property(anywhere, anywhere, fc.integer({ min: 1, max: 48 }), (cx, cy, size) => {
+        parsePointsEach(homeIconLines(cx, cy, size)).forEach((line, l) => {
+          line.forEach(([x, y], p) => {
+            expect(x).toBeCloseTo(cx + ((HOME_GRID[l][p][0] - 12) * size) / 24, 6);
+            expect(y).toBeCloseTo(cy + ((HOME_GRID[l][p][1] - 12) * size) / 24, 6);
+          });
+        });
+      }),
+    );
+  });
+
+  test('T5_B7_속성_임의의_숙소_좌표에서_모든_점이_숙소_원_안쪽', () => {
+    expect(safeRadius).toBeCloseTo(10.125);
+    fc.assert(
+      fc.property(anywhere, anywhere, (cx, cy) => {
+        for (const [x, y] of allPoints(cx, cy)) expect(Math.hypot(x - cx, y - cy)).toBeLessThanOrEqual(safeRadius);
+      }),
+    );
+  });
+
+  test('T5_B7_속성_집의_가운데_점은_cx_cy', () => {
+    fc.assert(
+      fc.property(anywhere, anywhere, (cx, cy) => {
+        const points = allPoints(cx, cy);
+        const xs = points.map(([x]) => x);
+        const ys = points.map(([, y]) => y);
+        expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(cx, 6);
+        expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(cy, 6);
+      }),
+    );
   });
 });
 
