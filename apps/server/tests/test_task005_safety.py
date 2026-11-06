@@ -251,14 +251,6 @@ def test_T5_S9_Q11_too_many_places가_fixed_unreachable보다_먼저():
     too_many(compose_courses(plan, [], as_places(venue, *items)))
 
 
-@pytest.mark.skip(reason="질문: §9 Q11과 TASK-002 §9 Q44(test_Q44_Infeasible_순서_fixed_unreachable이_must_visit_closed보다_먼저)가 반대. 답이 오면 푼다")
-def test_T5_S9_Q11_must_visit_closed가_fixed_unreachable보다_먼저():
-    venue = place("D09", km=1.21)
-    places = as_places(venue, place("D01", hours=opening("09:00", "20:00", 1)))
-    plan = day_plan(fixed=(fixed_event("09:13", "10:00", venue),), must=("D01",))
-    assert compose_courses(plan, [], places).reason == "must_visit_closed"
-
-
 # ---------- A4 + §9 Q1·Q3: 담은 곳 때문에 12 초과 ----------
 
 
