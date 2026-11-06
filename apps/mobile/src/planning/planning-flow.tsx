@@ -20,6 +20,7 @@ import {
   type StageResponse,
 } from '@/lib/planning-api';
 import { initialPlanningState, planningReducer } from '@/lib/planning-reducer';
+import { responseChanged } from '@/lib/response-changed';
 import { screenFor } from '@/lib/screen-for';
 
 import { fontAssets } from './fonts';
@@ -40,6 +41,7 @@ const INVALID = '다시 해 볼래?';
 const RESTART = '처음부터 다시 하자';
 const INFEASIBLE_FALLBACK_NAME = '꼭 갈 곳';
 const UNREACHABLE = '고정 일정에 제때 못 가';
+const TOO_MANY = '하루에 넣기엔 너무 많아. 몇 곳 빼 볼래?';
 const INFEASIBLE_OTHER = '이대로는 코스를 못 짜겠어'; // 표에 없는 이유 (사실과 다른 문구 금지, §13-3 #4)
 
 type Kind = 'stage' | 'picks' | 'select';
@@ -122,6 +124,7 @@ function Session({
   const infeasibleMessage = (reason: string, blocking: string[]): string => {
     if (reason === 'must_visit_overflow') return '꼭 갈 곳이 하루에 다 안 들어가';
     if (reason === 'user_stay_conflict') return '그 시간은 안 맞아';
+    if (reason === 'too_many_places') return TOO_MANY;
     if (reason === 'fixed_unreachable') return UNREACHABLE;
     if (reason !== 'must_visit_closed') return INFEASIBLE_OTHER;
     const day = (latest.current.response as { day?: PlanningSession['day'] } | null)?.day;
@@ -131,13 +134,13 @@ function Session({
   };
 
   /** 한 번 보내고 결과를 반영한다. 성공해서 서버 응답을 반영했으면 true */
-  const execute = useCallback(async (request: Request, kind: Kind, fromInput = false): Promise<boolean> => {
+  const execute = useCallback(async (request: Request, kind: Kind, fromInput = false, recovery = false): Promise<boolean> => {
     if (busy.current) return false;
     busy.current = true;
     dispatch({ type: 'request_start' });
     setProblem(null);
     try {
-      return await settle(request, kind, await send(request, signals.current), fromInput);
+      return await settle(request, kind, await send(request, signals.current), fromInput, recovery);
     } finally {
       busy.current = false;
     }
@@ -149,18 +152,19 @@ function Session({
     kind: Kind,
     result: Awaited<ReturnType<typeof send>>,
     fromInput = false,
+    recovery = false,
   ): Promise<boolean> => {
     if (!alive.current) return false;
-    if (result.ok) return accept(request, kind, result.data, fromInput);
-    return failWith(result.failure, request, kind, fromInput);
+    if (result.ok) return accept(request, kind, result.data, fromInput, recovery);
+    return failWith(result.failure, request, kind, fromInput, recovery);
   };
 
-  const accept = (request: Request, kind: Kind, data: unknown, fromInput: boolean): boolean => {
+  const accept = (request: Request, kind: Kind, data: unknown, fromInput: boolean, recovery: boolean): boolean => {
     // select 200이면 바로 S9 (Q26). 응답에 stage가 없어도 done으로 본다
     const response = kind === 'select' ? { ...(data as object), stage: 'done' } : data;
     const odd = () => {
       // 모르는 stage·모양은 500 줄과 같게 (Q18, §13-2 #7). 화면 숫자는 그대로
-      fail(OOPS, { tone: 'plain', retry: () => void execute(request, kind, fromInput) });
+      fail(OOPS, { tone: 'plain', retry: () => void execute(request, kind, fromInput, recovery) });
       return false;
     };
     if (kind === 'picks') {
@@ -182,15 +186,17 @@ function Session({
         return odd();
       }
     }
+    // C1: 복구 GET은 응답이 요청 전과 달라졌을 때만 입력 글을 지운다 (지금 화면 응답은 아직 바뀌기 전이다)
+    const cleared = fromInput || (recovery && responseChanged(latest.current.response, response));
     dispatch({ type: 'request_success', response });
-    if (fromInput) setInputCleared((now) => now + 1);
+    if (cleared) setInputCleared((now) => now + 1);
     return true;
   };
 
-  const failWith = async (failure: Failure, request: Request, kind: Kind, fromInput: boolean): Promise<boolean> => {
-    const same = () => void execute(request, kind, fromInput);
+  const failWith = async (failure: Failure, request: Request, kind: Kind, fromInput: boolean, recovery: boolean): Promise<boolean> => {
+    const same = () => void execute(request, kind, fromInput, recovery);
     const isGet = request.method === 'GET';
-    const getAgain = () => void execute(requests.current(sid.current ?? ''), 'stage');
+    const getAgain = () => void execute(requests.current(sid.current ?? ''), 'stage', false, true);
     switch (failure.kind) {
       case 'network':
         // 요청이 실제로 처리됐을 수 있어서 [다시]는 같은 요청이 아니라 GET으로 지금 상태를 받는다 (Q21)
@@ -223,7 +229,7 @@ function Session({
       return false;
     }
     const recover = requests.current(sid.current ?? '');
-    return settle(recover, 'stage', await send(recover, signals.current));
+    return settle(recover, 'stage', await send(recover, signals.current), false, true);
   };
 
   // ---------- 다시 켜기 (§B-2, Q17) ----------

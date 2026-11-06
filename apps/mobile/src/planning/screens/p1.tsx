@@ -9,6 +9,7 @@ import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
+import { freeHoursText } from '@/lib/free-hours';
 import { requests, type PlanningSession } from '@/lib/planning-api';
 
 import { useDraw } from '../draw';
@@ -35,7 +36,10 @@ type ChoiceId = NonNullable<AnswerBody['choice_ids']>[number];
 // 미정(§13): P1 고리는 크기가 커지며 나타난다 (SVG가 아니라서 그리는 움직임 대신 같은 useDraw 시간)
 function Ring() {
   const progress = useDraw();
-  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [layout.ringFrom, 1] });
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [layout.ringFrom, 1],
+  });
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { transform: [{ scale }] }]}>
       <View pointerEvents="none" style={styles.ringBrand} />
@@ -65,13 +69,17 @@ export function P1Screen({
   const dayStart = timeToMinutes(day.start);
   const span = Math.max(1, timeToMinutes(day.end) - dayStart);
   const percent = (time: string) => Math.min(100, Math.max(0, ((timeToMinutes(time) - dayStart) / span) * 100));
+  const free = freeHoursText(day); // 하루 길이 - 고정 일정 (표시용 계산, B8)
   const mustNames = day.must_visits.map((m) => m.name);
 
   return (
     <ScreenFrame
       title={`${dayName(day.day_number)} 계획`}
       subtitle={daySubtitle(day)}
-      input={{ onSend: (value) => void onAnswer({ choice_ids: chosen, text: value }), disabled: busy }}
+      input={{
+        onSend: (value) => void onAnswer({ choice_ids: chosen, text: value }),
+        disabled: busy,
+      }}
       footer={
         <>
           <SecondaryButton
@@ -95,7 +103,9 @@ export function P1Screen({
     >
       <FriendBubble message={question.text} />
       {busy ? <ActivityIndicator color={color.muted} /> : null}
-      {notice ? <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} retryDisabled={busy} /> : null}
+      {notice ? (
+        <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} retryDisabled={busy} />
+      ) : null}
 
       <View style={styles.grid}>
         {rows.map((row) => (
@@ -129,21 +139,24 @@ export function P1Screen({
       <View testID="timetable" style={styles.timetable}>
         <Text style={text('caption', 'muted')}>오늘 시간표</Text>
         <Text style={text('num-md')}>{`${day.start}~${day.end}`}</Text>
-        <View style={styles.track}>
-          {day.fixed.map((item) => (
-            <View
-              key={`${item.start}-${item.name}`}
-              testID="timetable-segment"
-              style={[
-                styles.segment,
-                {
-                  left: `${percent(item.start)}%`,
-                  width: `${Math.max(0, percent(item.end) - percent(item.start))}%`,
-                },
-              ]}
-            />
-          ))}
-        </View>
+        {free ? <Text style={text('caption', 'muted')}>{free}</Text> : null}
+        {day.fixed.length > 0 ? (
+          <View testID="timetable-bar" style={styles.track}>
+            {day.fixed.map((item) => (
+              <View
+                key={`${item.start}-${item.name}`}
+                testID="timetable-segment"
+                style={[
+                  styles.segment,
+                  {
+                    left: `${percent(item.start)}%`,
+                    width: `${Math.max(0, percent(item.end) - percent(item.start))}%`,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+        ) : null}
         {day.fixed.map((item) => (
           <Text key={`legend-${item.start}-${item.name}`} style={text('caption', 'muted')}>
             {`${item.start} ${item.name}`}
@@ -192,7 +205,22 @@ const styles = StyleSheet.create({
     paddingVertical: space['space-1'],
   },
   pillText: text('label'),
-  timetable: { backgroundColor: color['bg-2'], borderRadius: radius['r-xl'], padding: space['space-4'], gap: space['space-2'] },
-  track: { height: layout.barHeight, borderRadius: radius['r-full'], backgroundColor: color.surface, overflow: 'hidden' },
-  segment: { position: 'absolute', top: 0, bottom: 0, backgroundColor: color.ink },
+  timetable: {
+    backgroundColor: color['bg-2'],
+    borderRadius: radius['r-xl'],
+    padding: space['space-4'],
+    gap: space['space-2'],
+  },
+  track: {
+    height: layout.barHeight,
+    borderRadius: radius['r-full'],
+    backgroundColor: color.surface,
+    overflow: 'hidden',
+  },
+  segment: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    backgroundColor: color.ink,
+  },
 });

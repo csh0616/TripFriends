@@ -46,7 +46,14 @@ function shadowFrom(spec: string): ViewStyle {
   };
 }
 
+/** 굵은 글자(700): 토큰 type에 없는 굵기가 필요한 곳(B4 토글 고른 칸)에서만 쓴다 */
+export function bold(name: TypeName, tone: keyof typeof tokens.color = 'ink'): TextStyle {
+  return { ...text(name, tone), fontFamily: NOTO[700] };
+}
+
+// 미정(TASK-005): sh-raise는 두 겹 중 첫 겹만 RN 그림자로 옮긴다 (shadowFrom이 첫 겹만 읽음)
 export const shadow = {
   float: shadowFrom(tokens.shadow['sh-float']),
   sheet: shadowFrom(tokens.shadow['sh-sheet']),
+  raise: shadowFrom(tokens.shadow['sh-raise']),
 } as const;

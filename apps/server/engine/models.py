@@ -77,6 +77,11 @@ class PlanFixed(BaseModel):
         return _check_hhmm(value)
 
 
+def _max_must_visit() -> int:
+    """TASK-005 A3: 하루 꼭 갈 곳 상한. 기준 값은 함수 안에 둔다 (돌연변이 대상)."""
+    return 5
+
+
 class DayPlan(BaseModel):
     date: Date
     start: str
@@ -85,6 +90,14 @@ class DayPlan(BaseModel):
     fixed: list[PlanFixed]
     must_visit: list[PlaceId]
     stay_overrides: dict[PlaceId, int]
+
+    @field_validator("must_visit")
+    @classmethod
+    def _limit_must_visit(cls, value: list[PlaceId]) -> list[PlaceId]:
+        """TASK-005 A3·§9 Q12: 서로 다른 꼭 갈 곳이 상한을 넘으면 ValueError (중복은 한 번만 센다)."""
+        if len(set(value)) > _max_must_visit():
+            raise ValueError(f"꼭 갈 곳은 하루 {_max_must_visit()}곳까지: {len(set(value))}곳")
+        return value
 
 
 class CourseItem(BaseModel):

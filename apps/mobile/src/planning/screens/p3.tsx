@@ -8,13 +8,14 @@ import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { StatusChip } from '@/components/planning/status-chip';
+import { homeIconLines } from '@/lib/home-icon';
 import { formatStay } from '@/lib/format-stay';
 import type { CourseItem, CourseResult } from '@/lib/planning-api';
 import { projectRoute } from '@/lib/project-route';
 
 import { dayName } from '../format';
 import { layout } from '../layout';
-import { color, control, radius, space, text } from '../theme';
+import { bold, color, control, radius, shadow, space, text } from '../theme';
 import type { NoticeData, Send } from './types';
 
 const LABEL_TEXT = { relaxed: '느긋하게', packed: '꽉 채워서' } as const;
@@ -69,7 +70,11 @@ export function P3Screen({
       subtitle={`${dayName(day.day_number)} · ${items.length}곳`}
       onBack={back}
       backDisabled={busy}
-      input={{ onSend: () => undefined, disabled: true, hint: '코스는 위에서 바꿀 수 있어' }}
+      input={{
+        onSend: () => undefined,
+        disabled: true,
+        hint: '코스는 위에서 바꿀 수 있어',
+      }}
       footer={
         <>
           {empty ? (
@@ -112,7 +117,8 @@ export function P3Screen({
                 }}
                 style={[styles.toggleButton, on && styles.toggleOn]}
               >
-                <Text style={text('caption', on ? 'surface' : 'ink')}>{LABEL_TEXT[o.label]}</Text>
+                {/* 미정(TASK-005): 토글 글자는 caption */}
+                <Text style={on ? bold('caption', 'ink') : text('caption', 'muted')}>{LABEL_TEXT[o.label]}</Text>
               </Pressable>
             );
           })}
@@ -128,14 +134,16 @@ export function P3Screen({
               item.lat !== null && item.lng !== null ? [{ seq: item.seq, lat: item.lat, lng: item.lng }] : [],
             )}
           />
-          <Text style={text('heading')}>{`${items.length}곳 · 이동 ${option.total_travel_min}분`}</Text>
+          <Text style={text('caption', 'muted')}>{`${items.length}곳 · 이동 ${option.total_travel_min}분`}</Text>
 
           {empty ? <Text style={text('body', 'muted')}>담은 곳이 없어서 코스가 비었어</Text> : null}
 
           <View style={styles.list}>
-            {items.map((item) => (
+            {items.map((item, index) => (
               <Row
                 key={item.seq}
+                first={index === 0}
+                last={index === items.length - 1}
                 item={item}
                 must={item.place_id !== null && mustIds.has(item.place_id)}
                 open={open !== null && open === item.place_id}
@@ -164,6 +172,8 @@ export function P3Screen({
 }
 
 function Row({
+  first,
+  last,
   item,
   must,
   open,
@@ -171,6 +181,8 @@ function Row({
   onToggle,
   onAdjust,
 }: {
+  first: boolean;
+  last: boolean;
   item: CourseItem;
   must: boolean;
   open: boolean;
@@ -189,25 +201,36 @@ function Row({
   );
 
   return (
-    <View testID={`course-row-${item.seq}`} style={styles.row}>
+    <View testID={`course-row-${item.seq}`} style={[styles.row, open && styles.rowOpen]}>
+      {/* 번호 원을 잇는 선: 첫 줄은 원 아래부터, 끝 줄은 원 위까지. 한 줄뿐이면 없다 */}
+      {first && last ? null : (
+        <View
+          testID="course-line"
+          style={[styles.line, first ? styles.lineFirst : last ? styles.lineLast : styles.lineMiddle]}
+        />
+      )}
       <View style={styles.rowMain}>
         <Text style={styles.time}>{item.start}</Text>
         <View style={styles.number}>
-          <Text style={text('label', 'surface')}>{String(item.seq)}</Text>
+          <Text style={text('num-md', 'surface')}>{String(item.seq)}</Text>
         </View>
         <View style={styles.rowText}>
-          <Text style={text('heading')}>{item.name}</Text>
-          <Text style={text('caption', 'muted')}>{`${kind}이동 ${item.travel_min}분`}</Text>
-          {/* Q39 hours_status가 null(장소 없는 고정 일정)이면 칩을 숨긴다 */}
-          {item.hours_status ? <StatusChip status={item.hours_status} /> : null}
+          {/* 미정(TASK-005): 줄 이름은 heading */}
+          <Text numberOfLines={1} style={text('heading')}>
+            {item.name}
+          </Text>
+          <View testID={`course-row-sub-${item.seq}`} style={styles.sub}>
+            <Text
+              numberOfLines={1}
+              // 미정(TASK-005): 보조 줄은 caption
+              style={[text('caption', 'muted'), styles.subText]}
+            >{`${kind}이동 ${item.travel_min}분`}</Text>
+            {/* Q39 hours_status가 null(장소 없는 고정 일정)이면 칩을 숨긴다 */}
+            {item.hours_status ? <StatusChip status={item.hours_status} /> : null}
+          </View>
         </View>
         {placeId !== null ? (
-          <Pressable
-            testID={`stay-${placeId}`}
-            accessibilityRole="button"
-            onPress={onToggle}
-            style={styles.stay}
-          >
+          <Pressable testID={`stay-${placeId}`} accessibilityRole="button" onPress={onToggle} style={styles.stay}>
             {stay}
           </Pressable>
         ) : (
@@ -251,6 +274,7 @@ function RouteDiagram({
 }) {
   const height = layout.routeDiagram;
   const points = projectRoute([home, ...stops], width, height, layout.routePad);
+  const homeLines = homeIconLines(points[0].x, points[0].y, layout.routeHomeIcon);
   const line = points.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
@@ -267,8 +291,28 @@ function RouteDiagram({
             strokeLinejoin="round"
           />
         ) : null}
-        <Circle testID="route-home" cx={points[0].x} cy={points[0].y} r={layout.routeHome} fill={color.surface} />
-        <Circle cx={points[0].x} cy={points[0].y} r={layout.dot} fill={color.ink} />
+        <Circle
+          testID="route-home"
+          cx={points[0].x}
+          cy={points[0].y}
+          r={layout.routeHome}
+          fill={color.surface}
+          stroke={color.ink}
+          strokeWidth={layout.routeHomeStroke}
+        />
+        {/* 집 아이콘: 변환 없이 좌표를 직접 계산한 Polyline 2개 (중첩 Svg는 안 그려졌다) */}
+        {homeLines.map((points, i) => (
+          <Polyline
+            key={`home-${i}`}
+            testID={`route-home-icon-${i}`}
+            points={points}
+            fill="none"
+            stroke={color.ink}
+            strokeWidth={control['icon-stroke']}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
         {stops.map((stop, i) => (
           <Circle
             key={`n-${stop.seq}`}
@@ -286,8 +330,8 @@ function RouteDiagram({
             y={points[i + 1].y + layout.dot - 1}
             fill={color.surface}
             textAnchor="middle"
-            fontFamily={text('label').fontFamily}
-            fontSize={text('label').fontSize}
+            fontFamily={text('num-md').fontFamily}
+            fontSize={text('num-md').fontSize}
           >
             {/* 미정(§13): 번호는 좌표 없는 줄을 빼도 seq 그대로 (목록 번호와 같게) */}
             {String(stop.seq)}
@@ -300,7 +344,12 @@ function RouteDiagram({
 
 const styles = StyleSheet.create({
   grow: { flex: 1 },
-  toggle: { flexDirection: 'row', backgroundColor: color['bg-2'], borderRadius: radius['r-full'], padding: space['space-1'] },
+  toggle: {
+    flexDirection: 'row',
+    backgroundColor: color['bg-2'],
+    borderRadius: radius['r-full'],
+    padding: space['space-1'],
+  },
   toggleButton: {
     flex: 1,
     height: control['touch-min'],
@@ -308,11 +357,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  toggleOn: { backgroundColor: color.ink },
-  diagram: { borderRadius: radius['r-lg'], backgroundColor: color['bg-2'], overflow: 'hidden' },
-  list: { gap: space['space-3'] },
-  row: { backgroundColor: color['bg-2'], borderRadius: radius['r-lg'], padding: space['space-3'], gap: space['space-2'] },
-  rowMain: { flexDirection: 'row', alignItems: 'flex-start', gap: space['space-2'] },
+  toggleOn: { backgroundColor: color.surface, ...shadow.raise }, // 판 위에 살짝 뜬 칸 (sh-raise)
+  diagram: {
+    borderRadius: radius['r-lg'],
+    backgroundColor: color['bg-2'],
+    overflow: 'hidden',
+  },
+  list: {},
+  row: {
+    minHeight: layout.courseRow,
+    paddingHorizontal: space['space-3'],
+    borderRadius: radius['r-lg'],
+  },
+  rowOpen: { backgroundColor: color['bg-2'] },
+  rowMain: {
+    height: layout.courseRow,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['space-2'],
+  },
   time: { ...text('num-md'), width: layout.timeColumn },
   number: {
     width: layout.numberCircle,
@@ -322,8 +385,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowText: { flex: 1, gap: space['space-1'] },
-  stay: { minWidth: layout.stayColumn, minHeight: control['touch-min'], alignItems: 'flex-end', justifyContent: 'center' },
-  steps: { flexDirection: 'row', justifyContent: 'flex-end', gap: space['space-2'] },
-  check: { backgroundColor: color['bg-2'], borderRadius: radius['r-xl'], padding: space['space-4'], gap: space['space-2'] },
+  line: {
+    position: 'absolute',
+    width: layout.courseLine,
+    backgroundColor: color.line,
+    // 번호 원 가운데 = 안쪽 여백 + 시각 칸 + 간격 + 원 반지름
+    left: space['space-3'] + layout.timeColumn + space['space-2'] + layout.numberCircle / 2 - layout.courseLine / 2,
+  },
+  lineFirst: { top: layout.courseRow / 2, bottom: 0 },
+  lineMiddle: { top: 0, bottom: 0 },
+  lineLast: { top: 0, height: layout.courseRow / 2 },
+  rowText: { flex: 1 },
+  sub: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  subText: { flexShrink: 1 },
+  stay: {
+    minWidth: layout.stayColumn,
+    minHeight: control['touch-min'],
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  steps: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: space['space-2'],
+  },
+  check: {
+    backgroundColor: color['bg-2'],
+    borderRadius: radius['r-xl'],
+    padding: space['space-4'],
+    gap: space['space-2'],
+  },
 });

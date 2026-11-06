@@ -72,6 +72,7 @@ export const STRINGS: Record<string, string> = {
   'sh-0': 'none', // Q15
   'sh-float': '0 6px 20px rgba(26,26,26,.14), 0 1px 2px rgba(26,26,26,.08)',
   'sh-sheet': '0 -10px 32px rgba(26,26,26,.16)',
+  'sh-raise': '0 1px 2px rgba(26,26,26,.08), 0 2px 8px rgba(26,26,26,.08)', // v2.3, TASK-005 §9 Q14
   'ease-out': 'cubic-bezier(.2,.8,.2,1)',
   scrim: 'rgba(26,26,26,0.40)', // §4-1 v2.2, TASK-004 §13-3 #2
 };

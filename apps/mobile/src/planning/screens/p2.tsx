@@ -69,8 +69,7 @@ export function P2Screen({
     scroller.current?.scrollTo({ x: 0, animated: false });
   }, [batch.round]);
 
-  const categoryOf = (placeId: string) =>
-    candidates.find((c) => c.place.id === placeId)?.place.category ?? 'landmark';
+  const categoryOf = (placeId: string) => candidates.find((c) => c.place.id === placeId)?.place.category ?? 'landmark';
 
   const compose = () => {
     if (!busy) void onCompose();
@@ -86,7 +85,11 @@ export function P2Screen({
   const skip = async (id: string, index: number) => {
     if (busy) return;
     const ok = await onReact(id, 'skip');
-    if (ok) scroller.current?.scrollTo({ x: (index + 1) * step, animated: !reduceMotion.current });
+    if (ok)
+      scroller.current?.scrollTo({
+        x: (index + 1) * step,
+        animated: !reduceMotion.current,
+      });
   };
 
   return (
@@ -106,7 +109,9 @@ export function P2Screen({
                     <PhotoPlaceholder category={categoryOf(id)} style={StyleSheet.absoluteFill} />
                   </View>
                 ) : (
-                  <View key={`e-${slot}`} testID="empty-circle" style={[style, styles.emptyCircle]} />
+                  <View key={`e-${slot}`} testID="empty-circle" style={[style, styles.emptyCircle]}>
+                    <PlusIcon color={color.muted} size={layout.checkSmall} />
+                  </View>
                 );
               })}
             </View>
@@ -118,7 +123,9 @@ export function P2Screen({
     >
       <FriendBubble message={batch.message} />
       {busy ? <ActivityIndicator color={color.muted} /> : null}
-      {notice ? <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} retryDisabled={busy} /> : null}
+      {notice ? (
+        <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} retryDisabled={busy} />
+      ) : null}
 
       {chips.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -130,7 +137,7 @@ export function P2Screen({
               disabled={busy}
               hitSlop={{ top: layout.chipSlop, bottom: layout.chipSlop }}
               onPress={() => next({ direction_id: chip.id })}
-              style={[styles.chip, busy && styles.chipOff]}
+              style={[styles.chip, batch.clarify && !busy && styles.chipSuggest]}
             >
               <Text style={text('label', busy ? 'muted' : 'ink')}>{chip.label}</Text>
             </Pressable>
@@ -186,10 +193,10 @@ export function P2Screen({
                   accessibilityState={{ selected: liked }}
                   disabled={busy}
                   onPress={() => like(place.id)}
-                  style={[styles.round, liked ? styles.likedButton : styles.likeButton, busy && styles.roundOff]}
+                  style={[styles.round, styles.likeButton, busy && styles.roundOff]}
                 >
                   {liked ? (
-                    <CheckIcon color={busy ? color.muted : color['on-brand']} />
+                    <CheckIcon color={busy ? color.muted : color.surface} />
                   ) : (
                     <PlusIcon color={busy ? color.muted : color.surface} />
                   )}
@@ -199,7 +206,10 @@ export function P2Screen({
                 <StatusChip status={hours.chip} />
                 <Text style={text('caption', 'muted')}>{hours.text}</Text>
                 <Text style={text('caption', 'muted')}>
-                  {distanceLabel(day.lodging, { lat: place.lat, lng: place.lng })}
+                  {distanceLabel(day.lodging, {
+                    lat: place.lat,
+                    lng: place.lng,
+                  })}
                 </Text>
               </View>
             </View>
@@ -227,26 +237,49 @@ export function P2Screen({
 }
 
 const styles = StyleSheet.create({
-  picked: { flexDirection: 'row', alignItems: 'center', gap: space['space-3'], flexShrink: 1 },
+  picked: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['space-3'],
+    flexShrink: 1,
+  },
   circles: { flexDirection: 'row' },
-  circle: { width: layout.pickedCircle, height: layout.pickedCircle, borderRadius: radius['r-full'] },
+  circle: {
+    width: layout.pickedCircle,
+    height: layout.pickedCircle,
+    borderRadius: radius['r-full'],
+  },
   overlap: { marginLeft: -layout.pickedOverlap },
   clip: { overflow: 'hidden' },
-  emptyCircle: { backgroundColor: color['bg-2'] },
+  emptyCircle: {
+    borderStyle: 'dashed',
+    borderWidth: layout.emptyBorder,
+    borderColor: color.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // 칩 보이는 높이 36 + 위아래 hitSlop 4 = 44. 스크롤 안쪽 위아래 여백으로 그 4가 잘리지 않게 한다 (§13-2 #3)
   chips: { gap: space['space-2'], paddingVertical: layout.chipSlop },
   chip: {
     height: control.chip,
     paddingHorizontal: space['space-4'],
     borderRadius: radius['r-full'],
-    backgroundColor: color['brand-soft'],
+    backgroundColor: color['bg-2'],
     justifyContent: 'center',
   },
-  chipOff: { backgroundColor: color['bg-2'] },
+  chipSuggest: { backgroundColor: color['brand-soft'] }, // 친구의 제안 (되묻기) 칩 (TASK-005 §9 Q9)
   roundOff: { backgroundColor: color['bg-2'] },
   bleed: { marginHorizontal: -layout.screenMargin },
-  carousel: { paddingHorizontal: layout.screenMargin, gap: space['space-3'], alignItems: 'flex-start' },
-  photo: { height: layout.photo, borderRadius: radius['r-lg'], marginBottom: space['space-3'] },
+  carousel: {
+    paddingHorizontal: layout.screenMargin,
+    gap: space['space-3'],
+    alignItems: 'flex-start',
+  },
+  photo: {
+    height: layout.photo,
+    borderRadius: radius['r-lg'],
+    marginBottom: space['space-3'],
+  },
   counter: {
     position: 'absolute',
     top: space['space-3'],
@@ -274,7 +307,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   name: { ...text('heading'), marginBottom: space['space-1'] },
-  actions: { flexDirection: 'row', gap: space['space-3'], marginTop: space['space-3'] },
+  actions: {
+    flexDirection: 'row',
+    gap: space['space-3'],
+    marginTop: space['space-3'],
+  },
   round: {
     width: control['btn-sm'],
     height: control['btn-sm'],
@@ -284,8 +321,13 @@ const styles = StyleSheet.create({
   },
   skipButton: { backgroundColor: color['bg-2'] },
   likeButton: { backgroundColor: color.ink },
-  likedButton: { backgroundColor: color.brand },
-  facts: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space['space-2'], marginTop: space['space-3'] },
+  facts: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space['space-2'],
+    marginTop: space['space-3'],
+  },
   endCard: {
     minHeight: layout.photo,
     borderRadius: radius['r-lg'],

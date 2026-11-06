@@ -1,0 +1,4172 @@
+{
+ "N10_여러_종류": [
+  {
+   "dropped": [],
+   "go_home_min": 16,
+   "items": [
+    {
+     "end": "10:08",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 1,
+     "start": "09:03",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "11:03",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 2,
+     "start": "10:28",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "12:29",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 3,
+     "start": "11:24",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "13:35",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 4,
+     "start": "13:00",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "14:32",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 5,
+     "start": "13:57",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "16:04",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 6,
+     "start": "15:04",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "16:53",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 7,
+     "start": "16:23",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "17:50",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 8,
+     "start": "17:20",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 12,
+     "wait_min": 0
+    },
+    {
+     "end": "19:11",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 9,
+     "start": "18:11",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "20:43",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 10,
+     "start": "19:43",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 109
+  },
+  {
+   "dropped": [],
+   "go_home_min": 16,
+   "items": [
+    {
+     "end": "10:18",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 1,
+     "start": "09:03",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "11:13",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 2,
+     "start": "10:28",
+     "stay_min": 45,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "12:39",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 3,
+     "start": "11:24",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "13:40",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 4,
+     "start": "13:00",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "14:32",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 5,
+     "start": "13:52",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "16:04",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 6,
+     "start": "14:54",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "16:53",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 7,
+     "start": "16:13",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "17:50",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 8,
+     "start": "17:10",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 12,
+     "wait_min": 0
+    },
+    {
+     "end": "19:11",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 9,
+     "start": "18:01",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "20:43",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 10,
+     "start": "19:33",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 109
+  }
+ ],
+ "N12_시간_충분": [
+  {
+   "dropped": [],
+   "go_home_min": 9,
+   "items": [
+    {
+     "end": "01:34",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 1,
+     "start": "00:04",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "03:21",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 2,
+     "start": "01:51",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 2,
+     "wait_min": 0
+    },
+    {
+     "end": "05:15",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D12",
+     "seq": 3,
+     "start": "03:45",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "07:08",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 4,
+     "start": "05:38",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "09:02",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 5,
+     "start": "07:32",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "10:56",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 6,
+     "start": "09:26",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "12:48",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 7,
+     "start": "11:18",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "14:37",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 8,
+     "start": "13:07",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "16:29",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 9,
+     "start": "14:59",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "18:17",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 10,
+     "start": "16:47",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "20:17",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 11,
+     "start": "18:47",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "22:09",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 12,
+     "start": "20:39",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 93
+  },
+  {
+   "dropped": [],
+   "go_home_min": 9,
+   "items": [
+    {
+     "end": "01:04",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 1,
+     "start": "00:04",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "02:11",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 2,
+     "start": "01:11",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 2,
+     "wait_min": 0
+    },
+    {
+     "end": "03:25",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D12",
+     "seq": 3,
+     "start": "02:25",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "04:38",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 4,
+     "start": "03:38",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "05:52",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 5,
+     "start": "04:52",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "07:06",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 6,
+     "start": "06:06",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "08:18",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 7,
+     "start": "07:18",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "09:27",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 8,
+     "start": "08:27",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "10:39",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 9,
+     "start": "09:39",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "11:47",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 10,
+     "start": "10:47",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "13:07",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 11,
+     "start": "12:07",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "14:19",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 12,
+     "start": "13:19",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 93
+  }
+ ],
+ "N12_여러_종류": [
+  {
+   "dropped": [
+    {
+     "place_id": "D02",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D07",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D11",
+     "reason": "no_time"
+    }
+   ],
+   "go_home_min": 12,
+   "items": [
+    {
+     "end": "09:43",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 1,
+     "start": "09:08",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "10:58",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 2,
+     "start": "10:08",
+     "stay_min": 50,
+     "stay_source": "auto",
+     "travel_min": 10,
+     "wait_min": 0
+    },
+    {
+     "end": "12:35",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D12",
+     "seq": 3,
+     "start": "11:30",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "14:06",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 4,
+     "start": "13:01",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 11,
+     "wait_min": 0
+    },
+    {
+     "end": "15:38",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 5,
+     "start": "14:33",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 12,
+     "wait_min": 0
+    },
+    {
+     "end": "16:43",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 6,
+     "start": "16:08",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "18:11",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 7,
+     "start": "17:06",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "19:18",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 8,
+     "start": "18:43",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "20:46",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 9,
+     "start": "19:41",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 118
+  },
+  {
+   "dropped": [
+    {
+     "place_id": "D02",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D12",
+     "reason": "no_time"
+    }
+   ],
+   "go_home_min": 12,
+   "items": [
+    {
+     "end": "09:43",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 1,
+     "start": "09:08",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "10:48",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 2,
+     "start": "09:58",
+     "stay_min": 50,
+     "stay_source": "auto",
+     "travel_min": 10,
+     "wait_min": 0
+    },
+    {
+     "end": "12:14",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 3,
+     "start": "11:09",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "13:34",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 4,
+     "start": "12:29",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 10,
+     "wait_min": 0
+    },
+    {
+     "end": "14:59",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 5,
+     "start": "13:54",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "16:21",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 6,
+     "start": "15:16",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 12,
+     "wait_min": 0
+    },
+    {
+     "end": "17:16",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 7,
+     "start": "16:41",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "18:34",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 8,
+     "start": "17:29",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "19:31",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 9,
+     "start": "18:56",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "20:44",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 10,
+     "start": "19:44",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 131
+  }
+ ],
+ "N15_시간_충분": [
+  {
+   "dropped": [],
+   "go_home_min": 13,
+   "items": [
+    {
+     "end": "01:34",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 1,
+     "start": "00:04",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "03:21",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 2,
+     "start": "01:51",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 2,
+     "wait_min": 0
+    },
+    {
+     "end": "05:15",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D12",
+     "seq": 3,
+     "start": "03:45",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "07:08",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 4,
+     "start": "05:38",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "09:02",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 5,
+     "start": "07:32",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "10:56",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 6,
+     "start": "09:26",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "12:46",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D13",
+     "seq": 7,
+     "start": "11:16",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "14:34",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 8,
+     "start": "13:04",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "16:23",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 9,
+     "start": "14:53",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "18:15",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 10,
+     "start": "16:45",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "20:03",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 11,
+     "start": "18:33",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "21:52",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D15",
+     "seq": 12,
+     "start": "20:22",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "23:45",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D14",
+     "seq": 13,
+     "start": "22:15",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "25:34",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 14,
+     "start": "24:04",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "27:26",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 15,
+     "start": "25:56",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 99
+  },
+  {
+   "dropped": [],
+   "go_home_min": 13,
+   "items": [
+    {
+     "end": "01:04",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 1,
+     "start": "00:04",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "02:11",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 2,
+     "start": "01:11",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 2,
+     "wait_min": 0
+    },
+    {
+     "end": "03:25",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D12",
+     "seq": 3,
+     "start": "02:25",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "04:38",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 4,
+     "start": "03:38",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "05:52",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 5,
+     "start": "04:52",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "07:06",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 6,
+     "start": "06:06",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "08:16",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D13",
+     "seq": 7,
+     "start": "07:16",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "09:24",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 8,
+     "start": "08:24",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "10:33",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 9,
+     "start": "09:33",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "11:45",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 10,
+     "start": "10:45",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "12:53",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 11,
+     "start": "11:53",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "14:02",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D15",
+     "seq": 12,
+     "start": "13:02",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "15:15",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D14",
+     "seq": 13,
+     "start": "14:15",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "16:24",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 14,
+     "start": "15:24",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "17:36",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 15,
+     "start": "16:36",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 99
+  }
+ ],
+ "N15_시간이_많이_모자람": [
+  {
+   "dropped": [
+    {
+     "place_id": "D03",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D04",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D05",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D06",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D07",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D09",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D10",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D12",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D13",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D14",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D15",
+     "reason": "no_time"
+    }
+   ],
+   "go_home_min": 1,
+   "items": [
+    {
+     "end": "11:11",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 1,
+     "start": "10:06",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "12:08",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 2,
+     "start": "11:33",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "13:07",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 3,
+     "start": "12:37",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "13:57",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 4,
+     "start": "13:27",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 33
+  },
+  {
+   "dropped": [
+    {
+     "place_id": "D03",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D04",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D05",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D06",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D07",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D09",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D10",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D12",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D13",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D15",
+     "reason": "no_time"
+    }
+   ],
+   "go_home_min": 1,
+   "items": [
+    {
+     "end": "11:06",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 1,
+     "start": "10:06",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "11:48",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 2,
+     "start": "11:18",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "12:27",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D14",
+     "seq": 3,
+     "start": "11:57",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "13:17",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 4,
+     "start": "12:47",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "13:57",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 5,
+     "start": "13:27",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 38
+  }
+ ],
+ "N15_하루_12시간": [
+  {
+   "dropped": [
+    {
+     "place_id": "D01",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D03",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D11",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D12",
+     "reason": "no_time"
+    }
+   ],
+   "go_home_min": 15,
+   "items": [
+    {
+     "end": "10:08",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 1,
+     "start": "09:03",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "11:07",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 2,
+     "start": "10:32",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "12:06",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 3,
+     "start": "11:31",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "13:01",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 4,
+     "start": "12:26",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "14:28",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 5,
+     "start": "13:23",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "15:23",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D13",
+     "seq": 6,
+     "start": "14:48",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "16:19",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D14",
+     "seq": 7,
+     "start": "15:44",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "17:21",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 8,
+     "start": "16:51",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "18:44",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 9,
+     "start": "17:44",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "19:32",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 10,
+     "start": "19:02",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "20:41",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D15",
+     "seq": 11,
+     "start": "19:56",
+     "stay_min": 45,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 96
+  },
+  {
+   "dropped": [
+    {
+     "place_id": "D01",
+     "reason": "no_time"
+    },
+    {
+     "place_id": "D03",
+     "reason": "no_time"
+    }
+   ],
+   "go_home_min": 3,
+   "items": [
+    {
+     "end": "09:45",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 1,
+     "start": "09:15",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "10:58",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 2,
+     "start": "09:58",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "11:36",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 3,
+     "start": "11:06",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "12:35",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D15",
+     "seq": 4,
+     "start": "11:50",
+     "stay_min": 45,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "13:44",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D12",
+     "seq": 5,
+     "start": "12:59",
+     "stay_min": 45,
+     "stay_source": "auto",
+     "travel_min": 19,
+     "wait_min": 0
+    },
+    {
+     "end": "14:56",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 6,
+     "start": "13:56",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "15:46",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D13",
+     "seq": 7,
+     "start": "15:16",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "16:27",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D14",
+     "seq": 8,
+     "start": "15:57",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "17:36",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 9,
+     "start": "16:36",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "18:18",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 10,
+     "start": "17:48",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "18:58",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 11,
+     "start": "18:28",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "19:42",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 12,
+     "start": "19:12",
+     "stay_min": 30,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "20:56",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 13,
+     "start": "19:56",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 119
+  }
+ ],
+ "N1_여러_종류": [
+  {
+   "dropped": [],
+   "go_home_min": 14,
+   "items": [
+    {
+     "end": "11:14",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:14",
+     "stay_min": 120,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 28
+  },
+  {
+   "dropped": [],
+   "go_home_min": 14,
+   "items": [
+    {
+     "end": "10:14",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:14",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 28
+  }
+ ],
+ "N3_여러_종류": [
+  {
+   "dropped": [],
+   "go_home_min": 15,
+   "items": [
+    {
+     "end": "11:45",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:15",
+     "stay_min": 150,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "14:34",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 2,
+     "start": "12:04",
+     "stay_min": 150,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "16:35",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 3,
+     "start": "15:05",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 50
+  },
+  {
+   "dropped": [],
+   "go_home_min": 15,
+   "items": [
+    {
+     "end": "10:45",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:15",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "12:24",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 2,
+     "start": "10:54",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "13:45",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 3,
+     "start": "12:45",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 50
+  }
+ ],
+ "N5_여러_종류": [
+  {
+   "dropped": [],
+   "go_home_min": 5,
+   "items": [
+    {
+     "end": "10:45",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 1,
+     "start": "09:15",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "13:25",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 2,
+     "start": "11:15",
+     "stay_min": 130,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "16:28",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 3,
+     "start": "13:48",
+     "stay_min": 160,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "18:19",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 4,
+     "start": "16:49",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "20:54",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 5,
+     "start": "18:49",
+     "stay_min": 125,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 64
+  },
+  {
+   "dropped": [],
+   "go_home_min": 5,
+   "items": [
+    {
+     "end": "10:15",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 1,
+     "start": "09:15",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "12:05",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 2,
+     "start": "10:35",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "14:18",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 3,
+     "start": "12:18",
+     "stay_min": 120,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "15:29",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 4,
+     "start": "14:29",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "17:19",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 5,
+     "start": "15:49",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 64
+  }
+ ],
+ "N8_여러_종류": [
+  {
+   "dropped": [],
+   "go_home_min": 8,
+   "items": [
+    {
+     "end": "10:18",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 1,
+     "start": "09:08",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "11:18",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 2,
+     "start": "10:38",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "12:49",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 3,
+     "start": "11:39",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "14:23",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 4,
+     "start": "13:13",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "16:03",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 5,
+     "start": "14:53",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "17:46",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 6,
+     "start": "16:36",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 18,
+     "wait_min": 0
+    },
+    {
+     "end": "19:20",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 7,
+     "start": "18:15",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "20:51",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "19:46",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 11,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 94
+  },
+  {
+   "dropped": [],
+   "go_home_min": 8,
+   "items": [
+    {
+     "end": "10:28",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 1,
+     "start": "09:08",
+     "stay_min": 80,
+     "stay_source": "auto",
+     "travel_min": 8,
+     "wait_min": 0
+    },
+    {
+     "end": "11:28",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 2,
+     "start": "10:38",
+     "stay_min": 50,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "12:59",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 3,
+     "start": "11:39",
+     "stay_min": 80,
+     "stay_source": "auto",
+     "travel_min": 6,
+     "wait_min": 0
+    },
+    {
+     "end": "14:33",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 4,
+     "start": "13:13",
+     "stay_min": 80,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "16:08",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 5,
+     "start": "14:53",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "17:46",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 6,
+     "start": "16:31",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 18,
+     "wait_min": 0
+    },
+    {
+     "end": "19:20",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 7,
+     "start": "18:05",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "20:51",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "19:36",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 11,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 94
+  }
+ ],
+ "고정일정1_N8": [
+  {
+   "dropped": [],
+   "go_home_min": 10,
+   "items": [
+    {
+     "end": "10:20",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 1,
+     "start": "09:05",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "11:46",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 2,
+     "start": "10:36",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 1,
+     "wait_min": 0
+    },
+    {
+     "end": "12:56",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 3,
+     "start": "12:16",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "14:00",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 4,
+     "start": "13:00",
+     "stay_min": 60,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "15:29",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 5,
+     "start": "14:14",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "17:11",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 6,
+     "start": "16:01",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "18:22",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 7,
+     "start": "17:42",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "19:34",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "18:54",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "20:46",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 9,
+     "start": "20:06",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 112
+  },
+  {
+   "dropped": [],
+   "go_home_min": 10,
+   "items": [
+    {
+     "end": "11:05",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 1,
+     "start": "09:05",
+     "stay_min": 120,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "12:41",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 2,
+     "start": "11:11",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 1,
+     "wait_min": 0
+    },
+    {
+     "end": "14:00",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 3,
+     "start": "13:00",
+     "stay_min": 60,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "14:55",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 4,
+     "start": "14:15",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "16:24",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 5,
+     "start": "15:14",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "17:56",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 6,
+     "start": "16:46",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "18:52",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 7,
+     "start": "18:17",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "19:49",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "19:14",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "20:46",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 9,
+     "start": "20:11",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 112
+  }
+ ],
+ "고정일정2_N6": [
+  {
+   "dropped": [],
+   "go_home_min": 12,
+   "items": [
+    {
+     "end": "10:56",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:16",
+     "stay_min": 100,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "11:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 2,
+     "start": "11:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "13:10",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 3,
+     "start": "11:50",
+     "stay_min": 80,
+     "stay_source": "auto",
+     "travel_min": 20,
+     "wait_min": 0
+    },
+    {
+     "end": "14:57",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 4,
+     "start": "13:42",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "16:00",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 5,
+     "start": "15:00",
+     "stay_min": 60,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "17:18",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 6,
+     "start": "16:18",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 18,
+     "wait_min": 0
+    },
+    {
+     "end": "19:01",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 7,
+     "start": "17:46",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 13,
+     "wait_min": 0
+    },
+    {
+     "end": "20:45",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "19:30",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 110
+  },
+  {
+   "dropped": [],
+   "go_home_min": 12,
+   "items": [
+    {
+     "end": "11:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 1,
+     "start": "11:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "13:16",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 2,
+     "start": "11:46",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "14:41",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 3,
+     "start": "13:41",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 20,
+     "wait_min": 0
+    },
+    {
+     "end": "16:00",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 4,
+     "start": "15:00",
+     "stay_min": 60,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "16:52",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 5,
+     "start": "16:17",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 17,
+     "wait_min": 0
+    },
+    {
+     "end": "18:05",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 6,
+     "start": "17:15",
+     "stay_min": 50,
+     "stay_source": "auto",
+     "travel_min": 18,
+     "wait_min": 0
+    },
+    {
+     "end": "19:28",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 7,
+     "start": "18:23",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 13,
+     "wait_min": 0
+    },
+    {
+     "end": "20:47",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "19:47",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 110
+  }
+ ],
+ "고정일정_못감_Infeasible": {
+  "blocking": [
+   "F1"
+  ],
+  "reason": "fixed_unreachable",
+  "suggest_drop": []
+ },
+ "꼭갈곳2": [
+  {
+   "dropped": [],
+   "go_home_min": 17,
+   "items": [
+    {
+     "end": "09:47",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:07",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "11:24",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 2,
+     "start": "10:14",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 12,
+     "wait_min": 0
+    },
+    {
+     "end": "12:57",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 3,
+     "start": "11:52",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 13,
+     "wait_min": 0
+    },
+    {
+     "end": "14:27",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 4,
+     "start": "13:22",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 10,
+     "wait_min": 0
+    },
+    {
+     "end": "16:03",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 5,
+     "start": "14:58",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "17:35",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 6,
+     "start": "16:30",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 12,
+     "wait_min": 0
+    },
+    {
+     "end": "19:00",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 7,
+     "start": "17:55",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "20:42",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "19:37",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 22,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 114
+  },
+  {
+   "dropped": [],
+   "go_home_min": 17,
+   "items": [
+    {
+     "end": "09:52",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:07",
+     "stay_min": 45,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "11:24",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 2,
+     "start": "10:09",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 12,
+     "wait_min": 0
+    },
+    {
+     "end": "12:57",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 3,
+     "start": "11:42",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 13,
+     "wait_min": 0
+    },
+    {
+     "end": "14:27",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 4,
+     "start": "13:12",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 10,
+     "wait_min": 0
+    },
+    {
+     "end": "16:03",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 5,
+     "start": "14:48",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "17:35",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 6,
+     "start": "16:20",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 12,
+     "wait_min": 0
+    },
+    {
+     "end": "19:00",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 7,
+     "start": "17:45",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "20:42",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "19:27",
+     "stay_min": 75,
+     "stay_source": "auto",
+     "travel_min": 22,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 114
+  }
+ ],
+ "꼭갈곳5_N10": [
+  {
+   "dropped": [
+    {
+     "place_id": "D10",
+     "reason": "no_time"
+    }
+   ],
+   "go_home_min": 13,
+   "items": [
+    {
+     "end": "09:55",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:15",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "11:36",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 2,
+     "start": "10:26",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "13:02",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 3,
+     "start": "11:52",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 1,
+     "wait_min": 0
+    },
+    {
+     "end": "14:13",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 4,
+     "start": "13:33",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "15:22",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 5,
+     "start": "14:42",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "16:52",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 6,
+     "start": "15:42",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "18:32",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 7,
+     "start": "17:22",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "19:42",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 8,
+     "start": "19:02",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "20:46",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 9,
+     "start": "20:11",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 124
+  },
+  {
+   "dropped": [],
+   "go_home_min": 13,
+   "items": [
+    {
+     "end": "09:55",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:15",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "11:23",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 2,
+     "start": "10:13",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 13,
+     "wait_min": 0
+    },
+    {
+     "end": "12:53",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 3,
+     "start": "11:43",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "14:09",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 4,
+     "start": "12:59",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 1,
+     "wait_min": 0
+    },
+    {
+     "end": "15:10",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 5,
+     "start": "14:30",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "16:09",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 6,
+     "start": "15:29",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "17:29",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 7,
+     "start": "16:19",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 5,
+     "wait_min": 0
+    },
+    {
+     "end": "18:54",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 8,
+     "start": "17:49",
+     "stay_min": 65,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "19:49",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 9,
+     "start": "19:14",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "20:43",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 10,
+     "start": "20:08",
+     "stay_min": 35,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 136
+  }
+ ],
+ "꼭갈곳_넘침_Infeasible": {
+  "blocking": [
+   "D01",
+   "D02"
+  ],
+  "reason": "must_visit_overflow",
+  "suggest_drop": [
+   "D01",
+   "D02"
+  ]
+ },
+ "꼭갈곳_닫힘_Infeasible": {
+  "blocking": [
+   "D01"
+  ],
+  "reason": "must_visit_closed",
+  "suggest_drop": []
+ },
+ "닫힌_곳": [
+  {
+   "dropped": [
+    {
+     "place_id": "D01",
+     "reason": "closed_at_time"
+    }
+   ],
+   "go_home_min": 0,
+   "items": [
+    {
+     "end": "10:30",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 1,
+     "start": "09:00",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "12:15",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 2,
+     "start": "10:45",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "14:00",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 3,
+     "start": "12:30",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 0
+  },
+  {
+   "dropped": [
+    {
+     "place_id": "D01",
+     "reason": "closed_at_time"
+    }
+   ],
+   "go_home_min": 0,
+   "items": [
+    {
+     "end": "10:00",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 1,
+     "start": "09:00",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "11:05",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 2,
+     "start": "10:05",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "12:10",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 3,
+     "start": "11:10",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 0
+  }
+ ],
+ "머무는값": [
+  {
+   "dropped": [],
+   "go_home_min": 0,
+   "items": [
+    {
+     "end": "10:10",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:00",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "11:55",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 2,
+     "start": "10:25",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "13:40",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 3,
+     "start": "12:10",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "15:25",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 4,
+     "start": "13:55",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 0
+  },
+  {
+   "dropped": [],
+   "go_home_min": 0,
+   "items": [
+    {
+     "end": "09:40",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:00",
+     "stay_min": 40,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "10:45",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 2,
+     "start": "09:45",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "11:50",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 3,
+     "start": "10:50",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "12:55",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 4,
+     "start": "11:55",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 0
+  }
+ ],
+ "빈_입력": [
+  {
+   "dropped": [],
+   "go_home_min": 0,
+   "items": [],
+   "label": "relaxed",
+   "total_travel_min": 0
+  }
+ ],
+ "사용자값": [
+  {
+   "dropped": [],
+   "go_home_min": 15,
+   "items": [
+    {
+     "end": "11:16",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:16",
+     "stay_min": 120,
+     "stay_source": "user",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "13:30",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 2,
+     "start": "11:45",
+     "stay_min": 105,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "14:14",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 3,
+     "start": "13:59",
+     "stay_min": 15,
+     "stay_source": "user",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "16:20",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 4,
+     "start": "14:40",
+     "stay_min": 100,
+     "stay_source": "auto",
+     "travel_min": 11,
+     "wait_min": 0
+    },
+    {
+     "end": "19:00",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 5,
+     "start": "16:50",
+     "stay_min": 130,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "20:44",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 6,
+     "start": "19:34",
+     "stay_min": 70,
+     "stay_source": "auto",
+     "travel_min": 19,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 104
+  },
+  {
+   "dropped": [],
+   "go_home_min": 15,
+   "items": [
+    {
+     "end": "11:16",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 1,
+     "start": "09:16",
+     "stay_min": 120,
+     "stay_source": "user",
+     "travel_min": 16,
+     "wait_min": 0
+    },
+    {
+     "end": "13:05",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 2,
+     "start": "11:35",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "13:39",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 3,
+     "start": "13:24",
+     "stay_min": 15,
+     "stay_source": "user",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "15:25",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 4,
+     "start": "13:55",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 11,
+     "wait_min": 0
+    },
+    {
+     "end": "17:45",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 5,
+     "start": "15:45",
+     "stay_min": 120,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "19:09",
+     "hours_status": "confirmed",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 6,
+     "start": "18:09",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 19,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 104
+  }
+ ],
+ "사용자값_충돌_Infeasible": {
+  "blocking": [
+   "D01"
+  ],
+  "reason": "user_stay_conflict",
+  "suggest_drop": [
+   "D01"
+  ]
+ },
+ "합12_꼭갈곳5_고정7": [
+  {
+   "dropped": [],
+   "go_home_min": 0,
+   "items": [
+    {
+     "end": "01:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 1,
+     "start": "01:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "02:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 2,
+     "start": "02:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "03:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 3,
+     "start": "03:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "04:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 4,
+     "start": "04:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "05:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 5,
+     "start": "05:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "06:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 6,
+     "start": "06:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "07:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 7,
+     "start": "07:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "09:00",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M01",
+     "seq": 8,
+     "start": "07:30",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "10:45",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M02",
+     "seq": 9,
+     "start": "09:15",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "12:30",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M03",
+     "seq": 10,
+     "start": "11:00",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "14:15",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M04",
+     "seq": 11,
+     "start": "12:45",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "16:00",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M05",
+     "seq": 12,
+     "start": "14:30",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 0
+  },
+  {
+   "dropped": [],
+   "go_home_min": 0,
+   "items": [
+    {
+     "end": "01:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 1,
+     "start": "01:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "02:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 2,
+     "start": "02:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "03:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 3,
+     "start": "03:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "04:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 4,
+     "start": "04:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "05:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 5,
+     "start": "05:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "06:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 6,
+     "start": "06:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "07:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 7,
+     "start": "07:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "08:30",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M01",
+     "seq": 8,
+     "start": "07:30",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "09:35",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M02",
+     "seq": 9,
+     "start": "08:35",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "10:40",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M03",
+     "seq": 10,
+     "start": "09:40",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "11:45",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M04",
+     "seq": 11,
+     "start": "10:45",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "12:50",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "M05",
+     "seq": 12,
+     "start": "11:50",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 0,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 0
+  }
+ ],
+ "합12_담은곳11_고정1": [
+  {
+   "dropped": [],
+   "go_home_min": 9,
+   "items": [
+    {
+     "end": "09:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 1,
+     "start": "09:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "11:04",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 2,
+     "start": "09:34",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "12:51",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 3,
+     "start": "11:21",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 2,
+     "wait_min": 0
+    },
+    {
+     "end": "14:45",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 4,
+     "start": "13:15",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "16:39",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 5,
+     "start": "15:09",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "18:38",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 6,
+     "start": "17:08",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "20:30",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 7,
+     "start": "19:00",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "22:19",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 8,
+     "start": "20:49",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "24:11",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 9,
+     "start": "22:41",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "25:59",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 10,
+     "start": "24:29",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "27:59",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 11,
+     "start": "26:29",
+     "stay_min": 90,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "29:46",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 12,
+     "start": "28:21",
+     "stay_min": 85,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    }
+   ],
+   "label": "relaxed",
+   "total_travel_min": 90
+  },
+  {
+   "dropped": [],
+   "go_home_min": 9,
+   "items": [
+    {
+     "end": "09:30",
+     "hours_status": null,
+     "is_fixed": true,
+     "place_id": null,
+     "seq": 1,
+     "start": "09:00",
+     "stay_min": 30,
+     "stay_source": null,
+     "travel_min": 0,
+     "wait_min": 0
+    },
+    {
+     "end": "10:34",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D03",
+     "seq": 2,
+     "start": "09:34",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "11:41",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D10",
+     "seq": 3,
+     "start": "10:41",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 2,
+     "wait_min": 0
+    },
+    {
+     "end": "12:55",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D02",
+     "seq": 4,
+     "start": "11:55",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "14:09",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D11",
+     "seq": 5,
+     "start": "13:09",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 9,
+     "wait_min": 0
+    },
+    {
+     "end": "15:28",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D01",
+     "seq": 6,
+     "start": "14:28",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 14,
+     "wait_min": 0
+    },
+    {
+     "end": "16:40",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D06",
+     "seq": 7,
+     "start": "15:40",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "17:49",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D08",
+     "seq": 8,
+     "start": "16:49",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 4,
+     "wait_min": 0
+    },
+    {
+     "end": "19:01",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D05",
+     "seq": 9,
+     "start": "18:01",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    },
+    {
+     "end": "20:09",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D04",
+     "seq": 10,
+     "start": "19:09",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 3,
+     "wait_min": 0
+    },
+    {
+     "end": "21:29",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D09",
+     "seq": 11,
+     "start": "20:29",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 15,
+     "wait_min": 0
+    },
+    {
+     "end": "22:41",
+     "hours_status": "unknown",
+     "is_fixed": false,
+     "place_id": "D07",
+     "seq": 12,
+     "start": "21:41",
+     "stay_min": 60,
+     "stay_source": "auto",
+     "travel_min": 7,
+     "wait_min": 0
+    }
+   ],
+   "label": "packed",
+   "total_travel_min": 90
+  }
+ ]
+}
