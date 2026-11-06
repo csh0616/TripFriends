@@ -82,6 +82,59 @@
         }
       }
     },
+    "/planning/{session_id}": {
+      "get": {
+        "summary": "지금 stage의 응답을 다시 받기 (상태를 바꾸지 않음)",
+        "operationId": "current_planning_planning__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PlanningSession"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CandidateBatch"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CourseResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PlanningDone"
+                    }
+                  ],
+                  "title": "Response Current Planning Planning  Session Id  Get"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        }
+      }
+    },
     "/planning/{session_id}/answer": {
       "post": {
         "summary": "첫 질문의 답 또는 알아서 짜 줘",
@@ -615,12 +668,12 @@
               }
             }
           },
-          "422": {
-            "description": "Validation Error",
+          "400": {
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -810,6 +863,16 @@
           "direction_relaxed": {
             "type": "boolean",
             "title": "Direction Relaxed"
+          },
+          "day": {
+            "$ref": "#/components/schemas/DaySummary"
+          },
+          "picks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Picks"
           }
         },
         "type": "object",
@@ -823,7 +886,9 @@
           "clarify",
           "picks_count",
           "exhausted",
-          "direction_relaxed"
+          "direction_relaxed",
+          "day",
+          "picks"
         ],
         "title": "CandidateBatch"
       },
@@ -879,7 +944,7 @@
         ],
         "title": "Choice"
       },
-      "CourseItem": {
+      "CourseItemView": {
         "properties": {
           "seq": {
             "type": "integer",
@@ -950,6 +1015,10 @@
               }
             ],
             "title": "Hours Status"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
           }
         },
         "type": "object",
@@ -963,9 +1032,11 @@
           "travel_min",
           "wait_min",
           "is_fixed",
-          "hours_status"
+          "hours_status",
+          "name"
         ],
-        "title": "CourseItem"
+        "title": "CourseItemView",
+        "description": "TASK-004 A3: 앱이 장소 이름을 다시 찾지 않게 `name`을 더한 응답용 CourseItem. 엔진의 CourseItem은 그대로 둔다.\nname = 장소 이름, 장소가 없는 고정 일정이면 저장된 title (§12-1 Q1)."
       },
       "CourseResult": {
         "properties": {
@@ -989,13 +1060,17 @@
             },
             "type": "array",
             "title": "Options"
+          },
+          "day": {
+            "$ref": "#/components/schemas/DaySummary"
           }
         },
         "type": "object",
         "required": [
           "session_id",
           "stage",
-          "options"
+          "options",
+          "day"
         ],
         "title": "CourseResult"
       },
@@ -1015,14 +1090,14 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/CourseItem"
+              "$ref": "#/components/schemas/CourseItemView"
             },
             "type": "array",
             "title": "Items"
           },
           "dropped": {
             "items": {
-              "$ref": "#/components/schemas/Dropped"
+              "$ref": "#/components/schemas/DroppedView"
             },
             "type": "array",
             "title": "Dropped"
@@ -1046,6 +1121,114 @@
           "total_travel_min"
         ],
         "title": "CourseResultOption"
+      },
+      "DayFixed": {
+        "properties": {
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place_id",
+          "name",
+          "start",
+          "end"
+        ],
+        "title": "DayFixed"
+      },
+      "DayMustVisit": {
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place_id",
+          "name"
+        ],
+        "title": "DayMustVisit"
+      },
+      "DaySummary": {
+        "properties": {
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "day_number": {
+            "type": "integer",
+            "title": "Day Number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "lodging": {
+            "$ref": "#/components/schemas/LatLng"
+          },
+          "must_visits": {
+            "items": {
+              "$ref": "#/components/schemas/DayMustVisit"
+            },
+            "type": "array",
+            "title": "Must Visits"
+          },
+          "fixed": {
+            "items": {
+              "$ref": "#/components/schemas/DayFixed"
+            },
+            "type": "array",
+            "title": "Fixed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_id",
+          "day_number",
+          "date",
+          "start",
+          "end",
+          "lodging",
+          "must_visits",
+          "fixed"
+        ],
+        "title": "DaySummary",
+        "description": "TASK-004 A2: 저장소의 하루 데이터 요약 (PlanningSession·CandidateBatch·CourseResult에 붙는다)."
       },
       "DirectionChoice": {
         "properties": {
@@ -1075,7 +1258,7 @@
         ],
         "title": "DirectionChoice"
       },
-      "Dropped": {
+      "DroppedView": {
         "properties": {
           "place_id": {
             "type": "string",
@@ -1089,14 +1272,20 @@
               "fixed_conflict"
             ],
             "title": "Reason"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
           }
         },
         "type": "object",
         "required": [
           "place_id",
-          "reason"
+          "reason",
+          "name"
         ],
-        "title": "Dropped"
+        "title": "DroppedView",
+        "description": "TASK-004 A3: 엔진의 Dropped에 `name`을 더한 응답용."
       },
       "ErrorBody": {
         "properties": {
@@ -1241,6 +1430,24 @@
           "cards"
         ],
         "title": "Health"
+      },
+      "LatLng": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "title": "Lng"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lng"
+        ],
+        "title": "LatLng"
       },
       "NextRequest": {
         "properties": {
@@ -1436,6 +1643,31 @@
         "title": "PlanItem",
         "description": "오늘 코스의 일정 한 개."
       },
+      "PlanningDone": {
+        "properties": {
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "option_id": {
+            "type": "string",
+            "title": "Option Id"
+          },
+          "stage": {
+            "type": "string",
+            "const": "done",
+            "title": "Stage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_id",
+          "option_id",
+          "stage"
+        ],
+        "title": "PlanningDone",
+        "description": "TASK-004 A1: done 단계의 GET 응답. select 응답(SelectResult)에 stage를 더한 모양."
+      },
       "PlanningSession": {
         "properties": {
           "session_id": {
@@ -1454,13 +1686,17 @@
           },
           "question": {
             "$ref": "#/components/schemas/Question"
+          },
+          "day": {
+            "$ref": "#/components/schemas/DaySummary"
           }
         },
         "type": "object",
         "required": [
           "session_id",
           "stage",
-          "question"
+          "question",
+          "day"
         ],
         "title": "PlanningSession"
       },
