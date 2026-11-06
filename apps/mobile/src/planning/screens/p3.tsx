@@ -300,7 +300,7 @@ function RouteDiagram({
           stroke={color.ink}
           strokeWidth={layout.routeHomeStroke}
         />
-        {/* 집 아이콘: 변환 없이 좌표를 직접 계산한 Polyline 2개 (G transform은 폰에서 안 그려졌다) */}
+        {/* 집 아이콘: 변환 없이 좌표를 직접 계산한 Polyline 2개 (중첩 Svg는 안 그려졌다) */}
         {homeLines.map((points, i) => (
           <Polyline
             key={`home-${i}`}
