@@ -5,6 +5,7 @@ import { useFonts } from 'expo-font';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
+import { InputClearContext } from '@/components/planning/input-bar';
 import { Notice } from '@/components/planning/notice';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import {
@@ -38,10 +39,11 @@ const OOPS = '잠깐 문제가 생겼어';
 const INVALID = '다시 해 볼래?';
 const RESTART = '처음부터 다시 하자';
 const INFEASIBLE_FALLBACK_NAME = '꼭 갈 곳';
+const UNREACHABLE = '고정 일정에 제때 못 가';
+const INFEASIBLE_OTHER = '이대로는 코스를 못 짜겠어'; // 표에 없는 이유 (사실과 다른 문구 금지, §13-3 #4)
 
 type Kind = 'stage' | 'picks' | 'select';
 type Problem = { tone: 'plain' | 'problem'; retry: (() => void) | null };
-type Coordinates = Record<string, { lat: number; lng: number }>;
 
 export default function PlanningFlow() {
   const [fontsReady, fontError] = useFonts(fontAssets);
@@ -79,7 +81,7 @@ function Session({
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [showRestart, setShowRestart] = useState(restartNotice !== null);
-  const [coordinates, setCoordinates] = useState<Coordinates>({});
+  const [inputCleared, setInputCleared] = useState(0); // 올라가면 입력창이 글을 지운다 (보낸 글이 성공했을 때만)
 
   const alive = useRef(true);
   const busy = useRef(false); // 한 번에 한 요청 (§6)
@@ -116,6 +118,8 @@ function Session({
   const infeasibleMessage = (reason: string, blocking: string[]): string => {
     if (reason === 'must_visit_overflow') return '꼭 갈 곳이 하루에 다 안 들어가';
     if (reason === 'user_stay_conflict') return '그 시간은 안 맞아';
+    if (reason === 'fixed_unreachable') return UNREACHABLE;
+    if (reason !== 'must_visit_closed') return INFEASIBLE_OTHER;
     const day = (latest.current.response as { day?: PlanningSession['day'] } | null)?.day;
     const names = blocking.map((id) => day?.must_visits.find((m) => m.place_id === id)?.name ?? INFEASIBLE_FALLBACK_NAME);
     // TASK-004 미정: Q40 이름이 여럿이면 쉼표로 이어 쓴다 (조사를 피함)
@@ -123,50 +127,64 @@ function Session({
   };
 
   /** 한 번 보내고 결과를 반영한다. 성공해서 서버 응답을 반영했으면 true */
-  const execute = useCallback(async (request: Request, kind: Kind): Promise<boolean> => {
+  const execute = useCallback(async (request: Request, kind: Kind, fromInput = false): Promise<boolean> => {
     if (busy.current) return false;
     busy.current = true;
     dispatch({ type: 'request_start' });
     setProblem(null);
     try {
-      return await settle(request, kind, await send(request, signals.current));
+      return await settle(request, kind, await send(request, signals.current), fromInput);
     } finally {
       busy.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const settle = async (request: Request, kind: Kind, result: Awaited<ReturnType<typeof send>>): Promise<boolean> => {
+  const settle = async (
+    request: Request,
+    kind: Kind,
+    result: Awaited<ReturnType<typeof send>>,
+    fromInput = false,
+  ): Promise<boolean> => {
     if (!alive.current) return false;
-    if (result.ok) return accept(request, kind, result.data);
-    return failWith(result.failure, request, kind);
+    if (result.ok) return accept(request, kind, result.data, fromInput);
+    return failWith(result.failure, request, kind, fromInput);
   };
 
-  const accept = (request: Request, kind: Kind, data: unknown): boolean => {
+  const accept = (request: Request, kind: Kind, data: unknown, fromInput: boolean): boolean => {
     // select 200이면 바로 S9 (Q26). 응답에 stage가 없어도 done으로 본다
     const response = kind === 'select' ? { ...(data as object), stage: 'done' } : data;
-    if (kind !== 'picks') {
+    const odd = () => {
+      // 모르는 stage·모양은 500 줄과 같게 (Q18, §13-2 #7). 화면 숫자는 그대로
+      fail(OOPS, { tone: 'plain', retry: () => void execute(request, kind, fromInput) });
+      return false;
+    };
+    if (kind === 'picks') {
+      // 담기·패스 응답(Picks): 담은 곳 글자 목록과 숫자, stage는 없다
+      const p = response as Partial<Record<'picks' | 'picks_count' | 'stage', unknown>> | null;
+      const ok =
+        typeof p === 'object' &&
+        p !== null &&
+        !Array.isArray(p) &&
+        Array.isArray(p.picks) &&
+        p.picks.every((id) => typeof id === 'string') &&
+        typeof p.picks_count === 'number' &&
+        !('stage' in p);
+      if (!ok) return odd();
+    } else {
       try {
         screenFor(response as { stage?: unknown });
       } catch {
-        // 모르는 stage는 500 줄과 같게 (Q18)
-        fail(OOPS, { tone: 'plain', retry: () => void execute(request, kind) });
-        return false;
+        return odd();
       }
     }
-    if ((response as CandidateBatch).stage === 'browsing') {
-      const candidates = (response as CandidateBatch).candidates ?? [];
-      setCoordinates((now) => ({
-        ...now,
-        ...Object.fromEntries(candidates.map((c) => [c.place.id, { lat: c.place.lat, lng: c.place.lng }])),
-      }));
-    }
     dispatch({ type: 'request_success', response });
+    if (fromInput) setInputCleared((now) => now + 1);
     return true;
   };
 
-  const failWith = async (failure: Failure, request: Request, kind: Kind): Promise<boolean> => {
-    const same = () => void execute(request, kind);
+  const failWith = async (failure: Failure, request: Request, kind: Kind, fromInput: boolean): Promise<boolean> => {
+    const same = () => void execute(request, kind, fromInput);
     const isGet = request.method === 'GET';
     const getAgain = () => void execute(requests.current(sid.current ?? ''), 'stage');
     switch (failure.kind) {
@@ -257,7 +275,12 @@ function Session({
         return stop({ kind: 'server' });
       }
       const session = started.data as PlanningSession;
-      await AsyncStorage.setItem(STORAGE_KEY, session.session_id);
+      try {
+        await AsyncStorage.setItem(STORAGE_KEY, session.session_id);
+      } catch {
+        // 기기 저장이 실패해도 흐름은 계속. 다시 켜면 이어 가기만 안 된다 (§13-3 저장 실패)
+        console.warn('STORAGE_FAILED');
+      }
       if (!alive.current) return;
       sid.current = session.session_id;
       setSessionId(session.session_id);
@@ -269,10 +292,11 @@ function Session({
 
   // ---------- 화면이 부르는 동작 ----------
   const id = () => sid.current ?? '';
-  const onAnswer = (body: AnswerBody) => execute(requests.answer(id(), body), 'stage');
+  // 글(text)이 들어 있는 요청은 입력창에서 온 것: 성공하면 입력 글을 지운다
+  const onAnswer = (body: AnswerBody) => execute(requests.answer(id(), body), 'stage', typeof body.text === 'string');
   const onReact = (placeId: string, action: 'like' | 'skip' | 'unlike') =>
     execute(requests.react(id(), { place_id: placeId, action }), 'picks');
-  const onNext = (body?: NextBody) => execute(requests.next(id(), body), 'stage');
+  const onNext = (body?: NextBody) => execute(requests.next(id(), body), 'stage', typeof body?.text === 'string');
   const onCompose = () => execute(requests.compose(id()), 'stage');
   const onAdjust = (optionId: string, placeId: string, delta: 15 | -15) =>
     execute(requests.adjust(id(), { option_id: optionId, place_id: placeId, delta }), 'stage');
@@ -287,57 +311,60 @@ function Session({
       : null;
 
   // ---------- 어떤 화면을 그릴지: 응답 stage가 정한다 ----------
-  if (!ready) return <Loading />;
+  const renderScreen = (): React.ReactNode => {
+    if (!ready) return <Loading />;
 
-  if (state.response === null) {
-    if (sessionId === null) {
-      const shown = notice ?? (showRestart && restartNotice ? { message: restartNotice, tone: 'plain' as const } : null);
-      return <S0Screen busy={busyNow} notice={shown} onStart={() => void startDemo()} />;
+    if (state.response === null) {
+      if (sessionId === null) {
+        const shown = notice ?? (showRestart && restartNotice ? { message: restartNotice, tone: 'plain' as const } : null);
+        return <S0Screen busy={busyNow} notice={shown} onStart={() => void startDemo()} />;
+      }
+      // 다시 켠 뒤 GET 중이거나 실패: S0으로 보내지 않는다 (Q17)
+      return busyNow || !notice ? (
+        <Loading />
+      ) : (
+        <ScreenFrame>
+          <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} />
+        </ScreenFrame>
+      );
     }
-    // 다시 켠 뒤 GET 중이거나 실패: S0으로 보내지 않는다 (Q17)
-    return busyNow || !notice ? (
-      <Loading />
-    ) : (
-      <ScreenFrame>
-        <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} />
-      </ScreenFrame>
-    );
-  }
 
-  const response = state.response as StageResponse;
-  switch (screenFor(response)) {
-    case 'P1':
-      return <P1Screen key="P1" session={response as PlanningSession} busy={busyNow} notice={notice} onAnswer={onAnswer} />;
-    case 'P2':
-      return (
-        <P2Screen
-          key="P2"
-          batch={response as CandidateBatch}
-          picks={state.picks}
-          picksCount={state.picksCount}
-          busy={busyNow}
-          notice={notice}
-          onReact={onReact}
-          onNext={onNext}
-          onCompose={onCompose}
-        />
-      );
-    case 'P3':
-      return (
-        <P3Screen
-          key="P3"
-          course={response as CourseResult}
-          coordinates={coordinates}
-          busy={busyNow}
-          notice={notice}
-          onAdjust={onAdjust}
-          onBack={onBack}
-          onSelect={onSelect}
-        />
-      );
-    case 'S9':
-      return <S9Screen key="S9" onRestart={() => void clearStoredAndReset(null)} />;
-  }
+    const response = state.response as StageResponse;
+    switch (screenFor(response)) {
+      case 'P1':
+        return <P1Screen key="P1" session={response as PlanningSession} busy={busyNow} notice={notice} onAnswer={onAnswer} />;
+      case 'P2':
+        return (
+          <P2Screen
+            key="P2"
+            batch={response as CandidateBatch}
+            picks={state.picks}
+            picksCount={state.picksCount}
+            busy={busyNow}
+            notice={notice}
+            onReact={onReact}
+            onNext={onNext}
+            onCompose={onCompose}
+          />
+        );
+      case 'P3':
+        return (
+          <P3Screen
+            key="P3"
+            course={response as CourseResult}
+            busy={busyNow}
+            notice={notice}
+            onAdjust={onAdjust}
+            onBack={onBack}
+            onSelect={onSelect}
+          />
+        );
+      case 'S9':
+        return <S9Screen key="S9" onRestart={() => void clearStoredAndReset(null)} />;
+    }
+  };
+
+  return <InputClearContext.Provider value={inputCleared}>{renderScreen()}</InputClearContext.Provider>;
 }
 
 function Loading() {
