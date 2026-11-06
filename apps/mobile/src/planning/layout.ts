@@ -23,7 +23,12 @@ export const layout = {
   numberCircle: 24, // P3 번호 원
   routePad: 24, // 동선 그림 안쪽 여백
   routeNode: 11, // 동선 번호 원 반지름
-  routeHome: 8, // 동선 숙소 표시 반지름
+  routeHome: 12, // 동선 숙소 원 반지름 (지름 24, TASK-005 §9 Q15)
+  routeHomeStroke: 2, // 숙소 원 테두리
+  routeHomeIcon: 14, // 숙소 원 안의 집 아이콘
+  courseRow: 52, // P3 코스 줄 높이 (TASK-005 B5)
+  courseLine: 2, // 번호 원을 잇는 세로선
+  emptyBorder: 1.5, // 떠 있는 줄 빈 자리 점선 굵기
   routeLine: 3, // 동선 선 굵기
   barHeight: 8, // 시간표 막대 굵기
   timeColumn: 48, // P3 시각 칸 폭

@@ -33,7 +33,7 @@ export function Header({
               accessibilityLabel="뒤로"
               disabled={backDisabled}
               onPress={onBack}
-              style={styles.back}
+              style={[styles.back, backDisabled && styles.backOff]}
             >
               <BackIcon color={backDisabled ? color.muted : color.ink} />
             </Pressable>
@@ -76,8 +76,8 @@ const styles = StyleSheet.create({
     width: control['touch-min'],
     height: control['touch-min'],
     borderRadius: radius['r-full'],
-    backgroundColor: color['bg-2'],
     alignItems: 'center',
     justifyContent: 'center',
   },
+  backOff: { backgroundColor: color['bg-2'] }, // 요청 중 비활성 규칙 (TASK-005 §9 Q19)
 });

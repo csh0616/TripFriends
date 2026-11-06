@@ -72,7 +72,7 @@ export function InputBar({
           ) : null}
         </View>
         <Pressable testID="mic-button" accessibilityRole="button" accessibilityLabel="말하기" onPress={mic} style={styles.mic}>
-          <MicIcon color={color.surface} />
+          <MicIcon color={color.muted} />
         </Pressable>
       </View>
     </View>
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     width: control.input,
     height: control.input,
     borderRadius: radius['r-full'],
-    backgroundColor: color.ink,
+    backgroundColor: color['bg-2'], // 아직 안 되는 버튼: 비활성 규칙 (TASK-005 B10)
     alignItems: 'center',
     justifyContent: 'center',
   },
