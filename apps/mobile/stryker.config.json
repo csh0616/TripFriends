@@ -1,0 +1,44 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stryker-mutator/stryker/master/packages/core/schema/stryker-schema.json",
+  "testRunner": "jest",
+  "coverageAnalysis": "perTest",
+  "mutate": [
+    "src/lib/screen-for.ts",
+    "src/lib/planning-reducer.ts",
+    "src/lib/distance-label.ts",
+    "src/lib/format-stay.ts",
+    "src/lib/today-hours-text.ts",
+    "src/lib/project-route.ts",
+    "src/lib/placeholder-for.ts",
+    "src/lib/contrast.ts"
+  ],
+  "reporters": [
+    "clear-text",
+    "json"
+  ],
+  "jsonReporter": {
+    "fileName": "reports/mutation/mutation.json"
+  },
+  "timeoutMS": 30000,
+  "plugins": [
+    "@stryker-mutator/jest-runner"
+  ],
+  "inPlace": true,
+  "jest": {
+    "config": {
+      "preset": "jest-expo",
+      "setupFiles": [
+        "./jest.setup.ts"
+      ],
+      "testMatch": [
+        "<rootDir>/__tests__/planning-lib.test.ts"
+      ],
+      "moduleNameMapper": {
+        "\\.css$": "<rootDir>/jest/style-mock.js",
+        "^@/assets/(.*)$": "<rootDir>/assets/$1",
+        "^@/(.*)$": "<rootDir>/src/$1"
+      }
+    }
+  },
+  "tempDirName": ".stryker-tmp"
+}
