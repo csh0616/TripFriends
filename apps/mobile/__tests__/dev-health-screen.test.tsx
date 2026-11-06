@@ -1,8 +1,8 @@
 /// <reference types="jest" />
-// 앱 첫 화면 테스트. 근거: TASK-001 §4 AC-3·AC-20, §9-1 AC-20. 서버 /health는 가짜 응답으로.
+// 서버 상태 화면 테스트. 근거: TASK-001 §4 AC-3·AC-20, §9-1 AC-20, TASK-004 §12 Q27(경로 이동). 서버 /health는 가짜 응답으로.
 import { render, screen } from '@testing-library/react-native';
 
-import HomeScreen from '@/app/index';
+import HomeScreen from '@/app/dev/health';
 
 function jsonResponse(status: number, body: unknown) {
   return {

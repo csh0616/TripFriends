@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// 가드레일. 근거: TASK-004 §B-1, §B-3, §B-6 G1~G7, §9, AC-6, DESIGN-001 §2·§4-4
+// 가드레일. 근거: TASK-004 §B-1, §B-3, §B-6 G1~G7, §9, §12(Q4·Q5·Q13·Q16·Q25·Q28), AC-6, DESIGN-001 §2·§4-4
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -11,17 +11,27 @@ import { StatusChip } from '@/components/planning/status-chip';
 import { contrast } from '@/lib/contrast';
 
 import { CONTRAST_PAIRS, COLORS } from '../test-support/design-table';
-import { happyServer, pressId, resetDevice, tap, toP1, toP2, toP3, toS9 } from '../test-support/planning-driver';
+import { happyServer, pressId, R, resetDevice, startApp, tap, toP1, toP2, toP3, toS9 } from '../test-support/planning-driver';
+import { json } from '../test-support/fake-server';
+import { course, relaxed } from '../test-support/planning-fixtures';
 import { hits, REPO_ROOT, SRC, sourceFiles } from '../test-support/source-files';
 
 const TOKENS = join(REPO_ROOT, 'packages', 'design-tokens', 'tokens.json');
 const PLACEHOLDER_FILE = 'lib/placeholder-for.ts';
 const SOS_FILE = 'components/planning/sos-button.tsx';
 const PRIMARY_FILE = 'components/planning/primary-button.tsx';
-// §B-6 G1: `#RRGGBB`(8자리 #RRGGBBAA도 앞 6자리로 잡힘)와 `rgb(`
-const COLOUR_LITERAL = /#[0-9a-fA-F]{6}|\brgb\(/;
-// §B-1: 숫자 글자 크기·모서리 값 직접 쓰기 금지
-const SIZE_LITERAL = /\b(fontSize|lineHeight|border\w*Radius)\s*:\s*-?\d/;
+const LAYOUT_FILE = 'planning/layout.ts';
+// §B-6 G1 + Q13: hex(3·4·6·8자리), rgb(, rgba(, 따옴표 안의 색 이름. 'transparent'만 허용
+const COLOUR_NAMES =
+  'aliceblue|antiquewhite|aqua|aquamarine|azure|beige|bisque|black|blanchedalmond|blue|blueviolet|brown|burlywood|cadetblue|chartreuse|chocolate|coral|cornflowerblue|cornsilk|crimson|cyan|darkblue|darkcyan|darkgoldenrod|darkgray|darkgreen|darkgrey|darkkhaki|darkmagenta|darkolivegreen|darkorange|darkorchid|darkred|darksalmon|darkseagreen|darkslateblue|darkslategray|darkslategrey|darkturquoise|darkviolet|deeppink|deepskyblue|dimgray|dimgrey|dodgerblue|firebrick|floralwhite|forestgreen|fuchsia|gainsboro|ghostwhite|gold|goldenrod|gray|green|greenyellow|grey|honeydew|hotpink|indianred|indigo|ivory|khaki|lavender|lavenderblush|lawngreen|lemonchiffon|lightblue|lightcoral|lightcyan|lightgoldenrodyellow|lightgray|lightgreen|lightgrey|lightpink|lightsalmon|lightseagreen|lightskyblue|lightslategray|lightslategrey|lightsteelblue|lightyellow|lime|limegreen|linen|magenta|maroon|mediumaquamarine|mediumblue|mediumorchid|mediumpurple|mediumseagreen|mediumslateblue|mediumspringgreen|mediumturquoise|mediumvioletred|midnightblue|mintcream|mistyrose|moccasin|navajowhite|navy|oldlace|olive|olivedrab|orange|orangered|orchid|palegoldenrod|palegreen|paleturquoise|palevioletred|papayawhip|peachpuff|peru|pink|plum|powderblue|purple|rebeccapurple|red|rosybrown|royalblue|saddlebrown|salmon|sandybrown|seagreen|seashell|sienna|silver|skyblue|slateblue|slategray|slategrey|snow|springgreen|steelblue|tan|teal|thistle|tomato|turquoise|violet|wheat|white|whitesmoke|yellow|yellowgreen';
+const COLOUR_LITERAL = new RegExp(
+  `#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3,4})\\b|\\brgba?\\(|['"\`](?:${COLOUR_NAMES})['"\`]`,
+  'i',
+);
+// §B-1 + Q28: 글자 크기·줄 높이·모서리는 숫자 금지 (예외 파일 없음, 토큰만)
+const SIZE_LITERAL = /\b(fontSize|lineHeight|border\w*Radius)\s*[:=]\s*\{?\s*-?\d/;
+// Q28: 높이·너비·테두리 굵기 숫자는 layout.ts 한 파일에만
+const LAYOUT_LITERAL = /\b(height|width|minHeight|minWidth|maxHeight|maxWidth|border\w*Width)\s*[:=]\s*\{?\s*-?\d/;
 
 beforeEach(() => {
   resetDevice();
@@ -35,10 +45,28 @@ afterEach(() => {
 
 describe('G1', () => {
   test('G01_도구_검사_색_값을_잡고_비슷한_글자는_안_잡는다', () => {
-    for (const text of ["color: '#FF5A00'", 'color: "#ff5a00aa"', 'background: rgb(0, 0, 0)']) {
+    for (const text of [
+      "color: '#FF5A00'",
+      'color: "#ff5a00aa"',
+      'background: rgb(0, 0, 0)',
+      'background: rgba(0, 0, 0, .5)',
+      "color: '#FFF'",
+      "color: '#fff8'",
+      "color: 'white'",
+      'color: "Black"',
+      "color: 'orange'",
+    ]) {
       expect(COLOUR_LITERAL.test(text)).toBe(true);
     }
-    for (const text of ['testID="choice-1"', 'scroll(0)', 'tokens.color.brand']) {
+    for (const text of [
+      'testID="choice-1"',
+      'scroll(0)',
+      'tokens.color.brand',
+      "backgroundColor: 'transparent'",
+      "'whiteSpace'",
+      "label: '하얀색'",
+      '#12',
+    ]) {
       expect(COLOUR_LITERAL.test(text)).toBe(false);
     }
     expect(hits([{ path: 'a.ts', text: "x\ncolor: '#FF5A00'" }], COLOUR_LITERAL)).toEqual(["a.ts:2: color: '#FF5A00'"]);
@@ -46,11 +74,13 @@ describe('G1', () => {
 
   test('G02_검사_대상이_실제로_있다_빈손으로_통과하지_않는다', () => {
     const paths = sourceFiles().map((f) => f.path);
-    expect(paths).toEqual(expect.arrayContaining(['planning/planning-flow.tsx', PLACEHOLDER_FILE, SOS_FILE, PRIMARY_FILE]));
+    expect(paths).toEqual(
+      expect.arrayContaining(['planning/planning-flow.tsx', 'app/dev/health.tsx', LAYOUT_FILE, PLACEHOLDER_FILE, SOS_FILE, PRIMARY_FILE]),
+    );
     expect(paths.length).toBeGreaterThanOrEqual(12);
   });
 
-  test('G03_B6_G1_앱_소스에_색_값이_없다_placeholderFor_파일만_예외', () => {
+  test('G03_B6_G1_Q13_앱_소스에_색_값이_없다_placeholderFor_파일만_예외', () => {
     const files = sourceFiles().filter((f) => f.path !== PLACEHOLDER_FILE);
     expect(hits(files, COLOUR_LITERAL)).toEqual([]);
   });
@@ -59,12 +89,40 @@ describe('G1', () => {
     expect(readFileSync(join(SRC, PLACEHOLDER_FILE), 'utf8')).toMatch(/#8FA3B8/i);
   });
 
-  test('G05_B1_숫자_글자_크기와_모서리를_직접_쓰지_않는다', () => {
+  test('G05_B1_Q28_글자_크기_줄_높이_모서리_숫자는_어디에도_없다_layout도_예외_아님', () => {
     expect(hits(sourceFiles(), SIZE_LITERAL)).toEqual([]);
   });
 
-  test.skip('G06_질문대기_Q13_rgba와_3자리_hex와_색_이름도_막는다', () => {
-    expect(hits(sourceFiles().filter((f) => f.path !== PLACEHOLDER_FILE), /\brgba\(|#[0-9a-fA-F]{3}\b|'(white|black)'/)).toEqual([]);
+  test('G06_Q13_transparent만_허용하므로_G03_검사가_빈_허용이_아니다', () => {
+    const sample = [{ path: 'a.tsx', text: "a: 'transparent'\nb: 'white'\nc: rgba(0,0,0,1)\nd: '#FFF'" }];
+    expect(hits(sample, COLOUR_LITERAL)).toEqual(["a.tsx:2: b: 'white'", 'a.tsx:3: c: rgba(0,0,0,1)', "a.tsx:4: d: '#FFF'"]);
+  });
+
+  test('G31_도구_검사_레이아웃_숫자를_잡고_토큰은_안_잡는다', () => {
+    for (const text of ['height: 108', 'minHeight: 44', 'width={120}', 'borderWidth: 2', 'borderTopWidth: 1']) {
+      expect(LAYOUT_LITERAL.test(text)).toBe(true);
+    }
+    for (const text of ['height: layout.tile', 'width: size.card', 'borderRadius: radius.lg', 'hitSlop={slop}']) {
+      expect(LAYOUT_LITERAL.test(text)).toBe(false);
+    }
+    for (const text of ['fontSize: 15', 'lineHeight={22}', 'borderRadius: 24', 'borderBottomLeftRadius: 6']) {
+      expect(SIZE_LITERAL.test(text)).toBe(true);
+    }
+  });
+
+  test('G32_Q28_높이_너비_테두리_숫자는_layout_ts_한_파일에만', () => {
+    const files = sourceFiles().filter((f) => f.path !== LAYOUT_FILE);
+    expect(hits(files, LAYOUT_LITERAL)).toEqual([]);
+  });
+
+  test.each([
+    ['타일 108', /\b108\b/],
+    ['사진 316', /\b316\b/],
+    ['동선 그림 120', /\b120\b/],
+    ['떠 있는 줄 72', /\b72\b/],
+    ['고리 2.5', /\b2\.5\b/],
+  ])('G33_Q28_layout_ts에_문서의_크기가_모여_있다_%s', (_name, value) => {
+    expect(readFileSync(join(SRC, LAYOUT_FILE), 'utf8')).toMatch(value);
   });
 });
 
@@ -146,7 +204,7 @@ describe('G3', () => {
   test('G11_B6_G3_P2의_모든_누르는_부품_44_이상', async () => {
     happyServer();
     await toP2();
-    for (const id of ['direction-quieter', 'like-D01', 'skip-D01', 'compose-button', 'sos-button', 'header-back']) {
+    for (const id of ['direction-quieter', 'like-D01', 'skip-D01', 'compose-button', 'sos-button']) {
       expect(screen.getByTestId(id)).toBeTruthy();
     }
     expectTouchTargets();
@@ -156,15 +214,15 @@ describe('G3', () => {
     happyServer();
     await toP3();
     await pressId('stay-D01');
-    for (const id of ['stay-D01', 'stay-plus-D01', 'stay-minus-D01', 'option-relaxed', 'option-packed']) {
+    for (const id of ['stay-D01', 'stay-plus-D01', 'stay-minus-D01', 'option-relaxed', 'option-packed', 'header-back']) {
       expect(screen.getByTestId(id)).toBeTruthy();
     }
     expectTouchTargets();
   });
 
-  test('G13_B3_SOS와_뒤로_버튼은_정확히_44_이상의_원', async () => {
+  test('G13_B3_Q16_P3의_SOS와_뒤로_버튼은_44_이상의_원', async () => {
     happyServer();
-    await toP1();
+    await toP3();
     for (const id of ['sos-button', 'header-back']) {
       const size = reach(screen.getByTestId(id) as unknown as Host);
       expect(size.height).toBeGreaterThanOrEqual(44);
@@ -172,9 +230,16 @@ describe('G3', () => {
     }
   });
 
-  test('G14_B6_G3_S0과_S9의_버튼도_44_이상', async () => {
-    const server = happyServer();
-    await toS9(server);
+  test('G14_B6_G3_S0의_버튼도_44_이상', async () => {
+    happyServer();
+    await startApp();
+    await screen.findByText('데모 여행 시작');
+    expectTouchTargets();
+  });
+
+  test('G34_B6_G3_S9의_버튼도_44_이상', async () => {
+    happyServer();
+    await toS9();
     expectTouchTargets();
   });
 });
@@ -230,16 +295,41 @@ describe('G4', () => {
     expect(server.requests).toHaveLength(before);
   });
 
-  test.skip('G19_질문대기_Q4_S0과_S9에도_SOS가_있다', async () => {
-    const server = happyServer();
-    await toS9(server);
+  const BARE: [string, () => Promise<unknown>][] = [
+    [
+      'S0',
+      async () => {
+        await startApp();
+        await screen.findByText('데모 여행 시작');
+      },
+    ],
+    ['S9', () => toS9()],
+  ];
+
+  test.each(BARE)('G19_Q4_%s에는_SOS가_하나이고_스크롤에_따라_움직이지_않는다', async (_name, go) => {
+    happyServer();
+    await go();
     expect(screen.getAllByTestId('sos-button')).toHaveLength(1);
+    expectFixed('sos-button');
   });
 
-  test.skip('G20_질문대기_Q4_S0과_S9에도_입력창이_있다', async () => {
+  test.each(BARE)('G20_Q4_%s에는_입력창과_마이크가_없다', async (_name, go) => {
+    happyServer();
+    await go();
+    expect(screen.queryByTestId('input-bar')).toBeNull();
+    expect(screen.queryByTestId('input-text')).toBeNull();
+    expect(screen.queryByTestId('mic-button')).toBeNull();
+  });
+
+  test.each(BARE)('G35_Q4_B3_%s의_SOS를_누르면_준비_중_시트_서버_요청_없음', async (_name, go) => {
     const server = happyServer();
-    await toS9(server);
-    expect(screen.getAllByTestId('input-bar')).toHaveLength(1);
+    await go();
+    const before = server.requests.length;
+    await pressId('sos-button');
+    expect(await screen.findByText('긴급 도움은 준비 중이야')).toBeTruthy();
+    await tap(screen.getByText('닫기'));
+    expect(screen.queryByText('긴급 도움은 준비 중이야')).toBeNull();
+    expect(server.requests).toHaveLength(before);
   });
 });
 
@@ -289,11 +379,29 @@ describe('G6', () => {
     }
   });
 
-  test.skip('G25_질문대기_Q5_P3_코스_줄에도_상태_글자가_있다', async () => {
+  test('G25_Q5_P3_각_줄에_hours_status_글자가_있다', async () => {
     happyServer();
     await toP3();
     expect(within(screen.getByTestId('course-row-1')).getByText('확인됨')).toBeTruthy();
     expect(within(screen.getByTestId('course-row-2')).getByText('미확인')).toBeTruthy();
+    expect(within(screen.getByTestId('course-row-3')).getByText('확인됨')).toBeTruthy();
+  });
+
+  test('G36_Q5_P3_모름_상태도_글자로', async () => {
+    const server = happyServer();
+    const option = relaxed();
+    option.items[0] = { ...option.items[0], hours_status: 'unknown' as never };
+    server.on(R.compose, json(200, course([option])));
+    await toP3();
+    expect(within(screen.getByTestId('course-row-1')).getByText('모름')).toBeTruthy();
+  });
+
+  test('G37_Q5_P3_줄에는_영업_값_글자를_쓰지_않는다', async () => {
+    happyServer();
+    await toP3();
+    for (const row of ['course-row-1', 'course-row-2', 'course-row-3']) {
+      expect(within(screen.getByTestId(row)).queryByText(/오늘 휴무|영업시간 모름|\d{2}:\d{2}-\d{2}:\d{2}/)).toBeNull();
+    }
   });
 });
 

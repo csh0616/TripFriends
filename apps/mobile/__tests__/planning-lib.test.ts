@@ -117,6 +117,28 @@ describe('planningReducer', () => {
     expect(reduce([success(batch({ picks_count: 3 }))]).picksCount).toBe(3);
   });
 
+  test('L39_Q7_묶음_응답의_picks로_담은_곳을_복원', () => {
+    const after = reduce([success(batch({ picks: ['D02', 'D01'], picks_count: 2 }))]);
+    expect(after.picks).toEqual(['D02', 'D01']);
+    expect(after.picksCount).toBe(2);
+  });
+
+  test('L40_Q7_새_묶음의_picks가_앞선_담은_곳을_대신한다', () => {
+    const after = reduce([success(picks(['D01', 'D02'])), success(batch({ picks: ['D02'], picks_count: 1 }))]);
+    expect(after.picks).toEqual(['D02']);
+    expect(after.picksCount).toBe(1);
+  });
+
+  test.each([
+    ['코스', course()],
+    ['첫 질문', session],
+    ['완료', done],
+  ])('L41_S7_%s_응답은_picks가_없으니_담은_곳을_지우지_않는다', (_name, response) => {
+    const after = reduce([success(picks(['D01'])), success(response)]);
+    expect(after.picks).toEqual(['D01']);
+    expect(after.response).toEqual(response);
+  });
+
   test('L09_B5_요청을_시작해도_낙관적으로_숫자를_바꾸지_않는다', () => {
     const before = reduce([success(batch({ picks_count: 3 }))]);
     expect(planningReducer(before, start).picksCount).toBe(3);
@@ -191,12 +213,11 @@ describe('distanceLabel', () => {
     expect(distanceLabel(HOME, north(metres))).toBe(label);
   });
 
-  // 질문 대기 Q11: 995~999m는 반올림하면 1000이 된다. "1000m"인가 "1.0km"인가
-  test.skip.each([
+  test.each([
     [995.1, '숙소에서 1.0km'],
     [999, '숙소에서 1.0km'],
     [999.9, '숙소에서 1.0km'],
-  ])('L14_질문대기_Q11_995m부터_999m까지_%dm', (metres, label) => {
+  ])('L14_Q11_995m부터_999m까지는_1_0km_%dm', (metres, label) => {
     expect(distanceLabel(HOME, north(metres))).toBe(label);
   });
 
@@ -292,10 +313,8 @@ describe('todayHoursText', () => {
     ['10:00-18:00', 'unverified'],
     ['11:00-14:00,17:00-22:00', 'confirmed'],
     ['18:00-26:00', 'unverified'],
-  ])('L23_B5_영업_값_%s_%s는_값의_시각을_모두_보여_주고_칩은_데이터_상태', (value, status) => {
-    const { text, chip } = todayHoursText(fact(value, status));
-    for (const time of value.match(/\d{2}:\d{2}/g)!) expect(text).toContain(time);
-    expect(chip).toBe(status);
+  ])('L23_Q32_영업_값_%s_%s는_서버_글자_그대로이고_칩은_데이터_상태', (value, status) => {
+    expect(todayHoursText(fact(value, status))).toEqual({ text: value, chip: status });
   });
 
   test('L24_B5_다른_field가_앞에_있어도_opening_hours를_읽는다', () => {
@@ -377,11 +396,35 @@ describe('projectRoute', () => {
     );
   });
 
-  // 질문 대기 Q12: 북쪽이 위(y 작음), 동쪽이 오른쪽(x 큼)인지 문서에 없다
-  test.skip('L31_질문대기_Q12_북쪽이_위_동쪽이_오른쪽', () => {
+  test('L31_Q12_북쪽이_위_동쪽이_오른쪽', () => {
     const [home, ne] = projectRoute([{ lat: 35, lng: 135 }, { lat: 35.1, lng: 135.1 }], 300, 120, 16);
     expect(ne.x).toBeGreaterThan(home.x);
     expect(ne.y).toBeLessThan(home.y);
+  });
+
+  test('L42_Q12_축을_따로_봐도_북쪽은_y만_동쪽은_x만_바뀐다', () => {
+    const [home, north, east] = projectRoute(
+      [{ lat: 35, lng: 135 }, { lat: 35.1, lng: 135 }, { lat: 35, lng: 135.1 }],
+      300,
+      120,
+      16,
+    );
+    expect(north.y).toBeLessThan(home.y);
+    expect(north.x).toBeCloseTo(home.x, 9);
+    expect(east.x).toBeGreaterThan(home.x);
+    expect(east.y).toBeCloseTo(home.y, 9);
+  });
+
+  test('L43_Q12_더_북쪽이면_y가_작고_더_동쪽이면_x가_크다_항상', () => {
+    const coordinate = (min: number, max: number) => fc.double({ min, max, noNaN: true });
+    fc.assert(
+      fc.property(coordinate(30, 40), coordinate(30, 40), coordinate(130, 140), coordinate(130, 140), (a, b, c, d) => {
+        fc.pre(a !== b && c !== d);
+        const [p, q] = projectRoute([{ lat: a, lng: c }, { lat: b, lng: d }], 300, 120, 16);
+        expect(Math.sign(q.y - p.y)).toBe(-Math.sign(b - a));
+        expect(Math.sign(q.x - p.x)).toBe(Math.sign(d - c));
+      }),
+    );
   });
 });
 

@@ -1,12 +1,13 @@
 /// <reference types="jest" />
-// §7 실패하면 (줄마다). 근거: TASK-004 §7, AC-10, TASK-003 §5, §10(Q2·Q24·Q41·R5)
+// §7 실패하면 (줄마다). 근거: TASK-004 §7, §12(Q17~Q23·Q26), AC-10, TASK-003 §5, §10(Q2·Q24·Q41·R5)
 import { act, screen, waitFor } from '@testing-library/react-native';
 import { useFonts } from 'expo-font';
 
-import { apiError, FakeServer, json, networkDown, type Reply } from '../test-support/fake-server';
+import { apiError, FakeServer, hang, json, networkDown, notJson, type Reply } from '../test-support/fake-server';
 import {
   happyServer,
   hasStoredSession,
+  noSession,
   pressId,
   pressText,
   R,
@@ -48,6 +49,9 @@ type Attempt = {
   stays: () => unknown;
   /** 다시 보낸 요청의 본문 */
   body: unknown;
+  /** 복구 GET의 응답과 그 화면의 표시. 지금 화면과 달라야 GET이 화면을 정했는지 보인다 (Q21) */
+  recovered: unknown;
+  marker: string;
 };
 
 const onP1 = () => expect(screen.getByTestId('choice-cafe')).toBeTruthy();
@@ -55,19 +59,23 @@ const onP2 = () => expect(screen.getByTestId(P2_MARK)).toBeTruthy();
 const onP3 = () => expect(screen.getByText('코스 짜 봤어')).toBeTruthy();
 
 // 서버 요청을 보내는 앱 동작 전부 (TASK-003 §5)
+const TO_P2 = batch({ message: '복구한_묶음' });
+const P2_AFTER = { recovered: TO_P2, marker: '복구한_묶음' };
+const P3_AFTER = { recovered: course(), marker: '코스 짜 봤어' };
 const ATTEMPTS: Attempt[] = [
-  { name: 'P1 칩 답', go: toP1, route: R.answer, prepare: () => pressId('choice-cafe'), send: () => pressText('이걸로 찾아 줘'), stays: onP1, body: { choice_ids: ['cafe'] } },
-  { name: 'P1 알아서', go: toP1, route: R.answer, send: () => pressText('알아서 짜 줘'), stays: onP1, body: { auto: true } },
-  { name: 'P1 글', go: toP1, route: R.answer, send: () => typeAndSend('조용한 데'), stays: onP1, body: { choice_ids: [], text: '조용한 데' } },
-  { name: 'P2 담기', go: toP2, route: R.reactions, send: () => pressId('like-D01'), stays: onP2, body: { place_id: 'D01', action: 'like' } },
-  { name: 'P2 패스', go: toP2, route: R.reactions, send: () => pressId('skip-D02'), stays: onP2, body: { place_id: 'D02', action: 'skip' } },
-  { name: 'P2 방향', go: toP2, route: R.next, send: () => pressId('direction-closer'), stays: onP2, body: { direction_id: 'closer' } },
-  { name: 'P2 다른 곳', go: toP2, route: R.next, send: () => pressText('다른 곳 보여 줘'), stays: onP2, body: 'none' },
-  { name: 'P2 글', go: toP2, route: R.next, send: () => typeAndSend('조용한 데'), stays: onP2, body: { text: '조용한 데' } },
-  { name: 'P2 코스 짜기', go: toP2, route: R.compose, send: () => pressId('compose-button'), stays: onP2, body: 'none' },
-  { name: 'P3 +15', go: toP3, route: R.adjust, prepare: () => pressId('stay-D01'), send: () => pressId('stay-plus-D01'), stays: onP3, body: { option_id: 'opt-relaxed', place_id: 'D01', delta: 15 } },
-  { name: 'P3 더 고를래', go: toP3, route: R.back, send: () => pressText('더 고를래'), stays: onP3, body: 'none' },
-  { name: 'P3 이걸로 할래', go: toP3, route: R.selectRelaxed, send: () => pressText('이걸로 할래'), stays: onP3, body: 'none' },
+  { name: 'P1 칩 답', go: toP1, route: R.answer, prepare: () => pressId('choice-cafe'), send: () => pressText('이걸로 찾아 줘'), stays: onP1, body: { choice_ids: ['cafe'] }, ...P2_AFTER },
+  { name: 'P1 알아서', go: toP1, route: R.answer, send: () => pressText('알아서 짜 줘'), stays: onP1, body: { auto: true }, ...P3_AFTER },
+  { name: 'P1 글', go: toP1, route: R.answer, send: () => typeAndSend('조용한 데'), stays: onP1, body: { choice_ids: [], text: '조용한 데' }, ...P2_AFTER },
+  { name: 'P2 담기', go: toP2, route: R.reactions, send: () => pressId('like-D01'), stays: onP2, body: { place_id: 'D01', action: 'like' }, ...P3_AFTER },
+  { name: 'P2 패스', go: toP2, route: R.reactions, send: () => pressId('skip-D02'), stays: onP2, body: { place_id: 'D02', action: 'skip' }, ...P3_AFTER },
+  { name: 'P2 방향', go: toP2, route: R.next, send: () => pressId('direction-closer'), stays: onP2, body: { direction_id: 'closer' }, ...P3_AFTER },
+  { name: 'P2 다른 곳', go: toP2, route: R.next, send: () => pressText('다른 곳 보여 줘'), stays: onP2, body: 'none', ...P3_AFTER },
+  { name: 'P2 글', go: toP2, route: R.next, send: () => typeAndSend('조용한 데'), stays: onP2, body: { text: '조용한 데' }, ...P3_AFTER },
+  { name: 'P2 코스 짜기', go: toP2, route: R.compose, send: () => pressId('compose-button'), stays: onP2, body: 'none', ...P3_AFTER },
+  { name: 'P3 +15', go: toP3, route: R.adjust, prepare: () => pressId('stay-D01'), send: () => pressId('stay-plus-D01'), stays: onP3, body: { option_id: 'opt-relaxed', place_id: 'D01', delta: 15 }, ...P2_AFTER },
+  { name: 'P3 더 고를래', go: toP3, route: R.back, send: () => pressText('더 고를래'), stays: onP3, body: 'none', ...P2_AFTER },
+  { name: 'P3 이걸로 할래', go: toP3, route: R.selectRelaxed, send: () => pressText('이걸로 할래'), stays: onP3, body: 'none', recovered: done, marker: '코스 저장했어' },
+  { name: 'P3 뒤로', go: toP3, route: R.back, send: () => pressId('header-back'), stays: onP3, body: 'none', ...P2_AFTER },
 ];
 const named = ATTEMPTS.map((attempt) => [attempt.name, attempt] as [string, Attempt]);
 
@@ -78,7 +86,6 @@ const expectSameBody = (actual: unknown, expected: unknown) => {
 
 async function failOnce(attempt: Attempt, reply: Reply): Promise<FakeServer> {
   const server = happyServer();
-  server.on(R.get, json(200, done));
   await attempt.go();
   if (attempt.prepare) await attempt.prepare();
   server.once(attempt.route, reply);
@@ -98,12 +105,25 @@ async function expectRetrySendsSame(server: FakeServer, attempt: Attempt, messag
   await waitFor(() => expect(screen.queryByText(message)).toBeNull());
 }
 
+/** Q21: [다시]는 실패한 요청을 다시 보내지 않고 GET으로 지금 상태를 받아 그 화면을 보여 준다 */
+async function expectRetryRecoversByGet(server: FakeServer, attempt: Attempt, message: string) {
+  expect(await screen.findByText(message)).toBeTruthy();
+  attempt.stays();
+  server.on(R.get, json(200, attempt.recovered));
+  const gets = server.sent(R.get).length;
+  await tap(screen.getByText(RETRY));
+  expect(await screen.findByText(attempt.marker)).toBeTruthy();
+  expect(server.sent(R.get)).toHaveLength(gets + 1);
+  expect(server.sent(attempt.route)).toHaveLength(1);
+  expect(screen.queryByText(message)).toBeNull();
+}
+
 // ---------- 줄 1: 네트워크 끊김 ----------
 
 describe('§7 줄 1 네트워크 끊김', () => {
-  test.each(named)('Y01_AC10_%s_끊기면_문구와_다시_화면_그대로_다시는_같은_요청', async (_name, attempt) => {
+  test.each(named)('Y01_Q21_%s_끊기면_문구와_다시_화면_그대로_다시는_같은_요청이_아니라_GET', async (_name, attempt) => {
     const server = await failOnce(attempt, networkDown);
-    await expectRetrySendsSame(server, attempt, OFFLINE);
+    await expectRetryRecoversByGet(server, attempt, OFFLINE);
   });
 
   test('Y02_S7_담은_곳과_숫자가_그대로', async () => {
@@ -131,7 +151,7 @@ describe('§7 줄 1 네트워크 끊김', () => {
     expect(screen.getByText('이걸로 찾아 줘')).toBeTruthy();
   });
 
-  test('Y04_S7_P3에서_보던_안이_그대로', async () => {
+  test('Y04_Q21_P3에서_보던_안이_그대로이고_다시는_select가_아니라_GET', async () => {
     const server = happyServer();
     await toP3();
     await pressId('option-packed');
@@ -141,7 +161,9 @@ describe('§7 줄 1 네트워크 끊김', () => {
     expect(screen.getByText('1곳 · 이동 42분')).toBeTruthy();
     server.on(R.get, json(200, { ...done, option_id: 'opt-packed' }));
     await tap(screen.getByText(RETRY));
-    await waitFor(() => expect(server.sent(R.selectPacked)).toHaveLength(2));
+    expect(await screen.findByText('코스 저장했어')).toBeTruthy();
+    expect(server.sent(R.selectPacked)).toHaveLength(1);
+    expect(server.sent(R.get)).toHaveLength(1);
   });
 
   test('Y05_S7_저장된_세션을_지우지_않는다', async () => {
@@ -150,52 +172,156 @@ describe('§7 줄 1 네트워크 끊김', () => {
     expect(hasStoredSession()).toBe(true);
   });
 
-  test('Y06_S7_다시를_눌러도_또_끊기면_다시_문구_그대로', async () => {
+  test('Y06_Q21_GET도_끊기면_문구_그대로_다시는_또_GET_원래_요청은_한_번', async () => {
     const server = await failOnce(ATTEMPTS[8], networkDown);
     await screen.findByText(OFFLINE);
-    server.once(R.compose, networkDown);
+    server.once(R.get, networkDown);
     await tap(screen.getByText(RETRY));
-    await waitFor(() => expect(server.sent(R.compose)).toHaveLength(2));
+    await waitFor(() => expect(server.sent(R.get)).toHaveLength(1));
     expect(await screen.findByText(OFFLINE)).toBeTruthy();
     onP2();
+    server.on(R.get, json(200, course()));
+    await tap(screen.getByText(RETRY));
+    expect(await screen.findByText('코스 짜 봤어')).toBeTruthy();
+    expect(server.sent(R.get)).toHaveLength(2);
+    expect(server.sent(R.compose)).toHaveLength(1);
   });
 
-  test('Y07_S6_S7_다시_요청_중에도_한_번만', async () => {
+  test('Y07_S6_Q21_다시_요청_중에도_GET은_한_번', async () => {
     const server = await failOnce(ATTEMPTS[8], networkDown);
     await screen.findByText(OFFLINE);
-    server.once(R.compose, { kind: 'hang' });
+    server.once(R.get, hang);
     const retry = screen.getByText(RETRY);
     await tap(retry);
     await tap(retry).catch(() => undefined);
-    expect(server.sent(R.compose)).toHaveLength(2);
+    expect(server.sent(R.get)).toHaveLength(1);
+    expect(server.sent(R.compose)).toHaveLength(1);
   });
 
-  test('Y08_S7_다시가_성공하면_응답대로_화면이_바뀐다', async () => {
-    await failOnce(ATTEMPTS[8], networkDown);
+  test('Y08_Q21_서버가_처리했으면_GET_응답대로_화면이_바뀐다', async () => {
+    const server = await failOnce(ATTEMPTS[8], networkDown);
     await screen.findByText(OFFLINE);
+    server.on(R.get, json(200, course()));
     await tap(screen.getByText(RETRY));
     expect(await screen.findByText('코스 짜 봤어')).toBeTruthy();
+    expect(server.sent(R.compose)).toHaveLength(1);
   });
 
-  test.skip('Y09_질문대기_Q19_S0_시드_실패_뒤_다시', async () => {
+  test('Y43_Q21_Q7_서버가_처리_못_했으면_같은_화면이고_담은_곳은_GET의_picks', async () => {
     const server = happyServer();
-    server.once(R.seed, networkDown);
+    await toP2();
+    server.once(R.reactions, networkDown);
+    await pressId('like-D01');
+    await screen.findByText(OFFLINE);
+    server.on(R.get, json(200, batch({ picks: ['D02'], picks_count: 1 })));
+    server.on(R.reactions, json(200, picks([])));
+    await tap(screen.getByText(RETRY));
+    await screen.findByText('1곳 담았어');
+    await pressId('like-D02');
+    await waitFor(() => expect(server.last().body).toEqual({ place_id: 'D02', action: 'unlike' }));
+    expect(screen.queryByText(OFFLINE)).toBeNull();
+  });
+
+  test('Y44_Q21_S7_다시_GET이_404_session이면_저장값을_지우고_S0', async () => {
+    const server = await failOnce(ATTEMPTS[8], networkDown);
+    await screen.findByText(OFFLINE);
+    server.once(R.get, noSession);
+    await tap(screen.getByText(RETRY));
+    expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
+    expect(screen.getByText(RESTART)).toBeTruthy();
+    expect(hasStoredSession()).toBe(false);
+  });
+
+  test('Y45_Q21_S7_다시_GET이_500이면_500_문구_그_다시는_같은_GET', async () => {
+    const server = await failOnce(ATTEMPTS[8], networkDown);
+    await screen.findByText(OFFLINE);
+    server.once(R.get, apiError(500, 'INTERNAL_ERROR'));
+    await tap(screen.getByText(RETRY));
+    expect(await screen.findByText(OOPS)).toBeTruthy();
+    onP2();
+    server.on(R.get, json(200, course()));
+    await tap(screen.getByText(RETRY));
+    expect(await screen.findByText('코스 짜 봤어')).toBeTruthy();
+    expect(server.sent(R.get)).toHaveLength(2);
+    expect(server.sent(R.compose)).toHaveLength(1);
+  });
+
+  // ---------- Q19: S0 ----------
+
+  const seedOrStart: [string, string, Reply, string][] = [
+    ['시드 끊김', R.seed, networkDown, OFFLINE],
+    ['시드 500', R.seed, apiError(500, 'INTERNAL_ERROR'), OOPS],
+    ['세션 시작 끊김', R.start, networkDown, OFFLINE],
+    ['세션 시작 500', R.start, apiError(500, 'INTERNAL_ERROR'), OOPS],
+  ];
+
+  test.each(seedOrStart)('Y09_Q19_S0_%s면_문구와_다시_S0_그대로_저장_없음_GET_없음', async (_name, route, reply, message) => {
+    const server = happyServer();
+    server.once(route, reply);
     await startApp();
     await pressText('데모 여행 시작');
-    expect(await screen.findByText(OFFLINE)).toBeTruthy();
-    await tap(screen.getByText(RETRY));
-    await screen.findByText('서버가_준_첫_질문');
+    expect(await screen.findByText(message)).toBeTruthy();
+    expect(screen.getByText(RETRY)).toBeTruthy();
+    expect(screen.getByText('데모 여행 시작')).toBeTruthy();
+    expect(hasStoredSession()).toBe(false);
+    expect(server.sent(R.get)).toHaveLength(0);
   });
 
-  test.skip('Y10_질문대기_Q19_S0_세션_시작만_실패하면_시드를_다시_하지_않는다', async () => {
+  test.each(seedOrStart)('Y10_Q19_S0_%s_뒤_다시는_실패한_단계만', async (_name, route, reply, message) => {
     const server = happyServer();
+    server.once(route, reply);
+    await startApp();
+    await pressText('데모 여행 시작');
+    await screen.findByText(message);
+    await tap(screen.getByText(RETRY));
+    await screen.findByText('서버가_준_첫_질문');
+    expect(server.sent(R.seed)).toHaveLength(route === R.seed ? 2 : 1);
+    expect(server.sent(R.start)).toHaveLength(route === R.start ? 2 : 1);
+    expect(server.sent(R.start).every((r) => JSON.stringify(r.body) === JSON.stringify({ mode: 'conversation' }))).toBe(true);
+    expect(hasStoredSession()).toBe(true);
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
+  test('Y46_Q19_S0_다시도_실패하면_또_실패한_단계만', async () => {
+    const server = happyServer();
+    server.once(R.start, networkDown);
     server.once(R.start, networkDown);
     await startApp();
     await pressText('데모 여행 시작');
     await screen.findByText(OFFLINE);
     await tap(screen.getByText(RETRY));
+    await waitFor(() => expect(server.sent(R.start)).toHaveLength(2));
+    expect(await screen.findByText(OFFLINE)).toBeTruthy();
+    await tap(screen.getByText(RETRY));
     await screen.findByText('서버가_준_첫_질문');
     expect(server.sent(R.seed)).toHaveLength(1);
+    expect(server.sent(R.start)).toHaveLength(3);
+  });
+});
+
+// ---------- Q19: S0 시간 초과 ----------
+describe('Q19 S0 시간 초과', () => {
+  const advance = (ms: number) =>
+    act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+
+  test.each([
+    ['시드', R.seed],
+    ['세션 시작', R.start],
+  ])('Y47_Q19_%s_9999ms에는_아직_10000ms에_문구와_다시', async (_name, route) => {
+    const server = happyServer();
+    server.once(route, hang);
+    await startApp();
+    await screen.findByText('데모 여행 시작');
+    jest.useFakeTimers();
+    await pressText('데모 여행 시작');
+    await advance(0);
+    await advance(9999);
+    expect(screen.queryByText(OFFLINE)).toBeNull();
+    await advance(1);
+    expect(screen.getByText(OFFLINE)).toBeTruthy();
+    expect(screen.getByText(RETRY)).toBeTruthy();
   });
 });
 
@@ -204,10 +330,9 @@ describe('§7 줄 1 네트워크 끊김', () => {
 describe('§7 줄 1 시간 초과 10초', () => {
   async function pressThenWait(attempt: Attempt) {
     const server = happyServer();
-    server.on(R.get, json(200, done));
     await attempt.go();
     if (attempt.prepare) await attempt.prepare();
-    server.once(attempt.route, { kind: 'hang' });
+    server.once(attempt.route, hang);
     jest.useFakeTimers();
     await attempt.send();
     return server;
@@ -233,18 +358,35 @@ describe('§7 줄 1 시간 초과 10초', () => {
     attempt.stays();
   });
 
-  test('Y12_S7_시간_초과_뒤_다시는_같은_요청이고_시계를_새로_잰다', async () => {
+  test.each([
+    ['P1', ATTEMPTS[0]],
+    ['P2', ATTEMPTS[8]],
+    ['P3', ATTEMPTS[11]],
+  ])('Y48_Q21_%s_시간_초과_뒤_다시는_GET이고_원래_요청은_한_번', async (_name, attempt) => {
+    const server = await pressThenWait(attempt);
+    await advance(10000);
+    server.on(R.get, json(200, attempt.recovered));
+    await tap(screen.getByText(RETRY));
+    await advance(0);
+    expect(server.sent(R.get)).toHaveLength(1);
+    expect(server.sent(attempt.route)).toHaveLength(1);
+    expect(screen.getByText(attempt.marker)).toBeTruthy();
+  });
+
+  test('Y12_Q21_시간_초과_뒤_다시의_GET도_시계를_새로_잰다', async () => {
     const attempt = ATTEMPTS[8];
     const server = await pressThenWait(attempt);
     await advance(10000);
-    server.once(attempt.route, { kind: 'hang' });
+    server.once(R.get, hang);
     await tap(screen.getByText(RETRY));
-    expect(server.sent(attempt.route)).toHaveLength(2);
+    expect(server.sent(R.get)).toHaveLength(1);
+    expect(server.sent(attempt.route)).toHaveLength(1);
     expect(screen.queryByText(OFFLINE)).toBeNull();
     await advance(9999);
     expect(screen.queryByText(OFFLINE)).toBeNull();
     await advance(1);
     expect(screen.getByText(OFFLINE)).toBeTruthy();
+    attempt.stays();
   });
 
   test('Y13_S7_9999ms에_응답이_오면_시간_초과가_나지_않는다', async () => {
@@ -270,7 +412,7 @@ describe('§7 줄 1 시간 초과 10초', () => {
     jest.useFakeTimers();
     await pressId('like-D01');
     await advance(5000);
-    server.once(R.compose, { kind: 'hang' });
+    server.once(R.compose, hang);
     await pressId('compose-button');
     await advance(9999);
     expect(screen.queryByText(OFFLINE)).toBeNull();
@@ -288,7 +430,7 @@ describe('§7 줄 1 시간 초과 10초', () => {
     expect(server.sent(R.next)).toHaveLength(1);
   });
 
-  test.skip('Y16_질문대기_Q20_시간_초과_뒤_늦게_온_응답은_버린다', async () => {
+  test('Y16_Q20_시간_초과_뒤_늦게_온_응답은_버린다_문구와_화면_그대로', async () => {
     const server = happyServer();
     await toP2();
     const respond = server.defer(R.next);
@@ -300,6 +442,23 @@ describe('§7 줄 1 시간 초과 10초', () => {
       await jest.advanceTimersByTimeAsync(0);
     });
     expect(screen.queryByText('늦은_응답')).toBeNull();
+    expect(screen.getByText(OFFLINE)).toBeTruthy();
+    expect(screen.getByText('서버가_준_묶음_말')).toBeTruthy();
+  });
+
+  test('Y49_Q20_늦게_온_코스_응답이_화면을_바꾸지_않는다', async () => {
+    const server = happyServer();
+    await toP2();
+    const respond = server.defer(R.compose);
+    jest.useFakeTimers();
+    await pressId('compose-button');
+    await advance(10000);
+    await act(async () => {
+      respond(json(200, course()));
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.queryByText('코스 짜 봤어')).toBeNull();
+    onP2();
   });
 });
 
@@ -339,11 +498,9 @@ describe('§7 줄 2 400 INVALID_REQUEST', () => {
 // ---------- 줄 3: 404 ----------
 
 describe('§7 줄 3 404 세션 없음', () => {
-  const missing = apiError(404, 'NOT_FOUND', { session_id: SID });
-  // P3의 adjust·select 404는 옛 코스안일 수도 있어 질문 대기 (Q21)
-  const sessionRoutes = named.filter(([, attempt]) => attempt.route !== R.adjust && attempt.route !== R.selectRelaxed);
+  const missing = apiError(404, 'NOT_FOUND', { resource: 'session', session_id: SID });
 
-  test.each(sessionRoutes)('Y19_AC10_%s_404면_저장값을_지우고_S0과_처음부터_다시_하자', async (_name, attempt) => {
+  test.each(named)('Y19_Q21_%s_404_session이면_저장값을_지우고_S0과_처음부터_다시_하자', async (_name, attempt) => {
     const server = await failOnce(attempt, missing);
     expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
     expect(screen.getByText(RESTART)).toBeTruthy();
@@ -371,14 +528,51 @@ describe('§7 줄 3 404 세션 없음', () => {
     expect(screen.queryByText(RESTART)).toBeNull();
   });
 
-  test.skip.each([
-    ['adjust', ATTEMPTS[9]],
-    ['select', ATTEMPTS[11]],
-  ])('Y22_질문대기_Q21_%s_404가_옛_코스안이면_세션을_지우지_않고_GET으로_복구', async (_name, attempt) => {
-    const server = await failOnce(attempt, apiError(404, 'NOT_FOUND', { option_id: 'opt-relaxed' }));
-    server.on(R.get, json(200, course()));
-    await waitFor(() => expect(server.sent(R.get).length).toBeGreaterThan(0));
+  test.each<[string, Attempt, string]>([
+    ['P3 조정의 옛 코스안', ATTEMPTS[9], 'option'],
+    ['P3 고르기의 옛 코스안', ATTEMPTS[11], 'option'],
+    ['P2 코스 짜기에서 없는 경로', ATTEMPTS[8], 'route'],
+    ['P3 더 고를래에서 없는 경로', ATTEMPTS[10], 'route'],
+    ['P1 답에서 day', ATTEMPTS[0], 'day'],
+  ])('Y22_Q21_Q22_%s_404_resource가_session이_아니면_저장값_유지_GET으로_복구_안내_없음', async (_name, attempt, resource) => {
+    const server = happyServer();
+    await attempt.go();
+    if (attempt.prepare) await attempt.prepare();
+    server.on(R.get, json(200, attempt.recovered));
+    server.once(attempt.route, apiError(404, 'NOT_FOUND', { resource }));
+    const gets = server.sent(R.get).length;
+    await attempt.send();
+    expect(await screen.findByText(attempt.marker)).toBeTruthy();
+    expect(server.sent(R.get)).toHaveLength(gets + 1);
+    expect(server.sent(attempt.route)).toHaveLength(1);
     expect(hasStoredSession()).toBe(true);
+    for (const text of [RESTART, RETRY, OFFLINE, OOPS, INVALID]) expect(screen.queryByText(text)).toBeNull();
+    expect(screen.queryByText('데모 여행 시작')).toBeNull();
+  });
+
+  test('Y50_Q21_옛_코스안_404_복구로_받은_새_ID로_고른다', async () => {
+    const server = happyServer();
+    await toP3();
+    server.once(R.selectRelaxed, apiError(404, 'NOT_FOUND', { resource: 'option' }));
+    server.on(R.get, json(200, course([relaxed('new-relaxed')])));
+    server.on('POST /course-options/new-relaxed/select', json(200, { ...done }));
+    await pressText('이걸로 할래');
+    await waitFor(() => expect(server.sent(R.get)).toHaveLength(1));
+    await waitFor(() => expect(screen.getByText('이걸로 할래')).toBeTruthy());
+    await pressText('이걸로 할래');
+    expect(await screen.findByText('코스 저장했어')).toBeTruthy();
+    expect(server.sent('POST /course-options/new-relaxed/select')).toHaveLength(1);
+  });
+
+  test('Y51_Q21_404_복구_GET이_404_session이면_S0', async () => {
+    const server = happyServer();
+    await toP3();
+    server.once(R.adjust, apiError(404, 'NOT_FOUND', { resource: 'option' }));
+    server.once(R.get, noSession);
+    await pressId('stay-D01');
+    await pressId('stay-plus-D01');
+    expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
+    expect(hasStoredSession()).toBe(false);
   });
 });
 
@@ -426,24 +620,26 @@ describe('§7 줄 4 409 STATE_CONFLICT', () => {
     const server = happyServer();
     await toP2();
     server.once(R.compose, conflict);
-    server.once(R.get, apiError(404, 'NOT_FOUND'));
+    server.once(R.get, noSession); // Q21 A7
     await pressId('compose-button');
     expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
     expect(screen.getByText(RESTART)).toBeTruthy();
     expect(hasStoredSession()).toBe(false);
   });
 
-  test.skip('Y26_질문대기_Q22_같은_stage로_복구한_뒤_다시_버튼이나_안내를_보여_주는가', async () => {
+  test('Y26_Q22_같은_stage로_복구한_뒤_안내와_다시_버튼이_없다', async () => {
     const server = happyServer();
     await toP2();
     server.on(R.get, json(200, batch()));
     server.once(R.compose, conflict);
     await pressId('compose-button');
     await waitFor(() => expect(server.sent(R.get)).toHaveLength(1));
-    expect(screen.getByText(RETRY)).toBeTruthy();
+    await act(async () => undefined);
+    for (const text of [RETRY, OFFLINE, OOPS, INVALID, RESTART]) expect(screen.queryByText(text)).toBeNull();
+    onP2();
   });
 
-  test.skip('Y27_질문대기_Q22_복구_GET이_끊기면_다시는_GET을_보낸다', async () => {
+  test('Y27_Q21_복구_GET이_끊기면_문구와_다시_다시는_GET_원래_요청은_한_번', async () => {
     const server = happyServer();
     await toP2();
     server.once(R.compose, conflict);
@@ -454,6 +650,7 @@ describe('§7 줄 4 409 STATE_CONFLICT', () => {
     await tap(screen.getByText(RETRY));
     await screen.findByText('코스 짜 봤어');
     expect(server.sent(R.compose)).toHaveLength(1);
+    expect(server.sent(R.get)).toHaveLength(2);
   });
 });
 
@@ -466,18 +663,18 @@ describe('§7 줄 5 422 COURSE_INFEASIBLE', () => {
   const adjust = ATTEMPTS[9];
   const auto = ATTEMPTS[1];
 
-  const CASES: [string, Attempt, string, RegExp][] = [
-    ['P2 코스 짜기', compose, 'must_visit_closed', /이 그날 쉬어/],
-    ['P2 코스 짜기', compose, 'must_visit_overflow', /^꼭 갈 곳이 하루에 다 안 들어가$/],
-    ['P2 코스 짜기', compose, 'user_stay_conflict', /^그 시간은 안 맞아$/],
-    ['P3 조정', adjust, 'must_visit_closed', /이 그날 쉬어/],
-    ['P3 조정', adjust, 'must_visit_overflow', /^꼭 갈 곳이 하루에 다 안 들어가$/],
-    ['P3 조정', adjust, 'user_stay_conflict', /^그 시간은 안 맞아$/],
-    ['P1 알아서', auto, 'must_visit_closed', /이 그날 쉬어/],
-    ['P1 알아서', auto, 'must_visit_overflow', /^꼭 갈 곳이 하루에 다 안 들어가$/],
+  const CASES: [string, Attempt, string, string][] = [
+    ['P2 코스 짜기', compose, 'must_visit_closed', '꼭 갈 박물관, 그날 쉬어'],
+    ['P2 코스 짜기', compose, 'must_visit_overflow', '꼭 갈 곳이 하루에 다 안 들어가'],
+    ['P2 코스 짜기', compose, 'user_stay_conflict', '그 시간은 안 맞아'],
+    ['P3 조정', adjust, 'must_visit_closed', '꼭 갈 박물관, 그날 쉬어'],
+    ['P3 조정', adjust, 'must_visit_overflow', '꼭 갈 곳이 하루에 다 안 들어가'],
+    ['P3 조정', adjust, 'user_stay_conflict', '그 시간은 안 맞아'],
+    ['P1 알아서', auto, 'must_visit_closed', '꼭 갈 박물관, 그날 쉬어'],
+    ['P1 알아서', auto, 'must_visit_overflow', '꼭 갈 곳이 하루에 다 안 들어가'],
   ];
 
-  test.each(CASES)('Y28_AC10_%s_이유_%s면_그_문구이고_화면_그대로_다시_버튼_없음', async (_screen, attempt, reason, message) => {
+  test.each(CASES)('Y28_Q23_%s_이유_%s면_그_문구이고_화면_그대로_다시_버튼_없음', async (_screen, attempt, reason, message) => {
     await failOnce(attempt, infeasible(reason));
     expect(await screen.findByText(message)).toBeTruthy();
     attempt.stays();
@@ -519,7 +716,7 @@ describe('§7 줄 5 422 COURSE_INFEASIBLE', () => {
     await toP1();
     server.once(R.answer, infeasible('must_visit_closed'));
     await pressText('알아서 짜 줘');
-    await screen.findByText(/이 그날 쉬어/);
+    await screen.findByText('꼭 갈 박물관, 그날 쉬어');
     await pressText('아무거나 찾아 줘');
     expect(await screen.findByTestId(P2_MARK)).toBeTruthy();
     expect(server.sent(R.answer).map((r) => r.body)).toEqual([{ auto: true }, { choice_ids: [] }]);
@@ -538,9 +735,18 @@ describe('§7 줄 5 422 COURSE_INFEASIBLE', () => {
     expect(server.last().body).toEqual({ choice_ids: ['cafe'] });
   });
 
-  test.skip('Y32_질문대기_Q23_이름은_blocking_ID를_day_must_visits에서_찾는다', async () => {
-    await failOnce(compose, infeasible('must_visit_closed'));
-    expect(await screen.findByText(`${day.must_visits[0].name}이 그날 쉬어`)).toBeTruthy();
+  test('Y32_Q23_이름은_blocking_ID를_지금_day_must_visits에서_찾는다', async () => {
+    const server = happyServer();
+    const must_visits = [
+      { place_id: 'D20', name: '꼭 갈 박물관' },
+      { place_id: 'D21', name: '둘째 꼭 갈 곳' },
+    ];
+    server.on(R.answer, json(200, batch({ day: { ...day, must_visits } })));
+    await toP2();
+    server.once(R.compose, infeasible('must_visit_closed', ['D21']));
+    await pressId('compose-button');
+    expect(await screen.findByText('둘째 꼭 갈 곳, 그날 쉬어')).toBeTruthy();
+    expect(screen.queryByText('꼭 갈 박물관, 그날 쉬어')).toBeNull();
   });
 });
 
@@ -549,9 +755,10 @@ describe('§7 줄 5 422 COURSE_INFEASIBLE', () => {
 describe('§7 줄 6 500 INTERNAL_ERROR', () => {
   const boom = apiError(500, 'INTERNAL_ERROR');
 
-  test.each(named)('Y33_AC10_%s_500이면_문구와_다시_화면_그대로_다시는_같은_요청', async (_name, attempt) => {
+  test.each(named)('Y33_AC10_S7_%s_500이면_문구와_다시_화면_그대로_다시는_같은_요청_GET_아님', async (_name, attempt) => {
     const server = await failOnce(attempt, boom);
     await expectRetrySendsSame(server, attempt, OOPS);
+    expect(server.sent(R.get)).toHaveLength(0);
     expect(hasStoredSession()).toBe(true);
   });
 
@@ -583,18 +790,27 @@ describe('§7 줄 6 500 INTERNAL_ERROR', () => {
     expect(await screen.findByText(OOPS)).toBeTruthy();
   });
 
-  test('Y37_S7_끊김_뒤_다시가_500이면_문구가_500으로_바뀐다', async () => {
+  test('Y37_Q21_끊김_뒤_다시의_GET이_500이면_문구가_500으로_바뀐다', async () => {
     const server = await failOnce(ATTEMPTS[8], networkDown);
     await screen.findByText(OFFLINE);
-    server.once(R.compose, boom);
+    server.once(R.get, boom);
     await tap(screen.getByText(RETRY));
     expect(await screen.findByText(OOPS)).toBeTruthy();
     expect(screen.queryByText(OFFLINE)).toBeNull();
   });
 
-  test.skip('Y38_질문대기_Q18_표에_없는_상태_코드_503_또는_JSON이_아닌_응답', async () => {
-    await failOnce(ATTEMPTS[8], json(503, 'Service Unavailable'));
-    expect(await screen.findByText(OOPS)).toBeTruthy();
+  test.each<[string, Reply]>([
+    ['503', json(503, { detail: 'x' })],
+    ['401', apiError(401, 'INVALID_REQUEST')],
+    ['403', apiError(403, 'INVALID_REQUEST')],
+    ['JSON이 아닌 200', notJson(200)],
+    ['JSON이 아닌 500', notJson(500)],
+    ['JSON이 아닌 503', notJson(503)],
+  ])('Y38_Q18_%s도_500_줄과_같다_문구_다시_같은_요청_화면_저장값_그대로', async (_name, reply) => {
+    const server = await failOnce(ATTEMPTS[8], reply);
+    await expectRetrySendsSame(server, ATTEMPTS[8], OOPS);
+    expect(server.sent(R.get)).toHaveLength(0);
+    expect(hasStoredSession()).toBe(true);
   });
 });
 

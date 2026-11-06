@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// §6 규칙이 겹칠 때 (줄마다). 근거: TASK-004 §6, AC-11, §B-4
+// §6 규칙이 겹칠 때 (줄마다). 근거: TASK-004 §6, AC-11, §B-4, §12(Q16·Q18)
 import { screen, waitFor, within } from '@testing-library/react-native';
 
 import { json } from '../test-support/fake-server';
@@ -202,6 +202,7 @@ describe('§6 줄 4 요청 중이면 그 화면의 서버 요청 버튼을 모�
     ['+15', () => pressId('stay-plus-D01')],
     ['-15', () => pressId('stay-minus-D01')],
     ['더 고를래', () => pressText('더 고를래')],
+    ['뒤로', () => pressId('header-back')],
     ['이걸로 할래', () => pressText('이걸로 할래')],
   ];
 
@@ -341,11 +342,17 @@ describe('§6 줄 5 응답 stage가 이긴다', () => {
     expect(await screen.findByText(P3)).toBeTruthy();
   });
 
-  test.skip('X28_질문대기_Q18_모르는_stage를_받으면', async () => {
+  test('X28_Q18_모르는_stage면_500_줄처럼_문구와_다시_화면_그대로_다시는_같은_요청', async () => {
     const server = happyServer();
     await toP2();
-    server.on(R.next, json(200, { ...batch(), stage: 'somewhere' }));
+    server.once(R.next, json(200, { ...batch(), stage: 'somewhere' }));
     await pressId('direction-closer');
     expect(await screen.findByText('잠깐 문제가 생겼어')).toBeTruthy();
+    expect(screen.getByTestId('candidate-card-D01')).toBeTruthy();
+    await pressText('다시');
+    await screen.findByText('서버가_준_다음_묶음_말');
+    const [first, second] = server.sent(R.next);
+    expect(second).toEqual(first);
+    expect(server.sent(R.get)).toHaveLength(0);
   });
 });

@@ -2,6 +2,7 @@
 export type Sent = { method: string; path: string; body: unknown };
 export type Reply =
   | { kind: 'json'; status: number; body: unknown }
+  | { kind: 'text'; status: number; text: string }
   | { kind: 'network' }
   | { kind: 'hang' };
 type Deferred = { promise: Promise<Reply>; resolve: (reply: Reply) => void };
@@ -9,6 +10,8 @@ type Deferred = { promise: Promise<Reply>; resolve: (reply: Reply) => void };
 export const json = (status: number, body: unknown): Reply => ({ kind: 'json', status, body });
 export const networkDown: Reply = { kind: 'network' };
 export const hang: Reply = { kind: 'hang' };
+// JSON이 아닌 응답 (TASK-004 Q18)
+export const notJson = (status: number, text = '<html>bad gateway</html>'): Reply => ({ kind: 'text', status, text });
 // TASK-003 §5 공통 오류 형식
 export const apiError = (status: number, code: string, detail: unknown = null, message = '서버_내부_오류_문장'): Reply =>
   json(status, { error: { code, message, detail } });
@@ -74,6 +77,17 @@ export class FakeServer {
     const reply = 'promise' in next ? await raceAbort(next.promise, init?.signal) : next;
     if (reply.kind === 'network') throw new TypeError('Network request failed');
     if (reply.kind === 'hang') return raceAbort(new Promise<Response>(() => undefined), init?.signal);
+    if (reply.kind === 'text') {
+      return {
+        ok: reply.status >= 200 && reply.status < 300,
+        status: reply.status,
+        json: async () => {
+          throw new SyntaxError('Unexpected token < in JSON');
+        },
+        text: async () => reply.text,
+        headers: { get: () => 'text/html' },
+      } as unknown as Response;
+    }
     return {
       ok: reply.status >= 200 && reply.status < 300,
       status: reply.status,

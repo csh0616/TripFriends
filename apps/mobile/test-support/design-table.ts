@@ -20,10 +20,10 @@ export const COLORS: Record<string, string> = {
   danger: '#B42318',
 };
 
-// §4-2 글꼴 (이름 font-text, font-mono는 test-writer의 임시 이름. 문서에 토큰 이름이 없다: 질문 Q15)
+// §4-3 글꼴 이름 (Q15)
 export const FONTS: Record<string, string> = { 'font-text': 'Noto Sans KR', 'font-mono': 'DM Mono' };
 
-// §4-2 크기 (필드 이름 size·lineHeight·weight·family는 임시)
+// §4-2 크기 (필드 이름 size·lineHeight·weight·family는 §12-3에서 계약으로 승인)
 export const TYPE: Record<string, { size: number; lineHeight: number; weight: number; family?: string }> = {
   'num-xl': { size: 44, lineHeight: 44, weight: 500, family: 'DM Mono' },
   title: { size: 22, lineHeight: 30, weight: 700 },
@@ -34,7 +34,7 @@ export const TYPE: Record<string, { size: number; lineHeight: number; weight: nu
   'num-md': { size: 14, lineHeight: 20, weight: 500, family: 'DM Mono' },
 };
 
-// §4-3 숫자 토큰 (icon-stroke 이름은 임시. 문서는 "icon 24(선 1.75)")
+// §4-3 숫자 토큰 (Q15 r-full·icon-stroke, Q28 r-xl·r-tail)
 export const NUMBERS: Record<string, number> = {
   'space-1': 4,
   'space-2': 8,
@@ -57,7 +57,10 @@ export const NUMBERS: Record<string, number> = {
   'r-sm': 12,
   'r-md': 16,
   'r-lg': 20,
+  'r-xl': 24,
   'r-sheet': 28,
+  'r-full': 999,
+  'r-tail': 6,
   'dur-fast': 120,
   'dur-base': 200,
   'dur-sheet': 320,
@@ -66,19 +69,16 @@ export const NUMBERS: Record<string, number> = {
 
 // §4-3 글자 값
 export const STRINGS: Record<string, string> = {
+  'sh-0': 'none', // Q15
   'sh-float': '0 6px 20px rgba(26,26,26,.14), 0 1px 2px rgba(26,26,26,.08)',
   'sh-sheet': '0 -10px 32px rgba(26,26,26,.16)',
   'ease-out': 'cubic-bezier(.2,.8,.2,1)',
 };
 
-// 문서에 값이 없어 있는지만 보는 이름 (질문 Q15)
-export const NAME_ONLY = ['r-full', 'sh-0'];
-// §4-1의 sunset: sunset-start·end와 같은 값을 다른 이름으로 적었다. 있어도 되고 없어도 된다 (질문 Q15)
-export const OPTIONAL = ['sunset'];
-
 // §4-4 대비 표 (글자, 바탕, 문서의 숫자)
 export const CONTRAST_PAIRS: [string, string, number][] = [
   ['ink', 'surface', 12.63],
+  ['ink', 'bg-2', 11.48], // Q15
   ['muted', 'surface', 5.26],
   ['muted', 'bg-2', 4.78],
   ['muted', 'brand-soft', 4.76],

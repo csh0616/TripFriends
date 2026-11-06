@@ -1,4 +1,4 @@
-// 가짜 서버 응답. 모양은 TASK-003 §6 + TASK-004 A2·A3. 타입은 api-types에서만 가져온다 (A5 전에는 tsc가 day·name을 오류로 알려 준다).
+// 가짜 서버 응답. 모양은 TASK-003 §6 + TASK-004 A2·A3·A6. 타입은 api-types에서만 가져온다 (A5 전에는 tsc가 day·name을 오류로 알려 준다).
 import type { components } from 'api-types';
 
 type S = components['schemas'];
@@ -92,6 +92,7 @@ export const batch = (over: Partial<CandidateBatch> = {}): CandidateBatch => ({
   exhausted: false,
   direction_relaxed: false,
   day,
+  picks: [],
   ...over,
 });
 

@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { COLORS, FONTS, NAME_ONLY, NUMBERS, OPTIONAL, STRINGS, TYPE } from '../test-support/design-table';
+import { COLORS, FONTS, NUMBERS, STRINGS, TYPE } from '../test-support/design-table';
 import { REPO_ROOT } from '../test-support/source-files';
 
 const PACKAGE = join(REPO_ROOT, 'packages', 'design-tokens');
@@ -14,8 +14,6 @@ const KNOWN = new Set([
   ...Object.keys(TYPE),
   ...Object.keys(NUMBERS),
   ...Object.keys(STRINGS),
-  ...NAME_ONLY,
-  ...OPTIONAL,
 ]);
 
 type Found = Map<string, unknown[]>;
@@ -81,12 +79,29 @@ test.each(Object.entries(STRINGS))('T08_AC4_글자_값_%s', (name, value) => {
   expect(one(name)).toBe(value);
 });
 
-test.each(NAME_ONLY)('T09_AC4_값이_문서에_없는_이름_%s도_있다', (name) => {
-  expect(read().found.has(name)).toBe(true);
+test.each([
+  ['r-full', 999],
+  ['r-xl', 24],
+  ['r-tail', 6],
+  ['sh-0', 'none'],
+  ['icon-stroke', 1.75],
+])('T09_Q15_Q28_v2_1_토큰_%s의_값은_%s', (name, value) => {
+  expect(one(name)).toBe(value);
+});
+
+test('T15_Q15_옛_이름_sunset은_없고_두_이름만_있다', () => {
+  expect(readFileSync(TOKENS, 'utf8')).not.toContain('"sunset"');
+  expect(one('sunset-start')).toBe('#FF8C42');
+  expect(one('sunset-end')).toBe('#FFA140');
 });
 
 test('T10_AC4_표에_없는_토큰이_없다', () => {
   expect(read().extras).toEqual([]);
+});
+
+test('T16_Q15_필드와_이름을_뒤섞지_않는다_토큰이_정확히_표의_수만큼', () => {
+  const { found } = read();
+  expect([...found.keys()].sort()).toEqual([...KNOWN].sort());
 });
 
 test('T11_S4_2_가장_작은_글자는_12px_이상', () => {

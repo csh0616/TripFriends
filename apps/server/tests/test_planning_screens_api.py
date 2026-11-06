@@ -1,4 +1,4 @@
-"""앱 화면용 서버 소작업. 근거: TASK-004 §A(A1~A5), AC-2, AC-3, TASK-003 §5, §6, §10(원칙 1·2, Q6, Q37, Q38, R1, R4, R5, R11, R12)."""
+"""앱 화면용 서버 소작업. 근거: TASK-004 §A(A1~A5), §12-1(A6, A7, Q1, Q2, Q3), AC-2, AC-3, TASK-003 §5, §6, §10(원칙 1·2, Q6, Q37, Q38, R1, R4, R5, R11, R12)."""
 
 import json
 from datetime import date
@@ -115,7 +115,7 @@ STAGE_PARAMS = [pytest.param(fn, id=name) for name, fn in STAGES.items()]
 def assert_new_session_shape(data: dict) -> None:
     from planning.schemas import PlanningSession
 
-    assert set(data) == SESSION_KEYS | {"day"}
+    assert set(data) == SESSION_KEYS
     assert data["stage"] == "asking"
     assert set(data["question"]) == QUESTION_KEYS
     assert_day_shape(data["day"])
@@ -125,7 +125,7 @@ def assert_new_session_shape(data: dict) -> None:
 def assert_new_batch_shape(data: dict) -> None:
     from planning.schemas import CandidateBatch
 
-    assert set(data) == BATCH_KEYS | {"day"}
+    assert set(data) == BATCH_KEYS
     assert data["stage"] == "browsing"
     assert_day_shape(data["day"])
     CandidateBatch.model_validate(data)
@@ -134,12 +134,12 @@ def assert_new_batch_shape(data: dict) -> None:
 def assert_new_course_shape(data: dict) -> None:
     from planning.schemas import CourseResult
 
-    assert set(data) == COURSE_KEYS | {"day"}
+    assert set(data) == COURSE_KEYS
     assert data["stage"] == "composing"
     assert_day_shape(data["day"])
     for option in data["options"]:
         for item in option["items"]:
-            assert set(item) == ITEM_KEYS | {"name"}
+            assert set(item) == ITEM_KEYS
         for dropped in option["dropped"]:
             assert set(dropped) == {"place_id", "reason", "name"}
             assert type(dropped["name"]) is str and dropped["name"]
@@ -162,7 +162,7 @@ SHAPES = {"asking": assert_new_session_shape, "browsing": assert_new_batch_shape
 
 
 def expected_day(env, day_id: str) -> dict:
-    """저장소의 하루 데이터에서 만든 기대값 (A2). fixed의 name은 Q1 대기라 따로 뺀다."""
+    """저장소의 하루 데이터에서 만든 기대값 (A2). 고정 일정 name = 장소 이름, 없으면 title (Q1)."""
     record = env.repo.get_day(day_id)
     plan = record.plan
     return {
@@ -173,12 +173,16 @@ def expected_day(env, day_id: str) -> dict:
         "end": plan.end,
         "lodging": {"lat": plan.lodging[0], "lng": plan.lodging[1]},
         "must_visits": [{"place_id": pid, "name": record.places[pid].name} for pid in plan.must_visit],
-        "fixed": [{"place_id": f.place_id, "start": f.start, "end": f.end} for f in plan.fixed],
+        "fixed": [
+            {
+                "place_id": f.place_id,
+                "name": record.places[f.place_id].name if f.place_id else f.title,
+                "start": f.start,
+                "end": f.end,
+            }
+            for f in plan.fixed
+        ],
     }
-
-
-def day_without_fixed_name(day: dict) -> dict:
-    return {**day, "fixed": [{k: v for k, v in f.items() if k != "name"} for f in day["fixed"]]}
 
 
 # ---------- A1: stage별 응답 ----------
@@ -258,9 +262,35 @@ def test_S08_A1_Q37_exhausted는_지금_안_보여준_곳_5_미만인지_다시_
     assert get_ok(env, sid)["exhausted"] is exhausted
 
 
-@pytest.mark.skip(reason="질문 대기 Q2: 다시 계산한 exhausted가 true면 첫 묶음의 message도 소진 문장으로 바뀌는가")
-def test_S09_질문대기_Q2_첫_묶음_뒤_소진이_되면_message도_바뀐다(env):
-    sid, _ = at_browsing(env, city(10))
+@pytest.mark.parametrize(
+    ("total", "message"),
+    [(10, MSG_EXHAUSTED), (11, MSG_FIRST)],
+    ids=["안_보여준_곳_4", "안_보여준_곳_5_경계"],
+)
+def test_S09_Q2_첫_묶음_뒤_소진이_되면_message도_소진_문장(env, total, message):
+    sid, first = at_browsing(env, city(total))
+    assert first["message"] == MSG_FIRST
+    assert get_ok(env, sid)["message"] == message
+
+
+@pytest.mark.parametrize(
+    ("total", "exhausted", "message"),
+    [(16, True, MSG_EXHAUSTED), (17, False, MSG_NO_DIRECTION)],
+    ids=["안_보여준_곳_4", "안_보여준_곳_5_경계"],
+)
+def test_S71_Q2_다음_묶음도_GET에서는_지금_기준으로_다시_계산(env, total, exhausted, message):
+    sid, _ = at_browsing(env, city(total))
+    response = env.next(sid).json()
+    assert response["exhausted"] is False
+    data = get_ok(env, sid)
+    assert data["exhausted"] is exhausted
+    assert data["message"] == message
+
+
+def test_S72_Q2_방향_묶음이_소진이_되면_방향_문구_대신_소진_문장(env):
+    sid, _ = at_browsing(env, city(16))
+    response = env.next(sid, direction_id="closer").json()
+    assert response["message"] == "숙소랑 가까운 데 쪽으로 다시 찾아봤어!"
     assert get_ok(env, sid)["message"] == MSG_EXHAUSTED
 
 
@@ -285,13 +315,46 @@ def test_S11_A1_되묻기_뒤에도_묶음과_stage는_그대로(env):
     assert env.values(sid)["clarify_count"] == 1
 
 
-@pytest.mark.skip(reason="질문 대기 Q3: 되묻기 뒤 GET이 clarify와 '이 중에 있어?'를 다시 주는가 (앱을 다시 켠 경우)")
-def test_S12_질문대기_Q3_되묻기_뒤_GET은_되묻기_응답과_같다(env):
+def test_S12_Q3_되묻기_뒤_GET은_되묻기_응답과_같다(env):
     sid, _ = at_browsing(env)
     response = env.next(sid, text=UNKNOWN_TEXT).json()
     data = get_ok(env, sid)
-    assert data["clarify"] == response["clarify"]
+    assert data == response
+    assert data["clarify"]
     assert data["message"] == MSG_CLARIFY
+
+
+def test_S73_Q3_되묻기_중_담아도_되묻기_칩과_문구가_나오고_담은_곳이_새로_계산(env):
+    sid, batch = at_browsing(env)
+    env.next(sid, text=UNKNOWN_TEXT)
+    assert env.react(sid, ids(batch)[0]).status_code == 200
+    data = get_ok(env, sid)
+    assert data["message"] == MSG_CLARIFY
+    assert data["clarify"]
+    assert data["picks"] == [ids(batch)[0]]
+    assert data["picks_count"] == 1
+
+
+def test_S74_Q3_Q6_되묻기와_소진이_겹치면_GET도_되묻기_문장_exhausted는_true(env):
+    sid, _ = at_browsing(env, city(10))
+    env.next(sid, text=UNKNOWN_TEXT)
+    data = get_ok(env, sid)
+    assert data["message"] == MSG_CLARIFY
+    assert data["exhausted"] is True
+    assert data["clarify"]
+
+
+@pytest.mark.parametrize("step", ["둘째_못알아들음", "방향", "빈_next"])
+def test_S75_Q3_되묻기가_끝나면_GET의_clarify는_null(env, step):
+    sid, _ = at_browsing(env)
+    env.next(sid, text=UNKNOWN_TEXT)
+    body = {"둘째_못알아들음": {"text": UNKNOWN_TEXT}, "방향": {"direction_id": "closer"}, "빈_next": {}}[step]
+    response = env.next(sid, **body).json()
+    assert response["clarify"] is None
+    data = get_ok(env, sid)
+    assert data["clarify"] is None
+    assert data["message"] != MSG_CLARIFY
+    assert env.values(sid)["clarify_count"] == 0
 
 
 def test_S13_A1_composing이면_지금_option_ids의_코스안을_ID까지_같게(env):
@@ -630,7 +693,7 @@ def test_S40_A2_AC3_성공_응답_15종_모두_day가_저장소_값과_같다_�
     assert [name for name, _ in results] == FLOW_NAMES
     expected = expected_day(env, day_id)
     for name, body in results:
-        assert day_without_fixed_name(body["day"]) == expected, name
+        assert body["day"] == expected, name
         SHAPES[body["stage"]](body)
 
 
@@ -643,7 +706,7 @@ def test_S41_A2_AC3_성공_응답_15종_모두_day가_저장소_값과_같다_�
     assert (expected["start"], expected["end"], expected["day_number"]) == ("10:00", "20:00", 2)
     assert len(results) == 15
     for name, body in results:
-        assert day_without_fixed_name(body["day"]) == expected, name
+        assert body["day"] == expected, name
 
 
 def test_S42_A2_자동_시작_응답에도_day(env):
@@ -652,7 +715,7 @@ def test_S42_A2_자동_시작_응답에도_day(env):
     response = env.start(day_id, mode="auto")
     assert response.status_code == 201
     assert_new_course_shape(response.json())
-    assert day_without_fixed_name(response.json()["day"]) == expected_day(env, day_id)
+    assert response.json()["day"] == expected_day(env, day_id)
 
 
 def test_S43_A2_자동_뒤_더_고를래_응답에도_day(env):
@@ -660,7 +723,7 @@ def test_S43_A2_자동_뒤_더_고를래_응답에도_day(env):
     sid = env.start(day_id, mode="auto").json()["session_id"]
     data = env.back(sid).json()
     assert_new_batch_shape(data)
-    assert day_without_fixed_name(data["day"]) == expected_day(env, day_id)
+    assert data["day"] == expected_day(env, day_id)
 
 
 def test_S44_A2_첫_질문의_알아서_짜_줘_응답에도_day(env):
@@ -668,7 +731,7 @@ def test_S44_A2_첫_질문의_알아서_짜_줘_응답에도_day(env):
     sid = env.session(day_id)["session_id"]
     data = env.client.post(f"/planning/{sid}/answer", json={"auto": True}).json()
     assert_new_course_shape(data)
-    assert day_without_fixed_name(data["day"]) == expected_day(env, day_id)
+    assert data["day"] == expected_day(env, day_id)
 
 
 @pytest.mark.parametrize("arrive", [at_asking, at_browsing, at_composing], ids=["asking", "browsing", "composing"])
@@ -708,17 +771,17 @@ def test_S48_A2_장소_없는_고정_일정은_place_id가_null(env):
     assert (fixed[0]["place_id"], fixed[0]["start"], fixed[0]["end"]) == (None, "15:00", "16:00")
 
 
-@pytest.mark.skip(reason="질문 대기 Q1: 고정 일정 name의 출처 (장소 이름인가 일정 제목 title인가, 장소 없을 때 무엇인가)")
 @pytest.mark.parametrize(
     ("at_place", "expected"),
     [(True, "가상 P20"), (False, "고정 일정")],
     ids=["장소_있음", "장소_없음"],
 )
-def test_S49_질문대기_Q1_day_fixed의_name(env, at_place, expected):
+def test_S49_Q1_day_fixed의_name은_장소_이름_없으면_title(env, at_place, expected):
     places = city(30)
     event = fixed_event("15:00", "16:00", places["P20"] if at_place else None)
-    _, session = at_asking(env, places, day_plan(fixed=(event,)))
-    assert session["day"]["fixed"][0]["name"] == expected
+    sid, session = at_asking(env, places, day_plan(fixed=(event,)))
+    for body in (session, get_ok(env, sid)):
+        assert body["day"]["fixed"][0]["name"] == expected
 
 
 @pytest.mark.parametrize("number", [1, 2, 3, 6, 10], ids=str)
@@ -792,7 +855,7 @@ def test_S56_A3_장소_있는_고정_일정_항목_name은_장소_이름(env):
     _, course = at_composing(env, places, plan)
     fixed = next(i for i in course["options"][0]["items"] if i["is_fixed"])
     assert fixed["place_id"] == "P20"
-    assert fixed["name"] == "가상 P20"
+    assert fixed["name"] == "가상 P20"  # 일정 제목("고정 일정")이 아니라 장소 이름 (Q1)
 
 
 def test_S57_A3_장소_없는_고정_일정_항목에도_name_키가_있다(env):
@@ -802,11 +865,11 @@ def test_S57_A3_장소_없는_고정_일정_항목에도_name_키가_있다(env)
     assert "name" in item
 
 
-@pytest.mark.skip(reason="질문 대기 Q1: 장소 없는 고정 일정 항목의 name (일정 제목 title인가 null인가)")
-def test_S58_질문대기_Q1_장소_없는_고정_일정_항목의_name은_일정_제목(env):
-    _, course = at_composing(env, city(), day_plan(fixed=(fixed_event("15:00", "16:00"),)))
-    item = next(i for i in course["options"][0]["items"] if i["is_fixed"])
-    assert item["name"] == "고정 일정"
+def test_S58_Q1_장소_없는_고정_일정_항목의_name은_저장된_title(env):
+    sid, course = at_composing(env, city(), day_plan(fixed=(fixed_event("15:00", "16:00"),)))
+    for body in (course, get_ok(env, sid)):
+        item = next(i for i in body["options"][0]["items"] if i["is_fixed"])
+        assert item["name"] == "고정 일정"
 
 
 DROPPED_CASES = [
@@ -900,9 +963,9 @@ def test_S66_A5_GET의_200은_4가지_모양이다():
     branches = [resolve(spec, s) for s in schema["anyOf"]]
     assert len(branches) == 4
     keys = {frozenset(b["properties"]) for b in branches}
-    assert frozenset(SESSION_KEYS | {"day"}) in keys
-    assert frozenset(BATCH_KEYS | {"day"}) in keys
-    assert frozenset(COURSE_KEYS | {"day"}) in keys
+    assert frozenset(SESSION_KEYS) in keys
+    assert frozenset(BATCH_KEYS) in keys
+    assert frozenset(COURSE_KEYS) in keys
     assert frozenset(DONE_KEYS) in keys
 
 
@@ -928,7 +991,7 @@ def course_part(spec: dict, field: str) -> tuple[str, dict]:
     return ref.rsplit("/", 1)[-1], resolve(spec, {"$ref": ref})
 
 
-@pytest.mark.parametrize(("field", "keys"), [("items", ITEM_KEYS | {"name"}), ("dropped", {"place_id", "reason", "name"})])
+@pytest.mark.parametrize(("field", "keys"), [("items", ITEM_KEYS), ("dropped", {"place_id", "reason", "name"})])
 def test_S68_A5_코스_항목과_빠진_곳에_name(field, keys):
     _, schema = course_part(committed_openapi(), field)
     assert set(schema["properties"]) == keys
@@ -939,6 +1002,8 @@ def test_S69_A5_ts_타입에도_같은_내용():
     assert '"/planning/{session_id}": {' in source
     assert "must_visits:" in source
     assert "day_number:" in source
+    block = source.split("CandidateBatch: {", 1)[1].split("};", 1)[0]
+    assert "picks:" in block
     spec = committed_openapi()
     for field in ("items", "dropped"):
         name, _ = course_part(spec, field)
@@ -951,3 +1016,195 @@ def test_S70_A5_커밋한_명세가_지금_서버와_같다_GET_포함():
 
     assert committed_openapi() == app.openapi()
     assert "get" in app.openapi()["paths"]["/planning/{session_id}"]
+
+
+# ---------- A6 (Q7): CandidateBatch의 picks ----------
+
+
+def test_S76_A6_첫_묶음의_picks는_빈_목록(env):
+    sid, batch = at_browsing(env)
+    assert batch["picks"] == []
+    assert get_ok(env, sid)["picks"] == []
+
+
+def test_S77_A6_GET의_picks는_담은_순서(env):
+    sid, _ = at_browsing(env)
+    env.react(sid, "P03")
+    env.react(sid, "P01")
+    env.react(sid, "P02")
+    data = get_ok(env, sid)
+    assert data["picks"] == ["P03", "P01", "P02"]
+    assert data["picks_count"] == 3
+
+
+def test_S78_A6_취소하면_빠지고_다시_담으면_맨_뒤(env):
+    sid, _ = at_browsing(env)
+    env.react(sid, "P03")
+    env.react(sid, "P01")
+    env.react(sid, "P03", "unlike")
+    assert get_ok(env, sid)["picks"] == ["P01"]
+    env.react(sid, "P03")
+    assert get_ok(env, sid)["picks"] == ["P01", "P03"]
+
+
+def test_S79_A6_담은_곳을_넘기면_빠진다(env):
+    sid, _ = at_browsing(env)
+    env.react(sid, "P01")
+    env.react(sid, "P02")
+    env.react(sid, "P01", "skip")
+    data = get_ok(env, sid)
+    assert data["picks"] == ["P02"]
+    assert data["picks_count"] == 1
+
+
+def test_S80_A6_POST_next는_이전_묶음에서_담은_곳까지(env):
+    sid, _ = at_browsing(env)
+    env.react(sid, "P02")
+    env.react(sid, "P01")
+    data = env.next(sid).json()
+    assert data["picks"] == ["P02", "P01"]
+    assert get_ok(env, sid)["picks"] == ["P02", "P01"]
+
+
+def test_S81_A6_POST_되묻기_응답에도_picks(env):
+    sid, _ = at_browsing(env)
+    env.react(sid, "P01")
+    assert env.next(sid, text=UNKNOWN_TEXT).json()["picks"] == ["P01"]
+
+
+def test_S82_A6_POST_더_고를래_응답에도_picks_코스를_거쳐도_유지(env):
+    sid, _ = at_browsing(env)
+    env.react(sid, "P02")
+    env.react(sid, "P01")
+    env.compose(sid)
+    data = env.back(sid).json()
+    assert data["picks"] == ["P02", "P01"]
+    assert get_ok(env, sid)["picks"] == ["P02", "P01"]
+
+
+def test_S83_A6_자동_뒤_더_고를래는_빈_목록(env):
+    sid = env.start(env.plant_day(city()), mode="auto").json()["session_id"]
+    assert env.back(sid).json()["picks"] == []
+    assert get_ok(env, sid)["picks"] == []
+
+
+def test_S84_A6_picks는_Picks_응답과_같다(env):
+    sid, _ = at_browsing(env)
+    env.react(sid, "P04")
+    picks = env.react(sid, "P02").json()
+    data = get_ok(env, sid)
+    assert data["picks"] == picks["picks"]
+    assert data["picks_count"] == picks["picks_count"]
+
+
+def test_S85_A6_실패한_요청은_picks를_바꾸지_않는다(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, _ = at_browsing(env)
+    env.react(sid, "P01")
+    with monkeypatch.context() as patch:
+        patch.setattr("graphs.planning.next_batch", raise_forced)
+        assert_error(env.next(sid), 500)
+    assert_error(env.react(sid, "없는장소"), 400)
+    assert get_ok(env, sid)["picks"] == ["P01"]
+
+
+def test_S86_A6_A5_명세의_CandidateBatch에_picks(env):
+    schema = committed_openapi()["components"]["schemas"]["CandidateBatch"]
+    assert "picks" in schema["required"]
+    assert schema["properties"]["picks"]["type"] == "array"
+
+
+# ---------- A7 (Q21): 404 detail.resource ----------
+
+
+def resource_of(response) -> str:
+    return assert_error(response, 404, "NOT_FOUND")["detail"]["resource"]
+
+
+SESSION_REQUESTS = [
+    pytest.param("get", "", None, id="GET"),
+    pytest.param("post", "/answer", {"choice_ids": []}, id="answer"),
+    pytest.param("post", "/reactions", {"place_id": "P01", "action": "like"}, id="reactions"),
+    pytest.param("post", "/next", {}, id="next"),
+    pytest.param("post", "/compose", None, id="compose"),
+    pytest.param("post", "/adjust", {"option_id": "없는-코스안", "place_id": "P01", "delta": 15}, id="adjust"),
+    pytest.param("post", "/back", None, id="back"),
+]
+
+
+@pytest.mark.parametrize(("method", "tail", "body"), SESSION_REQUESTS)
+def test_S87_A7_없는_세션이면_session(env, method, tail, body):
+    kw = {} if body is None else {"json": body}
+    assert resource_of(getattr(env.client, method)(f"/planning/없는-세션{tail}", **kw)) == "session"
+
+
+def test_S88_A7_없는_코스안_고르기는_option(env):
+    assert resource_of(env.select("없는-코스안")) == "option"
+
+
+def test_S89_A7_세션은_있는데_없는_코스안_조정은_option(env):
+    sid, _ = at_composing(env)
+    assert resource_of(env.adjust(sid, "없는-코스안", "P01", 15)) == "option"
+
+
+def test_S90_A7_옛_코스안_조정과_고르기는_option_세션은_살아_있다(env):
+    sid, course = at_composing(env)
+    old = first_option_id(course)
+    assert env.adjust(sid, old, "P01", 15).status_code == 200
+    assert resource_of(env.adjust(sid, old, "P01", 15)) == "option"
+    assert resource_of(env.select(old)) == "option"
+    assert get(env, sid).status_code == 200
+
+
+def test_S91_A7_더_고를래_뒤_옛_코스안은_option(env):
+    sid, course = at_composing(env)
+    old = first_option_id(course)
+    env.back(sid)
+    assert resource_of(env.adjust(sid, old, "P01", 15)) == "option"
+    assert resource_of(env.select(old)) == "option"
+
+
+def test_S92_A7_다른_세션의_코스안_조정은_option(env):
+    a, _ = at_composing(env)
+    _, course_b = at_composing(env)
+    assert resource_of(env.adjust(a, first_option_id(course_b), "P01", 15)) == "option"
+
+
+def test_S93_A7_없는_날이면_day(env):
+    assert resource_of(env.start("없는-날")) == "day"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("get", "/없는-경로"), ("post", "/없는-경로"), ("post", "/planning"), ("get", "/days/없는-날/없는-경로")],
+    ids=["GET_없는_경로", "POST_없는_경로", "세션_없는_planning", "없는_하위_경로"],
+)
+def test_S94_A7_없는_경로면_route(env, method, path):
+    assert resource_of(getattr(env.client, method)(path)) == "route"
+
+
+def test_S95_A7_운영의_시드_경로도_route(monkeypatch):
+    import importlib
+
+    import api.main
+
+    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+    try:
+        with TestClient(importlib.reload(api.main).app) as client:
+            assert resource_of(client.post("/debug/seed-demo")) == "route"
+    finally:
+        monkeypatch.delenv("APP_ENV", raising=False)
+        importlib.reload(api.main)
+
+
+def test_S96_A7_Q40_세션도_코스안도_없으면_세션이_먼저(env):
+    assert resource_of(env.adjust("없는-세션", "없는-코스안", "P01", 15)) == "session"
+
+
+def test_S97_A7_404는_아무것도_바꾸지_않는다(env):
+    sid, course = at_composing(env)
+    env.adjust(sid, first_option_id(course), "P01", 15)
+    before = frozen(env, sid)
+    assert resource_of(env.select(first_option_id(course))) == "option"
+    assert frozen(env, sid) == before

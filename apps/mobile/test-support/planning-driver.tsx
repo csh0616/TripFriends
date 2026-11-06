@@ -5,8 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import PlanningFlow from '@/planning/planning-flow';
 
 import { memoryStorage } from './async-storage-mock';
-import { FakeServer, json } from './fake-server';
-import { batch, course, done, picks, seed, selected, session, SID } from './planning-fixtures';
+import { apiError, FakeServer, json, type Reply } from './fake-server';
+import { batch, course, picks, seed, selected, session, SID } from './planning-fixtures';
 
 export const R = {
   seed: 'POST /debug/seed-demo',
@@ -41,6 +41,9 @@ export function happyServer(): FakeServer {
     .on(R.selectRelaxed, json(200, selected))
     .on(R.selectPacked, json(200, { ...selected, option_id: 'opt-packed' }));
 }
+
+/** 이 경로에서 세션이 없다는 404 (Q21 A7) */
+export const noSession: Reply = apiError(404, 'NOT_FOUND', { resource: 'session' });
 
 export function startApp() {
   return render(
@@ -99,8 +102,7 @@ export async function toP3() {
   return app;
 }
 
-export async function toS9(server: FakeServer) {
-  server.on(R.get, json(200, done));
+export async function toS9() {
   const app = await toP3();
   await pressText('이걸로 할래');
   await screen.findByText('코스 저장했어');

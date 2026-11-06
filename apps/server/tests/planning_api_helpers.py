@@ -60,7 +60,7 @@ WHY_NONE = "이런 곳도 있어요"
 UNKNOWN_TEXT = "그냥 아무거나"  # POC-001 §5-1 키워드가 하나도 없는 문장
 FIXED_STAY = StayRange(min=60, typical=60, max=60)  # 두 안에서 머문 시간이 같아지는 장소
 
-SESSION_KEYS = {"session_id", "stage", "question"}
+SESSION_KEYS = {"session_id", "stage", "question", "day"}  # day: TASK-004 A2 (Q24)
 QUESTION_KEYS = {"text", "choices", "allow_text", "allow_auto"}
 BATCH_KEYS = {
     "session_id",
@@ -73,11 +73,13 @@ BATCH_KEYS = {
     "picks_count",
     "exhausted",
     "direction_relaxed",
+    "day",  # TASK-004 A2 (Q24)
+    "picks",  # TASK-004 A6 (Q7·Q24)
 }
 PLACE_KEYS = {"id", "name", "category", "lat", "lng", "crowd_level", "price_level", "mood_tags", "facts"}
 FACT_KEYS = {"field", "value", "status", "source_type", "checked_at"}
 PICKS_KEYS = {"picks", "picks_count"}
-COURSE_KEYS = {"session_id", "stage", "options"}
+COURSE_KEYS = {"session_id", "stage", "options", "day"}  # day: TASK-004 A2 (Q24)
 OPTION_KEYS = {"option_id", "label", "items", "dropped", "go_home_min", "total_travel_min"}
 ITEM_KEYS = {
     "seq",
@@ -90,6 +92,7 @@ ITEM_KEYS = {
     "wait_min",
     "is_fixed",
     "hours_status",
+    "name",  # TASK-004 A3 (Q24)
 }
 
 
@@ -239,7 +242,15 @@ def at_of(plan: DayPlan) -> datetime:
 
 
 def without_option_id(course: dict) -> list[dict]:
-    return [{k: v for k, v in option.items() if k != "option_id"} for option in course["options"]]
+    """코스안을 엔진 결과와 비교하려고 응답에만 있는 값을 뺀다: option_id, name(TASK-004 A3, Q24). name 자체는 test_planning_screens_api가 검사한다."""
+    return [
+        {
+            **{k: v for k, v in option.items() if k != "option_id"},
+            "items": [{k: v for k, v in item.items() if k != "name"} for item in option["items"]],
+            "dropped": [{k: v for k, v in entry.items() if k != "name"} for entry in option["dropped"]],
+        }
+        for option in course["options"]
+    ]
 
 
 def dumped(options) -> list[dict]:
@@ -364,7 +375,7 @@ def assert_course_shape(data: dict) -> None:
             assert type(item["is_fixed"]) is bool
             assert item["hours_status"] in {"confirmed", "unverified", "unknown", None}
         for dropped_entry in option["dropped"]:
-            assert set(dropped_entry) == {"place_id", "reason"}
+            assert set(dropped_entry) == {"place_id", "reason", "name"}  # name: TASK-004 A3 (Q24)
             assert dropped_entry["reason"] in {"closed_at_time", "no_time", "fixed_conflict"}
     CourseResult.model_validate(data)
 
