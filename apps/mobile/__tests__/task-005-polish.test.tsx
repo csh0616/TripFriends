@@ -1,9 +1,10 @@
 /// <reference types="jest" />
 // 화면 다듬기와 복구 뒤 입력 글. 근거: TASK-005 §B(B1~B12), §C(C1), §4 5줄, §5 3줄, §6 AC-5·AC-6, §9-3(우선), TASK-004 §13-3 비활성, DESIGN-001 v2.3 §2·§4.
 // 로직·토큰·구조만 본다. 보이는 모습 자체는 AC-7(폰 스크린샷)이 본다.
-import { screen, waitFor, within } from '@testing-library/react-native';
+import { render, screen, waitFor, within } from '@testing-library/react-native';
 import fc from 'fast-check';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import Svg, { G } from 'react-native-svg';
 
 import { contrast } from '@/lib/contrast';
 
@@ -40,6 +41,18 @@ function paintedAncestor(host: Tree): Tree | null {
 }
 
 const raised = () => (shadow as unknown as Record<string, Record<string, unknown>>).raise;
+
+/**
+ * route-home-icon의 transform = `translate(x y) scale(s)` (s = 14/24, 아이콘은 24칸).
+ * 안쪽 Svg의 x·y는 무시되므로 G의 transform으로 놓는다 (TASK-005 B7, §9 Q15).
+ */
+function homeIconBox() {
+  const transform = String(byId('route-home-icon').props.transform);
+  const match = /^translate\(\s*(-?[\d.]+)[\s,]+(-?[\d.]+)\s*\)\s*scale\(\s*([\d.]+)\s*\)$/.exec(transform);
+  if (!match) throw new Error(`route-home-icon의 transform 모양이 다름: ${transform}`);
+  const [x, y, scale] = match.slice(1).map(Number);
+  return { x, y, size: 24 * scale };
+}
 
 const MONO = 'DMMono_500Medium';
 const BOLD = 'NotoSansKR_700Bold';
@@ -364,9 +377,46 @@ describe('B7·B9 구조', () => {
   test('T5_B7_S9_Q15_숙소_원_안의_집_아이콘은_14', async () => {
     happyServer();
     await toP3();
-    const icon = byId('route-home-icon');
-    expect(hasIcon(icon)).toBe(true);
-    expect([icon, ...inside(icon)].some((h) => h.props.width === 14 && h.props.height === 14)).toBe(true);
+    const icon = homeIconBox();
+    expect(hasIcon(byId('route-home-icon'))).toBe(true);
+    expect(icon.size).toBeCloseTo(14);
+  });
+
+  test('T5_B7_S9_Q15_집_아이콘의_가운데는_숙소_원의_가운데', async () => {
+    happyServer();
+    await toP3();
+    const home = byId('route-home').props;
+    const icon = homeIconBox();
+    expect(icon.x + icon.size / 2).toBeCloseTo(home.cx);
+    expect(icon.y + icon.size / 2).toBeCloseTo(home.cy);
+  });
+
+  const svgsIn = (host: Tree) => inside(host).filter((h) => h.props.svgElement === 'Svg');
+
+  test('T5_B7_도구_검사_중첩_Svg를_셀_수_있고_G는_세지_않는다', async () => {
+    await render(
+      <View testID="box">
+        <Svg>
+          <Svg />
+          <G />
+        </Svg>
+      </View>,
+    );
+    expect(svgsIn(byId('box'))).toHaveLength(2);
+  });
+
+  test('T5_B7_동선_그림_안에_Svg는_최상위_하나뿐', async () => {
+    happyServer();
+    await toP3();
+    expect(svgsIn(byId('route-diagram'))).toHaveLength(1);
+  });
+
+  test('T5_B7_번호_원과_숫자는_그대로_남는다', async () => {
+    happyServer();
+    await toP3();
+    expect(screen.getAllByTestId(/^route-stop-/)).toHaveLength(3);
+    const labels = inside(byId('route-diagram')).filter((h) => h.type === 'Text').map((h) => h.props.children);
+    expect(labels).toEqual(['1', '2', '3']);
   });
 
   test.each([1, 2, 3])('T5_S9_Q16_동선_그림의_%i번_번호도_num_md', async (seq) => {

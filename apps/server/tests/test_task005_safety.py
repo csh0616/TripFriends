@@ -62,6 +62,26 @@ def setup(musts: int, fixed: int, picks: int, changed: int = 0) -> tuple[DayPlan
     return plan, [p.id for p in pick_places], as_places(*must_places, *pick_places)
 
 
+def same_venue_rows(venue: Place, count: int) -> tuple:
+    """같은 장소에서 열리는 고정 일정 count개: 01:00부터 30분마다 15분. 고정 일정 id는 각각 다르다."""
+    return tuple(fixed_event(hhmm(60 + 30 * i), hhmm(75 + 30 * i), venue, fid=f"S{i:02d}") for i in range(count))
+
+
+def same_venue_setup(musts: int, events: int, picks: int) -> tuple[DayPlan, list[str], dict[str, Place]]:
+    """꼭 갈 곳 + 담은 곳 + 어디에도 안 담은 장소 V01의 고정 일정 events개."""
+    venue = place("V01")
+    must_places = spots(musts, prefix="M")
+    pick_places = spots(picks, prefix="P")
+    plan = long_day(must=tuple(p.id for p in must_places), fixed=same_venue_rows(venue, events))
+    return plan, [p.id for p in pick_places], as_places(venue, *must_places, *pick_places)
+
+
+def same_venue_short_day(musts: int, events: int, picks: int) -> tuple[DayPlan, list[str], dict[str, Place]]:
+    """하루가 16:00에 끝나 담은 곳이 다 못 들어간다. 빠진 곳의 이유를 가를 때 고정 일정 수만큼 갈래가 2배씩 는다 (`_Day.fits`)."""
+    plan, chosen, places = same_venue_setup(musts, events, picks)
+    return plan.model_copy(update={"end": "16:00"}), chosen, places
+
+
 def assert_cut(plan: DayPlan, picks: list[str], places: dict[str, Place], result, cut: list[str]) -> None:
     """모든 안에서 cut의 곳만 빠지고, 이유는 no_time, 꼭 갈 곳은 그대로."""
     assert_all_valid(plan, picks, places, result)
@@ -390,6 +410,60 @@ def test_T5_S9_Q13_담은곳이_고정일정_장소이면_한_번만_세어_자�
         assert "P02" in visits(option)
 
 
+# ---------- §9 Q2: 같은 장소 고정 일정은 각각 센다 (Q12·Q13의 "중복 id"는 id가 같을 때뿐) ----------
+
+
+@pytest.mark.parametrize(
+    "picks, events, cut",
+    [(10, 2, 0), (11, 2, 1), (10, 3, 1), (11, 3, 2)],
+    ids=["합12_안_잘림", "담은곳11_고정2_합13", "담은곳10_고정3_합13", "담은곳11_고정3_합14"],
+)
+def test_T5_S9_Q2_같은_장소_고정일정도_각각_세어_담은곳이_잘린다(picks, events, cut):
+    plan, chosen, places = same_venue_setup(0, events, picks)
+    assert_cut(plan, chosen, places, compose_courses(plan, chosen, places), chosen[picks - cut :])
+
+
+def test_T5_S9_Q2_꼭갈곳과_같은_장소_고정일정_합이_12면_계산한다():
+    plan, chosen, places = same_venue_setup(5, 7, 0)
+    assert isinstance(compose_courses(plan, chosen, places), list)
+
+
+@pytest.mark.parametrize("musts, events", [(5, 8), (1, 12), (0, 13)], ids=["꼭갈곳5_고정8", "꼭갈곳1_고정12", "고정13"])
+def test_T5_S9_Q2_꼭갈곳과_같은_장소_고정일정_합이_13이면_too_many_places(musts, events):
+    plan, chosen, places = same_venue_setup(musts, events, 0)
+    result = too_many(compose_courses(plan, chosen, places))
+    assert sorted(result.blocking) == sorted({*plan.must_visit, *(f.id for f in plan.fixed)})
+
+
+def test_T5_S9_Q2_담은곳_11에_같은_장소_고정일정_28개도_멈추지_않고_too_many_places():
+    assert run_in_child(0, 28, 11, build="same_venue_short_day") == {"reason": "too_many_places"}
+
+
+@pytest.mark.parametrize("events, is_too_many", [(8, False), (9, True)], ids=["합12", "합13"])
+def test_T5_S9_Q13_같은_장소_고정일정의_장소가_꼭갈곳이면_그_사이만_한_번_센다(events, is_too_many):
+    # 꼭 갈 곳 5곳 중 V01이 고정 일정 장소: 꼭 갈 곳 4 + 고정 일정 events개
+    venue = place("V01")
+    musts = spots(4, prefix="M")
+    plan = long_day(must=("V01", *(p.id for p in musts)), fixed=same_venue_rows(venue, events))
+    result = compose_courses(plan, [], as_places(venue, *musts))
+    if is_too_many:
+        too_many(result)
+    else:
+        assert isinstance(result, list)
+
+
+@pytest.mark.parametrize("picks, cut", [(10, []), (11, ["P11"])], ids=["합12", "합13"])
+def test_T5_S9_Q13_같은_장소_고정일정의_장소가_담은곳이면_그_사이만_한_번_센다(picks, cut):
+    # 담은 곳 picks곳 + V01(고정 일정 장소) + 고정 일정 2개
+    venue = place("V01")
+    items = spots(picks, prefix="P")
+    plan = long_day(fixed=same_venue_rows(venue, 2))
+    chosen = ["V01", *(p.id for p in items)]
+    for option in options(compose_courses(plan, chosen, as_places(venue, *items))):
+        assert [d.place_id for d in option.dropped] == cut
+        assert "V01" not in visits(option)
+
+
 # ---------- A4 "DP에 들어가는 N" ----------
 
 
@@ -424,15 +498,15 @@ def test_T5_A4_S9_임의의_수에서_too_many_자르기_그대로를_가른다(
     assert_cut(plan, chosen, places, result, chosen[picks - over :])
 
 
-def run_in_child(musts: int, fixed: int, picks: int) -> dict:
+def run_in_child(musts: int, fixed: int, picks: int, build: str = "setup") -> dict:
     """지금 코드는 N=25에서 몇 분 멈춘다 (TASK-004 §14). pytest가 멈추지 않게 자식 프로세스로 돌리고 시간이 지나면 그 자식만 끈다."""
     script = f"""
 import json, sys
 sys.path.insert(0, "tests")
-from test_task005_safety import setup
+from test_task005_safety import {build}
 from engine.models import Infeasible
 from engine.planning import compose_courses
-plan, chosen, places = setup({musts}, {fixed}, {picks})
+plan, chosen, places = {build}({musts}, {fixed}, {picks})
 result = compose_courses(plan, chosen, places)
 if isinstance(result, Infeasible):
     print(json.dumps({{"reason": result.reason}}))
