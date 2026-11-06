@@ -19,6 +19,7 @@ import {
   toP1,
   toP2,
   toP3,
+  toS9,
   typeAndSend,
 } from '../test-support/planning-driver';
 import { batch, course, day, done, packed, picks, relaxed, session, SID } from '../test-support/planning-fixtures';
@@ -936,6 +937,125 @@ describe('§13-3 기기 저장 실패', () => {
     await screen.findByText('서버가_준_첫_질문');
     expect(warn).not.toHaveBeenCalled();
     expect(hasStoredSession()).toBe(true);
+  });
+});
+
+// ---------- 점검 추가: 기기 읽기·지우기 실패 (§7 기기 저장 실패 줄) ----------
+
+describe('§7 기기 읽기·지우기 실패', () => {
+  const quiet = () => jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  const removeFails = () => jest.spyOn(AsyncStorage, 'removeItem').mockRejectedValue(new Error('기기 지우기 실패'));
+
+  test('Y72_S7_읽기가_실패하면_로딩에_멈추지_않고_S0_GET_없음_콘솔_경고_1건', async () => {
+    jest.spyOn(AsyncStorage, 'getItem').mockRejectedValue(new Error('기기 읽기 실패'));
+    const warn = quiet();
+    const server = happyServer();
+    await startApp();
+    expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
+    expect(screen.queryByTestId('app-loading')).toBeNull();
+    expect(server.sent(R.get)).toHaveLength(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  test('Y73_S7_읽기가_실패해도_시작_버튼이_동작한다', async () => {
+    jest.spyOn(AsyncStorage, 'getItem').mockRejectedValue(new Error('기기 읽기 실패'));
+    quiet();
+    happyServer();
+    await startApp();
+    await pressText('데모 여행 시작');
+    expect(await screen.findByText('서버가_준_첫_질문')).toBeTruthy();
+  });
+
+  test('Y74_S7_B2_지우기가_실패해도_S9_처음부터는_S0으로_간다_콘솔_경고', async () => {
+    const warn = quiet();
+    happyServer();
+    await toS9();
+    removeFails();
+    await pressText('처음부터');
+    expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  test('Y75_S7_다시_켠_GET이_404_session이면_지우기가_실패해도_S0과_처음부터_다시_하자_콘솔_경고', async () => {
+    const warn = quiet();
+    const server = happyServer();
+    const app = await toP1();
+    server.once(R.get, noSession);
+    removeFails();
+    await restart(app);
+    expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
+    expect(screen.getByText(RESTART)).toBeTruthy();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  test('Y76_S7_요청의_404_session이면_지우기가_실패해도_S0과_처음부터_다시_하자_콘솔_경고', async () => {
+    const warn = quiet();
+    const server = happyServer();
+    await toP2();
+    server.once(R.compose, noSession);
+    removeFails();
+    await pressId('compose-button');
+    expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
+    expect(screen.getByText(RESTART)).toBeTruthy();
+    expect(warn).toHaveBeenCalled();
+  });
+});
+
+// ---------- 점검 추가: 시드가 200 + JSON null (Q18·Q37) ----------
+
+describe('Q18 Q37 시드 응답이 이상할 때', () => {
+  /** 처리되지 않은 예외를 모은다. 테스트 안의 process는 복사본이라 진짜 process에 건다. */
+  function watchUnhandled() {
+    const real = require('node:vm').runInThisContext('process');
+    const seen: unknown[] = [];
+    const listener = (reason: unknown) => seen.push(reason);
+    real.on('unhandledRejection', listener);
+    return {
+      async settled() {
+        await new Promise((done) => setTimeout(done, 20));
+        real.off('unhandledRejection', listener);
+        return seen;
+      },
+    };
+  }
+
+  const nullSeed = async () => {
+    const server = happyServer();
+    server.once(R.seed, json(200, null));
+    await startApp();
+    await pressText('데모 여행 시작');
+    return server;
+  };
+
+  test('Y77_Q18_Q37_시드가_200_null이면_500_줄처럼_문구와_다시_세션_시작_안_함', async () => {
+    const server = await nullSeed();
+    expect(await screen.findByText(OOPS)).toBeTruthy();
+    expect(screen.getByText(RETRY)).toBeTruthy();
+    expect(server.sent(R.start)).toHaveLength(0);
+    expect(hasStoredSession()).toBe(false);
+  });
+
+  test('Y78_Q18_Q37_시드가_200_null이어도_처리되지_않은_예외가_없다', async () => {
+    const watch = watchUnhandled();
+    await nullSeed();
+    expect(await watch.settled()).toEqual([]);
+  });
+
+  test('Y79_Q18_Q37_시드가_200_null인_뒤_시작_버튼이_풀려_다시_시작할_수_있다', async () => {
+    const server = await nullSeed();
+    await screen.findByText(OOPS);
+    await pressText('데모 여행 시작');
+    expect(await screen.findByText('서버가_준_첫_질문')).toBeTruthy();
+    expect(server.sent(R.seed)).toHaveLength(2);
+  });
+
+  test('Y80_Q18_Q37_시드가_200_null인_뒤_다시는_시드부터', async () => {
+    const server = await nullSeed();
+    await screen.findByText(OOPS);
+    await tap(screen.getByText(RETRY));
+    expect(await screen.findByText('서버가_준_첫_질문')).toBeTruthy();
+    expect(server.sent(R.seed)).toHaveLength(2);
+    expect(server.sent(R.start)).toHaveLength(1);
   });
 });
 

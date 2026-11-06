@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { act, render, screen, waitFor, within } from '@testing-library/react-native';
-import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Animated, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { apiError, hang, json, networkDown } from '../test-support/fake-server';
@@ -1106,6 +1106,76 @@ describe('§13-2 #8 담기 동그라미 움직임', () => {
     respond(json(200, picks(['D01'])));
     await screen.findByText('1곳 담았어');
     expect(durations(timing)).toContain(420);
+  });
+});
+
+// ---------- 점검 추가: 움직임 줄이기와 카드 스크롤, 설정을 못 읽을 때 ----------
+
+describe('DESIGN-001 §4-3 움직임 줄이기, §13-2 #8 담기 표시', () => {
+  type Tree = { props: Record<string, any>; queryAll: (p: (h: Tree) => boolean) => Tree[] };
+
+  // RN 가짜 설정 함수는 이미 mock이라 restoreAllMocks로 돌아가지 않는다. 다음 테스트로 새지 않게 기본값으로 되돌린다.
+  afterEach(() => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
+  });
+
+  /** 패스 뒤 다음 카드로 넘기는 스크롤 (x가 0이면 새 묶음의 맨 앞으로 돌리는 것이라 뺀다) */
+  async function scrollAfterSkip() {
+    const scroll = jest.spyOn(ScrollView.prototype as unknown as { scrollTo: (o: object) => void }, 'scrollTo');
+    scroll.mockClear(); // RN 가짜 ScrollView의 scrollTo는 테스트끼리 같은 함수라 앞 기록을 지운다
+    happyServer();
+    await toP2();
+    await pressId('skip-D01');
+    await waitFor(() => {
+      expect(scroll.mock.calls.some(([options]) => (options as { x: number }).x > 0)).toBe(true);
+    });
+    return scroll.mock.calls.map(([options]) => options as { x: number; animated: boolean }).filter(({ x }) => x > 0);
+  }
+
+  test('W116_S4_3_움직임_줄이기가_꺼져_있으면_패스_뒤_스크롤은_animated_true', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
+    const moves = await scrollAfterSkip();
+    expect(moves).toHaveLength(1);
+    expect(moves[0].animated).toBe(true);
+  });
+
+  test('W117_S4_3_움직임_줄이기가_켜져_있으면_패스_뒤_스크롤은_animated_false', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    const moves = await scrollAfterSkip();
+    expect(moves).toHaveLength(1);
+    expect(moves[0].animated).toBe(false);
+  });
+
+  /** 담은 표시 고리: 남은 길이(strokeDashoffset)가 0이면 끝까지 그려진 것 */
+  const ringOffset = () => {
+    const [ring] = (screen.container as unknown as Tree).queryAll(
+      (host) => host.props.stroke === COLORS.brand && host.props.strokeDashoffset !== undefined,
+    );
+    return Number(ring.props.strokeDashoffset);
+  };
+
+  async function likeFirst() {
+    const server = happyServer();
+    server.on(R.reactions, json(200, picks(['D01'])));
+    await toP2();
+    await pressId('like-D01');
+    await screen.findByText('1곳 담았어');
+    expect(screen.getByTestId('picked-mark-D01')).toBeTruthy();
+  }
+
+  test.each([
+    ['켜짐', true],
+    ['꺼짐', false],
+  ])('W118_도구_검사_움직임_줄이기_%s이면_고리가_끝값까지_그려진다', async (_name, reduce) => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(reduce);
+    await likeFirst();
+    await waitFor(() => expect(ringOffset()).toBeCloseTo(0), { timeout: 3000 });
+  });
+
+  test('W119_S13_8_움직임_줄이기_설정을_못_읽어도_담은_표시_고리가_끝값까지_그려진다', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockRejectedValue(new Error('설정 읽기 실패'));
+    await likeFirst();
+    await waitFor(() => expect(ringOffset()).toBeCloseTo(0), { timeout: 3000 });
   });
 });
 
