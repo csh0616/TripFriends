@@ -13,7 +13,7 @@ export function S9Screen({ onRestart }: { onRestart: () => void }) {
     <ScreenFrame>
       <View style={styles.center}>
         <View style={styles.badge}>
-          <CheckIcon color={color['on-brand']} size={layout.numberCircle * 1.5} />
+          <CheckIcon color={color['on-brand']} size={layout.successCheck} />
         </View>
         <Text style={text('title')}>코스 저장했어</Text>
       </View>

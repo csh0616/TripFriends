@@ -29,7 +29,18 @@ export const layout = {
   timeColumn: 48, // P3 시각 칸 폭
   stayColumn: 88, // P3 머문 시간 칸 폭
   contentMax: 560, // 큰 화면에서 본문 최대 폭
-  logoTile: 88, // S0 로고 타일
+  logoWidth: 200, // S0 확정 로고 (원본 669x373)
+  logoHeight: 112,
+  markRing: 4, // 담음 표시 둘레에 그려지는 동그라미가 벌어진 정도
+  checkSmall: 16, // 작은 체크 아이콘 (P1 고른 알약)
+  successCheck: 36, // S9 체크 아이콘
+  avatarEye: 4, // 친구 아바타 눈 지름
+  avatarEyeGap: 8, // 눈 사이
+  avatarMouthWidth: 12, // 입 폭
+  avatarMouthHeight: 6, // 입 높이
+  avatarLine: 2, // 입 선 굵기
+  avatarFace: 3, // 눈·입 사이
+  ringFrom: 0.9, // P1 고른 고리가 나타날 때 시작 크기 비율
   successCircle: 72, // S9 체크 원
   dot: 6, // 작은 점
   // 누르는 영역 보강: 칩 36 -> 44
