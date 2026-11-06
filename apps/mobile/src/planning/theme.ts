@@ -51,6 +51,7 @@ export function bold(name: TypeName, tone: keyof typeof tokens.color = 'ink'): T
   return { ...text(name, tone), fontFamily: NOTO[700] };
 }
 
+// 미정(TASK-005): sh-raise는 두 겹 중 첫 겹만 RN 그림자로 옮긴다 (shadowFrom이 첫 겹만 읽음)
 export const shadow = {
   float: shadowFrom(tokens.shadow['sh-float']),
   sheet: shadowFrom(tokens.shadow['sh-sheet']),

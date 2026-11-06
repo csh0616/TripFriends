@@ -124,7 +124,7 @@ function Session({
   const infeasibleMessage = (reason: string, blocking: string[]): string => {
     if (reason === 'must_visit_overflow') return '꼭 갈 곳이 하루에 다 안 들어가';
     if (reason === 'user_stay_conflict') return '그 시간은 안 맞아';
-  if (reason === 'too_many_places') return TOO_MANY;
+    if (reason === 'too_many_places') return TOO_MANY;
     if (reason === 'fixed_unreachable') return UNREACHABLE;
     if (reason !== 'must_visit_closed') return INFEASIBLE_OTHER;
     const day = (latest.current.response as { day?: PlanningSession['day'] } | null)?.day;

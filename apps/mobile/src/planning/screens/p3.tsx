@@ -1,10 +1,9 @@
 // P3 코스안 (TASK-004 §B-4, §12 Q5·Q8·Q14·Q39·Q41, §13 Q33). CourseResult를 그린다. 숫자·시각은 서버 값 그대로.
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Svg, { Circle, Polyline, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, G, Path, Polyline, Text as SvgText } from 'react-native-svg';
 
-import { HomeIcon } from '@/components/planning/icons';
-
+import { HOME_PATH } from '@/components/planning/icons';
 import { Notice } from '@/components/planning/notice';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
@@ -118,6 +117,7 @@ export function P3Screen({
                 }}
                 style={[styles.toggleButton, on && styles.toggleOn]}
               >
+                {/* 미정(TASK-005): 토글 글자는 caption */}
                 <Text style={on ? bold('caption', 'ink') : text('caption', 'muted')}>{LABEL_TEXT[o.label]}</Text>
               </Pressable>
             );
@@ -215,12 +215,14 @@ function Row({
           <Text style={text('num-md', 'surface')}>{String(item.seq)}</Text>
         </View>
         <View style={styles.rowText}>
+          {/* 미정(TASK-005): 줄 이름은 heading */}
           <Text numberOfLines={1} style={text('heading')}>
             {item.name}
           </Text>
           <View testID={`course-row-sub-${item.seq}`} style={styles.sub}>
             <Text
               numberOfLines={1}
+              // 미정(TASK-005): 보조 줄은 caption
               style={[text('caption', 'muted'), styles.subText]}
             >{`${kind}이동 ${item.travel_min}분`}</Text>
             {/* Q39 hours_status가 null(장소 없는 고정 일정)이면 칩을 숨긴다 */}
@@ -272,6 +274,7 @@ function RouteDiagram({
 }) {
   const height = layout.routeDiagram;
   const points = projectRoute([home, ...stops], width, height, layout.routePad);
+  const homeScale = layout.routeHomeIcon / control.icon;
   const line = points.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
@@ -297,13 +300,22 @@ function RouteDiagram({
           stroke={color.ink}
           strokeWidth={layout.routeHomeStroke}
         />
-        <HomeIcon
+        {/* 24칸 집 선을 14로 줄여 원 가운데에 놓는다. 선 굵기는 줄어든 만큼 키워 icon-stroke 그대로 보이게 한다 */}
+        <G
           testID="route-home-icon"
-          color={color.ink}
-          size={layout.routeHomeIcon}
-          x={points[0].x - layout.routeHomeIcon / 2}
-          y={points[0].y - layout.routeHomeIcon / 2}
-        />
+          width={layout.routeHomeIcon}
+          height={layout.routeHomeIcon}
+          transform={`translate(${points[0].x - layout.routeHomeIcon / 2} ${points[0].y - layout.routeHomeIcon / 2}) scale(${homeScale})`}
+        >
+          <Path
+            d={HOME_PATH}
+            fill="none"
+            stroke={color.ink}
+            strokeWidth={control['icon-stroke'] / homeScale}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </G>
         {stops.map((stop, i) => (
           <Circle
             key={`n-${stop.seq}`}
