@@ -77,6 +77,14 @@ class PlanningRepo(ABC):
     @abstractmethod
     def batch_relaxed(self, session_id: str) -> bool: ...
 
+    @abstractmethod
+    def save_batch_first(self, session_id: str, first: bool) -> None:
+        """# TASK-004 미정: 문서에 없는 저장 항목. 그래프 상태는 11개 고정이라 저장소에 둔다 (relaxed와 같은 방식).
+        지금 묶음이 첫 질문의 답으로 만든 첫 묶음인지 (TASK-004 A1: GET이 message 대본 우선순위, TASK-003 §10 Q6을 다시 적용하려고)."""
+
+    @abstractmethod
+    def batch_first(self, session_id: str) -> bool: ...
+
     # ---- 머무는 시간 ----
     @abstractmethod
     def stay_overrides(self, session_id: str) -> dict[PlaceId, int]: ...
@@ -124,6 +132,7 @@ class MemoryPlanningRepo(PlanningRepo):
         self._unliked: dict[str, list[PlaceId]] = {}
         self._overrides: dict[str, dict[PlaceId, int]] = {}
         self._relaxed: dict[str, bool] = {}
+        self._first: dict[str, bool] = {}
         self._options: dict[str, OptionRecord] = {}
         self._chosen: dict[str, str] = {}
         self._logs: list[dict[str, Any]] = []
@@ -148,6 +157,7 @@ class MemoryPlanningRepo(PlanningRepo):
             self._unliked[session_id] = []
             self._overrides[session_id] = {}
             self._relaxed[session_id] = False
+            self._first[session_id] = False
 
     def session_day(self, session_id: str) -> str | None:
         with self._lock:
@@ -190,6 +200,14 @@ class MemoryPlanningRepo(PlanningRepo):
     def batch_relaxed(self, session_id: str) -> bool:
         with self._lock:
             return self._relaxed.get(session_id, False)
+
+    def save_batch_first(self, session_id: str, first: bool) -> None:
+        with self._lock:
+            self._first[session_id] = first
+
+    def batch_first(self, session_id: str) -> bool:
+        with self._lock:
+            return self._first.get(session_id, False)
 
     def stay_overrides(self, session_id: str) -> dict[PlaceId, int]:
         with self._lock:
@@ -239,6 +257,7 @@ class MemoryPlanningRepo(PlanningRepo):
                     "unliked": self._unliked,
                     "overrides": self._overrides,
                     "relaxed": self._relaxed,
+                    "first": self._first,
                     "options": {k: (v.session_id, v.picks, v.course.model_dump()) for k, v in self._options.items()},
                     "chosen": self._chosen,
                     "logs": self._logs,

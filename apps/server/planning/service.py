@@ -25,11 +25,13 @@ from planning.schemas import (
     CourseResult,
     NextRequest,
     Picks,
+    PlanningDone,
     PlanningSession,
     ReactionRequest,
     SeedResult,
     SelectResult,
 )
+from planning import presenter
 from planning.seed import seed_demo
 
 # §10 Q24, §10-10 R3
@@ -74,7 +76,7 @@ class PlanningService:
     def _state(self, session_id: str) -> PlanningState:
         """없는 세션이면 404."""
         if self.repo.session_day(session_id) is None:
-            raise PlanningError("NOT_FOUND", "없는 세션이에요", {"session_id": session_id})
+            raise PlanningError("NOT_FOUND", "없는 세션이에요", {"resource": "session", "session_id": session_id})  # TASK-004 §12-1 A7
         values = self.graph.get_state(self._config(session_id)).values
         return PlanningState(**values)
 
@@ -113,7 +115,7 @@ class PlanningService:
         with self._lock:
             day = self.repo.get_day(day_id)
             if day is None:
-                raise PlanningError("NOT_FOUND", "없는 날이에요", {"day_id": day_id})
+                raise PlanningError("NOT_FOUND", "없는 날이에요", {"resource": "day", "day_id": day_id})  # TASK-004 §12-1 A7
             session_id = str(uuid.uuid4())
             box = Outbox()
             self.graph.invoke(new_state(session_id, day_id, mode), self._config(session_id, box))  # type: ignore[arg-type]
@@ -122,6 +124,35 @@ class PlanningService:
                 # §10 Q2·§10-10 R1: 시작에서 코스를 못 만들거나 예외가 나면 세션을 만들지 않는다 (저장소엔 안 썼고, 스레드도 지운다)
                 self.graph.checkpointer.delete_thread(session_id)
             return self._response(outcome)  # type: ignore[return-value]
+
+    def current(self, session_id: str) -> PlanningSession | CandidateBatch | CourseResult | PlanningDone:
+        """TASK-004 A1: GET. 지금 stage의 응답을 **지금 상태로 다시 계산**해서 준다.
+
+        그래프를 재개하지 않는다(`graph.get_state`는 읽기뿐이라 체크포인트가 늘지 않는다). 저장소도 읽기뿐이다.
+        응답은 POST가 쓰는 presenter 함수로 만들어 두 길이 갈라지지 않는다. 예외는 아무것도 바꾸기 전이라
+        500 공통 형식이 되고 다음 요청에 영향이 없다 (TASK-003 §10-10 R1, §10-11 R11).
+        """
+        with self._lock:
+            state = self._state(session_id)  # 없으면 404 resource=session
+            day = self.repo.get_day(state.day_id)
+            if state.stage == "done":
+                option_id = self.repo.chosen_option(state.day_id)
+                assert option_id is not None  # done은 select가 저장한 뒤에만 된다
+                return presenter.done_response(state, option_id)
+            assert day is not None  # 세션은 있는 날에만 만든다
+            if state.stage == "asking":
+                return presenter.session_response(state, day)
+            if state.stage == "browsing":
+                return presenter.batch_now(
+                    state,
+                    self.repo.reactions(session_id),
+                    self.repo.batch_relaxed(session_id),
+                    self.repo.batch_first(session_id),
+                    day,
+                )
+            records = [self.repo.get_option(option_id) for option_id in state.option_ids]
+            assert all(record is not None for record in records)
+            return presenter.course_response(state, records, day)  # type: ignore[arg-type]
 
     def answer(self, session_id: str, body: AnswerRequest) -> CandidateBatch | CourseResult:
         with self._lock:
@@ -152,7 +183,7 @@ class PlanningService:
             state = self._state(session_id)
             # §10 Q40·Q41: 지금 보여 주는 코스안이 아니면(없는·다른 세션의·옛 ID) stage보다 먼저 404
             if body.option_id not in state.option_ids:
-                raise PlanningError("NOT_FOUND", "없는 코스안이에요", {"option_id": body.option_id})
+                raise PlanningError("NOT_FOUND", "없는 코스안이에요", {"resource": "option", "option_id": body.option_id})  # A7
             event = {"kind": "adjust", "option_id": body.option_id, "place_id": body.place_id, "delta": body.delta}
             return self._resume(state, event)  # type: ignore[return-value]
 
@@ -165,11 +196,11 @@ class PlanningService:
         with self._lock:
             option = self.repo.get_option(option_id)
             if option is None:
-                raise PlanningError("NOT_FOUND", "없는 코스안이에요", {"option_id": option_id})
+                raise PlanningError("NOT_FOUND", "없는 코스안이에요", {"resource": "option", "option_id": option_id})  # A7
             state = self._state(option.session_id)  # §10 Q21: 코스안 ID만으로 세션을 찾는다
             # §10-10 R5: 그 세션의 지금 option_ids에 없으면(옛 ID·back 뒤·다시 계산한 뒤) 404, 있는데 composing이 아니면 409
             if option_id not in state.option_ids:
-                raise PlanningError("NOT_FOUND", "지금 보여 주는 코스안이 아니에요", {"option_id": option_id})
+                raise PlanningError("NOT_FOUND", "지금 보여 주는 코스안이 아니에요", {"resource": "option", "option_id": option_id})  # A7
             if state.stage != "composing":
                 raise PlanningError("STATE_CONFLICT", f"지금 단계({state.stage})에서는 고를 수 없어요", {"stage": state.stage})
             return self._resume(state, {"kind": "select", "option_id": option_id})  # type: ignore[return-value]

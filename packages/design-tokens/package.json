@@ -1,0 +1,8 @@
+{
+  "name": "design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DESIGN-001 §4 확정 토큰. 앱은 이 값만 쓴다 (유일한 출처는 DESIGN-001, 이 파일이 코드 쪽 출처)",
+  "main": "index.ts",
+  "types": "index.ts"
+}

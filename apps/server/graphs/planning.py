@@ -31,7 +31,7 @@ from engine.models import Batch, CourseOption, Direction, Infeasible, PlaceId
 from engine.planning import clamp_user_stay, compose_courses, first_batch, next_batch, parse_direction
 from planning import presenter
 from planning.repo import DayRecord, PlanningRepo, new_option_records
-from planning.schemas import PlanningSession, SelectResult
+from planning.schemas import SelectResult
 from planning.state import DEFAULT_CLARIFY, PlanningState, Stage, candidates, day_start  # noqa: F401  (re-export)
 
 log = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ def _row_auto(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Planni
         return None
     records = new_option_records(state.session_id, picks, result)
     new = _course_state(state, records, round=0, shown=[], batch=[], last_direction=None, clarify_count=0)
-    response = presenter.course_response(new, records)
+    response = presenter.course_response(new, records, day)
     run.repo.save_options(records)  # 저장
     return _finish(run, response, new)
 
@@ -161,6 +161,7 @@ def _row_answer(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plann
     if text is not None:  # 저장
         _log_parse(run, text, direction)
     run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)
+    run.repo.save_batch_first(state.session_id, True)  # TASK-004 A1: GET이 첫 묶음 대본(Q6)을 다시 고르려고 묶음의 성질로 남긴다
     return _finish(run, response, new)
 
 
@@ -200,6 +201,7 @@ def _row_next(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plannin
         _log_parse(run, text, direction)
     run.repo.skip_unreacted(state.session_id, state.batch)
     run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)
+    run.repo.save_batch_first(state.session_id, False)
     return _finish(run, response, new)
 
 
@@ -214,7 +216,7 @@ def _row_compose(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Pla
         return None
     records = new_option_records(state.session_id, picks, result)
     new = _course_state(state, records)
-    response = presenter.course_response(new, records)
+    response = presenter.course_response(new, records, day)
     # 저장. TASK-003 §10-11 R12: 저장 도중의 예외(부분 저장)는 R1 메모리 저장소의 알려진 한계 (Supabase TASK에서 트랜잭션으로)
     run.repo.skip_unreacted(state.session_id, state.batch)
     run.repo.save_options(records)
@@ -237,7 +239,7 @@ def _row_adjust(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plann
         return None
     records = new_option_records(state.session_id, option.picks, result)
     new = _course_state(state, records)
-    response = presenter.course_response(new, records)
+    response = presenter.course_response(new, records, day)
     # 저장. 부분 저장은 R1 메모리 저장소의 알려진 한계 (§10-11 R12)
     run.repo.set_stay_override(state.session_id, place_id, minutes)
     run.repo.save_options(records)
@@ -254,6 +256,7 @@ def _row_back(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Planni
         new, reactions, batch.direction_relaxed, day, first=False, clarify=False, exhausted=batch.exhausted
     )
     run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)  # 저장
+    run.repo.save_batch_first(state.session_id, False)
     return _finish(run, response, new)
 
 
@@ -334,9 +337,7 @@ def build_planning_graph(repo: PlanningRepo):
                 repo.create_session(state.session_id, state.day_id)
                 return Command(goto="course", update=nxt.model_dump())  # 응답은 _row_auto가 이미 만들어 두었다
             day = _day(run, state)
-            response = PlanningSession(
-                session_id=state.session_id, stage="asking", question=presenter.question(day.day_number)
-            )
+            response = presenter.session_response(state, day)
             repo.create_session(state.session_id, state.day_id)  # 응답을 만든 뒤 저장 (R12)
             run.done(Outcome("ok", response=response))
             return Command(goto="ask", update=state.model_dump())

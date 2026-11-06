@@ -1,5 +1,6 @@
 """/planning 요청·응답 모양 (TASK-003 §5·§6). OpenAPI → packages/api-types로 이어지는 계약."""
 
+import datetime as dt
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
@@ -98,10 +99,41 @@ class Question(BaseModel):
     allow_auto: bool
 
 
+class LatLng(BaseModel):
+    lat: float
+    lng: float
+
+
+class DayMustVisit(BaseModel):
+    place_id: PlaceId
+    name: str
+
+
+class DayFixed(BaseModel):
+    place_id: PlaceId | None  # 장소 없는 고정 일정이면 None
+    name: str  # TASK-004 §12-1 Q1: 장소 이름, 장소가 없으면 저장된 title
+    start: str
+    end: str
+
+
+class DaySummary(BaseModel):
+    """TASK-004 A2: 저장소의 하루 데이터 요약 (PlanningSession·CandidateBatch·CourseResult에 붙는다)."""
+
+    day_id: str
+    day_number: int
+    date: dt.date
+    start: str
+    end: str
+    lodging: LatLng
+    must_visits: list[DayMustVisit]
+    fixed: list[DayFixed]
+
+
 class PlanningSession(BaseModel):
     session_id: str
     stage: Stage
     question: Question
+    day: DaySummary
 
 
 class Fact(BaseModel):
@@ -147,6 +179,8 @@ class CandidateBatch(BaseModel):
     picks_count: int
     exhausted: bool
     direction_relaxed: bool
+    day: DaySummary
+    picks: list[PlaceId]  # TASK-004 §12-1 A6(Q7): 담은 순서
 
 
 class Picks(BaseModel):
@@ -154,11 +188,26 @@ class Picks(BaseModel):
     picks_count: int
 
 
+class CourseItemView(CourseItem):
+    """TASK-004 A3: 앱이 장소 이름을 다시 찾지 않게 `name`을 더한 응답용 CourseItem. 엔진의 CourseItem은 그대로 둔다.
+    name = 장소 이름, 장소가 없는 고정 일정이면 저장된 title (§12-1 Q1)."""
+
+    name: str
+    lat: float | None  # TASK-004 A8: 장소 좌표(표시용). 장소 없는 고정 일정이면 null (키는 있음)
+    lng: float | None
+
+
+class DroppedView(Dropped):
+    """TASK-004 A3: 엔진의 Dropped에 `name`을 더한 응답용."""
+
+    name: str
+
+
 class CourseResultOption(BaseModel):
     option_id: str
     label: Literal["relaxed", "packed"]
-    items: list[CourseItem]
-    dropped: list[Dropped]
+    items: list[CourseItemView]
+    dropped: list[DroppedView]
     go_home_min: int
     total_travel_min: int
 
@@ -167,11 +216,20 @@ class CourseResult(BaseModel):
     session_id: str
     stage: Stage
     options: list[CourseResultOption]
+    day: DaySummary
 
 
 class SelectResult(BaseModel):
     day_id: str
     option_id: str
+
+
+class PlanningDone(BaseModel):
+    """TASK-004 A1: done 단계의 GET 응답. select 응답(SelectResult)에 stage를 더한 모양."""
+
+    day_id: str
+    option_id: str
+    stage: Literal["done"]
 
 
 class SeedResult(BaseModel):

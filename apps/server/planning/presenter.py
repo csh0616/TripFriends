@@ -11,12 +11,20 @@ from planning.schemas import (
     Candidate,
     CandidateBatch,
     Choice,
+    CourseItemView,
     CourseResult,
     CourseResultOption,
+    DayFixed,
+    DayMustVisit,
+    DaySummary,
     DirectionChoice,
+    DroppedView,
     Fact,
+    LatLng,
     Picks,
     Place,
+    PlanningDone,
+    PlanningSession,
     Question,
 )
 
@@ -57,6 +65,39 @@ def question(day_number: int) -> Question:
         choices=list(CHOICES),
         allow_text=True,
         allow_auto=True,
+    )
+
+
+def day_summary(day_id: str, day: DayRecord) -> DaySummary:
+    """TASK-004 A2: 저장소의 하루 데이터 그대로. 고정 일정 name = 장소 이름, 장소가 없으면 저장된 title (§12-1 Q1)."""
+    plan = day.plan
+    return DaySummary(
+        day_id=day_id,
+        day_number=day.day_number,
+        date=plan.date,
+        start=plan.start,
+        end=plan.end,
+        lodging=LatLng(lat=plan.lodging[0], lng=plan.lodging[1]),
+        must_visits=[DayMustVisit(place_id=pid, name=day.places[pid].name) for pid in plan.must_visit],
+        fixed=[
+            DayFixed(
+                place_id=f.place_id,
+                name=day.places[f.place_id].name if f.place_id else f.title,
+                start=f.start,
+                end=f.end,
+            )
+            for f in plan.fixed
+        ],
+    )
+
+
+def session_response(state: PlanningState, day: DayRecord) -> PlanningSession:
+    """TASK-003 §6 PlanningSession (첫 질문). 시작 응답과 GET(asking)이 함께 쓴다."""
+    return PlanningSession(
+        session_id=state.session_id,
+        stage="asking",
+        question=question(day.day_number),
+        day=day_summary(state.day_id, day),
     )
 
 
@@ -157,7 +198,27 @@ def batch_response(
         picks_count=len(reactions.liked),
         exhausted=exhausted,
         direction_relaxed=relaxed,
+        day=day_summary(state.day_id, day),
+        picks=list(reactions.liked),  # TASK-004 §12-1 A6: 담은 순서. 인자로 받은 반응이라 저장 전 시점이 유지된다
     )
+
+
+def batch_now(state: PlanningState, reactions: Reactions, relaxed: bool, first: bool, day: DayRecord) -> CandidateBatch:
+    """TASK-004 A1: 지금 묶음을 **지금 상태로 다시 계산**한 응답 (GET). 아무것도 저장하지 않는다.
+
+    TASK-004 §12-1 Q2·Q3: exhausted는 지금 안 보여 준 곳이 5곳 미만인지 다시 계산(소진이면 소진 문장),
+    clarify_count가 1이면 되묻기 칩과 "이 중에 있어?"를 다시 준다. POST와 같은 `batch_response`를 쓴다.
+    `first`(첫 묶음 대본 여부)와 `relaxed`는 묶음을 만들 때의 값이라 저장소에서 읽어 온다 (§10-10 R4).
+    """
+    cand = candidates(day)
+    exhausted = next_batch(cand, reactions, None, state.shown, day.plan.lodging, day_start(day)).exhausted
+    return batch_response(
+        state, reactions, relaxed, day, first=first, clarify=state.clarify_count == 1, exhausted=exhausted
+    )
+
+
+def done_response(state: PlanningState, option_id: str) -> PlanningDone:
+    return PlanningDone(day_id=state.day_id, option_id=option_id, stage="done")
 
 
 def picks_response(reactions: Reactions) -> Picks:
@@ -165,16 +226,35 @@ def picks_response(reactions: Reactions) -> Picks:
     return Picks(picks=liked, picks_count=len(liked))
 
 
-def course_response(state: PlanningState, records: list[OptionRecord]) -> CourseResult:
-    options = [
-        CourseResultOption(
-            option_id=record.option_id,
-            label=record.course.label,
-            items=record.course.items,
-            dropped=record.course.dropped,
-            go_home_min=record.course.go_home_min,
-            total_travel_min=record.course.total_travel_min,
+def course_response(state: PlanningState, records: list[OptionRecord], day: DayRecord) -> CourseResult:
+    """TASK-003 §6 CourseResult + TASK-004 A2(day)·A3(name).
+
+    항목 name: 장소가 있으면 장소 이름(고정 일정 포함, §12-1 Q1). 장소가 없는 고정 일정은 저장된 title.
+    # TASK-004 미정: 장소 없는 고정 일정 항목과 title을 잇는 방법(문서에 없음)
+    장소 없는 고정 일정은 서로 겹치지 않아 시각순으로 정렬한 title과 코스의 해당 항목을 순서대로 짝짓는다.
+    """
+    titles = [f.title for f in sorted((f for f in day.plan.fixed if f.place_id is None), key=lambda f: (f.start, f.end))]
+    options = []
+    for record in records:
+        untitled = iter(titles)
+        items = [
+            CourseItemView(
+                **item.model_dump(),
+                name=day.places[item.place_id].name if item.place_id else next(untitled),
+                lat=day.places[item.place_id].lat if item.place_id else None,
+                lng=day.places[item.place_id].lng if item.place_id else None,
+            )
+            for item in record.course.items
+        ]
+        dropped = [DroppedView(**d.model_dump(), name=day.places[d.place_id].name) for d in record.course.dropped]
+        options.append(
+            CourseResultOption(
+                option_id=record.option_id,
+                label=record.course.label,
+                items=items,
+                dropped=dropped,
+                go_home_min=record.course.go_home_min,
+                total_travel_min=record.course.total_travel_min,
+            )
         )
-        for record in records
-    ]
-    return CourseResult(session_id=state.session_id, stage=state.stage, options=options)
+    return CourseResult(session_id=state.session_id, stage=state.stage, options=options, day=day_summary(state.day_id, day))

@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/planning/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 지금 stage의 응답을 다시 받기 (상태를 바꾸지 않음) */
+        get: operations["current_planning_planning__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/planning/{session_id}/answer": {
         parameters: {
             query?: never;
@@ -272,6 +289,9 @@ export interface components {
             exhausted: boolean;
             /** Direction Relaxed */
             direction_relaxed: boolean;
+            day: components["schemas"]["DaySummary"];
+            /** Picks */
+            picks: string[];
         };
         /** CardInfo */
         CardInfo: {
@@ -295,8 +315,12 @@ export interface components {
             /** Label */
             label: string;
         };
-        /** CourseItem */
-        CourseItem: {
+        /**
+         * CourseItemView
+         * @description TASK-004 A3: 앱이 장소 이름을 다시 찾지 않게 `name`을 더한 응답용 CourseItem. 엔진의 CourseItem은 그대로 둔다.
+         *     name = 장소 이름, 장소가 없는 고정 일정이면 저장된 title (§12-1 Q1).
+         */
+        CourseItemView: {
             /** Seq */
             seq: number;
             /** Place Id */
@@ -317,6 +341,12 @@ export interface components {
             is_fixed: boolean;
             /** Hours Status */
             hours_status: ("confirmed" | "unverified" | "unknown") | null;
+            /** Name */
+            name: string;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
         };
         /** CourseResult */
         CourseResult: {
@@ -329,6 +359,7 @@ export interface components {
             stage: "asking" | "browsing" | "composing" | "done";
             /** Options */
             options: components["schemas"]["CourseResultOption"][];
+            day: components["schemas"]["DaySummary"];
         };
         /** CourseResultOption */
         CourseResultOption: {
@@ -340,13 +371,55 @@ export interface components {
              */
             label: "relaxed" | "packed";
             /** Items */
-            items: components["schemas"]["CourseItem"][];
+            items: components["schemas"]["CourseItemView"][];
             /** Dropped */
-            dropped: components["schemas"]["Dropped"][];
+            dropped: components["schemas"]["DroppedView"][];
             /** Go Home Min */
             go_home_min: number;
             /** Total Travel Min */
             total_travel_min: number;
+        };
+        /** DayFixed */
+        DayFixed: {
+            /** Place Id */
+            place_id: string | null;
+            /** Name */
+            name: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+        };
+        /** DayMustVisit */
+        DayMustVisit: {
+            /** Place Id */
+            place_id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * DaySummary
+         * @description TASK-004 A2: 저장소의 하루 데이터 요약 (PlanningSession·CandidateBatch·CourseResult에 붙는다).
+         */
+        DaySummary: {
+            /** Day Id */
+            day_id: string;
+            /** Day Number */
+            day_number: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            lodging: components["schemas"]["LatLng"];
+            /** Must Visits */
+            must_visits: components["schemas"]["DayMustVisit"][];
+            /** Fixed */
+            fixed: components["schemas"]["DayFixed"][];
         };
         /** DirectionChoice */
         DirectionChoice: {
@@ -358,8 +431,11 @@ export interface components {
             /** Label */
             label: string;
         };
-        /** Dropped */
-        Dropped: {
+        /**
+         * DroppedView
+         * @description TASK-004 A3: 엔진의 Dropped에 `name`을 더한 응답용.
+         */
+        DroppedView: {
             /** Place Id */
             place_id: string;
             /**
@@ -367,6 +443,8 @@ export interface components {
              * @enum {string}
              */
             reason: "closed_at_time" | "no_time" | "fixed_conflict";
+            /** Name */
+            name: string;
         };
         /**
          * ErrorBody
@@ -427,6 +505,13 @@ export interface components {
             ok: boolean;
             /** Cards */
             cards: number;
+        };
+        /** LatLng */
+        LatLng: {
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
         };
         /** NextRequest */
         NextRequest: {
@@ -518,6 +603,21 @@ export interface components {
              */
             hours_checked: boolean;
         };
+        /**
+         * PlanningDone
+         * @description TASK-004 A1: done 단계의 GET 응답. select 응답(SelectResult)에 stage를 더한 모양.
+         */
+        PlanningDone: {
+            /** Day Id */
+            day_id: string;
+            /** Option Id */
+            option_id: string;
+            /**
+             * Stage
+             * @constant
+             */
+            stage: "done";
+        };
         /** PlanningSession */
         PlanningSession: {
             /** Session Id */
@@ -528,6 +628,7 @@ export interface components {
              */
             stage: "asking" | "browsing" | "composing" | "done";
             question: components["schemas"]["Question"];
+            day: components["schemas"]["DaySummary"];
         };
         /** Question */
         Question: {
@@ -726,6 +827,37 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    current_planning_planning__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningSession"] | components["schemas"]["CandidateBatch"] | components["schemas"]["CourseResult"] | components["schemas"]["PlanningDone"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1156,13 +1288,13 @@ export interface operations {
                     "application/json": components["schemas"]["Screen"];
                 };
             };
-            /** @description Validation Error */
-            422: {
+            /** @description Bad Request */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

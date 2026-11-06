@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo-google-fonts/dm-mono": "^0.4.2",
+    "@expo-google-fonts/noto-sans-kr": "^0.4.4",
     "@expo/ui": "~58.0.23",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "api-types": "workspace:*",
+    "design-tokens": "workspace:*",
     "expo": "~58.0.19",
     "expo-constants": "~58.0.13",
     "expo-device": "~58.0.5",
@@ -25,13 +29,17 @@
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
+    "react-native-svg": "15.16.0",
     "react-native-web": "~0.21.4",
     "react-native-worklets": "0.13.0"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/jest-runner": "^10.1.1",
     "@testing-library/react-native": "^14.1.0",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.3.0",
+    "fast-check": "^4.10.2",
     "jest": "^30.5.2",
     "jest-expo": "~58.0.13",
     "react-test-renderer": "19.3.0",
@@ -44,7 +52,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "test": "jest"
+    "test": "jest",
+    "mutation": "stryker run"
   },
   "private": true,
   "jest": {

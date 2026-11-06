@@ -2,3 +2,20 @@
 // 테스트 환경에는 네이티브 worklets 모듈이 없어서, 라이브러리가 제공하는 가짜 모듈로 바꾼다
 jest.mock('react-native-worklets', () => require('react-native-worklets/lib/module/mock'));
 jest.mock('react-native-reanimated', () => require('react-native-reanimated/lib/module/mock'));
+
+// TASK-004: 아래 런타임 의존성은 frontend가 추가한다. 없어도 테스트가 돌도록 가짜 모듈로 고정한다 (virtual).
+jest.mock(
+  '@react-native-async-storage/async-storage',
+  () => require('./test-support/async-storage-mock'),
+  { virtual: true },
+);
+jest.mock('react-native-svg', () => require('./test-support/svg-mock'), { virtual: true });
+jest.mock('@expo-google-fonts/noto-sans-kr', () => require('./test-support/google-font-mock'), { virtual: true });
+jest.mock('@expo-google-fonts/dm-mono', () => require('./test-support/google-font-mock'), { virtual: true });
+// 글꼴 로드 성공이 기본값. 실패는 §7 테스트에서 이 가짜 함수의 반환값을 바꾼다.
+jest.mock('expo-font', () => ({
+  ...jest.requireActual('expo-font'),
+  useFonts: jest.fn(() => [true, null]),
+  loadAsync: jest.fn(async () => undefined),
+  isLoaded: jest.fn(() => true),
+}));

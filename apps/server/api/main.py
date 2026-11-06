@@ -17,7 +17,7 @@ from api.planning import drop_default_422, http_error_response, is_planning_path
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
 from planning.repo import MemoryPlanningRepo
-from planning.schemas import SeedResult
+from planning.schemas import ErrorResponse, SeedResult
 from planning.service import PlanningError, PlanningService
 
 log = logging.getLogger(__name__)
@@ -73,7 +73,9 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
     # TASK-003 미정: 그 밖의 4xx는 INVALID_REQUEST, 5xx는 INTERNAL_ERROR로 둔다 (문서에 없는 새 code 값을 만들지 않으려고)
     """
     code = "NOT_FOUND" if exc.status_code == 404 else "INTERNAL_ERROR" if exc.status_code >= 500 else "INVALID_REQUEST"
-    response = http_error_response(exc.status_code, code, str(exc.detail))
+    # TASK-004 §12-1 A7: 없는 경로의 404는 detail.resource = "route" (이미 만든 리소스 404는 PlanningError가 session·option·day)
+    detail = {"resource": "route"} if exc.status_code == 404 else None
+    response = http_error_response(exc.status_code, code, str(exc.detail), detail)
     if exc.headers:
         response.headers.update(exc.headers)  # 405의 Allow 등
     return response
@@ -133,7 +135,7 @@ def catalog() -> list[CardInfo]:
 # 개발 환경에서만 연다 (APP_ENV=production이면 닫힘)
 if os.environ.get("APP_ENV", "development") != "production":
 
-    @app.post("/debug/compose")
+    @app.post("/debug/compose", responses={400: {"model": ErrorResponse}})
     def debug_compose(snapshot: Snapshot) -> Screen:
         return compose_screen(snapshot)
 

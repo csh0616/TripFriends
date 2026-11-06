@@ -17,6 +17,7 @@ from planning.schemas import (
     ErrorResponse,
     NextRequest,
     Picks,
+    PlanningDone,
     PlanningSession,
     ReactionRequest,
     SelectResult,
@@ -24,8 +25,9 @@ from planning.schemas import (
 )
 from planning.service import PlanningError, PlanningService
 
-# 이 경로들만 공통 오류 형식으로 바꾼다. 그 밖의 엔드포인트(/debug/compose 등)는 기존 동작 그대로
-PLANNING_PREFIXES = ("/days/", "/planning/", "/course-options/")
+# 본문 오류를 400 공통 형식으로 바꾸는 경로. 그 밖의 엔드포인트는 기존 동작 그대로
+# TASK-004 A4: /debug/compose도 포함 (같은 접두사의 /debug/seed-demo는 본문이 없다)
+PLANNING_PREFIXES = ("/days/", "/planning/", "/course-options/", "/debug/compose")
 
 
 def get_service(request: Request) -> PlanningService:
@@ -39,8 +41,8 @@ def _error(status: int, code: str, message: str, detail: object = None) -> JSONR
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message, "detail": detail}})
 
 
-def http_error_response(status: int, code: str, message: str) -> JSONResponse:
-    return _error(status, code, message, None)
+def http_error_response(status: int, code: str, message: str, detail: object = None) -> JSONResponse:
+    return _error(status, code, message, detail)
 
 
 def planning_error_handler(_request: Request, exc: PlanningError) -> JSONResponse:
@@ -72,6 +74,15 @@ router = APIRouter()
 )
 def start_planning(day_id: str, body: StartRequest, service: Service) -> PlanningSession | CourseResult:
     return service.start(day_id, body.mode)
+
+
+@router.get(
+    "/planning/{session_id}",
+    responses=_doc(404),
+    summary="지금 stage의 응답을 다시 받기 (상태를 바꾸지 않음)",
+)
+def current_planning(session_id: str, service: Service) -> PlanningSession | CandidateBatch | CourseResult | PlanningDone:
+    return service.current(session_id)
 
 
 @router.post("/planning/{session_id}/answer", responses=_doc(400, 404, 409, 422), summary="첫 질문의 답 또는 알아서 짜 줘")
