@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { FriendBubble } from '@/components/planning/friend-bubble';
+import { DrawnRing } from '@/components/planning/drawn-ring';
 import { CheckIcon, CloseIcon, PlusIcon } from '@/components/planning/icons';
 import { Notice } from '@/components/planning/notice';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
@@ -124,9 +125,9 @@ export function P2Screen({
               disabled={busy}
               hitSlop={{ top: layout.chipSlop, bottom: layout.chipSlop }}
               onPress={() => next({ direction_id: chip.id })}
-              style={[styles.chip, busy && styles.dim]}
+              style={[styles.chip, busy && styles.chipOff]}
             >
-              <Text style={text('caption')}>{chip.label}</Text>
+              <Text style={text('label', busy ? 'muted' : 'ink')}>{chip.label}</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -151,8 +152,11 @@ export function P2Screen({
                   <Text style={text('num-md')}>{`${pad2(index + 1)} / ${pad2(total)}`}</Text>
                 </View>
                 {liked ? (
-                  <View testID={`picked-mark-${place.id}`} style={styles.mark}>
-                    <CheckIcon color={color['on-brand']} />
+                  <View style={styles.markWrap}>
+                    <View testID={`picked-mark-${place.id}`} style={styles.mark}>
+                      <CheckIcon color={color['on-brand']} />
+                    </View>
+                    <DrawnRing size={layout.pickedMark + 2 * layout.markRing} />
                   </View>
                 ) : null}
               </PhotoPlaceholder>
@@ -165,9 +169,9 @@ export function P2Screen({
                   accessibilityLabel="패스"
                   disabled={busy}
                   onPress={() => void skip(place.id, index)}
-                  style={[styles.round, styles.skipButton, busy && styles.dim]}
+                  style={[styles.round, styles.skipButton]}
                 >
-                  <CloseIcon color={color.ink} />
+                  <CloseIcon color={busy ? color.muted : color.ink} />
                 </Pressable>
                 <Pressable
                   testID={`like-${place.id}`}
@@ -176,9 +180,13 @@ export function P2Screen({
                   accessibilityState={{ selected: liked }}
                   disabled={busy}
                   onPress={() => like(place.id)}
-                  style={[styles.round, liked ? styles.likedButton : styles.likeButton, busy && styles.dim]}
+                  style={[styles.round, liked ? styles.likedButton : styles.likeButton, busy && styles.roundOff]}
                 >
-                  {liked ? <CheckIcon color={color['on-brand']} /> : <PlusIcon color={color.surface} />}
+                  {liked ? (
+                    <CheckIcon color={busy ? color.muted : color['on-brand']} />
+                  ) : (
+                    <PlusIcon color={busy ? color.muted : color.surface} />
+                  )}
                 </Pressable>
               </View>
               <View style={styles.facts}>
@@ -195,7 +203,8 @@ export function P2Screen({
         <View testID="end-card" style={[styles.endCard, { width: cardWidth }]}>
           {batch.exhausted ? (
             <>
-              <Text style={text('heading')}>{batch.message}</Text>
+              {/* §13-3 끝 카드: 소진이면 앱 고정 글, 서버 message는 말풍선에만 */}
+              <Text style={text('heading')}>코스 짜 볼까?</Text>
               <PrimaryButton label="코스 짜기" disabled={busy} onPress={compose} />
             </>
           ) : (
@@ -218,7 +227,8 @@ const styles = StyleSheet.create({
   overlap: { marginLeft: -layout.pickedOverlap },
   clip: { overflow: 'hidden' },
   emptyCircle: { backgroundColor: color['bg-2'] },
-  chips: { gap: space['space-2'] },
+  // 칩 보이는 높이 36 + 위아래 hitSlop 4 = 44. 스크롤 안쪽 위아래 여백으로 그 4가 잘리지 않게 한다 (§13-2 #3)
+  chips: { gap: space['space-2'], paddingVertical: layout.chipSlop },
   chip: {
     height: control.chip,
     paddingHorizontal: space['space-4'],
@@ -226,7 +236,8 @@ const styles = StyleSheet.create({
     backgroundColor: color['brand-soft'],
     justifyContent: 'center',
   },
-  dim: { opacity: 0.5 },
+  chipOff: { backgroundColor: color['bg-2'] },
+  roundOff: { backgroundColor: color['bg-2'] },
   bleed: { marginHorizontal: -layout.screenMargin },
   carousel: { paddingHorizontal: layout.screenMargin, gap: space['space-3'], alignItems: 'flex-start' },
   photo: { height: layout.photo, borderRadius: radius['r-lg'], marginBottom: space['space-3'] },
@@ -239,10 +250,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: space['space-3'],
     paddingVertical: space['space-1'],
   },
-  mark: {
+  markWrap: {
     position: 'absolute',
     top: space['space-3'],
     right: space['space-3'],
+    width: layout.pickedMark + 2 * layout.markRing,
+    height: layout.pickedMark + 2 * layout.markRing,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mark: {
     width: layout.pickedMark,
     height: layout.pickedMark,
     borderRadius: radius['r-full'],

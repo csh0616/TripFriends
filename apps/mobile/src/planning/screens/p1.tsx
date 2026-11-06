@@ -1,6 +1,6 @@
 // P1 첫 질문 (TASK-004 §B-4, §12 Q4·Q6·Q9·Q32). PlanningSession을 그린다.
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { FriendBubble } from '@/components/planning/friend-bubble';
 import { CheckIcon } from '@/components/planning/icons';
@@ -10,6 +10,8 @@ import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { requests, type PlanningSession } from '@/lib/planning-api';
+
+import { useDraw } from '../draw';
 
 import { dayName, daySubtitle, mustVisitLine, timeToMinutes } from '../format';
 import { layout } from '../layout';
@@ -28,6 +30,18 @@ const TILE_CATEGORY: Record<string, string> = {
 
 export type AnswerBody = Parameters<typeof requests.answer>[1];
 type ChoiceId = NonNullable<AnswerBody['choice_ids']>[number];
+
+/** 고른 타일의 고리. 같은 움직임 부품(useDraw, dur-draw)으로 나타난다 (§13-2 #8, 움직임 줄이기면 0) */
+function Ring() {
+  const progress = useDraw();
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [layout.ringFrom, 1] });
+  return (
+    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { transform: [{ scale }] }]}>
+      <View pointerEvents="none" style={styles.ringBrand} />
+      <View pointerEvents="none" style={styles.ringWhite} />
+    </Animated.View>
+  );
+}
 
 export function P1Screen({
   session,
@@ -97,15 +111,11 @@ export function P1Screen({
                   style={styles.tile}
                 >
                   <PhotoPlaceholder category={TILE_CATEGORY[choice.id] ?? 'landmark'} style={StyleSheet.absoluteFill} />
-                  {on ? (
-                    <>
-                      <View pointerEvents="none" style={styles.ringBrand} />
-                      <View pointerEvents="none" style={styles.ringWhite} />
-                    </>
-                  ) : null}
+                  {on ? <Ring /> : null}
                   <View style={styles.pill}>
-                    {on ? <CheckIcon color={color.ink} size={16} /> : null}
-                    <Text style={on ? styles.pillOn : styles.pillOff}>{choice.label}</Text>
+                    {on ? <CheckIcon color={color.ink} size={layout.checkSmall} /> : null}
+                    {/* 미정(§13): 알약 글자는 고르기 전후 모두 label. 고른 표시는 체크와 고리가 맡는다 */}
+                    <Text style={styles.pillText}>{choice.label}</Text>
                   </View>
                 </Pressable>
               );
@@ -180,8 +190,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space['space-3'],
     paddingVertical: space['space-1'],
   },
-  pillOff: text('caption'),
-  pillOn: text('label'),
+  pillText: text('label'),
   timetable: { backgroundColor: color['bg-2'], borderRadius: radius['r-xl'], padding: space['space-4'], gap: space['space-2'] },
   track: { height: layout.barHeight, borderRadius: radius['r-full'], backgroundColor: color.surface, overflow: 'hidden' },
   segment: { position: 'absolute', top: 0, bottom: 0, backgroundColor: color.ink },

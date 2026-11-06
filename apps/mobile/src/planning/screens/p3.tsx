@@ -25,11 +25,8 @@ const REASON_TEXT = {
 } as const;
 const STEP_MIN = 15 as const;
 
-type Coordinates = Record<string, { lat: number; lng: number }>;
-
 export function P3Screen({
   course,
-  coordinates,
   busy,
   notice,
   onAdjust,
@@ -37,8 +34,6 @@ export function P3Screen({
   onSelect,
 }: {
   course: CourseResult;
-  /** 지금까지 본 후보의 좌표 (코스 항목에는 좌표가 없다) */
-  coordinates: Coordinates;
   busy: boolean;
   notice: NoticeData | null;
   onAdjust: Send<[string, string, 15 | -15]>;
@@ -79,10 +74,11 @@ export function P3Screen({
         <>
           {empty ? (
             <>
+              {/* 주 버튼은 늘 맨 오른쪽 (§13-2 #9, Q41) */}
+              <SecondaryButton label="이걸로 할래" disabled={busy} onPress={select} />
               <View style={styles.grow}>
                 <PrimaryButton label="더 고를래" disabled={busy} onPress={back} />
               </View>
-              <SecondaryButton label="이걸로 할래" disabled={busy} onPress={select} />
             </>
           ) : (
             <>
@@ -128,7 +124,9 @@ export function P3Screen({
           <RouteDiagram
             width={width - 2 * layout.screenMargin}
             home={day.lodging}
-            stops={items.map((item) => (item.place_id ? coordinates[item.place_id] : undefined))}
+            stops={items.flatMap((item) =>
+              item.lat !== null && item.lng !== null ? [{ seq: item.seq, lat: item.lat, lng: item.lng }] : [],
+            )}
           />
           <Text style={text('heading')}>{`${items.length}곳 · 이동 ${option.total_travel_min}분`}</Text>
 
@@ -182,10 +180,10 @@ function Row({
 }) {
   // 고정 일정 줄은 머문 시간을 바꿀 수 없다 (§10-10 R6). 장소 없는 줄도 마찬가지.
   const placeId = !item.is_fixed ? item.place_id : null;
-    const kind = item.is_fixed ? '고정 일정 · ' : must ? '꼭 갈 곳 · ' : '';
+  const kind = item.is_fixed ? '고정 일정 · ' : must ? '꼭 갈 곳 · ' : '';
   const stay = (
     <>
-      <Text style={text('num-md')}>{formatStay(item.stay_min)}</Text>
+      <Text style={text('caption')}>{formatStay(item.stay_min)}</Text>
       {item.stay_source === 'user' ? <Text style={text('label', 'muted')}>바꿈</Text> : null}
     </>
   );
@@ -239,9 +237,8 @@ function Row({
 }
 
 /**
- * 동선 도식 (지도 SDK 없음). 숙소 + 장소를 상자에 맞춰 그린다.
- * TASK-004 미정: Q45 코스 항목에 좌표가 없어서, 본 적 있는 후보의 좌표만 쓴다.
- * 좌표를 모르는 줄이 하나라도 있으면 (다시 켠 뒤 등) 정확한 위치 대신 같은 간격으로 늘어놓는다.
+ * 동선 도식 (지도 SDK 없음). 숙소 + 코스 항목 좌표(A8)를 상자에 맞춰 그린다.
+ * 좌표 없는 줄(장소 없는 고정 일정)은 그림에서 빼고 목록에는 둔다. 번호는 목록과 같은 seq.
  */
 function RouteDiagram({
   width,
@@ -250,45 +247,49 @@ function RouteDiagram({
 }: {
   width: number;
   home: { lat: number; lng: number };
-  stops: ({ lat: number; lng: number } | undefined)[];
+  stops: { seq: number; lat: number; lng: number }[];
 }) {
   const height = layout.routeDiagram;
-  const known = stops.every((s) => s !== undefined);
-  const points = known
-    ? projectRoute([home, ...(stops as { lat: number; lng: number }[])], width, height, layout.routePad)
-    : [home, ...stops].map((_, i, all) => ({
-        x: layout.routePad + (i * (width - 2 * layout.routePad)) / Math.max(1, all.length - 1),
-        y: height / 2,
-      }));
+  const points = projectRoute([home, ...stops], width, height, layout.routePad);
   const line = points.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
     <View testID="route-diagram" style={[styles.diagram, { width, height }]}>
       <Svg width={width} height={height}>
-        <Polyline
-          points={line}
-          fill="none"
-          stroke={color.brand}
-          strokeWidth={layout.routeLine}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <Circle cx={points[0].x} cy={points[0].y} r={layout.routeHome} fill={color.surface} />
+        {stops.length > 0 ? (
+          <Polyline
+            testID="route-line"
+            points={line}
+            fill="none"
+            stroke={color.brand}
+            strokeWidth={layout.routeLine}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ) : null}
+        <Circle testID="route-home" cx={points[0].x} cy={points[0].y} r={layout.routeHome} fill={color.surface} />
         <Circle cx={points[0].x} cy={points[0].y} r={layout.dot} fill={color.ink} />
-        {points.slice(1).map((p, i) => (
-          <Circle key={`n-${i}`} cx={p.x} cy={p.y} r={layout.routeNode} fill={color.ink} />
+        {stops.map((stop, i) => (
+          <Circle
+            key={`n-${stop.seq}`}
+            testID={`route-stop-${stop.seq}`}
+            cx={points[i + 1].x}
+            cy={points[i + 1].y}
+            r={layout.routeNode}
+            fill={color.ink}
+          />
         ))}
-        {points.slice(1).map((p, i) => (
+        {stops.map((stop, i) => (
           <SvgText
-            key={`t-${i}`}
-            x={p.x}
-            y={p.y + layout.dot - 1}
+            key={`t-${stop.seq}`}
+            x={points[i + 1].x}
+            y={points[i + 1].y + layout.dot - 1}
             fill={color.surface}
             textAnchor="middle"
             fontFamily={text('label').fontFamily}
             fontSize={text('label').fontSize}
           >
-            {String(i + 1)}
+            {String(stop.seq)}
           </SvgText>
         ))}
       </Svg>
