@@ -9,8 +9,9 @@ import { json } from '../test-support/fake-server';
 import { picks } from '../test-support/planning-fixtures';
 
 type Tree = { type: string; props: Record<string, any>; parent: Tree | null; queryAll: (p: (h: Tree) => boolean) => Tree[] };
-type Must = { place_id: string; name: string };
-type DayTimes = { start: string; end: string; fixed: { start: string; end: string }[]; must_visits?: Must[] };
+type Must = { place_id: string; name: string; stay_min: number };
+type Fixed = { start: string; end: string; place_id?: string };
+type DayTimes = { start: string; end: string; fixed: Fixed[]; must_visits?: Must[] };
 
 const freeHoursText = (input: DayTimes): string | null => require('@/lib/free-hours').freeHoursText(input);
 
@@ -64,20 +65,28 @@ describe('D1 떠 있는 줄의 원', () => {
 
 // ---------- D2 ----------
 
-describe('D2 비어 있는 시간에서 꼭 갈 곳 머문 시간도 뺀다', () => {
-  const DAY = { start: '10:00', end: '20:00', fixed: [] as { start: string; end: string }[] };
-  const must = (id: string): Must => ({ place_id: id, name: `꼭 갈 곳 ${id}` });
+describe('D2 비어 있는 시간에서 꼭 갈 곳 머문 시간도 뺀다 (§11 Q19: 값은 서버의 stay_min)', () => {
+  const DAY = { start: '10:00', end: '20:00', fixed: [] as Fixed[] };
+  const must = (id: string, stay_min = 60): Must => ({ place_id: id, name: `꼭 갈 곳 ${id}`, stay_min });
 
   test.each<[string, Must[], string | null]>([
     ['꼭 갈 곳 없음', [], '10시간 비어 있어'],
-    ['머문 시간이 없는 꼭 갈 곳 1곳은 60분', [must('A')], '9시간 비어 있어'],
-    ['머문 시간이 없는 꼭 갈 곳 3곳은 180분', [must('A'), must('B'), must('C')], '7시간 비어 있어'],
+    ['60분 1곳', [must('A')], '9시간 비어 있어'],
+    ['120분 1곳', [must('A', 120)], '8시간 비어 있어'],
+    ['60분 3곳', [must('A'), must('B'), must('C')], '7시간 비어 있어'],
+    ['45분과 75분', [must('A', 45), must('B', 75)], '8시간 비어 있어'],
   ])('T6_D2_%s', (_name, must_visits, expected) => {
     expect(freeHoursText({ ...DAY, must_visits })).toBe(expected);
   });
 
-  test('T6_D2_고정_일정과_함께_뺀다', () => {
-    expect(freeHoursText({ ...DAY, fixed: [{ start: '13:00', end: '14:00' }], must_visits: [must('A')] })).toBe('8시간 비어 있어');
+  test('T6_D2_다른_장소의_고정_일정과는_따로_뺀다', () => {
+    const fixed = [{ start: '13:00', end: '14:00', place_id: 'X' }];
+    expect(freeHoursText({ ...DAY, fixed, must_visits: [must('A')] })).toBe('8시간 비어 있어');
+  });
+
+  test('T6_D2_S11_Q19_꼭_갈_곳이_고정_일정이기도_하면_두_번_빼지_않는다', () => {
+    const fixed = [{ start: '13:00', end: '14:00', place_id: 'A' }];
+    expect(freeHoursText({ ...DAY, fixed, must_visits: [must('A')] })).toBe('9시간 비어 있어');
   });
 
   test('T6_D2_TASK005_Q7_다_빼서_반올림_뒤_0_이하면_숨긴다', () => {
@@ -92,18 +101,8 @@ describe('D2 비어 있는 시간에서 꼭 갈 곳 머문 시간도 뺀다', ()
 
   test('T6_D2_문구는_그대로이고_P1에_나온다', async () => {
     happyServer();
-    await toP1(); // 가짜 day: 10:00~20:00, 꼭 갈 곳 1곳(머문 시간 값 없음)
+    await toP1(); // 가짜 day: 10:00~20:00, 꼭 갈 곳 1곳 60분
     expect(within(byId('timetable') as never).getByText('9시간 비어 있어')).toBeTruthy();
-  });
-
-  test.skip('Q19_머문_시간_값이_있으면_그_값을_뺀다_필드_이름이_문서에_없다', () => {
-    const typed = { ...must('A'), typical_min: 120 };
-    expect(freeHoursText({ ...DAY, must_visits: [typed] })).toBe('8시간 비어 있어');
-  });
-
-  test.skip('Q19_꼭_갈_곳이_고정_일정이기도_하면_두_번_빼지_않는다', () => {
-    const fixed = [{ start: '13:00', end: '14:00', place_id: 'A' }];
-    expect(freeHoursText({ ...DAY, fixed, must_visits: [must('A')] })).toBe('9시간 비어 있어');
   });
 });
 
@@ -153,7 +152,7 @@ const ALL_SCREENS: [string, () => Promise<unknown>][] = [
   ['S9', () => toS9()],
 ];
 
-// 사진 타일과 SOS 원은 모양이 정해져 있어 빼고 본다 (질문 Q20)
+// 사진 타일과 SOS 원은 모양이 정해져 있어 뺀다 (§11 Q20)
 const FIXED_SHAPE = (id: unknown) => id === 'sos-button' || (typeof id === 'string' && id.startsWith('choice-'));
 
 describe('D4 글자 확대 1.3배', () => {

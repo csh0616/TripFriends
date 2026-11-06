@@ -7,10 +7,16 @@ type Props = Record<string, any>;
 
 export const mapControl = {
   failRender: false, // true면 지도 부품을 그릴 때 던진다 (TASK-006 §7 지도 로드 실패)
+  silent: false, // true면 준비 신호를 주지 않는다 (TASK-006 §11 Q17: 8초)
+  mountedAt: null as number | null, // 지도가 화면에 올라온 시각
+  ready: () => undefined as void, // silent일 때 시험이 직접 준비 신호를 준다
   fits: [] as { coordinates: { latitude: number; longitude: number }[]; options?: { edgePadding?: { bottom?: number } } }[],
   moves: [] as { latitude: number; longitude: number }[], // animateToRegion·animateCamera의 가운데
   reset() {
     this.failRender = false;
+    this.silent = false;
+    this.mountedAt = null;
+    this.ready = () => undefined;
     this.fits = [];
     this.moves = [];
   },
@@ -30,8 +36,15 @@ const MapView = forwardRef<unknown, Props>(function MapView(props, ref) {
     },
   }));
   useEffect(() => {
-    props.onMapReady?.();
-    props.onMapLoaded?.();
+    mapControl.mountedAt = Date.now();
+    mapControl.ready = () => {
+      props.onMapReady?.();
+      props.onMapLoaded?.();
+    };
+    // 실제 지도처럼 그린 다음 차례에 신호를 준다
+    if (mapControl.silent) return undefined;
+    const timer = setTimeout(() => mapControl.ready(), 0);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return createElement(View, { ...props, testID: props.testID ?? 'map-view', mapElement: 'MapView' } as object);

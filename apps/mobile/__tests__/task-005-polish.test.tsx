@@ -763,7 +763,8 @@ describe('B8 freeHoursText', () => {
 describe('B8 P1 시간표', () => {
   async function p1With(fixed: { place_id: string | null; name: string; start: string; end: string }[]) {
     const server = happyServer();
-    server.on(R.start, json(201, { ...session, day: { ...day, fixed } }));
+    // TASK-006 §11-4: 고정 일정만 보는 시험이라 꼭 갈 곳을 비운다 (D2로 꼭 갈 곳 머문 시간도 빠지므로)
+    server.on(R.start, json(201, { ...session, day: { ...day, fixed, must_visits: [] } }));
     await startApp();
     await pressText('데모 여행 시작');
     await screen.findByText('서버가_준_첫_질문');

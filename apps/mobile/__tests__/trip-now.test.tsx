@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// 여행 중 화면 SC-04 (로직·가드레일). 근거: TASK-006 B1~B10, §6, §7, §8 AC-5·AC-6·AC-7, SCREEN-001 §2·§3-2·§6, ADR-014, DESIGN-001 §4.
+// 여행 중 화면 SC-04 (로직·가드레일). 근거: TASK-006 §11(우선), B1~B10, §6, §7, §8 AC-5·AC-6·AC-7, SCREEN-001 §2·§3-2·§6, ADR-014, DESIGN-001 §4.
 // 지도·시트는 가짜 부품(test-support/maps-mock, bottom-sheet-mock)이다. 이 파일이 통과해도 지도가 실제로 보인다는 뜻이 아니다.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,9 +16,10 @@ import { apiError, hang, json, networkDown, notJson } from '../test-support/fake
 import { mapControl } from '../test-support/maps-mock';
 import { pressId, pressText, resetDevice, restart, tap, toS9 } from '../test-support/planning-driver';
 import { hits, MOBILE_ROOT, sourceFiles } from '../test-support/source-files';
+
 import { advance, buildConfig, ENTER, flow, installConfig, nowServer, TEST_KEY, toNow } from '../test-support/trip-now-driver';
 import { first, MAP_URL, nowItem, nowView, pins, POSITION, route, second, t01, t02, t03, t07, t08, third } from '../test-support/trip-now-fixtures';
-import { day } from '../test-support/planning-fixtures';
+import { day, SPOT } from '../test-support/planning-fixtures';
 
 // app.config가 만든 설정을 시험마다 바꿔 끼운다 (키 있음·없음). trip-now-driver의 installConfig 참고
 jest.mock('expo-constants', () => {
@@ -309,7 +310,7 @@ describe('B6 카드 부품', () => {
   });
 
   test('T6_B6_T_02_길_안내는_서버의_map_url을_연다', async () => {
-    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const open = jest.spyOn(Linking, 'openURL').mockClear().mockResolvedValue(undefined);
     await shows(t02());
     await pressId('directions-button');
     await waitFor(() => expect(open).toHaveBeenCalledWith(MAP_URL));
@@ -364,9 +365,40 @@ describe('B6 카드 부품', () => {
     expect(inCard('rest-row-3').getByText('모름')).toBeTruthy();
   });
 
-  test.skip('Q21_T_07_고정_일정에_상태_칩이_필요한가_fixed에는_facts가_없다', async () => {
+  test('T6_S11_Q21_T_07_고정_일정에_장소가_있으면_상태_글자', async () => {
     await shows(t07());
     expect(inCard('card-T-07').getByText('확인됨')).toBeTruthy();
+  });
+
+  test('T6_S11_Q21_T_07_장소가_없으면_상태_글자_없이_그려진다', async () => {
+    await shows(t07({ fixed: { name: '서버_예약_공연', start: '15:00', end: '16:00', facts: [] } }));
+    expect(inCard('card-T-07').getByText('서버_예약_공연')).toBeTruthy();
+    expect(inCard('card-T-07').queryByText(/확인됨|미확인|모름/)).toBeNull();
+  });
+
+  test('T6_S11_Q6_장소_없는_고정_일정의_T_01은_상태_글자_없이_그려진다', async () => {
+    await shows(t01({ item: { ...second, place_id: null, lat: null, lng: null, facts: [] } }));
+    expect(inCard('card-T-01').getByText(second.name)).toBeTruthy();
+    expect(inCard('card-T-01').queryByText(/확인됨|미확인|모름/)).toBeNull();
+  });
+
+  test('T6_S11_Q6_map_url이_null이면_열지_않는다', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockClear().mockResolvedValue(undefined);
+    await shows(t02({ map_url: null, next_item: { ...second, place_id: null, lat: null, lng: null, facts: [] } }));
+    if (screen.queryByTestId('directions-button')) await pressId('directions-button');
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  test('T6_S11_Q5_남은_일정이_비어_있어도_그려진다', async () => {
+    await shows(t03({ items: [] }));
+    expect(screen.queryByTestId(/^rest-row-/)).toBeNull();
+  });
+
+  test('T6_S11_Q13_빈_코스의_T_08과_이유를_핀_없이_그린다', async () => {
+    await toNow(nowServer(nowCard(t08({ go_home_min: 0 }), { pins: [], reason: '오늘 코스가 비어 있어' })));
+    expect(screen.getByTestId('card-T-08')).toBeTruthy();
+    expect(inCard('now-reason').getByText('오늘 코스가 비어 있어')).toBeTruthy();
+    expect(screen.queryByTestId(/^map-pin-/)).toBeNull();
   });
 });
 
@@ -402,13 +434,14 @@ describe('B7 데모 시계', () => {
     for (const id of ['demo-panel', 'demo-bar', 'demo-time', 'demo-plus-10', 'demo-play']) expect(byId(id)).toBeTruthy();
   });
 
-  test('T6_B7_개발_빌드가_아니면_데모_버튼이_없다', async () => {
+  // §11 Q22: 데모일 때 = __DEV__ 또는 시드에서 만든 날. 앱에는 아직 시드 아닌 날로 가는 길이 없어 "없음" 쪽은 시험할 수 없다 (질문 R10)
+  test('T6_S11_Q22_개발_빌드가_아니어도_시드에서_만든_날이면_데모_버튼이_있다', async () => {
     const global_ = globalThis as unknown as { __DEV__: boolean };
     const saved = global_.__DEV__;
     try {
       global_.__DEV__ = false;
       await toNow();
-      expect(screen.queryByTestId('demo-toggle')).toBeNull();
+      expect(screen.getByTestId('demo-toggle')).toBeTruthy();
     } finally {
       global_.__DEV__ = saved;
     }
@@ -429,7 +462,7 @@ describe('B7 데모 시계', () => {
     await waitFor(() => expect(control.requests().at(-1)?.at).toBe(AT('10:10')));
   });
 
-  test('T6_B7_Q22_더하기는_하루_끝을_넘지_않는다', async () => {
+  test('T6_S11_Q22_더하기는_하루_끝에서_멈춘다', async () => {
     const { control } = await toNow();
     await pressId('demo-toggle');
     for (let i = 0; i < 61; i += 1) await pressId('demo-plus-10');
@@ -462,7 +495,7 @@ describe('B7 데모 시계', () => {
     );
   });
 
-  test('T6_B7_Q22_재생해도_하루_끝을_넘지_않는다', async () => {
+  test('T6_S11_Q22_재생은_하루_끝에서_멈춘다', async () => {
     const { control } = await toNow();
     await pressId('demo-toggle');
     jest.useFakeTimers();
@@ -471,6 +504,10 @@ describe('B7 데모 시계', () => {
     expect(demoTime()).toBe('20:00');
     await flow(300);
     expect(control.requests().every((request) => (request.at as string) <= AT('20:00'))).toBe(true);
+    const settled = control.requests().length;
+    await flow(5000);
+    expect(demoTime()).toBe('20:00');
+    expect(control.requests()).toHaveLength(settled);
   });
 
   // 시각 막대의 끌기 자체는 Maestro 몫. 위치 → 시각 계산만 본다 (함수 이름은 이 테스트가 정한 계약)
@@ -500,9 +537,34 @@ describe('B7 데모 시계', () => {
     });
   });
 
-  test.skip('Q15_요청에_fakePosition_위치가_실려_간다_앱이_일정_시각을_어디서_받는지_문서에_없다', async () => {
+  const pressPlus = async (times: number) => {
+    for (let i = 0; i < times; i += 1) await pressId('demo-plus-10');
+  };
+
+  test('T6_B7_S11_Q15_일정_안_시각의_요청에_그_장소_위치가_실려_간다', async () => {
     const { control } = await toNow();
-    expect(control.requests()[0].lat).not.toBeNull();
+    await pressId('demo-toggle');
+    await pressPlus(2); // 10:20, 1번 일정 안
+    await waitFor(() => expect(control.requests().at(-1)?.at).toBe(AT('10:20')));
+    const sent = control.requests().at(-1) as { lat: string; lng: string };
+    expect(Number(sent.lat)).toBeCloseTo(SPOT.D01.lat, 9);
+    expect(Number(sent.lng)).toBeCloseTo(SPOT.D01.lng, 9);
+  });
+
+  test('T6_B7_S11_Q15_일정_사이_시각의_요청에_핀_시각으로_보간한_위치가_실려_간다', async () => {
+    const { control } = await toNow();
+    await pressId('demo-toggle');
+    await pressPlus(13); // 12:10, 1번 12:00 끝 ~ 2번 12:20 시작의 가운데
+    await waitFor(() => expect(control.requests().at(-1)?.at).toBe(AT('12:10')));
+    const sent = control.requests().at(-1) as { lat: string; lng: string };
+    expect(Number(sent.lat)).toBeCloseTo((SPOT.D01.lat + SPOT.D20.lat) / 2, 9);
+    expect(Number(sent.lng)).toBeCloseTo((SPOT.D01.lng + SPOT.D20.lng) / 2, 9);
+  });
+
+  test.skip('R7_첫_요청에는_핀이_아직_없다_위치_없이_보내고_다시_부르나', async () => {
+    const { control } = await toNow();
+    expect(control.requests()).toHaveLength(2);
+    expect(control.requests()[1].lat).not.toBeNull();
   });
 });
 
@@ -609,7 +671,7 @@ describe('B9 진입과 다시 켜기', () => {
     expect(control.requests()).toHaveLength(0);
   });
 
-  test.skip('Q16_다시_켠_뒤_시각은_마지막_시각인가_그날_시작인가', async () => {
+  test('T6_S11_Q16_다시_켜면_마지막_데모_시각으로', async () => {
     const { app, control } = await toNow();
     await pressId('demo-toggle');
     await pressId('demo-plus-10');
@@ -753,9 +815,51 @@ describe('§7 줄 1 지도 키 없음·로드 실패', () => {
     expect(screen.getByTestId('map-view')).toBeTruthy();
   });
 
-  test.skip('Q17_지도가_로드_신호를_주지_않으면_실패로_보는_시간이_문서에_없다', async () => {
-    await toNow();
-    expect(screen.getByText(MESSAGE)).toBeTruthy();
+  describe('§11 Q17 준비 신호 8초', () => {
+    /** 지도가 올라온 뒤 정확히 ms가 지난 시각까지 민다 */
+    const untilAfterMount = async (ms: number) => {
+      await advance((mapControl.mountedAt as number) + ms - Date.now());
+    };
+
+    async function silentMap() {
+      mapControl.silent = true;
+      const control = nowServer();
+      await toS9();
+      jest.useFakeTimers();
+      await pressText(ENTER);
+      await flow(400);
+      expect(mapControl.mountedAt).not.toBeNull();
+      return control;
+    }
+
+    test('T6_AC7_S11_Q17_7999ms에는_지도이고_8000ms에_대체_화면', async () => {
+      await silentMap();
+      await untilAfterMount(7999);
+      expect(screen.getByTestId('map-view')).toBeTruthy();
+      expect(screen.queryByText(MESSAGE)).toBeNull();
+      await untilAfterMount(8000);
+      expectFallback();
+      expect(screen.getByTestId('now-main')).toBeTruthy();
+    });
+
+    test('T6_AC7_S11_Q17_8초_안에_신호가_오면_뒤에도_지도', async () => {
+      await silentMap();
+      await untilAfterMount(7999);
+      await act(async () => mapControl.ready());
+      await untilAfterMount(9000);
+      expect(screen.getByTestId('map-view')).toBeTruthy();
+      expect(screen.queryByText(MESSAGE)).toBeNull();
+    });
+
+    test('T6_AC7_S11_Q17_신호가_바로_오면_8초가_지나도_지도', async () => {
+      nowServer();
+      await toS9();
+      jest.useFakeTimers();
+      await pressText(ENTER);
+      await flow(400);
+      await untilAfterMount(8000);
+      expect(screen.getByTestId('map-view')).toBeTruthy();
+    });
   });
 });
 
@@ -821,9 +925,24 @@ describe('§7 줄 2 끊김·시간 초과', () => {
     expect(byId('map-pin-1')).toBeTruthy();
   });
 
-  test.skip('Q22_첫_요청부터_끊기면_마지막_화면이_없다_무엇을_보여_주나', async () => {
+  test('T6_AC7_S11_Q22_첫_요청부터_끊겨도_띠와_다시', async () => {
     const control = nowServer();
     control.once(networkDown);
+    await toS9();
+    await pressText(ENTER);
+    expect(await screen.findByText(BAND)).toBeTruthy();
+    expect(screen.getByTestId('retry-button')).toBeTruthy();
+    expect(screen.getByTestId('sos-button')).toBeTruthy();
+    expect(screen.queryByTestId('now-main')).toBeNull();
+    await pressId('retry-button');
+    await screen.findByTestId('now-main');
+    expect(screen.queryByText(BAND)).toBeNull();
+    expect(control.requests()[1].path).toBe(control.requests()[0].path);
+  });
+
+  test.skip('R8_첫_요청이_500이면_띠인가_잠깐_문제_줄인가', async () => {
+    const control = nowServer();
+    control.once(apiError(500, 'INTERNAL_ERROR'));
     await toS9();
     await pressText(ENTER);
     expect(await screen.findByText(BAND)).toBeTruthy();
@@ -874,12 +993,16 @@ describe('§7 줄 3 404 course', () => {
     expect(screen.getByText('계획 다시 하기')).toBeTruthy();
   });
 
-  test.skip('Q22_course가_아닌_404_day_route는_어떻게_보여_주나', async () => {
+  test.each(['day', 'route'])('T6_AC7_S11_Q22_course가_아닌_404_%s는_500_줄처럼', async (resource) => {
     const control = nowServer();
-    control.reply(apiError(404, 'NOT_FOUND', { resource: 'day' }));
-    await toS9();
-    await pressText(ENTER);
+    await toNow(control);
+    control.once(apiError(404, 'NOT_FOUND', { resource }));
+    await pressId('demo-toggle');
+    await pressId('demo-plus-10');
     expect(await screen.findByText('잠깐 문제가 생겼어')).toBeTruthy();
+    expect(screen.getByTestId('card-T-01')).toBeTruthy();
+    expect(screen.getByTestId('retry-button')).toBeTruthy();
+    expect(screen.queryByText('계획 다시 하기')).toBeNull();
   });
 });
 

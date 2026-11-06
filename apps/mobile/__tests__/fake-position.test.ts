@@ -1,11 +1,11 @@
 /// <reference types="jest" />
 // fakePosition 순수 함수. 근거: TASK-006 B7, §8 AC-5 (일정 안 = 그 장소, 이동 중 = 두 점 사이, 시각 단조).
-// 위치 입력의 코스 모양은 질문 Q15 (NowView에는 일정 시각이 없다). 여기서는 필요한 값만 넣는다.
+// §11 Q15: 핀에 start·end가 생겼다. 출발 전 = 숙소, 일정 사이 = 빈 시간 전체를 분모로 보간, 마지막 뒤 = go_home_min 동안 숙소로, 그 뒤 숙소.
 import fc from 'fast-check';
 
 type Spot = { lat: number; lng: number };
 type Item = Spot & { start: string; end: string; travel_min: number };
-type Course = { lodging: Spot; items: Item[] };
+type Course = { lodging: Spot; items: Item[]; go_home_min: number };
 
 // 아직 없는 파일이라 테스트마다 불러온다
 const fakePosition = (at: string, course: Course): Spot | null => require('@/lib/fake-position').fakePosition(at, course);
@@ -20,6 +20,7 @@ const B = { lat: 35.3, lng: 135.6 };
 const C = { lat: 35.5, lng: 135.1 };
 const COURSE: Course = {
   lodging: HOME,
+  go_home_min: 25,
   items: [
     { ...A, start: '10:12', end: '12:00', travel_min: 12 },
     { ...B, start: '12:20', end: '14:00', travel_min: 20 },
@@ -91,7 +92,7 @@ function build(parts: { stay: number; travel: number; lat: number; lng: number }
     now = start + stay;
     return { lat, lng, start: clock(start), end: clock(now), travel_min: travel };
   });
-  return { lodging: HOME, items };
+  return { lodging: HOME, items, go_home_min: 30 };
 }
 
 const fraction = fc.double({ min: 0, max: 1, noNaN: true, maxExcluded: true });
@@ -144,20 +145,17 @@ describe('AC-5 속성', () => {
   });
 });
 
-// ---------- 문서가 비어 있는 곳 ----------
+// ---------- §11 Q15 ----------
 
-describe('질문 Q15', () => {
-  test.skip('Q15_첫_일정_전_위치_숙소에_있나_숙소에서_1번_사이인가', () => {
-    expectAt(fakePosition(at(min('09:00')), COURSE), HOME);
+describe('§11 Q15', () => {
+  test.each(['00:00', '09:00', '09:59'])('T6_Q15_첫_일정_출발_전_%s는_숙소', (time) => {
+    expectAt(fakePosition(at(min(time)), COURSE), HOME);
   });
 
-  test.skip('Q15_마지막_일정_뒤_위치_마지막_장소인가_숙소_쪽으로_가나', () => {
-    expectAt(fakePosition(at(min('19:30')), COURSE), C);
-  });
-
-  test.skip('Q15_기다림이_있으면_비율의_분모는_이동_시간인가_전체_빈_시간인가', () => {
+  test('T6_Q15_기다림이_있어도_비율의_분모는_빈_시간_전체', () => {
     const waiting: Course = {
       lodging: HOME,
+      go_home_min: 25,
       items: [
         { ...A, start: '10:12', end: '12:00', travel_min: 12 },
         { ...B, start: '13:00', end: '14:00', travel_min: 20 },
@@ -166,8 +164,39 @@ describe('질문 Q15', () => {
     expectAt(fakePosition(at(min('12:30')), waiting), { lat: (A.lat + B.lat) / 2, lng: (A.lng + B.lng) / 2 });
   });
 
-  test.skip('Q6_Q15_좌표_없는_고정_일정_안이면_null인가', () => {
-    const course = { lodging: HOME, items: [{ lat: null, lng: null, start: '10:12', end: '12:00', travel_min: 0 }] } as unknown as Course;
-    expect(fakePosition(at(min('11:00')), course)).toBeNull();
+  test('T6_Q15_마지막_일정_끝_정각은_마지막_장소', () => {
+    expectAt(fakePosition(at(min('19:00')), COURSE), C);
+  });
+
+  test('T6_Q15_마지막_뒤는_go_home_min_동안_숙소_쪽으로', () => {
+    expectAt(fakePosition(at(min('19:10')), COURSE), { lat: C.lat + ((HOME.lat - C.lat) * 10) / 25, lng: C.lng + ((HOME.lng - C.lng) * 10) / 25 });
+  });
+
+  test('T6_Q15_숙소_도착_1분_전은_아직_숙소가_아니다', () => {
+    const position = fakePosition(at(min('19:24')), COURSE) as Spot;
+    expect(position.lat).toBeCloseTo(C.lat + ((HOME.lat - C.lat) * 24) / 25, 9);
+    expect(position.lat).not.toBeCloseTo(HOME.lat, 6);
+  });
+
+  test.each(['19:25', '19:26', '23:59'])('T6_Q15_go_home_min이_지난_%s는_숙소', (time) => {
+    expectAt(fakePosition(at(min(time)), COURSE), HOME);
+  });
+
+  test('T6_Q15_속성_마지막_뒤_숙소까지_시간_비율대로', () => {
+    fc.assert(
+      fc.property(legs, fc.integer({ min: 0, max: 29 }), (parts, passed) => {
+        const course = build(parts);
+        const last = course.items[course.items.length - 1];
+        const moment = min(last.end) + passed;
+        expectAt(fakePosition(at(moment), course), {
+          lat: last.lat + ((HOME.lat - last.lat) * passed) / 30,
+          lng: last.lng + ((HOME.lng - last.lng) * passed) / 30,
+        });
+      }),
+    );
+  });
+
+  test.skip('R6_출발_뒤_1번_시작_전_위치_숙소에서_1번_사이인가_핀에는_이동_분이_없어_앱이_출발_시각을_모른다', () => {
+    expectAt(fakePosition(at(min('10:06')), COURSE), { lat: (HOME.lat + A.lat) / 2, lng: (HOME.lng + A.lng) / 2 });
   });
 });

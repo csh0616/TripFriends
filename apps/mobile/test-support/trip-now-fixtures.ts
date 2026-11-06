@@ -1,4 +1,4 @@
-// 가짜 NowView. 모양은 TASK-006 §A-1. 시각 값 형식(leave_at 등)은 질문 Q8의 답이 나오면 맞춘다.
+// 가짜 NowView. 모양은 TASK-006 §A-1·§11 (Q8 HH:MM, Q15 핀 시각, Q21 fixed.facts).
 import { day, DAY_ID, SPOT } from './planning-fixtures';
 
 type Status = 'confirmed' | 'unverified' | 'unknown';
@@ -36,7 +36,7 @@ export const t02 = (over: object = {}) => ({
 export const t03 = (over: object = {}) => ({ type: 'T-03', items: [second, third], ...over });
 export const t07 = (over: object = {}) => ({
   type: 'T-07',
-  fixed: { name: '서버_예약_공연', start: '15:00', end: '16:00' },
+  fixed: { name: '서버_예약_공연', start: '15:00', end: '16:00', facts: first.facts },
   leave_by: '14:40',
   leave_in_min: 15,
   ...over,
@@ -44,9 +44,9 @@ export const t07 = (over: object = {}) => ({
 export const t08 = (over: object = {}) => ({ type: 'T-08', go_home_min: 25, lodging: day.lodging, ...over });
 
 export const pins = [
-  { seq: 1, place_id: 'D01', name: first.name, ...SPOT.D01, state: 'done' },
-  { seq: 2, place_id: 'D02', name: second.name, ...SPOT.D20, state: 'now' },
-  { seq: 3, place_id: 'D03', name: third.name, ...SPOT.D30, state: 'next' },
+  { seq: 1, place_id: 'D01', name: first.name, ...SPOT.D01, start: first.start, end: first.end, state: 'done' },
+  { seq: 2, place_id: 'D02', name: second.name, ...SPOT.D20, start: second.start, end: second.end, state: 'now' },
+  { seq: 3, place_id: 'D03', name: third.name, ...SPOT.D30, start: third.start, end: third.end, state: 'next' },
 ];
 
 const point = (at: { lat: number; lng: number }) => [at.lat, at.lng];
