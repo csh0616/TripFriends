@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// 화면 다듬기와 복구 뒤 입력 글. 근거: TASK-005 §B(B1~B12), §C(C1), §4 5줄, §5 3줄, §6 AC-5·AC-6, TASK-004 §13-3 비활성, DESIGN-001 §2·§4.
+// 화면 다듬기와 복구 뒤 입력 글. 근거: TASK-005 §B(B1~B12), §C(C1), §4 5줄, §5 3줄, §6 AC-5·AC-6, §9-3(우선), TASK-004 §13-3 비활성, DESIGN-001 v2.3 §2·§4.
 // 로직·토큰·구조만 본다. 보이는 모습 자체는 AC-7(폰 스크린샷)이 본다.
 import { screen, waitFor, within } from '@testing-library/react-native';
 import fc from 'fast-check';
@@ -7,8 +7,10 @@ import { StyleSheet } from 'react-native';
 
 import { contrast } from '@/lib/contrast';
 
-import { COLORS, TYPE } from '../test-support/design-table';
-import { apiError, json, networkDown, type Reply } from '../test-support/fake-server';
+import { shadow } from '@/planning/theme';
+
+import { COLORS, STRINGS, TYPE } from '../test-support/design-table';
+import { apiError, hang, json, networkDown, type Reply } from '../test-support/fake-server';
 import { happyServer, pressId, pressText, R, resetDevice, startApp, tap, toP1, toP2, toP3, typeAndSend } from '../test-support/planning-driver';
 import { batch, course, day, packed, picks, relaxed, session } from '../test-support/planning-fixtures';
 
@@ -37,6 +39,8 @@ function paintedAncestor(host: Tree): Tree | null {
   return now;
 }
 
+const raised = () => (shadow as unknown as Record<string, Record<string, unknown>>).raise;
+
 const MONO = 'DMMono_500Medium';
 const BOLD = 'NotoSansKR_700Bold';
 const MEDIUM = 'NotoSansKR_500Medium';
@@ -62,7 +66,34 @@ describe('B1 방향 칩', () => {
     expect(styleOf(label).color).toBe(COLORS.ink);
   });
 
-  test.todo('T5_B1_고른_칩은_brand_soft (Q: P2 응답에 고른 방향이 없어 어느 칩이 고른 칩인지 문서에 없음)');
+  test('T5_S9_Q8_고른_상태가_없어_다음_묶음의_방향_칩도_전부_bg_2', async () => {
+    const server = happyServer();
+    server.on(R.next, json(200, batch({ round: 2, directions: [{ id: 'photo' as const, label: '사진 예쁜 데' }] })));
+    await toP2();
+    await pressId('direction-quieter');
+    await screen.findByTestId('direction-photo');
+    expect(fillOf(byId('direction-photo'))).toBe(COLORS['bg-2']);
+  });
+
+  const clarify = [{ id: 'quieter' as const, label: '좀 더 한적한 데' }];
+
+  test('T5_S9_Q9_되묻기_칩은_제안이라_brand_soft에_ink_글자', async () => {
+    const server = happyServer();
+    server.on(R.answer, json(200, batch({ clarify, message: '이 중에 있어?' })));
+    await toP2();
+    const chip = byId('clarify-quieter');
+    expect(fillOf(chip)).toBe(COLORS['brand-soft']);
+    expect(styleOf(chip.queryAll((h) => h.type === 'Text')[0]).color).toBe(COLORS.ink);
+  });
+
+  test('T5_S9_Q9_S13_요청_중_되묻기_칩은_비활성_규칙대로_bg_2', async () => {
+    const server = happyServer();
+    server.on(R.answer, json(200, batch({ clarify, message: '이 중에 있어?' })));
+    await toP2();
+    server.once(R.compose, hang);
+    await pressId('compose-button');
+    expect(fillOf(byId('clarify-quieter'))).toBe(COLORS['bg-2']);
+  });
 });
 
 // ---------- B2: 담은 표시 하나 + §5 3줄 ----------
@@ -168,6 +199,12 @@ describe('B3 떠 있는 줄 빈 자리', () => {
 // ---------- B4: 코스 종류 토글 ----------
 
 describe('B4 토글', () => {
+  test('T5_S9_Q14_sh_raise_값은_DESIGN_001과_같고_sh_float와_다른_그림자로_옮겨진다', () => {
+    expect(STRINGS['sh-raise']).toBe('0 1px 2px rgba(26,26,26,.08), 0 2px 8px rgba(26,26,26,.08)');
+    expect(raised().shadowOpacity).toBeGreaterThan(0);
+    expect(raised().shadowRadius).not.toBe(shadow.float.shadowRadius);
+  });
+
   const look = (id: string) => {
     const button = byId(id);
     const label = button.queryAll((h) => h.type === 'Text')[0];
@@ -178,6 +215,9 @@ describe('B4 토글', () => {
     const on = look(id);
     expect(on.fill).toBe(COLORS.surface);
     expect(hasShadow(on.box)).toBe(true);
+    // §9 Q14: sh-raise. theme의 shadow.raise는 새 임시 이름
+    expect(raised()).toBeDefined();
+    expect(on.box).toMatchObject(raised());
     expect(on.label.color).toBe(COLORS.ink);
     expect(on.label.fontFamily).toBe(BOLD);
   };
@@ -315,10 +355,26 @@ describe('B7·B9 구조', () => {
     expect(home.props.stroke).toBe(COLORS.ink);
   });
 
-  test('T5_B7_숙소에_집_아이콘이_있다', async () => {
+  test('T5_B7_S9_Q15_숙소_원은_지름_24', async () => {
     happyServer();
     await toP3();
-    expect(hasIcon(byId('route-home-icon'))).toBe(true);
+    expect(byId('route-home').props.r).toBe(12);
+  });
+
+  test('T5_B7_S9_Q15_숙소_원_안의_집_아이콘은_14', async () => {
+    happyServer();
+    await toP3();
+    const icon = byId('route-home-icon');
+    expect(hasIcon(icon)).toBe(true);
+    expect([icon, ...inside(icon)].some((h) => h.props.width === 14 && h.props.height === 14)).toBe(true);
+  });
+
+  test.each([1, 2, 3])('T5_S9_Q16_동선_그림의_%i번_번호도_num_md', async (seq) => {
+    happyServer();
+    await toP3();
+    const label = inside(byId('route-diagram')).find((h) => h.type === 'Text' && h.props.children === String(seq)) as Tree;
+    expect(label.props.fontFamily).toBe(MONO);
+    expect(label.props.fontSize).toBe(TYPE['num-md'].size);
   });
 
   test('T5_B7_검은_점이_남아_있지_않다_ink로_채운_원은_번호_원뿐', async () => {
@@ -336,6 +392,17 @@ describe('B7·B9 구조', () => {
     expect(isClear(style.backgroundColor)).toBe(true);
     expect(style.width).toBe(44);
     expect(style.height).toBe(44);
+  });
+
+  test('T5_S9_Q19_요청_중_뒤로_버튼은_bg_2_바탕에_muted_아이콘', async () => {
+    const server = happyServer();
+    await toP3();
+    server.once(R.selectRelaxed, hang);
+    await pressText('이걸로 할래');
+    const back = byId('header-back');
+    expect(fillOf(back)).toBe(COLORS['bg-2']);
+    expect(strokes(back).length).toBeGreaterThan(0);
+    for (const stroke of strokes(back)) expect(stroke).toBe(COLORS.muted);
   });
 });
 
@@ -428,19 +495,33 @@ describe('B8 freeHoursText', () => {
     expect(freeHoursText({ start, end, fixed })).toBe(expected);
   });
 
-  // "시간 단위 반올림 30분"을 어떻게 읽어도 답이 같은 값만 넣는다. 갈리는 값은 아래 todo (질문 목록)
+  // §9 Q6: 1시간 단위 반올림, 30분은 올림
   test.each<[string, string, string]>([
     ['3시간 14분은 3시간', '13:14', '3시간 비어 있어'],
+    ['3시간 15분은 3시간', '13:15', '3시간 비어 있어'],
+    ['3시간 29분은 3시간', '13:29', '3시간 비어 있어'],
+    ['3시간 30분은 4시간', '13:30', '4시간 비어 있어'],
     ['3시간 45분은 4시간', '13:45', '4시간 비어 있어'],
     ['3시간 59분은 4시간', '13:59', '4시간 비어 있어'],
+    ['30분은 1시간', '10:30', '1시간 비어 있어'],
     ['45분은 1시간', '10:45', '1시간 비어 있어'],
-  ])('T5_B8_반올림_%s', (_name, end, expected) => {
+  ])('T5_B8_S9_Q6_반올림_%s', (_name, end, expected) => {
     expect(freeHoursText({ start: '10:00', end, fixed: [] })).toBe(expected);
   });
 
-  test.todo('T5_B8_반올림_3시간_29분과_3시간_30분의_경계 (Q: 1시간 단위 반올림인지 30분 단위인지)');
-  test.todo('T5_B8_반올림_3시간_15분 (Q: 30분 단위면 3.5시간, 표시 모양도 문서에 없음)');
-  test.todo('T5_S4_B8_남은_시간이_10분이면 (Q: 반올림하면 0. 반올림 전 값으로 숨길지 뒤 값으로 숨길지)');
+  // §9 Q7: 반올림 뒤 값이 0 이하면 숨김
+  test.each<[string, string]>([
+    ['10분', '10:10'],
+    ['29분', '10:29'],
+  ])('T5_S4_B8_S9_Q7_남은_시간이_%s이면_반올림하면_0이라_숨긴다', (_name, end) => {
+    expect(freeHoursText({ start: '10:00', end, fixed: [] })).toBeNull();
+  });
+
+  test('T5_S4_B8_S9_Q7_고정_일정을_뺀_뒤_29분과_30분의_경계', () => {
+    const fixed = [at('10:00', '19:31')];
+    expect(freeHoursText({ ...DAY, fixed })).toBeNull();
+    expect(freeHoursText({ ...DAY, fixed: [at('10:00', '19:30')] })).toBe('1시간 비어 있어');
+  });
 
   const clock = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
 
@@ -525,6 +606,7 @@ describe('C1 responseChanged', () => {
     ['첫 질문 그대로', session, session],
     ['코스안 ID가 같음', twoOptions, course([relaxed('a'), packed('b')])],
     ['코스안 ID는 같고 내용만 다름', twoOptions, course([relaxed('a', { go_home_min: 99 }), packed('b')])],
+    ['코스안 ID 순서만 다름 (§9 Q18)', twoOptions, course([packed('b'), relaxed('a')])],
   ])('T5_C1_같다_%s', (_name, before, after) => {
     expect(responseChanged(before, after)).toBe(false);
   });
@@ -678,5 +760,19 @@ describe('C1 복구 뒤 입력 글', () => {
     expect(typed()).toBe('');
   });
 
-  test.todo('T5_C1_세션이_아닌_404_뒤_GET_복구 (Q: C1에는 끊김·409만 적혀 있음)');
+  // §9 Q17: 모든 GET 복구. 세션이 아닌 404도 GET으로 복구된다 (TASK-004 §12 Q21)
+  const routeGone = apiError(404, 'NOT_FOUND', { resource: 'route' });
+
+  test('T5_S9_Q17_세션이_아닌_404_뒤_GET이_같으면_글을_그대로_둔다', async () => {
+    const server = await failedOnP2(routeGone, batch());
+    await gotGet(server);
+    await waitFor(() => expect(screen.getByTestId('input-text').props.editable).toBe(true));
+    expect(typed()).toBe(TEXT);
+  });
+
+  test('T5_S9_Q17_세션이_아닌_404_뒤_GET의_round가_다르면_글을_지운다', async () => {
+    await failedOnP2(routeGone, batch({ round: 2, message: '복구한_묶음' }));
+    await screen.findByText('복구한_묶음');
+    await waitFor(() => expect(typed()).toBe(''));
+  });
 });
