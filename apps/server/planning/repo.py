@@ -79,7 +79,8 @@ class PlanningRepo(ABC):
 
     @abstractmethod
     def save_batch_first(self, session_id: str, first: bool) -> None:
-        """지금 묶음이 첫 질문의 답으로 만든 첫 묶음인지 (TASK-004 A1: GET이 message 대본 우선순위, TASK-003 §10 Q6을 다시 적용하려고)."""
+        """# TASK-004 미정: 문서에 없는 저장 항목. 그래프 상태는 11개 고정이라 저장소에 둔다 (relaxed와 같은 방식).
+        지금 묶음이 첫 질문의 답으로 만든 첫 묶음인지 (TASK-004 A1: GET이 message 대본 우선순위, TASK-003 §10 Q6을 다시 적용하려고)."""
 
     @abstractmethod
     def batch_first(self, session_id: str) -> bool: ...

@@ -230,6 +230,7 @@ def course_response(state: PlanningState, records: list[OptionRecord], day: DayR
     """TASK-003 §6 CourseResult + TASK-004 A2(day)·A3(name).
 
     항목 name: 장소가 있으면 장소 이름(고정 일정 포함, §12-1 Q1). 장소가 없는 고정 일정은 저장된 title.
+    # TASK-004 미정: 장소 없는 고정 일정 항목과 title을 잇는 방법(문서에 없음)
     장소 없는 고정 일정은 서로 겹치지 않아 시각순으로 정렬한 title과 코스의 해당 항목을 순서대로 짝짓는다.
     """
     titles = [f.title for f in sorted((f for f in day.plan.fixed if f.place_id is None), key=lambda f: (f.start, f.end))]
