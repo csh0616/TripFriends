@@ -1,4 +1,356 @@
-// TASK-004 §B-2. 껍데기: 응답 stage로 S0·P1·P2·P3·S9를 고르는 앱 틀. 구현은 frontend가 한다.
-export default function PlanningFlow(): never {
-  throw new Error('not implemented');
+// TASK-004 §B-2: 앱 틀. 응답 stage가 화면(S0·P1·P2·P3·S9)을 정한다. 앱은 흐름을 혼자 정하지 않고 낙관적 갱신도 하지 않는다.
+// 실패 처리는 §7 표와 §12 Q17~Q23을 따른다.
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+
+import { Notice } from '@/components/planning/notice';
+import { ScreenFrame } from '@/components/planning/screen-frame';
+import {
+  requests,
+  send,
+  type CandidateBatch,
+  type CourseResult,
+  type Failure,
+  type PlanningSession,
+  type Request,
+  type SeedResult,
+  type StageResponse,
+} from '@/lib/planning-api';
+import { initialPlanningState, planningReducer } from '@/lib/planning-reducer';
+import { screenFor } from '@/lib/screen-for';
+
+import { fontAssets } from './fonts';
+import { color } from './theme';
+import { P1Screen, type AnswerBody } from './screens/p1';
+import { P2Screen, type NextBody } from './screens/p2';
+import { P3Screen } from './screens/p3';
+import { S0Screen } from './screens/s0';
+import { S9Screen } from './screens/s9';
+import type { NoticeData } from './screens/types';
+
+const STORAGE_KEY = 'tripfriends.planning_session_id';
+
+// 사용자에게 보이는 문구 (TASK-004 §7)
+const OFFLINE = '연결이 안 돼. 다시 해 볼까?';
+const OOPS = '잠깐 문제가 생겼어';
+const INVALID = '다시 해 볼래?';
+const RESTART = '처음부터 다시 하자';
+const INFEASIBLE_FALLBACK_NAME = '꼭 갈 곳';
+
+type Kind = 'stage' | 'picks' | 'select';
+type Problem = { tone: 'plain' | 'problem'; retry: (() => void) | null };
+type Coordinates = Record<string, { lat: number; lng: number }>;
+
+export default function PlanningFlow() {
+  const [fontsReady, fontError] = useFonts(fontAssets);
+  // 처음부터·404로 S0에 돌아올 때 Session을 새로 만든다 (상태를 통째로 비운다)
+  const [boot, setBoot] = useState<{ epoch: number; start: 'boot' | 's0'; notice: string | null }>({
+    epoch: 0,
+    start: 'boot',
+    notice: null,
+  });
+
+  // 글꼴을 못 읽으면 시스템 글꼴로 그냥 보여 준다 (막지 않음, §7). 읽는 중에만 빈 화면.
+  if (!fontsReady && !fontError) return <View style={styles.blank} />;
+
+  return (
+    <Session
+      key={boot.epoch}
+      start={boot.start}
+      restartNotice={boot.notice}
+      onReset={(notice) => setBoot((now) => ({ epoch: now.epoch + 1, start: 's0', notice }))}
+    />
+  );
 }
+
+function Session({
+  start,
+  restartNotice,
+  onReset,
+}: {
+  start: 'boot' | 's0';
+  restartNotice: string | null;
+  onReset: (notice: string | null) => void;
+}) {
+  const [state, dispatch] = useReducer(planningReducer, initialPlanningState);
+  const [ready, setReady] = useState(start === 's0');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [showRestart, setShowRestart] = useState(restartNotice !== null);
+  const [coordinates, setCoordinates] = useState<Coordinates>({});
+
+  const alive = useRef(true);
+  const busy = useRef(false); // 한 번에 한 요청 (§6)
+  const sid = useRef<string | null>(null);
+  const seedDay = useRef<string | null>(null); // S0: 시드는 됐고 세션만 남았을 때 (Q19)
+  const signals = useRef(new Set<AbortController>());
+  const latest = useRef(state);
+  latest.current = state;
+
+  useEffect(() => {
+    alive.current = true;
+    const pending = signals.current;
+    return () => {
+      alive.current = false;
+      pending.forEach((controller) => controller.abort());
+    };
+  }, []);
+
+  const fail = useCallback((message: string, next: Problem) => {
+    if (!alive.current) return;
+    setProblem(next);
+    dispatch({ type: 'request_failure', message });
+  }, []);
+
+  const clearStoredAndReset = useCallback(
+    async (notice: string | null) => {
+      await AsyncStorage.removeItem(STORAGE_KEY);
+      if (alive.current) onReset(notice);
+    },
+    [onReset],
+  );
+
+  /** 422 문구. 이름은 지금 화면 응답의 day.must_visits에서 찾는다 (Q23) */
+  const infeasibleMessage = (reason: string, blocking: string[]): string => {
+    if (reason === 'must_visit_overflow') return '꼭 갈 곳이 하루에 다 안 들어가';
+    if (reason === 'user_stay_conflict') return '그 시간은 안 맞아';
+    const day = (latest.current.response as { day?: PlanningSession['day'] } | null)?.day;
+    const names = blocking.map((id) => day?.must_visits.find((m) => m.place_id === id)?.name ?? INFEASIBLE_FALLBACK_NAME);
+    // TASK-004 미정: Q40 이름이 여럿이면 쉼표로 이어 쓴다 (조사를 피함)
+    return `${(names.length > 0 ? names : [INFEASIBLE_FALLBACK_NAME]).join(', ')}, 그날 쉬어`;
+  };
+
+  /** 한 번 보내고 결과를 반영한다. 성공해서 서버 응답을 반영했으면 true */
+  const execute = useCallback(async (request: Request, kind: Kind): Promise<boolean> => {
+    if (busy.current) return false;
+    busy.current = true;
+    dispatch({ type: 'request_start' });
+    setProblem(null);
+    try {
+      return await settle(request, kind, await send(request, signals.current));
+    } finally {
+      busy.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const settle = async (request: Request, kind: Kind, result: Awaited<ReturnType<typeof send>>): Promise<boolean> => {
+    if (!alive.current) return false;
+    if (result.ok) return accept(request, kind, result.data);
+    return failWith(result.failure, request, kind);
+  };
+
+  const accept = (request: Request, kind: Kind, data: unknown): boolean => {
+    // select 200이면 바로 S9 (Q26). 응답에 stage가 없어도 done으로 본다
+    const response = kind === 'select' ? { ...(data as object), stage: 'done' } : data;
+    if (kind !== 'picks') {
+      try {
+        screenFor(response as { stage?: unknown });
+      } catch {
+        // 모르는 stage는 500 줄과 같게 (Q18)
+        fail(OOPS, { tone: 'plain', retry: () => void execute(request, kind) });
+        return false;
+      }
+    }
+    if ((response as CandidateBatch).stage === 'browsing') {
+      const candidates = (response as CandidateBatch).candidates ?? [];
+      setCoordinates((now) => ({
+        ...now,
+        ...Object.fromEntries(candidates.map((c) => [c.place.id, { lat: c.place.lat, lng: c.place.lng }])),
+      }));
+    }
+    dispatch({ type: 'request_success', response });
+    return true;
+  };
+
+  const failWith = async (failure: Failure, request: Request, kind: Kind): Promise<boolean> => {
+    const same = () => void execute(request, kind);
+    const isGet = request.method === 'GET';
+    const getAgain = () => void execute(requests.current(sid.current ?? ''), 'stage');
+    switch (failure.kind) {
+      case 'network':
+        // 요청이 실제로 처리됐을 수 있어서 [다시]는 같은 요청이 아니라 GET으로 지금 상태를 받는다 (Q21)
+        fail(OFFLINE, { tone: 'plain', retry: isGet ? same : getAgain });
+        return false;
+      case 'invalid':
+        console.warn('INVALID_REQUEST', request.method, request.path);
+        fail(INVALID, { tone: 'plain', retry: null });
+        return false;
+      case 'infeasible':
+        fail(infeasibleMessage(failure.reason, failure.blocking), { tone: 'problem', retry: null });
+        return false;
+      case 'not_found':
+        if (failure.resource === 'session') {
+          await clearStoredAndReset(RESTART);
+          return false;
+        }
+        break;
+      case 'conflict':
+        break;
+      case 'server':
+        // TASK-004 미정: Q35·Q42 500은 [다시]가 같은 요청 (GET이면 GET)
+        fail(OOPS, { tone: 'plain', retry: same });
+        return false;
+    }
+    // 409, 세션이 아닌 404: 서버 기준으로 GET해서 그 화면으로 복구. 따로 안내하지 않는다 (Q21·Q22)
+    if (isGet) {
+      // TASK-004 미정: Q36·Q37 GET 자신의 404(세션 밖)·409는 500 줄처럼
+      fail(OOPS, { tone: 'plain', retry: same });
+      return false;
+    }
+    const recover = requests.current(sid.current ?? '');
+    return settle(recover, 'stage', await send(recover, signals.current));
+  };
+
+  // ---------- 다시 켜기 (§B-2, Q17) ----------
+  useEffect(() => {
+    if (start !== 'boot') return;
+    (async () => {
+      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      if (!alive.current) return;
+      if (stored) {
+        sid.current = stored;
+        setSessionId(stored);
+        setReady(true);
+        void execute(requests.current(stored), 'stage');
+      } else {
+        setReady(true);
+      }
+    })();
+  }, [start, execute]);
+
+  // ---------- S0: 시드 -> 둘째 날로 세션 시작 (Q19, Q31) ----------
+  const startDemo = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setShowRestart(false);
+    setProblem(null);
+    dispatch({ type: 'request_start' });
+    const stop = (failure: Failure) => {
+      const again = () => void startDemo();
+      if (failure.kind === 'network') fail(OFFLINE, { tone: 'plain', retry: again });
+      else if (failure.kind === 'invalid') {
+        console.warn('INVALID_REQUEST', 'S0');
+        fail(INVALID, { tone: 'plain', retry: null });
+      } else {
+        // TASK-004 미정: Q37 S0의 404 day·그 밖의 실패는 500 줄처럼
+        fail(OOPS, { tone: 'plain', retry: again });
+      }
+    };
+    try {
+      if (seedDay.current === null) {
+        const seeded = await send(requests.seed(), signals.current);
+        if (!alive.current) return;
+        if (!seeded.ok) return stop(seeded.failure);
+        const dayId = (seeded.data as SeedResult).day_ids?.[1]; // 둘째 날
+        if (typeof dayId !== 'string') return stop({ kind: 'server' });
+        seedDay.current = dayId;
+      }
+      const started = await send(requests.start(seedDay.current), signals.current);
+      if (!alive.current) return;
+      if (!started.ok) return stop(started.failure);
+      try {
+        screenFor(started.data as { stage?: unknown });
+      } catch {
+        return stop({ kind: 'server' });
+      }
+      const session = started.data as PlanningSession;
+      await AsyncStorage.setItem(STORAGE_KEY, session.session_id);
+      if (!alive.current) return;
+      sid.current = session.session_id;
+      setSessionId(session.session_id);
+      dispatch({ type: 'request_success', response: session });
+    } finally {
+      busy.current = false;
+    }
+  }, [fail]);
+
+  // ---------- 화면이 부르는 동작 ----------
+  const id = () => sid.current ?? '';
+  const onAnswer = (body: AnswerBody) => execute(requests.answer(id(), body), 'stage');
+  const onReact = (placeId: string, action: 'like' | 'skip' | 'unlike') =>
+    execute(requests.react(id(), { place_id: placeId, action }), 'picks');
+  const onNext = (body?: NextBody) => execute(requests.next(id(), body), 'stage');
+  const onCompose = () => execute(requests.compose(id()), 'stage');
+  const onAdjust = (optionId: string, placeId: string, delta: 15 | -15) =>
+    execute(requests.adjust(id(), { option_id: optionId, place_id: placeId, delta }), 'stage');
+  const onBack = () => execute(requests.back(id()), 'stage');
+  const onSelect = (optionId: string) => execute(requests.select(optionId), 'select');
+
+  const busyNow = state.inFlight;
+  // 요청 중에는 이전 오류를 숨긴다 (다시 시도하는 중)
+  const notice: NoticeData | null =
+    state.error !== null && !busyNow && problem
+      ? { message: state.error, tone: problem.tone, onRetry: problem.retry ?? undefined }
+      : null;
+
+  // ---------- 어떤 화면을 그릴지: 응답 stage가 정한다 ----------
+  if (!ready) return <Loading />;
+
+  if (state.response === null) {
+    if (sessionId === null) {
+      const shown = notice ?? (showRestart && restartNotice ? { message: restartNotice, tone: 'plain' as const } : null);
+      return <S0Screen busy={busyNow} notice={shown} onStart={() => void startDemo()} />;
+    }
+    // 다시 켠 뒤 GET 중이거나 실패: S0으로 보내지 않는다 (Q17)
+    return busyNow || !notice ? (
+      <Loading />
+    ) : (
+      <ScreenFrame>
+        <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} />
+      </ScreenFrame>
+    );
+  }
+
+  const response = state.response as StageResponse;
+  switch (screenFor(response)) {
+    case 'P1':
+      return <P1Screen key="P1" session={response as PlanningSession} busy={busyNow} notice={notice} onAnswer={onAnswer} />;
+    case 'P2':
+      return (
+        <P2Screen
+          key="P2"
+          batch={response as CandidateBatch}
+          picks={state.picks}
+          picksCount={state.picksCount}
+          busy={busyNow}
+          notice={notice}
+          onReact={onReact}
+          onNext={onNext}
+          onCompose={onCompose}
+        />
+      );
+    case 'P3':
+      return (
+        <P3Screen
+          key="P3"
+          course={response as CourseResult}
+          coordinates={coordinates}
+          busy={busyNow}
+          notice={notice}
+          onAdjust={onAdjust}
+          onBack={onBack}
+          onSelect={onSelect}
+        />
+      );
+    case 'S9':
+      return <S9Screen key="S9" onRestart={() => void clearStoredAndReset(null)} />;
+  }
+}
+
+function Loading() {
+  return (
+    <ScreenFrame>
+      <View testID="app-loading" style={styles.loading}>
+        <ActivityIndicator color={color.muted} />
+      </View>
+    </ScreenFrame>
+  );
+}
+
+const styles = StyleSheet.create({
+  blank: { flex: 1, backgroundColor: color.surface },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+});
