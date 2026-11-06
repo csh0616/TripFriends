@@ -343,6 +343,10 @@ export interface components {
             hours_status: ("confirmed" | "unverified" | "unknown") | null;
             /** Name */
             name: string;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
         };
         /** CourseResult */
         CourseResult: {

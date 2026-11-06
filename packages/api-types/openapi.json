@@ -1019,6 +1019,28 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
           }
         },
         "type": "object",
@@ -1033,7 +1055,9 @@
           "wait_min",
           "is_fixed",
           "hours_status",
-          "name"
+          "name",
+          "lat",
+          "lng"
         ],
         "title": "CourseItemView",
         "description": "TASK-004 A3: 앱이 장소 이름을 다시 찾지 않게 `name`을 더한 응답용 CourseItem. 엔진의 CourseItem은 그대로 둔다.\nname = 장소 이름, 장소가 없는 고정 일정이면 저장된 title (§12-1 Q1)."

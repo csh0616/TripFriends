@@ -193,6 +193,8 @@ class CourseItemView(CourseItem):
     name = 장소 이름, 장소가 없는 고정 일정이면 저장된 title (§12-1 Q1)."""
 
     name: str
+    lat: float | None  # TASK-004 A8: 장소 좌표(표시용). 장소 없는 고정 일정이면 null (키는 있음)
+    lng: float | None
 
 
 class DroppedView(Dropped):

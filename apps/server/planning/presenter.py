@@ -241,6 +241,8 @@ def course_response(state: PlanningState, records: list[OptionRecord], day: DayR
             CourseItemView(
                 **item.model_dump(),
                 name=day.places[item.place_id].name if item.place_id else next(untitled),
+                lat=day.places[item.place_id].lat if item.place_id else None,
+                lng=day.places[item.place_id].lng if item.place_id else None,
             )
             for item in record.course.items
         ]
