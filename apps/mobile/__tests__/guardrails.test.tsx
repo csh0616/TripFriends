@@ -897,3 +897,22 @@ describe('§13-3 #5 주황 4% (폰 크기 390x844, 계산할 수 있는 면적�
     expect(wrong).toEqual([]);
   });
 });
+
+describe('§13-3 Q34 머리 제목', () => {
+  /** SOS에서 위로 올라가 본문 스크롤을 품기 직전까지가 머리다 */
+  function headerTexts() {
+    let header = byId('sos-button');
+    while (header.parent && header.parent.queryAll((host) => host.type === 'RCTScrollView').length === 0) header = header.parent;
+    return textsUnder(header).map(textOf).filter((value) => value !== 'SOS');
+  }
+
+  test.each<[string, () => Promise<unknown>, string[]]>([
+    ['S0', ALL_SCREENS[0][1], []],
+    ['S9', ALL_SCREENS[4][1], []],
+    ['P1은 제목이 있어서 검사가 빈손이 아니다', toP1, ['둘째 날 계획', '12월 2일 수요일 · 10:00~20:00']],
+  ])('G73_Q34_%s_머리_글자', async (_name, go, expected) => {
+    happyServer();
+    await go();
+    expect(headerTexts()).toEqual(expected);
+  });
+});

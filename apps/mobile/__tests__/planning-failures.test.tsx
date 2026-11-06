@@ -999,6 +999,41 @@ describe('§13-3 승인된 결정 고정', () => {
     await pressId('compose-button');
     expect(await screen.findByText('꼭 갈 박물관, 둘째 꼭 갈 곳, 그날 쉬어')).toBeTruthy();
   });
+
+  const RECOVERIES: [string, Reply, boolean][] = [
+    ['끊김 뒤 다시', networkDown, true],
+    ['409 복구', apiError(409, 'STATE_CONFLICT', { stage: 'x' }), false],
+  ];
+
+  test.each(RECOVERIES)('Y70_Q38_%s로_P1에_돌아오면_고른_칩이_유지된다', async (_name, reply, pressRetry) => {
+    const server = happyServer();
+    await toP1();
+    await pressId('choice-cafe');
+    server.on(R.get, json(200, session));
+    server.once(R.answer, reply);
+    await pressText('이걸로 찾아 줘');
+    if (pressRetry) await pressText(RETRY);
+    await waitFor(() => expect(server.sent(R.get)).toHaveLength(1));
+    expect(await screen.findByText('이걸로 찾아 줘')).toBeTruthy();
+    await pressText('이걸로 찾아 줘');
+    await waitFor(() => expect(server.sent(R.answer)).toHaveLength(2));
+    expect(server.last().body).toEqual({ choice_ids: ['cafe'] });
+  });
+
+  test.each(RECOVERIES)('Y71_Q38_%s로_P3에_돌아오면_보던_코스_안이_유지된다', async (_name, reply, pressRetry) => {
+    const server = happyServer();
+    await toP3();
+    await pressId('option-packed');
+    server.on(R.get, json(200, course()));
+    server.once(R.selectPacked, reply);
+    await pressText('이걸로 할래');
+    if (pressRetry) await pressText(RETRY);
+    await waitFor(() => expect(server.sent(R.get)).toHaveLength(1));
+    expect(await screen.findByText('1곳 · 이동 42분')).toBeTruthy();
+    await pressText('이걸로 할래');
+    await waitFor(() => expect(server.sent(R.selectPacked)).toHaveLength(2));
+    expect(server.sent(R.selectRelaxed)).toHaveLength(0);
+  });
 });
 
 // ---------- 줄 6: 500 ----------

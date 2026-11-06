@@ -1022,7 +1022,7 @@ describe('§13-2 #9 떠 있는 줄의 주 버튼', () => {
       .map((inner) => inner.props.children)
       .join('');
 
-  test('W106_S13_9_Q8_P3_빈_코스에서도_맨_오른쪽이_주_버튼_더_고를래', async () => {
+  test('W106_S13_9_Q8_Q41_P3_빈_코스에서도_맨_오른쪽이_주_버튼_더_고를래_이걸로_할래는_보조', async () => {
     const server = happyServer();
     server.on(R.compose, json(200, course([relaxed('opt-relaxed', { items: [], dropped: [] })])));
     await toP3();
@@ -1031,6 +1031,8 @@ describe('§13-2 #9 떠 있는 줄의 주 버튼', () => {
     expect(background(last)).toBe(COLORS.brand);
     expect(labelOf(last)).toBe('더 고를래');
     for (const other of all.slice(0, -1)) expect(background(other)).not.toBe(COLORS.brand);
+    expect(all.map(labelOf)).toEqual(['이걸로 할래', '더 고를래']); // Q41: 보조로 남는다
+    expect(background(all[0])).toBe(COLORS['bg-2']);
   });
 
   test('W107_B3_P3_코스가_있으면_맨_오른쪽이_주_버튼_이걸로_할래', async () => {
