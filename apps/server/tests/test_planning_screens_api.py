@@ -1,0 +1,953 @@
+"""앱 화면용 서버 소작업. 근거: TASK-004 §A(A1~A5), AC-2, AC-3, TASK-003 §5, §6, §10(원칙 1·2, Q6, Q37, Q38, R1, R4, R5, R11, R12)."""
+
+import json
+from datetime import date
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+from planning_api_helpers import (
+    BATCH_KEYS,
+    COURSE_KEYS,
+    FIXED_STAY,
+    ITEM_KEYS,
+    MSG_CLARIFY,
+    MSG_EXHAUSTED,
+    MSG_FIRST,
+    MSG_NO_DIRECTION,
+    PICKS_KEYS,
+    QUESTION_KEYS,
+    SESSION_KEYS,
+    UNKNOWN_TEXT,
+    as_dict,
+    assert_error,
+    cafes,
+    first_option_id,
+    ids,
+    week_hours,
+)
+from planning_helpers import day_plan, fixed_event, opening, place
+
+from engine.models import StayRange
+
+SERVER = Path(__file__).parents[1]
+API_TYPES = SERVER.parents[1] / "packages" / "api-types"
+DAY_KEYS = {"day_id", "day_number", "date", "start", "end", "lodging", "must_visits", "fixed"}
+DONE_KEYS = {"day_id", "option_id", "stage"}
+BATCH_BUILDER = "planning.presenter.pick_directions"  # 기존 F113과 같은 강제 지점
+COURSE_BUILDER = "planning.presenter.CourseResult"  # 기존 F116과 같은 강제 지점
+DAY_LOOKUP = "planning.repo.MemoryPlanningRepo.get_day"
+CHOSEN_LOOKUP = "planning.repo.MemoryPlanningRepo.chosen_option"
+
+
+def raise_forced(*args, **kwargs):
+    raise RuntimeError("테스트가 강제한 예외")
+
+
+def city(count=24):
+    return as_dict(cafes(count))
+
+
+@pytest.fixture
+def quiet_env(env):
+    """서버 예외를 테스트로 다시 던지지 않고 500 응답으로 받는다."""
+    env.client = TestClient(env.app, raise_server_exceptions=False)
+    return env
+
+
+def get(env, session_id):
+    return env.client.get(f"/planning/{session_id}")
+
+
+def get_ok(env, session_id) -> dict:
+    response = get(env, session_id)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def frozen(env, sid) -> dict:
+    """요청 전후로 그대로여야 하는 것: 그래프 상태, 저장소, 기다리는 자리, 체크포인트 값과 개수."""
+    config = {"configurable": {"thread_id": sid}}
+    snapshot = env.graph.get_state(config)
+    return {
+        "values": snapshot.values,
+        "next": snapshot.next,
+        "checkpoint_id": snapshot.config["configurable"]["checkpoint_id"],
+        "checkpoints": len(list(env.graph.get_state_history(config))),
+        "repo": env.repo.snapshot(),
+    }
+
+
+# ---------- stage 4개로 가는 길 ----------
+
+
+def at_asking(env, places=None, plan=None):
+    session = env.session(env.plant_day(places or city(), plan))
+    return session["session_id"], session
+
+
+def at_browsing(env, places=None, plan=None):
+    return env.browse(env.plant_day(places or city(), plan))
+
+
+def at_composing(env, places=None, plan=None):
+    return env.composing(env.plant_day(places or city(), plan), likes=("P01", "P02"))
+
+
+def at_done(env, places=None, plan=None):
+    day_id = env.plant_day(places or city(), plan)
+    sid, course = env.composing(day_id, likes=("P01", "P02"))
+    option_id = first_option_id(course)
+    response = env.select(option_id)
+    assert response.status_code == 200, response.text
+    return sid, {"day_id": day_id, "option_id": option_id, "stage": "done"}
+
+
+STAGES = {"asking": at_asking, "browsing": at_browsing, "composing": at_composing, "done": at_done}
+STAGE_PARAMS = [pytest.param(fn, id=name) for name, fn in STAGES.items()]
+
+
+# ---------- 응답 모양 (TASK-003 §6 + day + name) ----------
+
+
+def assert_new_session_shape(data: dict) -> None:
+    from planning.schemas import PlanningSession
+
+    assert set(data) == SESSION_KEYS | {"day"}
+    assert data["stage"] == "asking"
+    assert set(data["question"]) == QUESTION_KEYS
+    assert_day_shape(data["day"])
+    PlanningSession.model_validate(data)
+
+
+def assert_new_batch_shape(data: dict) -> None:
+    from planning.schemas import CandidateBatch
+
+    assert set(data) == BATCH_KEYS | {"day"}
+    assert data["stage"] == "browsing"
+    assert_day_shape(data["day"])
+    CandidateBatch.model_validate(data)
+
+
+def assert_new_course_shape(data: dict) -> None:
+    from planning.schemas import CourseResult
+
+    assert set(data) == COURSE_KEYS | {"day"}
+    assert data["stage"] == "composing"
+    assert_day_shape(data["day"])
+    for option in data["options"]:
+        for item in option["items"]:
+            assert set(item) == ITEM_KEYS | {"name"}
+        for dropped in option["dropped"]:
+            assert set(dropped) == {"place_id", "reason", "name"}
+            assert type(dropped["name"]) is str and dropped["name"]
+    CourseResult.model_validate(data)
+
+
+def assert_day_shape(day: dict) -> None:
+    assert set(day) == DAY_KEYS
+    assert type(day["day_id"]) is str
+    assert type(day["day_number"]) is int
+    assert set(day["lodging"]) == {"lat", "lng"}
+    assert type(day["lodging"]["lat"]) is float and type(day["lodging"]["lng"]) is float
+    for must in day["must_visits"]:
+        assert set(must) == {"place_id", "name"}
+    for fixed in day["fixed"]:
+        assert set(fixed) == {"place_id", "name", "start", "end"}
+
+
+SHAPES = {"asking": assert_new_session_shape, "browsing": assert_new_batch_shape, "composing": assert_new_course_shape}
+
+
+def expected_day(env, day_id: str) -> dict:
+    """저장소의 하루 데이터에서 만든 기대값 (A2). fixed의 name은 Q1 대기라 따로 뺀다."""
+    record = env.repo.get_day(day_id)
+    plan = record.plan
+    return {
+        "day_id": day_id,
+        "day_number": record.day_number,
+        "date": plan.date.isoformat(),
+        "start": plan.start,
+        "end": plan.end,
+        "lodging": {"lat": plan.lodging[0], "lng": plan.lodging[1]},
+        "must_visits": [{"place_id": pid, "name": record.places[pid].name} for pid in plan.must_visit],
+        "fixed": [{"place_id": f.place_id, "start": f.start, "end": f.end} for f in plan.fixed],
+    }
+
+
+def day_without_fixed_name(day: dict) -> dict:
+    return {**day, "fixed": [{k: v for k, v in f.items() if k != "name"} for f in day["fixed"]]}
+
+
+# ---------- A1: stage별 응답 ----------
+
+
+def test_S01_A1_asking이면_첫_질문을_다시_준다(env):
+    sid, session = at_asking(env)
+    data = get_ok(env, sid)
+    assert_new_session_shape(data)
+    assert data == session
+
+
+def test_S02_A1_browsing이면_지금_묶음을_다시_준다(env):
+    sid, batch = at_browsing(env)
+    data = get_ok(env, sid)
+    assert_new_batch_shape(data)
+    assert data == batch
+
+
+def test_S03_A1_원칙2_반응_뒤에는_why와_담은_수를_지금_상태로_다시_계산(env):
+    places = as_dict(
+        [
+            place("P01", tags=("골목",), hours=week_hours()),
+            place("P02", tags=("골목",), hours=week_hours()),
+            *cafes(20, start=3),
+        ]
+    )
+    sid, batch = at_browsing(env, places)
+    assert env.react(sid, "P01").status_code == 200
+    data = get_ok(env, sid)
+    assert ids(data) == ids(batch)
+    assert data["picks_count"] == 1
+    assert data["round"] == batch["round"]
+    by_id = {c["place"]["id"]: c["why"] for c in data["candidates"]}
+    assert by_id["P02"] == "골목 좋아해서 골랐어요"  # P01을 담아서 바뀐 값
+
+
+def test_S04_A1_방향으로_받은_묶음도_같은_message와_묶음(env):
+    sid, _ = at_browsing(env)
+    response = env.next(sid, direction_id="closer").json()
+    assert get_ok(env, sid) == response
+
+
+def test_S05_A1_Q6_글로_방향을_말한_첫_묶음은_다시_받아도_첫_묶음_대본(env):
+    places = as_dict(cafes(24, crowd=1))
+    sid, batch = env.browse(env.plant_day(places), [], "조용한 데")
+    assert batch["message"] == MSG_FIRST
+    assert get_ok(env, sid)["message"] == MSG_FIRST
+
+
+def test_S06_A1_Q38_자동_뒤_더_고를래_묶음은_round_1이어도_방향_없음_대본(env):
+    data = env.start(env.plant_day(city()), mode="auto").json()
+    sid = data["session_id"]
+    batch = env.back(sid).json()
+    assert (batch["round"], batch["message"]) == (1, MSG_NO_DIRECTION)
+    assert get_ok(env, sid) == batch
+
+
+def test_S07_A1_R4_direction_relaxed는_묶음을_만들_때의_값_그대로(env):
+    items = cafes(6, crowd=5) + cafes(4, start=7, crowd=1) + cafes(8, start=30, crowd=5)
+    sid, _ = env.browse(env.plant_day(as_dict(items)))
+    batch = env.next(sid, direction_id="quieter").json()
+    assert batch["direction_relaxed"] is True
+    assert get_ok(env, sid)["direction_relaxed"] is True
+    env.react(sid, ids(batch)[0])
+    assert get_ok(env, sid)["direction_relaxed"] is True
+
+
+@pytest.mark.parametrize(
+    ("total", "exhausted"),
+    [(10, True), (11, False)],
+    ids=["안_보여준_곳_4", "안_보여준_곳_5_경계"],
+)
+def test_S08_A1_Q37_exhausted는_지금_안_보여준_곳_5_미만인지_다시_계산(env, total, exhausted):
+    sid, first = at_browsing(env, city(total))
+    assert first["exhausted"] is False
+    assert get_ok(env, sid)["exhausted"] is exhausted
+
+
+@pytest.mark.skip(reason="질문 대기 Q2: 다시 계산한 exhausted가 true면 첫 묶음의 message도 소진 문장으로 바뀌는가")
+def test_S09_질문대기_Q2_첫_묶음_뒤_소진이_되면_message도_바뀐다(env):
+    sid, _ = at_browsing(env, city(10))
+    assert get_ok(env, sid)["message"] == MSG_EXHAUSTED
+
+
+def test_S10_A1_Q31_빈_묶음도_그대로_돌려준다(env):
+    sid, _ = at_browsing(env, city(6))
+    batch = env.next(sid).json()
+    assert batch["candidates"] == []
+    data = get_ok(env, sid)
+    assert data["candidates"] == []
+    assert data["exhausted"] is True
+    assert data["message"] == MSG_EXHAUSTED
+    assert data["round"] == batch["round"]
+
+
+def test_S11_A1_되묻기_뒤에도_묶음과_stage는_그대로(env):
+    sid, batch = at_browsing(env)
+    response = env.next(sid, text=UNKNOWN_TEXT).json()
+    assert response["clarify"]
+    data = get_ok(env, sid)
+    assert_new_batch_shape(data)
+    assert ids(data) == ids(batch)
+    assert env.values(sid)["clarify_count"] == 1
+
+
+@pytest.mark.skip(reason="질문 대기 Q3: 되묻기 뒤 GET이 clarify와 '이 중에 있어?'를 다시 주는가 (앱을 다시 켠 경우)")
+def test_S12_질문대기_Q3_되묻기_뒤_GET은_되묻기_응답과_같다(env):
+    sid, _ = at_browsing(env)
+    response = env.next(sid, text=UNKNOWN_TEXT).json()
+    data = get_ok(env, sid)
+    assert data["clarify"] == response["clarify"]
+    assert data["message"] == MSG_CLARIFY
+
+
+def test_S13_A1_composing이면_지금_option_ids의_코스안을_ID까지_같게(env):
+    sid, course = at_composing(env)
+    data = get_ok(env, sid)
+    assert_new_course_shape(data)
+    assert data == course
+    assert [o["option_id"] for o in data["options"]] == env.values(sid)["option_ids"]
+
+
+def test_S14_A1_조정_뒤에는_새_코스안을_준다_옛_ID_없음(env):
+    sid, course = at_composing(env)
+    adjusted = env.adjust(sid, first_option_id(course), "P01", 15).json()
+    data = get_ok(env, sid)
+    assert data == adjusted
+    assert first_option_id(course) not in [o["option_id"] for o in data["options"]]
+
+
+def test_S15_A1_두_안이면_두_안_모두(env):
+    places = as_dict(cafes(8, stay=StayRange(min=30, typical=60, max=90)))
+    sid, course = at_composing(env, places)
+    assert len(course["options"]) == 2
+    assert get_ok(env, sid) == course
+
+
+def test_S16_A1_자동_시작한_세션도_composing으로_다시_준다(env):
+    day_id = env.plant_day(city())
+    started = env.start(day_id, mode="auto").json()
+    assert get_ok(env, started["session_id"]) == started
+
+
+def test_S17_A1_첫_질문의_알아서_짜_줘_뒤에도_composing으로_다시_준다(env):
+    sid, _ = at_asking(env)
+    response = env.client.post(f"/planning/{sid}/answer", json={"auto": True})
+    assert response.status_code == 200, response.text
+    assert get_ok(env, sid) == response.json()
+
+
+def test_S18_A1_done이면_day_id_option_id_stage_세_키만(env):
+    sid, expected = at_done(env)
+    data = get_ok(env, sid)
+    assert set(data) == DONE_KEYS
+    assert data == expected
+
+
+def test_S19_A1_done의_option_id는_실제로_고른_안(env):
+    places = as_dict(cafes(8, stay=StayRange(min=30, typical=60, max=90)))
+    day_id = env.plant_day(places)
+    sid, course = env.composing(day_id, likes=("P01", "P02", "P03"))
+    second = course["options"][1]["option_id"]
+    assert env.select(second).status_code == 200
+    assert get_ok(env, sid) == {"day_id": day_id, "option_id": second, "stage": "done"}
+
+
+# ---------- A1: 바뀌지 않음, 되풀이, 404 ----------
+
+
+@pytest.mark.parametrize("arrive", STAGE_PARAMS)
+def test_S20_A1_AC2_GET은_상태_저장소_체크포인트를_바꾸지_않는다(env, arrive):
+    sid, _ = arrive(env)
+    before = frozen(env, sid)
+    assert get(env, sid).status_code == 200
+    assert frozen(env, sid) == before
+
+
+@pytest.mark.parametrize("arrive", STAGE_PARAMS)
+def test_S21_A1_AC2_세_번_연속_불러도_응답이_같고_아무것도_안_바뀐다(env, arrive):
+    sid, _ = arrive(env)
+    before = frozen(env, sid)
+    first = get_ok(env, sid)
+    assert get_ok(env, sid) == first
+    assert get_ok(env, sid) == first
+    assert frozen(env, sid) == before
+
+
+def test_S22_A1_되묻기_횟수와_해석_기록도_GET으로_늘지_않는다(env):
+    sid, _ = at_browsing(env)
+    env.next(sid, text=UNKNOWN_TEXT)
+    before = frozen(env, sid)
+    logs = env.repo.decision_logs()
+    assert get(env, sid).status_code == 200
+    assert frozen(env, sid) == before
+    assert env.repo.decision_logs() == logs
+
+
+def test_S23_A1_GET_뒤에도_멈춘_자리에서_그대로_이어_간다(env):
+    session = env.session(env.plant_day(city()))
+    sid = session["session_id"]
+    get_ok(env, sid)
+    batch = env.answer(session).json()
+    assert env.stage(sid) == "browsing"
+    get_ok(env, sid)
+    assert env.react(sid, ids(batch)[0]).status_code == 200
+    get_ok(env, sid)
+    course = env.compose(sid).json()
+    assert env.stage(sid) == "composing"
+    get_ok(env, sid)
+    assert env.select(first_option_id(course)).status_code == 200
+    assert env.stage(sid) == "done"
+    assert get_ok(env, sid)["stage"] == "done"
+
+
+def test_S24_A1_없는_세션이면_404_공통_형식(env):
+    assert_error(get(env, "없는-세션"), 404, "NOT_FOUND")
+
+
+@given(session_id=st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789-", min_size=1, max_size=40))
+@settings(max_examples=30, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+def test_S25_A1_어떤_없는_세션_ID도_404이고_저장소가_그대로(env, session_id):
+    before = env.repo.snapshot()
+    assert_error(get(env, session_id), 404, "NOT_FOUND")
+    assert env.repo.snapshot() == before
+
+
+def test_S26_R14_GET만_열고_다른_메서드는_405_공통_형식(env):
+    sid, _ = at_browsing(env)
+    assert_error(env.client.post(f"/planning/{sid}"), 405)
+    assert_error(env.client.delete(f"/planning/{sid}"), 405)
+
+
+def test_S27_세션끼리_섞이지_않는다(env):
+    a, batch_a = at_browsing(env)
+    b, batch_b = at_browsing(env)
+    env.react(a, "P01")
+    assert get_ok(env, a)["picks_count"] == 1
+    assert get_ok(env, b) == batch_b
+    assert batch_a["session_id"] != batch_b["session_id"]
+
+
+# ---------- 원칙 1: 실패한 요청 뒤의 GET ----------
+
+
+def closed_monday_city():
+    closed = place("P20", hours=opening("10:00", "18:00", weekday=1), stay=FIXED_STAY)
+    return as_dict([*cafes(19), closed])
+
+
+def test_S28_원칙1_compose_422_뒤_GET은_요청_전_묶음과_같다(env):
+    sid, _ = at_browsing(env, closed_monday_city(), day_plan(must=("P20",)))
+    env.react(sid, "P01")
+    before_get = get_ok(env, sid)
+    assert_error(env.compose(sid), 422, "COURSE_INFEASIBLE")
+    assert get_ok(env, sid) == before_get
+    assert env.stage(sid) == "browsing"
+
+
+def test_S29_원칙1_adjust_422_뒤_GET은_같은_ID와_머문_시간(env):
+    places = as_dict([*cafes(6), place("P20", hours=week_hours("09:00", "10:00"), stay=FIXED_STAY)])
+    sid, course = env.composing(env.plant_day(places, day_plan(must=("P20",))))
+    assert_error(env.adjust(sid, first_option_id(course), "P20", 15), 422)
+    assert get_ok(env, sid) == course
+
+
+def test_S30_원칙1_자동_답_422_뒤_GET은_첫_질문_그대로(env):
+    sid, session = at_asking(env, closed_monday_city(), day_plan(must=("P20",)))
+    assert_error(env.client.post(f"/planning/{sid}/answer", json={"auto": True}), 422)
+    assert get_ok(env, sid) == session
+
+
+def test_S31_원칙1_409_뒤_GET은_지금_stage를_준다(env):
+    """TASK-004 §7의 409 복구가 쓰는 길."""
+    sid, session = at_asking(env)
+    assert_error(env.compose(sid), 409, "STATE_CONFLICT")
+    assert get_ok(env, sid) == session
+
+
+def test_S32_원칙1_400_뒤_GET은_요청_전과_같다(env):
+    sid, batch = at_browsing(env)
+    assert_error(env.next(sid, direction_id="sunny"), 400)
+    assert_error(env.react(sid, "없는장소"), 400)
+    assert get_ok(env, sid) == batch
+
+
+@pytest.mark.parametrize(
+    ("target", "send"),
+    [
+        ("graphs.planning.next_batch", lambda env, sid: env.next(sid)),
+        (BATCH_BUILDER, lambda env, sid: env.next(sid)),
+        ("graphs.planning.compose_courses", lambda env, sid: env.compose(sid)),
+        (COURSE_BUILDER, lambda env, sid: env.compose(sid)),
+    ],
+    ids=["next_계산", "next_응답", "compose_계산", "compose_응답"],
+)
+def test_S33_R1_R12_POST가_500이어도_GET은_요청_전과_같다(quiet_env, monkeypatch, target, send):
+    env = quiet_env
+    sid, _ = at_browsing(env)
+    env.react(sid, "P01")
+    before_get = get_ok(env, sid)
+    with monkeypatch.context() as patch:
+        patch.setattr(target, raise_forced)
+        assert_error(send(env, sid), 500, "INTERNAL_ERROR")
+    assert get_ok(env, sid) == before_get
+
+
+def test_S34_R1_adjust가_500이어도_GET은_같은_ID(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, course = at_composing(env)
+    with monkeypatch.context() as patch:
+        patch.setattr("graphs.planning.compose_courses", raise_forced)
+        assert_error(env.adjust(sid, first_option_id(course), "P01", 15), 500)
+    assert get_ok(env, sid) == course
+
+
+# ---------- R11: GET 자신의 응답 단계 예외 ----------
+
+
+GET_FAULTS = [
+    pytest.param(at_asking, DAY_LOOKUP, id="asking_하루_찾기"),
+    pytest.param(at_browsing, DAY_LOOKUP, id="browsing_하루_찾기"),
+    pytest.param(at_browsing, BATCH_BUILDER, id="browsing_응답_만들기"),
+    pytest.param(at_composing, DAY_LOOKUP, id="composing_하루_찾기"),
+    pytest.param(at_composing, COURSE_BUILDER, id="composing_응답_만들기"),
+    pytest.param(at_done, CHOSEN_LOOKUP, id="done_고른_안_찾기"),
+]
+
+
+@pytest.mark.parametrize(("arrive", "target"), GET_FAULTS)
+def test_S35_R11_GET_응답_단계_예외는_500_공통_형식이고_아무것도_안_바뀐다(quiet_env, monkeypatch, arrive, target):
+    env = quiet_env
+    sid, _ = arrive(env)
+    before = frozen(env, sid)
+    with monkeypatch.context() as patch:
+        patch.setattr(target, raise_forced)
+        error = assert_error(get(env, sid), 500, "INTERNAL_ERROR")
+    assert "테스트가 강제한 예외" not in error["message"]
+    assert frozen(env, sid) == before
+
+
+@pytest.mark.parametrize(("arrive", "target"), GET_FAULTS)
+def test_S36_R1_GET_예외_뒤_같은_GET을_다시_보내면_정상(quiet_env, monkeypatch, arrive, target):
+    env = quiet_env
+    sid, _ = arrive(env)
+    expected = get_ok(env, sid)
+    with monkeypatch.context() as patch:
+        patch.setattr(target, raise_forced)
+        assert_error(get(env, sid), 500)
+    assert get_ok(env, sid) == expected
+
+
+def test_S37_R1_browsing_GET_예외_뒤_like와_compose가_정상(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, _ = at_browsing(env)
+    with monkeypatch.context() as patch:
+        patch.setattr(BATCH_BUILDER, raise_forced)
+        assert_error(get(env, sid), 500)
+    assert env.react(sid, "P01").json() == {"picks": ["P01"], "picks_count": 1}
+    assert env.compose(sid).status_code == 200
+    assert env.stage(sid) == "composing"
+
+
+def test_S38_R1_asking_GET_예외_뒤_답이_정상(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, session = at_asking(env)
+    with monkeypatch.context() as patch:
+        patch.setattr(DAY_LOOKUP, raise_forced)
+        assert_error(get(env, sid), 500)
+    assert env.answer(session).status_code == 200
+    assert env.stage(sid) == "browsing"
+
+
+def test_S39_R1_composing_GET_예외_뒤_고르기가_정상(quiet_env, monkeypatch):
+    env = quiet_env
+    sid, course = at_composing(env)
+    with monkeypatch.context() as patch:
+        patch.setattr(COURSE_BUILDER, raise_forced)
+        assert_error(get(env, sid), 500)
+    assert env.select(first_option_id(course)).status_code == 200
+    assert env.stage(sid) == "done"
+
+
+# ---------- A2: day 요약 ----------
+
+
+def full_plan() -> tuple[dict, object]:
+    places = city(60)
+    plan = day_plan(
+        must=("P50", "P51"),
+        fixed=(fixed_event("15:00", "16:00", places["P40"]),),
+    )
+    return places, plan
+
+
+def success_responses(env, day_id: str):
+    """day가 있어야 하는 성공 응답을 모두 지나간다. (이름, 응답 JSON)."""
+    results = []
+
+    def record(name, response, status=200):
+        assert response.status_code == status, f"{name}: {response.text}"
+        results.append((name, response.json()))
+        return response.json()
+
+    session = record("시작", env.start(day_id), 201)
+    sid = session["session_id"]
+    record("GET_asking", get(env, sid))
+    first = record("첫_답", env.answer(session))
+    record("GET_첫_묶음", get(env, sid))
+    env.react(sid, ids(first)[0])
+    record("GET_반응_뒤", get(env, sid))
+    record("되묻기", env.next(sid, text=UNKNOWN_TEXT))
+    record("두번째_못알아들음", env.next(sid, text=UNKNOWN_TEXT))
+    record("방향", env.next(sid, direction_id="closer"))
+    record("글_방향", env.next(sid, text="밤에"))
+    record("빈_next", env.next(sid))
+    course = record("코스", env.compose(sid))
+    record("GET_코스", get(env, sid))
+    in_course = next(i["place_id"] for i in course["options"][0]["items"] if not i["is_fixed"])
+    record("조정", env.adjust(sid, first_option_id(course), in_course, 15))
+    record("더_고를래", env.back(sid))
+    record("다시_코스", env.compose(sid))
+    return results
+
+
+FLOW_NAMES = [
+    "시작",
+    "GET_asking",
+    "첫_답",
+    "GET_첫_묶음",
+    "GET_반응_뒤",
+    "되묻기",
+    "두번째_못알아들음",
+    "방향",
+    "글_방향",
+    "빈_next",
+    "코스",
+    "GET_코스",
+    "조정",
+    "더_고를래",
+    "다시_코스",
+]
+
+
+def test_S40_A2_AC3_성공_응답_15종_모두_day가_저장소_값과_같다_심어둔_하루(env):
+    places, plan = full_plan()
+    day_id = env.plant_day(places, plan, day_number=4)
+    results = success_responses(env, day_id)
+    assert [name for name, _ in results] == FLOW_NAMES
+    expected = expected_day(env, day_id)
+    for name, body in results:
+        assert day_without_fixed_name(body["day"]) == expected, name
+        SHAPES[body["stage"]](body)
+
+
+def test_S41_A2_AC3_성공_응답_15종_모두_day가_저장소_값과_같다_가상_도시_둘째_날(env):
+    day_id = env.seed()["day_ids"][1]
+    results = success_responses(env, day_id)
+    expected = expected_day(env, day_id)
+    assert expected["must_visits"] == [{"place_id": "D01", "name": env.repo.get_day(day_id).places["D01"].name}]
+    assert expected["date"] == "2026-12-02"
+    assert (expected["start"], expected["end"], expected["day_number"]) == ("10:00", "20:00", 2)
+    assert len(results) == 15
+    for name, body in results:
+        assert day_without_fixed_name(body["day"]) == expected, name
+
+
+def test_S42_A2_자동_시작_응답에도_day(env):
+    places, plan = full_plan()
+    day_id = env.plant_day(places, plan)
+    response = env.start(day_id, mode="auto")
+    assert response.status_code == 201
+    assert_new_course_shape(response.json())
+    assert day_without_fixed_name(response.json()["day"]) == expected_day(env, day_id)
+
+
+def test_S43_A2_자동_뒤_더_고를래_응답에도_day(env):
+    day_id = env.plant_day(city())
+    sid = env.start(day_id, mode="auto").json()["session_id"]
+    data = env.back(sid).json()
+    assert_new_batch_shape(data)
+    assert day_without_fixed_name(data["day"]) == expected_day(env, day_id)
+
+
+def test_S44_A2_첫_질문의_알아서_짜_줘_응답에도_day(env):
+    day_id = env.plant_day(city())
+    sid = env.session(day_id)["session_id"]
+    data = env.client.post(f"/planning/{sid}/answer", json={"auto": True}).json()
+    assert_new_course_shape(data)
+    assert day_without_fixed_name(data["day"]) == expected_day(env, day_id)
+
+
+@pytest.mark.parametrize("arrive", [at_asking, at_browsing, at_composing], ids=["asking", "browsing", "composing"])
+def test_S45_A2_꼭_갈_곳_고정_일정이_없으면_빈_목록(env, arrive):
+    sid, response = arrive(env)
+    for body in (response, get_ok(env, sid)):
+        assert body["day"]["must_visits"] == []
+        assert body["day"]["fixed"] == []
+
+
+@pytest.mark.parametrize("arrive", [at_asking, at_browsing, at_composing], ids=["asking", "browsing", "composing"])
+def test_S46_A2_꼭_갈_곳이_있으면_순서대로_이름까지(env, arrive):
+    places = city(30)
+    sid, response = arrive(env, places, day_plan(must=("P21", "P20")))
+    expected = [{"place_id": "P21", "name": "가상 P21"}, {"place_id": "P20", "name": "가상 P20"}]
+    for body in (response, get_ok(env, sid)):
+        assert body["day"]["must_visits"] == expected
+        assert body["day"]["fixed"] == []
+
+
+def test_S47_A2_장소_있는_고정_일정은_place_id_시각까지(env):
+    places = city(30)
+    plan = day_plan(fixed=(fixed_event("15:00", "16:00", places["P20"]),))
+    sid, session = at_asking(env, places, plan)
+    fixed = session["day"]["fixed"]
+    assert len(fixed) == 1
+    assert set(fixed[0]) == {"place_id", "name", "start", "end"}
+    assert (fixed[0]["place_id"], fixed[0]["start"], fixed[0]["end"]) == ("P20", "15:00", "16:00")
+
+
+def test_S48_A2_장소_없는_고정_일정은_place_id가_null(env):
+    plan = day_plan(fixed=(fixed_event("15:00", "16:00"),))
+    _, session = at_asking(env, city(), plan)
+    fixed = session["day"]["fixed"]
+    assert len(fixed) == 1
+    assert set(fixed[0]) == {"place_id", "name", "start", "end"}
+    assert (fixed[0]["place_id"], fixed[0]["start"], fixed[0]["end"]) == (None, "15:00", "16:00")
+
+
+@pytest.mark.skip(reason="질문 대기 Q1: 고정 일정 name의 출처 (장소 이름인가 일정 제목 title인가, 장소 없을 때 무엇인가)")
+@pytest.mark.parametrize(
+    ("at_place", "expected"),
+    [(True, "가상 P20"), (False, "고정 일정")],
+    ids=["장소_있음", "장소_없음"],
+)
+def test_S49_질문대기_Q1_day_fixed의_name(env, at_place, expected):
+    places = city(30)
+    event = fixed_event("15:00", "16:00", places["P20"] if at_place else None)
+    _, session = at_asking(env, places, day_plan(fixed=(event,)))
+    assert session["day"]["fixed"][0]["name"] == expected
+
+
+@pytest.mark.parametrize("number", [1, 2, 3, 6, 10], ids=str)
+def test_S50_A2_day_number는_저장소_값_그대로(env, number):
+    day_id = env.plant_day(city(), day_number=number)
+    session = env.session(day_id)
+    assert session["day"]["day_number"] == number
+    assert get_ok(env, session["session_id"])["day"]["day_number"] == number
+
+
+def test_S51_A2_날짜_시각_숙소는_저장소_값_그대로_기본값이_아니다(env):
+    plan = day_plan(start="07:30", end="23:15", day=date(2027, 1, 31))
+    plan = plan.model_copy(update={"lodging": (34.5, 133.25)})
+    _, session = at_asking(env, city(), plan)
+    day = session["day"]
+    assert day["date"] == "2027-01-31"
+    assert (day["start"], day["end"]) == ("07:30", "23:15")
+    assert day["lodging"] == {"lat": 34.5, "lng": 133.25}
+
+
+def test_S52_A2_같은_여행의_세_날은_자기_날짜와_번호(env):
+    day_ids = env.seed()["day_ids"]
+    days = [env.session(d)["day"] for d in day_ids]
+    assert [d["day_id"] for d in days] == day_ids
+    assert [d["day_number"] for d in days] == [1, 2, 3]
+    assert [d["date"] for d in days] == ["2026-12-01", "2026-12-02", "2026-12-03"]
+    assert [len(d["must_visits"]) for d in days] == [0, 1, 0]
+
+
+def test_S53_A2_반응과_고르기_응답은_day를_넣지_않는다(env):
+    """A2는 세 모델만 적었다. TASK-003 §5·§6의 Picks와 select 응답은 그대로."""
+    day_id = env.plant_day(city())
+    sid, _ = env.browse(day_id)
+    assert set(env.react(sid, "P01").json()) == PICKS_KEYS
+    course = env.compose(sid).json()
+    option_id = first_option_id(course)
+    assert env.select(option_id).json() == {"day_id": day_id, "option_id": option_id}
+
+
+# ---------- A3: CourseItem·Dropped의 name ----------
+
+
+def test_S54_A3_AC3_코스_항목_name은_장소_이름_모든_항목_모든_안(env):
+    places = as_dict(cafes(8, stay=StayRange(min=30, typical=60, max=90)))
+    sid, course = at_composing(env, places)
+    assert len(course["options"]) == 2
+    for body in (course, get_ok(env, sid)):
+        for option in body["options"]:
+            assert option["items"]
+            for item in option["items"]:
+                assert item["name"] == f"가상 {item['place_id']}"
+
+
+def test_S55_A3_조정_자동_다시_짜기_응답에도_name(env):
+    sid, course = at_composing(env)
+    adjusted = env.adjust(sid, first_option_id(course), "P01", 15).json()
+    assert_new_course_shape(adjusted)
+    env.back(sid)
+    again = env.compose(sid).json()
+    assert_new_course_shape(again)
+    auto = env.start(env.plant_day(city()), mode="auto").json()
+    assert_new_course_shape(auto)
+    for body in (adjusted, again, auto):
+        for item in body["options"][0]["items"]:
+            assert item["name"] == f"가상 {item['place_id']}"
+
+
+def test_S56_A3_장소_있는_고정_일정_항목_name은_장소_이름(env):
+    places = city(30)
+    plan = day_plan(fixed=(fixed_event("15:00", "16:00", places["P20"]),))
+    _, course = at_composing(env, places, plan)
+    fixed = next(i for i in course["options"][0]["items"] if i["is_fixed"])
+    assert fixed["place_id"] == "P20"
+    assert fixed["name"] == "가상 P20"
+
+
+def test_S57_A3_장소_없는_고정_일정_항목에도_name_키가_있다(env):
+    _, course = at_composing(env, city(), day_plan(fixed=(fixed_event("15:00", "16:00"),)))
+    item = next(i for i in course["options"][0]["items"] if i["is_fixed"])
+    assert item["place_id"] is None
+    assert "name" in item
+
+
+@pytest.mark.skip(reason="질문 대기 Q1: 장소 없는 고정 일정 항목의 name (일정 제목 title인가 null인가)")
+def test_S58_질문대기_Q1_장소_없는_고정_일정_항목의_name은_일정_제목(env):
+    _, course = at_composing(env, city(), day_plan(fixed=(fixed_event("15:00", "16:00"),)))
+    item = next(i for i in course["options"][0]["items"] if i["is_fixed"])
+    assert item["name"] == "고정 일정"
+
+
+DROPPED_CASES = [
+    pytest.param("15:29", "closed_at_time", id="closed_at_time"),
+    pytest.param("16:00", "fixed_conflict", id="fixed_conflict"),
+]
+
+
+@pytest.mark.parametrize(("close_at", "reason"), DROPPED_CASES)
+def test_S59_A3_AC3_빠진_곳_name_이유별(env, close_at, reason):
+    target = place("P02", hours=opening("15:00", close_at))
+    places = as_dict([*cafes(1), target, *cafes(6, start=3)])
+    plan = day_plan(fixed=(fixed_event("15:00", "16:00"),))
+    sid, course = at_composing(env, places, plan)
+    for body in (course, get_ok(env, sid)):
+        entry = next(d for d in body["options"][0]["dropped"] if d["place_id"] == "P02")
+        assert entry == {"place_id": "P02", "reason": reason, "name": "가상 P02"}
+
+
+def test_S60_A3_AC3_빠진_곳_name_시간이_모자람(env):
+    # 60분 2곳: 쉬는 15분이면 135분이라 하루 130분에 안 들어간다 (기존 F63과 같은 하루)
+    plan = day_plan(start="09:00", end="11:10")
+    sid, course = at_composing(env, city(), plan)
+    relaxed = next(o for o in course["options"] if o["label"] == "relaxed")
+    assert len(relaxed["dropped"]) == 1
+    entry = relaxed["dropped"][0]
+    assert entry["reason"] == "no_time"
+    assert entry["name"] == f"가상 {entry['place_id']}"
+
+
+# ---------- A4: /debug/compose 본문 오류 ----------
+
+VALID_SNAPSHOT = {"now": "12:00"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"now": "시각이_아님"},
+        {"now": 12345678901234567890},
+        {"now": "12:00", "offline": "아마도"},
+        {"now": "12:00", "open_events": "목록이_아님"},
+        {"now": "12:00", "rain_prob_2h": "많이"},
+        [],
+        "글",
+    ],
+    ids=["빈_본문", "시각_아님", "시각이_큰_숫자", "참거짓_아님", "목록_아님", "숫자_아님", "배열", "글"],
+)
+def test_S61_A4_본문이_잘못되면_400_INVALID_REQUEST_공통_형식(env, body):
+    assert_error(env.client.post("/debug/compose", json=body), 400, "INVALID_REQUEST")
+
+
+def test_S62_A4_JSON이_아니어도_400_공통_형식(env):
+    response = env.client.post("/debug/compose", content=b"{not json", headers={"content-type": "application/json"})
+    assert_error(response, 400, "INVALID_REQUEST")
+
+
+def test_S63_A4_본문이_아예_없어도_400_공통_형식(env):
+    assert_error(env.client.post("/debug/compose"), 400, "INVALID_REQUEST")
+
+
+def test_S64_A4_맞는_본문은_그대로_200(env):
+    response = env.client.post("/debug/compose", json=VALID_SNAPSHOT)
+    assert response.status_code == 200, response.text
+    assert "error" not in response.json()
+
+
+# ---------- A5: 타입 재생성 ----------
+
+
+def committed_openapi() -> dict:
+    return json.loads((API_TYPES / "openapi.json").read_text(encoding="utf-8"))
+
+
+def resolve(spec: dict, schema: dict) -> dict:
+    while "$ref" in schema:
+        schema = spec["components"]["schemas"][schema["$ref"].rsplit("/", 1)[-1]]
+    return schema
+
+
+def test_S65_A5_openapi에_GET_planning(env):
+    spec = committed_openapi()
+    operation = spec["paths"]["/planning/{session_id}"]["get"]
+    assert {"200", "404"} <= set(operation["responses"])
+
+
+def test_S66_A5_GET의_200은_4가지_모양이다():
+    spec = committed_openapi()
+    schema = spec["paths"]["/planning/{session_id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    branches = [resolve(spec, s) for s in schema["anyOf"]]
+    assert len(branches) == 4
+    keys = {frozenset(b["properties"]) for b in branches}
+    assert frozenset(SESSION_KEYS | {"day"}) in keys
+    assert frozenset(BATCH_KEYS | {"day"}) in keys
+    assert frozenset(COURSE_KEYS | {"day"}) in keys
+    assert frozenset(DONE_KEYS) in keys
+
+
+@pytest.mark.parametrize("name", ["PlanningSession", "CandidateBatch", "CourseResult"])
+def test_S67_A5_세_모델의_day가_요약_8개_필드(name):
+    spec = committed_openapi()
+    schema = spec["components"]["schemas"][name]
+    assert "day" in schema["required"]
+    day = resolve(spec, schema["properties"]["day"])
+    assert set(day["properties"]) == DAY_KEYS
+    assert set(resolve(spec, day["properties"]["lodging"])["properties"]) == {"lat", "lng"}
+    must = resolve(spec, day["properties"]["must_visits"]["items"])
+    assert set(must["properties"]) == {"place_id", "name"}
+    fixed = resolve(spec, day["properties"]["fixed"]["items"])
+    assert set(fixed["properties"]) == {"place_id", "name", "start", "end"}
+
+
+def course_part(spec: dict, field: str) -> tuple[str, dict]:
+    """모델 이름은 정해져 있지 않아 CourseResult에서 찾아 들어간다. (모델 이름, 스키마)."""
+    course = resolve(spec, spec["components"]["schemas"]["CourseResult"])
+    option = resolve(spec, course["properties"]["options"]["items"])
+    ref = option["properties"][field]["items"]["$ref"]
+    return ref.rsplit("/", 1)[-1], resolve(spec, {"$ref": ref})
+
+
+@pytest.mark.parametrize(("field", "keys"), [("items", ITEM_KEYS | {"name"}), ("dropped", {"place_id", "reason", "name"})])
+def test_S68_A5_코스_항목과_빠진_곳에_name(field, keys):
+    _, schema = course_part(committed_openapi(), field)
+    assert set(schema["properties"]) == keys
+
+
+def test_S69_A5_ts_타입에도_같은_내용():
+    source = (API_TYPES / "index.ts").read_text(encoding="utf-8")
+    assert '"/planning/{session_id}": {' in source
+    assert "must_visits:" in source
+    assert "day_number:" in source
+    spec = committed_openapi()
+    for field in ("items", "dropped"):
+        name, _ = course_part(spec, field)
+        block = source.split(f"{name}: {{", 1)[1].split("};", 1)[0]
+        assert "name:" in block
+
+
+def test_S70_A5_커밋한_명세가_지금_서버와_같다_GET_포함():
+    from api.main import app
+
+    assert committed_openapi() == app.openapi()
+    assert "get" in app.openapi()["paths"]["/planning/{session_id}"]
