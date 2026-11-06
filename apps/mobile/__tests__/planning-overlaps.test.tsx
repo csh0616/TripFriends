@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// §6 규칙이 겹칠 때 (줄마다). 근거: TASK-004 §6, AC-11, §B-4, §12(Q16·Q18)
+// §6 규칙이 겹칠 때 (줄마다). 근거: TASK-004 §6, AC-11, §B-4, §12(Q16·Q18), §13-3(끝 카드)
 import { screen, waitFor, within } from '@testing-library/react-native';
 
 import { json } from '../test-support/fake-server';
@@ -9,6 +9,7 @@ import {
   pressText,
   R,
   resetDevice,
+  restart,
   startApp,
   tap,
   toP1,
@@ -51,12 +52,15 @@ describe('§6 줄 1 서버 문구가 이긴다', () => {
     expect(screen.queryByText('서버가_준_묶음_말')).toBeNull();
   });
 
-  test('X04_S6_exhausted_끝_카드_문구는_서버_message_고정_문구_없음', async () => {
+  // §13-3 끝 카드로 기대값 변경: 끝 카드 글은 서버 message가 아니라 앱 고정 "코스 짜 볼까?", 서버 message는 말풍선
+  test('X04_S13_exhausted_끝_카드는_코스_짜_볼까_서버_message는_말풍선에만', async () => {
     const server = happyServer();
     server.on(R.answer, json(200, batch({ exhausted: true, message: '서버가_준_소진_문장' })));
     await toP2();
     const end = within(screen.getByTestId('end-card'));
-    expect(end.getByText('서버가_준_소진_문장')).toBeTruthy();
+    expect(end.getByText('코스 짜 볼까?')).toBeTruthy();
+    expect(end.queryByText('서버가_준_소진_문장')).toBeNull();
+    expect(screen.getAllByText('서버가_준_소진_문장')).toHaveLength(1);
     expect(screen.queryByText('다른 곳도 볼래?')).toBeNull();
   });
 
@@ -65,6 +69,65 @@ describe('§6 줄 1 서버 문구가 이긴다', () => {
     await toP2();
     expect(within(screen.getByTestId('end-card')).getByText('다른 곳도 볼래?')).toBeTruthy();
   });
+});
+
+// ---------- §13-3 끝 카드: 되묻기와 겹쳐도 같은 규칙 ----------
+
+describe('§13-3 끝 카드 글', () => {
+  const clarify = [{ id: 'food' as const, label: '먹을 데' }];
+
+  test('X29_S13_소진과_되묻기가_겹치면_끝_카드는_코스_짜_볼까_말풍선은_서버_글', async () => {
+    const server = happyServer();
+    server.on(R.answer, json(200, batch({ exhausted: true, clarify, message: '이 중에 있어?' })));
+    await toP2();
+    expect(within(screen.getByTestId('end-card')).getByText('코스 짜 볼까?')).toBeTruthy();
+    expect(screen.getAllByText('이 중에 있어?')).toHaveLength(1);
+    expect(screen.queryByText('다른 곳도 볼래?')).toBeNull();
+  });
+
+  test('X30_S13_되묻기여도_소진이_아니면_끝_카드는_다른_곳도_볼래', async () => {
+    const server = happyServer();
+    server.on(R.answer, json(200, batch({ exhausted: false, clarify, message: '이 중에 있어?' })));
+    await toP2();
+    const end = within(screen.getByTestId('end-card'));
+    expect(end.getByText('다른 곳도 볼래?')).toBeTruthy();
+    expect(end.queryByText('코스 짜 볼까?')).toBeNull();
+    expect(screen.getAllByText('이 중에 있어?')).toHaveLength(1);
+  });
+
+  test('X31_S13_실제_소진_문장도_화면에_한_번만', async () => {
+    const message = '더 보여 줄 곳이 거의 없어. 이제 코스 짜 볼까?'; // TASK-003 §6 소진 문장
+    const server = happyServer();
+    server.on(R.answer, json(200, batch({ exhausted: true, message })));
+    await toP2();
+    expect(screen.getAllByText(message)).toHaveLength(1);
+    expect(screen.getAllByText('코스 짜 볼까?')).toHaveLength(1);
+  });
+
+  test('X32_S13_다시_켠_GET의_소진_묶음도_같은_규칙', async () => {
+    const server = happyServer();
+    const app = await toP2();
+    server.on(R.get, json(200, batch({ exhausted: true, message: '다시_받은_소진' })));
+    await restart(app);
+    expect(await screen.findByText('다시_받은_소진')).toBeTruthy();
+    expect(within(screen.getByTestId('end-card')).getByText('코스 짜 볼까?')).toBeTruthy();
+    expect(screen.getAllByText('다시_받은_소진')).toHaveLength(1);
+  });
+
+  test('X33_S13_빈_묶음이어도_소진이_아니면_다른_곳도_볼래', async () => {
+    const server = happyServer();
+    server.on(R.answer, json(200, batch({ candidates: [], exhausted: false, message: '서버_빈_묶음' })));
+    await toP2Empty();
+    const end = within(screen.getByTestId('end-card'));
+    expect(end.getByText('다른 곳도 볼래?')).toBeTruthy();
+    expect(screen.getAllByText('서버_빈_묶음')).toHaveLength(1);
+  });
+
+  async function toP2Empty() {
+    await toP1();
+    await pressText('아무거나 찾아 줘');
+    await screen.findByTestId('end-card');
+  }
 });
 
 // ---------- 줄 2: clarify와 directions ----------

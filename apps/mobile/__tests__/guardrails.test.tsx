@@ -1,20 +1,23 @@
 /// <reference types="jest" />
-// 가드레일. 근거: TASK-004 §B-1, §B-3, §B-6 G1~G7, §9, §12(Q4·Q5·Q13·Q16·Q25·Q28), AC-6, DESIGN-001 §2·§4-4
+// 가드레일. 근거: TASK-004 §B-1, §B-3, §B-6 G1~G7, §9, §12(Q4·Q5·Q13·Q16·Q25·Q28), §13, AC-6, DESIGN-001 §2·§4
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { render, screen, within } from '@testing-library/react-native';
-import { Pressable, StyleSheet } from 'react-native';
+import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/planning/primary-button';
+import { FriendBubble } from '@/components/planning/friend-bubble';
+import { SecondaryButton } from '@/components/planning/secondary-button';
 import { StatusChip } from '@/components/planning/status-chip';
 import { contrast } from '@/lib/contrast';
+import { layout } from '@/planning/layout';
 
-import { CONTRAST_PAIRS, COLORS } from '../test-support/design-table';
-import { happyServer, pressId, R, resetDevice, startApp, tap, toP1, toP2, toP3, toS9 } from '../test-support/planning-driver';
+import { CONTRAST_PAIRS, COLORS, STRINGS, TYPE } from '../test-support/design-table';
+import { happyServer, pressId, pressText, R, resetDevice, startApp, tap, toP1, toP2, toP3, toS9 } from '../test-support/planning-driver';
 import { json } from '../test-support/fake-server';
-import { course, relaxed } from '../test-support/planning-fixtures';
-import { hits, REPO_ROOT, SRC, sourceFiles } from '../test-support/source-files';
+import { batch, course, picks, relaxed } from '../test-support/planning-fixtures';
+import { hits, MOBILE_ROOT, REPO_ROOT, SRC, sourceFiles } from '../test-support/source-files';
 
 const TOKENS = join(REPO_ROOT, 'packages', 'design-tokens', 'tokens.json');
 const PLACEHOLDER_FILE = 'lib/placeholder-for.ts';
@@ -443,4 +446,454 @@ describe('G7', () => {
 test('G30_S9_EXPO_PUBLIC_변수는_API_주소만', () => {
   const names = sourceFiles().flatMap((f) => f.text.match(/EXPO_PUBLIC_\w+/g) ?? []);
   expect(new Set(names)).toEqual(new Set(['EXPO_PUBLIC_API_URL']));
+});
+
+// ---------- §13 ----------
+
+type Tree = { type: string; props: Record<string, any>; parent: Tree | null; queryAll: (p: (h: Tree) => boolean) => Tree[] };
+
+const styleOf = (host: { props: Record<string, any> }) => (StyleSheet.flatten(host.props.style) ?? {}) as Record<string, any>;
+const root = () => screen.container as unknown as Tree;
+const byId = (id: string) => screen.getByTestId(id) as unknown as Tree;
+const textOf = (host: Tree) => {
+  const flat = (value: unknown): string => (Array.isArray(value) ? value.map(flat).join('') : typeof value === 'string' || typeof value === 'number' ? String(value) : '');
+  return flat(host.props.children);
+};
+const textsUnder = (host: Tree) => host.queryAll((inner) => inner.type === 'Text');
+
+const ALL_SCREENS: [string, () => Promise<unknown>][] = [
+  [
+    'S0',
+    async () => {
+      await startApp();
+      await screen.findByText('데모 여행 시작');
+    },
+  ],
+  ['P1', toP1],
+  ['P2', toP2],
+  ['P3', toP3],
+  ['S9', () => toS9()],
+];
+
+describe('§13-2 #1 그림자', () => {
+  const expectShadow = (style: Record<string, any>) => {
+    expect(style.shadowColor).toBe(COLORS['on-brand']);
+    expect(style.shadowOffset).toEqual(expect.objectContaining({ height: expect.any(Number) }));
+    expect(style.shadowOpacity).toBeGreaterThan(0);
+    expect(style.shadowRadius).toBeGreaterThan(0);
+    expect(style.elevation).toBeGreaterThan(0);
+  };
+
+  test.each([
+    ['P1', toP1],
+    ['P2', toP2],
+    ['P3', toP3],
+  ] as [string, () => Promise<unknown>][])('G38_S13_1_%s_떠_있는_줄에_그림자가_실제로_있다', async (_name, go) => {
+    happyServer();
+    await go();
+    expectShadow(styleOf(byId('floating-bar')));
+    expect(styleOf(byId('floating-bar')).shadowOffset.height).toBeGreaterThan(0);
+  });
+
+  test('G39_S13_1_SOS_시트에_위쪽으로_드리운_그림자가_실제로_있다', async () => {
+    happyServer();
+    await toP1();
+    await pressId('sos-button');
+    expectShadow(styleOf(byId('sos-sheet')));
+    expect(styleOf(byId('sos-sheet')).shadowOffset.height).toBeLessThan(0);
+  });
+});
+
+describe('§13-2 #3 칩 누르는 영역', () => {
+  /** 위로 올라가며 가로 스크롤 영역까지의 높이를 잰다. 조상이 칩 높이로 줄어 있으면 hitSlop이 잘린다. */
+  function reachInsideScroll(host: Tree) {
+    const own = reach(host as unknown as Host).height ?? 0;
+    let room = Number(styleOf(host).height ?? styleOf(host).minHeight ?? 0);
+    let current = host.parent;
+    while (current) {
+      const style = styleOf(current);
+      const vertical = style.paddingVertical ?? style.padding;
+      const padding = vertical !== undefined ? 2 * vertical : (style.paddingTop ?? 0) + (style.paddingBottom ?? 0);
+      room = Math.max(room + padding, style.height ?? 0, style.minHeight ?? 0);
+      if (current.type === 'RCTScrollView') {
+        // 안쪽 묶음의 스타일은 RN 가짜 ScrollView에서 contentContainerStyle 속성으로 남는다
+        const inner = StyleSheet.flatten(current.props.contentContainerStyle) ?? {};
+        const innerVertical = inner.paddingVertical ?? inner.padding;
+        const innerPadding = innerVertical !== undefined ? 2 * Number(innerVertical) : Number(inner.paddingTop ?? 0) + Number(inner.paddingBottom ?? 0);
+        const start = Number(styleOf(host).height ?? styleOf(host).minHeight ?? 0);
+        room = Math.max(room + innerPadding, Number(inner.height ?? 0), Number(inner.minHeight ?? 0), start);
+        return { own, room };
+      }
+      current = current.parent;
+    }
+    return { own, room: 0 };
+  }
+
+  const expectChipReach = (id: string) => {
+    const { own, room } = reachInsideScroll(byId(id));
+    expect(own).toBeGreaterThanOrEqual(44);
+    expect(room).toBeGreaterThanOrEqual(44);
+  };
+
+  const noop = () => undefined;
+  test.each<[string, object | undefined, object, boolean]>([
+    ['스크롤 영역이 칩 높이면 hitSlop이 잘린다', { top: 4, bottom: 4 }, { height: 36 }, false],
+    ['칩 36 + 위아래 4 + 스크롤 안쪽 위아래 4', { top: 4, bottom: 4 }, { height: 36 }, true],
+    ['감싸는 44 높이', undefined, { height: 44 }, true],
+    ['hitSlop 3이면 43', { top: 3, bottom: 4 }, { height: 36 }, false],
+  ])('G40_도구_검사_%s', async (name, slop, style, passes) => {
+    await render(
+      <ScrollView horizontal contentContainerStyle={name.includes('안쪽') ? { paddingVertical: 4 } : undefined}>
+        <View>
+          <Pressable testID="chip" hitSlop={slop} style={style} onPress={noop} />
+        </View>
+      </ScrollView>,
+    );
+    if (passes) expectChipReach('chip');
+    else expect(() => expectChipReach('chip')).toThrow();
+  });
+
+  test('G41_S13_3_방향_칩의_44가_스크롤_영역에_잘리지_않는다', async () => {
+    happyServer();
+    await toP2();
+    expectChipReach('direction-quieter');
+    expectChipReach('direction-closer');
+  });
+
+  test('G42_S13_3_되묻기_칩의_44가_스크롤_영역에_잘리지_않는다', async () => {
+    const server = happyServer();
+    server.on(R.answer, json(200, batch({ clarify: [{ id: 'food', label: '먹을 데' }] })));
+    await toP2();
+    expectChipReach('clarify-food');
+  });
+});
+
+describe('§13-2 #6 #8 숫자는 layout·토큰으로', () => {
+  const ICON_LITERAL = /\b(size|strokeWidth|r|rx|ry)\s*[:=]\s*\{?\s*-?\d/;
+
+  test('G43_도구_검사_아이콘_크기_숫자를_잡는다', () => {
+    for (const text of ['size={16}', 'size: 16', 'strokeWidth={3}', 'r={11}']) expect(ICON_LITERAL.test(text)).toBe(true);
+    for (const text of ['size={layout.check}', 'size = control.icon', 'strokeWidth={layout.routeLine}', 'gear={1}']) {
+      expect(ICON_LITERAL.test(text)).toBe(false);
+    }
+  });
+
+  test('G44_S13_6_아이콘_크기_숫자는_layout_ts_한_파일에만', () => {
+    const files = sourceFiles().filter((f) => f.path !== LAYOUT_FILE);
+    expect(hits(files, ICON_LITERAL)).toEqual([]);
+  });
+
+  test('G45_S13_8_담기_움직임_시간은_토큰으로_420을_직접_쓰지_않는다', () => {
+    expect(hits(sourceFiles(), /\b420\b/)).toEqual([]);
+    expect(sourceFiles().some((f) => f.text.includes("dur-draw"))).toBe(true);
+  });
+});
+
+describe('§13-2 #10 칩 글자', () => {
+  const expectLabel = (id: string) => {
+    const [label] = textsUnder(byId(id));
+    const style = styleOf(label);
+    expect(style.fontSize).toBe(TYPE.label.size);
+    expect(style.lineHeight).toBe(TYPE.label.lineHeight);
+    expect(String(style.fontFamily)).toMatch(/NotoSansKR.*600/);
+  };
+
+  test('G46_S13_10_방향_칩_글자는_label_12_16_600', async () => {
+    happyServer();
+    await toP2();
+    expectLabel('direction-quieter');
+  });
+
+  test('G47_S13_10_되묻기_칩_글자도_label', async () => {
+    const server = happyServer();
+    server.on(R.answer, json(200, batch({ clarify: [{ id: 'food', label: '먹을 데' }] })));
+    await toP2();
+    expectLabel('clarify-food');
+  });
+});
+
+describe('§13-3 #2 scrim', () => {
+  const CONCAT = /\bcolor(?:\.\w+|\[[^\]]*\])\s*\+|\$\{\s*color\b|\bcolor(?:\.\w+|\[[^\]]*\])\.concat\(/;
+
+  test('G48_도구_검사_색에_글자를_붙이는_것을_잡는다', () => {
+    for (const text of ["color.ink + '66'", "color['on-brand'] + '66'", '`${color.ink}66`', "color.ink.concat('66')"]) {
+      expect(CONCAT.test(text)).toBe(true);
+    }
+    for (const text of ['color.ink', "color['bg-2']", 'backgroundColor: color.scrim', 'width + 2']) {
+      expect(CONCAT.test(text)).toBe(false);
+    }
+  });
+
+  test('G49_S13_2_토큰_밖_색_조합_색_더하기_투명도_글자가_소스에_없다', () => {
+    expect(hits(sourceFiles(), CONCAT)).toEqual([]);
+  });
+
+  test.each(ALL_SCREENS)('G50_S13_2_%s_시트_뒤_막은_scrim_토큰', async (_name, go) => {
+    happyServer();
+    await go();
+    await pressId('sos-button');
+    expect(styleOf(byId('sheet-scrim')).backgroundColor).toBe(STRINGS.scrim);
+  });
+
+  test('G51_S13_2_scrim_값은_DESIGN_001_그대로', () => {
+    expect(STRINGS.scrim).toBe('rgba(26,26,26,0.40)');
+    expect(readFileSync(join(REPO_ROOT, 'docs', 'DESIGN-001_Brand-Tokens.md'), 'utf8')).toContain(STRINGS.scrim);
+  });
+});
+
+describe('§13-3 비활성', () => {
+  const OPACITY = /\bopacity\s*[:=]/;
+
+  const expectPlainDisabled = (button: { props: Record<string, any> }) => {
+    const style = styleOf(button);
+    expect(style.backgroundColor).toBe(COLORS['bg-2']);
+    expect(style.opacity ?? 1).toBe(1);
+  };
+
+  test('G52_도구_검사_opacity를_잡고_그림자는_안_잡는다', () => {
+    for (const text of ['opacity: 0.5', 'dim: { opacity: 0.5 }', 'opacity={0.5}']) expect(OPACITY.test(text)).toBe(true);
+    for (const text of ['shadowOpacity: 0.1', 'stopOpacity={1}']) expect(OPACITY.test(text)).toBe(false);
+  });
+
+  test('G53_S13_비활성을_opacity로_만들지_않는다_소스_전체', () => {
+    expect(hits(sourceFiles(), OPACITY)).toEqual([]);
+  });
+
+  test('G54_S13_주_버튼_비활성은_bg_2_바탕_muted_글자_opacity_없음', async () => {
+    await render(<PrimaryButton testID="b" label="누름" disabled onPress={() => undefined} />);
+    expectPlainDisabled(screen.getByTestId('b'));
+    expect(styleOf(screen.getByText('누름')).color).toBe(COLORS.muted);
+  });
+
+  test('G55_S13_보조_버튼_비활성도_bg_2_바탕_muted_글자_opacity_없음', async () => {
+    await render(<SecondaryButton testID="b" label="누름" disabled onPress={() => undefined} />);
+    expectPlainDisabled(screen.getByTestId('b'));
+    expect(styleOf(screen.getByText('누름')).color).toBe(COLORS.muted);
+  });
+
+  test('G56_S13_활성이면_주_버튼은_brand_보조는_ink_글자', async () => {
+    await render(
+      <>
+        <PrimaryButton testID="p" label="주" onPress={() => undefined} />
+        <SecondaryButton testID="s" label="보조" onPress={() => undefined} />
+      </>,
+    );
+    expect(styleOf(screen.getByTestId('p')).backgroundColor).toBe(COLORS.brand);
+    expect(styleOf(screen.getByText('주')).color).toBe(COLORS['on-brand']);
+    expect(styleOf(screen.getByText('보조')).color).toBe(COLORS.ink);
+  });
+
+  const BUSY: [string, () => Promise<unknown>, string, () => Promise<unknown>][] = [
+    ['P1', toP1, R.answer, () => pressText('아무거나 찾아 줘')],
+    ['P2', toP2, R.compose, () => pressId('compose-button')],
+    ['P3', toP3, R.back, () => pressText('더 고를래')],
+  ];
+
+  test.each(BUSY)('G57_S13_%s_요청_중_막힌_버튼은_모두_bg_2_바탕이고_글자는_muted', async (_name, go, route, act) => {
+    const server = happyServer();
+    await go();
+    server.once(route, { kind: 'hang' });
+    await act();
+    const disabled = root().queryAll(
+      (host) => host.type === 'View' && typeof host.props.onClick === 'function' && host.props.accessibilityState?.disabled === true,
+    );
+    expect(disabled.length).toBeGreaterThan(0);
+    for (const button of disabled) {
+      expectPlainDisabled(button);
+      for (const label of textsUnder(button)) expect(styleOf(label).color).toBe(COLORS.muted);
+    }
+  });
+
+  test('G58_S13_S0_요청_중_시작_버튼도_같다', async () => {
+    const server = happyServer();
+    server.once(R.seed, { kind: 'hang' });
+    await startApp();
+    await pressText('데모 여행 시작');
+    expect(styleOf(screen.getByText('데모 여행 시작')).color).toBe(COLORS.muted);
+  });
+});
+
+describe('§13-3 글꼴', () => {
+  const HANGUL = /[가-힣]/;
+  const family = (host: { props: Record<string, any> }) => String(styleOf(host).fontFamily);
+
+  test.each(ALL_SCREENS)('G59_S13_%s_DM_Mono에_한글이_섞인_글이_없다', async (_name, go) => {
+    happyServer();
+    await go();
+    const wrong = textsUnder(root())
+      .filter((host) => /mono/i.test(family(host)) && HANGUL.test(textOf(host)))
+      .map(textOf);
+    expect(wrong).toEqual([]);
+  });
+
+  test('G60_S13_머문_시간_글은_font_text', async () => {
+    happyServer();
+    await toP3();
+    expect(family(within(screen.getByTestId('course-row-1')).getByText('1시간 30분'))).toMatch(/NotoSansKR/);
+  });
+
+  test('G61_S13_B4_시각과_번호는_DM_Mono', async () => {
+    happyServer();
+    await toP2();
+    expect(family(within(screen.getByTestId('candidate-card-D01')).getByText('01 / 06'))).toMatch(/mono/i);
+    await pressId('compose-button');
+    await screen.findByText('코스 짜 봤어');
+    expect(family(within(screen.getByTestId('course-row-1')).getByText('10:10'))).toMatch(/mono/i);
+  });
+});
+
+describe('§13-3 아바타', () => {
+  const painted = (host: Tree) => {
+    const style = styleOf(host);
+    return [host.props.fill, host.props.stroke, style.backgroundColor, style.borderColor].filter(
+      (value) => typeof value === 'string' && value !== 'none' && value !== 'transparent',
+    );
+  };
+
+  test('G62_S13_아바타는_T_글자가_아니라_ink_원_32', async () => {
+    await render(<FriendBubble message="말" />);
+    expect(screen.queryByText('T')).toBeNull();
+    const style = styleOf(byId('friend-avatar'));
+    expect(style.backgroundColor).toBe(COLORS.ink);
+    expect(style.width).toBe(32);
+    expect(style.height).toBe(32);
+    expect(style.borderRadius).toBe(999);
+    expect(textsUnder(byId('friend-avatar'))).toEqual([]);
+  });
+
+  test('G63_S13_아바타의_눈과_입은_흰색_도형', async () => {
+    await render(<FriendBubble message="말" />);
+    const inner = byId('friend-avatar')
+      .queryAll((host) => host.type === 'View')
+      .flatMap(painted);
+    expect(inner.length).toBeGreaterThan(0);
+    for (const value of inner) expect(String(value).toUpperCase()).toBe(COLORS.surface);
+  });
+
+  test.each([
+    ['P1', toP1],
+    ['P2', toP2],
+  ] as [string, () => Promise<unknown>][])('G64_S13_%s_말풍선에도_T_글자_없이_아바타', async (_name, go) => {
+    happyServer();
+    await go();
+    expect(screen.queryByText('T')).toBeNull();
+    expect(screen.getByTestId('friend-avatar')).toBeTruthy();
+  });
+});
+
+describe('§13-3 로고', () => {
+  const LOGO = join(MOBILE_ROOT, 'assets', 'brand', 'logo-ink.png');
+
+  test('G65_S13_확정_로고가_assets_brand에_같은_파일로_있다', () => {
+    expect(existsSync(LOGO)).toBe(true);
+    expect(readFileSync(LOGO).equals(readFileSync(join(REPO_ROOT, 'docs', 'design', 'logo-ink.png')))).toBe(true);
+  });
+
+  test('G66_S13_S0이_확정_로고를_보여_준다', async () => {
+    happyServer();
+    await startApp();
+    await screen.findByText('데모 여행 시작');
+    expect(screen.getByTestId('s0-logo').props.source).toBeTruthy();
+    expect(hits(sourceFiles(), /assets\/brand\/logo-ink\.png/).length).toBeGreaterThan(0);
+  });
+
+  test('G67_S13_임시_로고는_지웠다', () => {
+    expect(hits(sourceFiles(), /LogoTile|logoTile/)).toEqual([]);
+    const s0 = sourceFiles().filter((f) => f.path === 'planning/screens/s0.tsx');
+    expect(s0).toHaveLength(1);
+    expect(hits(s0, /LinearGradient|sunset/)).toEqual([]);
+  });
+});
+
+describe('§13-3 #5 주황 4% (폰 크기 390x844, 계산할 수 있는 면적만)', () => {
+  const PHONE = { width: 390, height: 844, scale: 2, fontScale: 1 };
+  const LIMIT = 0.04 * PHONE.width * PHONE.height;
+  let window: ReturnType<typeof Dimensions.get>;
+
+  beforeEach(() => {
+    window = Dimensions.get('window');
+    Dimensions.set({ window: PHONE, screen: PHONE });
+  });
+
+  afterEach(() => {
+    Dimensions.set({ window, screen: window });
+  });
+
+  const isPrimary = (host: Tree) => styleOf(host).backgroundColor === COLORS.brand && styleOf(host).height === 52;
+  const isBrand = (value: unknown) => String(value).toUpperCase() === COLORS.brand;
+
+  /** 주 버튼을 뺀 주황 면적. box: 크기를 스타일에 안 적은 고리의 상자 */
+  function brandArea(scope: Tree, box?: { width: number; height: number }) {
+    return scope
+      .queryAll((host) => host.type === 'View' && !isPrimary(host))
+      .reduce((sum, host) => {
+        const style = styleOf(host);
+        let area = 0;
+        if (isBrand(style.backgroundColor)) area += Number(style.width) * Number(style.height);
+        if (isBrand(style.borderColor)) {
+          const width = Number(style.width ?? box?.width);
+          const height = Number(style.height ?? box?.height);
+          area += 2 * (width + height) * Number(style.borderWidth);
+        }
+        if (isBrand(host.props.stroke)) {
+          const stroke = Number(host.props.strokeWidth);
+          if (host.props.points !== undefined) {
+            const points = String(host.props.points).trim().split(/\s+/).map((pair) => pair.split(',').map(Number));
+            const length = points.slice(1).reduce((total, [x, y], i) => total + Math.hypot(x - points[i][0], y - points[i][1]), 0);
+            area += length * stroke;
+          } else {
+            area += 2 * Math.PI * Number(host.props.r) * stroke;
+          }
+        }
+        if (isBrand(host.props.fill)) area += Math.PI * Number(host.props.r) ** 2;
+        return sum + area;
+      }, 0);
+  }
+
+  test('G68_S13_5_도구_검사_넘치는_면적을_잡는다', async () => {
+    await render(
+      <>
+        <View testID="big" style={{ backgroundColor: COLORS.brand, width: 390, height: 34 }} />
+        <View testID="main" style={{ backgroundColor: COLORS.brand, width: 390, height: 52 }} />
+      </>,
+    );
+    expect(brandArea(root())).toBe(390 * 34);
+    expect(brandArea(root())).toBeGreaterThan(LIMIT);
+  });
+
+  test('G69_S13_5_P1_타일을_모두_골라도_고리는_4퍼센트_이하', async () => {
+    happyServer();
+    await toP1();
+    for (const id of ['walk_alley', 'food_tour', 'shopping', 'night_view', 'cafe', 'museum_experience']) await pressId(`choice-${id}`);
+    const tile = { width: (PHONE.width - 2 * layout.screenMargin - 12) / 2, height: layout.tile };
+    const area = brandArea(root(), tile);
+    expect(area).toBeGreaterThan(0);
+    expect(area).toBeLessThanOrEqual(LIMIT);
+  });
+
+  test('G70_S13_5_P2_담은_카드_한_장의_주황은_4퍼센트_이하', async () => {
+    const server = happyServer();
+    server.on(R.reactions, json(200, picks(['D01'])));
+    await toP2();
+    await pressId('like-D01');
+    await screen.findByText('1곳 담았어');
+    const area = brandArea(byId('candidate-card-D01'));
+    expect(area).toBeGreaterThan(0);
+    expect(area).toBeLessThanOrEqual(LIMIT);
+  });
+
+  test('G71_S13_5_P3_동선과_그_밖의_주황은_주_버튼_빼고_4퍼센트_이하', async () => {
+    happyServer();
+    await toP3();
+    const area = brandArea(root());
+    expect(area).toBeGreaterThan(0);
+    expect(area).toBeLessThanOrEqual(LIMIT);
+  });
+
+  test.each(ALL_SCREENS)('G72_S13_5_S4_1_%s_주황으로_쓴_글자가_없다', async (_name, go) => {
+    happyServer();
+    await go();
+    const wrong = textsUnder(root()).filter((host) => isBrand(styleOf(host).color)).map(textOf);
+    expect(wrong).toEqual([]);
+  });
 });

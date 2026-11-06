@@ -1,9 +1,10 @@
 /// <reference types="jest" />
-// 화면 흐름. 근거: TASK-004 §B-2, §B-4, §12, AC-7·AC-8·AC-9·AC-12, TASK-003 §5·§6, §10(Q4·R6·R7)
+// 화면 흐름. 근거: TASK-004 §B-2, §B-4, §12, §13, AC-7·AC-8·AC-9·AC-12, TASK-003 §5·§6, §10(Q4·R6·R7)
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { act, render, screen, waitFor, within } from '@testing-library/react-native';
+import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { apiError, hang, json, networkDown } from '../test-support/fake-server';
@@ -25,6 +26,7 @@ import {
   toS9,
   typeAndSend,
 } from '../test-support/planning-driver';
+import { COLORS } from '../test-support/design-table';
 import { batch, course, day, done, packed, picks, relaxed, seed, selected, session, SID } from '../test-support/planning-fixtures';
 import { REPO_ROOT } from '../test-support/source-files';
 
@@ -533,13 +535,16 @@ describe('P2 후보 고르기', () => {
     await waitFor(() => expect(server.last().body).toEqual({ place_id: 'D03', action: 'unlike' }));
   });
 
-  test('W37_Q8_빈_묶음이면_카드_없이_끝_카드만_문구는_서버_message', async () => {
+  // §13-3 끝 카드로 기대값 변경: 소진이면 끝 카드 글은 "코스 짜 볼까?", 서버 message는 말풍선 (Q8의 "문구는 서버 message"를 대신함)
+  test('W37_Q8_S13_빈_묶음이면_카드_없이_끝_카드만_글은_코스_짜_볼까_서버_message는_말풍선', async () => {
     const server = happyServer();
     server.on(R.answer, json(200, batch({ candidates: [], exhausted: true, message: '서버_소진' })));
     await toP1();
     await pressText('아무거나 찾아 줘');
     const end = within(await screen.findByTestId('end-card'));
-    expect(end.getByText('서버_소진')).toBeTruthy();
+    expect(end.getByText('코스 짜 볼까?')).toBeTruthy();
+    expect(end.queryByText('서버_소진')).toBeNull();
+    expect(screen.getAllByText('서버_소진')).toHaveLength(1);
     expect(screen.queryAllByTestId(/^candidate-card-/)).toHaveLength(0);
     expect(screen.queryByText('다른 곳도 볼래?')).toBeNull();
     expect(screen.getByTestId('compose-button')).toBeTruthy();
@@ -588,8 +593,8 @@ describe('P3 코스안', () => {
     expect(screen.getByText('코스 짜 봤어')).toBeTruthy();
   });
 
-  // 질문 대기 Q33: §12 Q32의 부제 문장이 P3까지 바꾸는가 ("둘째 날 · 3곳" 대 "12월 2일 수요일 · 10:00~20:00")
-  test.skip('W40_질문대기_Q33_P3_부제', async () => {
+  // §13-3 Q33: "{날 이름} · {n}곳" 승인, skip 해제
+  test('W40_S13_Q33_P3_부제', async () => {
     happyServer();
     await toP3();
     expect(screen.getByText('둘째 날 · 3곳')).toBeTruthy();
@@ -608,6 +613,8 @@ describe('P3 코스안', () => {
       ...option.items[2],
       seq: 4,
       place_id: null as unknown as string,
+      lat: null as unknown as number, // §13-1 A8
+      lng: null as unknown as number,
       name: '저녁 약속',
       stay_source: null as unknown as 'auto',
       hours_status: null as unknown as 'confirmed',
@@ -768,6 +775,8 @@ describe('P3 코스안', () => {
       ...withoutPlace.items[2],
       seq: 4,
       place_id: null as unknown as string,
+      lat: null as unknown as number, // §13-1 A8
+      lng: null as unknown as number,
       stay_source: null as unknown as 'auto',
       hours_status: null as unknown as 'confirmed',
     });
@@ -862,6 +871,289 @@ describe('P3 코스안', () => {
     happyServer();
     await toP3();
     expect(screen.queryByText('담은 곳이 없어서 코스가 비었어')).toBeNull();
+  });
+});
+
+// ---------- §13-1 A8: 동선 그림 ----------
+
+describe('§13-1 A8 P3 동선 그림', () => {
+  const prop = (id: string) => screen.getByTestId(id).props as Record<string, unknown>;
+  const at = (id: string) => ({ x: Number(prop(id).cx), y: Number(prop(id).cy) });
+  const stops = () => screen.queryAllByTestId(/^route-stop-/);
+  const lineOf = () =>
+    String(prop('route-line').points)
+      .trim()
+      .split(/\s+/)
+      .map((pair) => pair.split(',').map(Number));
+  const noPlace = (seq: number, name: string) => ({
+    ...relaxed().items[2],
+    seq,
+    name,
+    place_id: null,
+    lat: null,
+    lng: null,
+    stay_source: null,
+    hours_status: null,
+  });
+
+  /** 북쪽이 위, 동쪽이 오른쪽 (Q12). 경도 D20 < 숙소 < D01 < D30, 위도 D30=숙소 < D01 < D20 */
+  function expectScattered() {
+    const home = at('route-home');
+    const [d01, d20, d30] = [at('route-stop-1'), at('route-stop-2'), at('route-stop-3')];
+    expect(d20.x).toBeLessThan(home.x);
+    expect(home.x).toBeLessThan(d01.x);
+    expect(d01.x).toBeLessThan(d30.x);
+    expect(d20.y).toBeLessThan(d01.y);
+    expect(d01.y).toBeLessThan(d30.y);
+    expect(d30.y).toBeCloseTo(home.y);
+  }
+
+  test('W97_A8_숙소와_항목_좌표로_그린다_일렬이_아니다_후보_좌표가_아니라_항목_좌표', async () => {
+    happyServer();
+    await toP3();
+    expect(stops()).toHaveLength(3);
+    expectScattered();
+  });
+
+  test('W98_A8_다시_켠_뒤처럼_후보를_본_적_없어도_항목_좌표로_같은_그림', async () => {
+    const server = happyServer();
+    const app = await toP1();
+    server.on(R.get, json(200, course()));
+    await restart(app);
+    await screen.findByText('코스 짜 봤어');
+    expect(stops()).toHaveLength(3);
+    expectScattered();
+  });
+
+  test('W99_A8_첫_질문의_알아서_짜_줘로_바로_온_코스도_항목_좌표', async () => {
+    const server = happyServer();
+    server.on(R.answer, json(200, course()));
+    await toP1();
+    await pressText('알아서 짜 줘');
+    await screen.findByText('코스 짜 봤어');
+    expectScattered();
+  });
+
+  test('W100_A8_모든_점이_그림_상자_안', async () => {
+    happyServer();
+    await toP3();
+    const box = StyleSheet.flatten(prop('route-diagram').style as object) as { width: number; height: number };
+    for (const id of ['route-home', 'route-stop-1', 'route-stop-2', 'route-stop-3']) {
+      const { x, y } = at(id);
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThanOrEqual(box.width);
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(y).toBeLessThanOrEqual(box.height);
+    }
+  });
+
+  test('W101_B4_A8_선은_brand이고_숙소부터_순서대로', async () => {
+    happyServer();
+    await toP3();
+    expect(prop('route-line').stroke).toBe(COLORS.brand);
+    const expected = ['route-home', 'route-stop-1', 'route-stop-2', 'route-stop-3'].map(at);
+    const line = lineOf();
+    expect(line).toHaveLength(4);
+    line.forEach(([x, y], index) => {
+      expect(x).toBeCloseTo(expected[index].x);
+      expect(y).toBeCloseTo(expected[index].y);
+    });
+  });
+
+  test('W102_A8_좌표_없는_줄은_그림에서_빠지고_목록에는_남는다_곳_수는_items_전체', async () => {
+    const server = happyServer();
+    const option = relaxed();
+    option.items.splice(1, 0, noPlace(9, '저녁 약속') as never); // 가운데에 끼운다
+    server.on(R.compose, json(200, course([option])));
+    await toP3();
+    expect(stops()).toHaveLength(3);
+    expect(screen.queryByTestId('route-stop-9')).toBeNull();
+    expect(lineOf()).toHaveLength(4);
+    expect(String(prop('route-line').points)).not.toMatch(/NaN|undefined|null/);
+    expect(within(screen.getByTestId('course-row-9')).getByText('저녁 약속')).toBeTruthy();
+    expect(screen.getByText('4곳 · 이동 80분')).toBeTruthy();
+    expect(screen.getByText('둘째 날 · 4곳')).toBeTruthy();
+  });
+
+  test('W103_A8_모두_좌표가_없으면_숙소만_그리고_목록은_그대로', async () => {
+    const server = happyServer();
+    const option = relaxed('opt-relaxed', { items: [noPlace(1, '점심 약속'), noPlace(2, '저녁 약속')] });
+    server.on(R.compose, json(200, course([option])));
+    await toP3();
+    expect(stops()).toHaveLength(0);
+    expect(screen.getByTestId('route-home')).toBeTruthy();
+    expect(within(screen.getByTestId('course-row-1')).getByText('점심 약속')).toBeTruthy();
+    expect(within(screen.getByTestId('course-row-2')).getByText('저녁 약속')).toBeTruthy();
+  });
+
+  test('W104_A8_토글하면_그_안의_좌표로_다시_그린다', async () => {
+    happyServer();
+    await toP3();
+    await pressId('option-packed');
+    expect(stops()).toHaveLength(1);
+    expect(screen.getByTestId('route-stop-1')).toBeTruthy();
+    expect(screen.queryByTestId('route-stop-2')).toBeNull();
+    expect(at('route-stop-1').x).toBeGreaterThan(at('route-home').x); // D01은 숙소보다 동쪽·북쪽 (fixtures SPOT)
+    expect(at('route-stop-1').y).toBeLessThan(at('route-home').y);
+  });
+
+  test('W105_A8_빈_코스면_번호_원이_없다', async () => {
+    const server = happyServer();
+    server.on(R.compose, json(200, course([relaxed('opt-relaxed', { items: [], dropped: [] })])));
+    await toP3();
+    expect(stops()).toHaveLength(0);
+  });
+});
+
+// ---------- §13-2 #9: 주 버튼은 오른쪽 ----------
+
+describe('§13-2 #9 떠 있는 줄의 주 버튼', () => {
+  type Host = { type: string; props: Record<string, any>; queryAll: (p: (h: Host) => boolean) => Host[] };
+
+  function buttons() {
+    const bar = screen.getByTestId('floating-bar') as unknown as Host;
+    expect(StyleSheet.flatten(bar.props.style).flexDirection ?? 'row').toBe('row');
+    return bar.queryAll((host) => host.type === 'View' && typeof host.props.onClick === 'function');
+  }
+  const background = (host: Host) => StyleSheet.flatten(host.props.style).backgroundColor;
+  const labelOf = (host: Host) =>
+    host
+      .queryAll((inner) => inner.type === 'Text')
+      .map((inner) => inner.props.children)
+      .join('');
+
+  test('W106_S13_9_Q8_P3_빈_코스에서도_맨_오른쪽이_주_버튼_더_고를래', async () => {
+    const server = happyServer();
+    server.on(R.compose, json(200, course([relaxed('opt-relaxed', { items: [], dropped: [] })])));
+    await toP3();
+    const all = buttons();
+    const last = all[all.length - 1];
+    expect(background(last)).toBe(COLORS.brand);
+    expect(labelOf(last)).toBe('더 고를래');
+    for (const other of all.slice(0, -1)) expect(background(other)).not.toBe(COLORS.brand);
+  });
+
+  test('W107_B3_P3_코스가_있으면_맨_오른쪽이_주_버튼_이걸로_할래', async () => {
+    happyServer();
+    await toP3();
+    const all = buttons();
+    expect(all.map(labelOf)).toEqual(['더 고를래', '이걸로 할래']);
+    expect(background(all[1])).toBe(COLORS.brand);
+    expect(background(all[0])).not.toBe(COLORS.brand);
+  });
+
+  test('W108_B3_P1도_맨_오른쪽이_주_버튼', async () => {
+    happyServer();
+    await toP1();
+    const all = buttons();
+    expect(background(all[all.length - 1])).toBe(COLORS.brand);
+    expect(labelOf(all[all.length - 1])).toBe('아무거나 찾아 줘');
+  });
+
+  test('W109_B3_P2도_맨_오른쪽이_주_버튼', async () => {
+    happyServer();
+    await toP2();
+    const all = buttons();
+    expect(background(all[all.length - 1])).toBe(COLORS.brand);
+    expect(labelOf(all[all.length - 1])).toBe('코스 짜기');
+  });
+});
+
+// ---------- §13-2 #8: 담기 움직임 ----------
+
+describe('§13-2 #8 담기 동그라미 움직임', () => {
+  const durations = (spy: jest.SpiedFunction<typeof Animated.timing>) =>
+    spy.mock.calls.map(([, config]) => (config as { duration?: number }).duration);
+
+  test('W110_S13_8_담으면_dur_draw_420ms로_그린다', async () => {
+    const reduce = jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
+    const timing = jest.spyOn(Animated, 'timing');
+    const server = happyServer();
+    server.on(R.reactions, json(200, picks(['D01'])));
+    await toP2();
+    await pressId('like-D01');
+    await screen.findByText('1곳 담았어');
+    expect(screen.getByTestId('picked-mark-D01')).toBeTruthy();
+    expect(reduce).toHaveBeenCalled();
+    expect(durations(timing)).toContain(420);
+  });
+
+  test('W111_S13_8_움직임_줄이기가_켜져_있으면_0ms', async () => {
+    const reduce = jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(true);
+    const timing = jest.spyOn(Animated, 'timing');
+    const server = happyServer();
+    server.on(R.reactions, json(200, picks(['D01'])));
+    await toP2();
+    await pressId('like-D01');
+    await screen.findByText('1곳 담았어');
+    expect(screen.getByTestId('picked-mark-D01')).toBeTruthy();
+    expect(reduce).toHaveBeenCalled();
+    expect(durations(timing)).toContain(0);
+    expect(durations(timing)).not.toContain(420);
+  });
+
+  test('W112_S13_8_응답이_오기_전에는_그리지_않는다_낙관적_갱신_없음', async () => {
+    jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
+    const timing = jest.spyOn(Animated, 'timing');
+    const server = happyServer();
+    await toP2();
+    const respond = server.defer(R.reactions);
+    await pressId('like-D01');
+    expect(screen.queryByTestId('picked-mark-D01')).toBeNull();
+    expect(durations(timing)).not.toContain(420);
+    respond(json(200, picks(['D01'])));
+    await screen.findByText('1곳 담았어');
+    expect(durations(timing)).toContain(420);
+  });
+});
+
+// ---------- §13-3 Q34~Q44: 승인된 것 중 테스트 없던 줄 ----------
+
+describe('§13-3 승인된 결정 고정', () => {
+  const startedWith = async (change: object) => {
+    const server = happyServer();
+    server.on(R.start, json(201, { ...session, day: { ...day, ...change } }));
+    await startApp();
+    await pressText('데모 여행 시작');
+    await screen.findByText('서버가_준_첫_질문');
+  };
+
+  test('W113_Q39_장소_없는_고정_일정_줄은_hours_status가_null이면_상태_칩이_없다', async () => {
+    const server = happyServer();
+    const option = relaxed();
+    option.items.push({
+      ...option.items[2],
+      seq: 4,
+      place_id: null as unknown as string,
+      lat: null as unknown as number,
+      lng: null as unknown as number,
+      name: '저녁 약속',
+      stay_source: null as unknown as 'auto',
+      hours_status: null as unknown as 'confirmed',
+    });
+    server.on(R.compose, json(200, course([option])));
+    await toP3();
+    const row = within(screen.getByTestId('course-row-4'));
+    for (const chip of ['확인됨', '미확인', '모름']) expect(row.queryByText(chip)).toBeNull();
+  });
+
+  test.each([
+    ['받침 있는 이름', [{ place_id: 'D20', name: '박물관' }], '박물관은 먼저 넣어 뒀어'],
+    ['받침 없는 이름', [{ place_id: 'D20', name: '카페' }], '카페는 먼저 넣어 뒀어'],
+    ['한글이 아닌 이름', [{ place_id: 'D20', name: 'ABC' }], 'ABC, 먼저 넣어 뒀어'],
+    ['여럿', [{ place_id: 'D20', name: '박물관' }, { place_id: 'D21', name: '카페' }], '박물관, 카페, 먼저 넣어 뒀어'],
+  ])('W114_Q40_꼭_갈_곳_줄_%s', async (_name, must_visits, line) => {
+    await startedWith({ must_visits });
+    expect(screen.getByText(line)).toBeTruthy();
+  });
+
+  test.each([
+    ['P1', toP1],
+    ['P2', toP2],
+  ])('W115_Q44_%s_입력창_안내_글', async (_name, go) => {
+    happyServer();
+    await go();
+    expect(screen.getByTestId('input-text').props.placeholder).toBe('하고 싶은 말을 써 줘');
   });
 });
 

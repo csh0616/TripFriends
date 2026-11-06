@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// 디자인 토큰. 근거: TASK-004 §B-1, AC-4, DESIGN-001 §1·§2·§4 (표는 test-support/design-table.ts에 옮겨 적음)
+// 디자인 토큰. 근거: TASK-004 §B-1, AC-4, §13-3 #2(scrim), DESIGN-001 §1·§2·§4 (표는 test-support/design-table.ts에 옮겨 적음)
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 

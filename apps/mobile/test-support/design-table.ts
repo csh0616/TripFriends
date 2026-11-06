@@ -73,6 +73,7 @@ export const STRINGS: Record<string, string> = {
   'sh-float': '0 6px 20px rgba(26,26,26,.14), 0 1px 2px rgba(26,26,26,.08)',
   'sh-sheet': '0 -10px 32px rgba(26,26,26,.16)',
   'ease-out': 'cubic-bezier(.2,.8,.2,1)',
+  scrim: 'rgba(26,26,26,0.40)', // §4-1 v2.2, TASK-004 §13-3 #2
 };
 
 // §4-4 대비 표 (글자, 바탕, 문서의 숫자)

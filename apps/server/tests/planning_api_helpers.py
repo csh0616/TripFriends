@@ -93,6 +93,8 @@ ITEM_KEYS = {
     "is_fixed",
     "hours_status",
     "name",  # TASK-004 A3 (Q24)
+    "lat",  # TASK-004 §13-1 A8
+    "lng",  # TASK-004 §13-1 A8
 }
 
 
@@ -242,11 +244,11 @@ def at_of(plan: DayPlan) -> datetime:
 
 
 def without_option_id(course: dict) -> list[dict]:
-    """코스안을 엔진 결과와 비교하려고 응답에만 있는 값을 뺀다: option_id, name(TASK-004 A3, Q24). name 자체는 test_planning_screens_api가 검사한다."""
+    """코스안을 엔진 결과와 비교하려고 응답에만 있는 값을 뺀다: option_id, name(TASK-004 A3, Q24), lat·lng(§13-1 A8). 그 값 자체는 test_planning_screens_api가 검사한다."""
     return [
         {
             **{k: v for k, v in option.items() if k != "option_id"},
-            "items": [{k: v for k, v in item.items() if k != "name"} for item in option["items"]],
+            "items": [{k: v for k, v in item.items() if k not in {"name", "lat", "lng"}} for item in option["items"]],
             "dropped": [{k: v for k, v in entry.items() if k != "name"} for entry in option["dropped"]],
         }
         for option in course["options"]

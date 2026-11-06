@@ -29,6 +29,13 @@ export const day = {
 
 export const seed: SeedResult = { trip_id: 'trip-1', day_ids: ['day-1', DAY_ID, 'day-3'] };
 
+// §13-1 A8: 코스 항목의 좌표. 숙소(35, 135)와 일렬이 아니고, 후보 카드의 좌표(모두 경도 135)와도 일부러 다르다.
+export const SPOT = {
+  D01: { lat: 35.01, lng: 135.01 },
+  D20: { lat: 35.02, lng: 134.99 },
+  D30: { lat: 35.0, lng: 135.02 },
+};
+
 // 서버 문구가 앱 고정 문구를 이기는지 보려고 문서 대본과 일부러 다른 글을 쓴다 (§6)
 export const session: PlanningSession = {
   session_id: SID,
@@ -106,6 +113,7 @@ export const relaxed = (id = 'opt-relaxed', over: object = {}) => ({
       seq: 1,
       place_id: 'D01',
       name: '장소 D01',
+      ...SPOT.D01,
       start: '10:10',
       end: '11:40',
       stay_min: 90,
@@ -119,6 +127,7 @@ export const relaxed = (id = 'opt-relaxed', over: object = {}) => ({
       seq: 2,
       place_id: 'D20',
       name: '꼭 갈 박물관',
+      ...SPOT.D20,
       start: '12:00',
       end: '13:00',
       stay_min: 60,
@@ -132,6 +141,7 @@ export const relaxed = (id = 'opt-relaxed', over: object = {}) => ({
       seq: 3,
       place_id: 'D30',
       name: '예약한 공연장',
+      ...SPOT.D30,
       start: '15:00',
       end: '16:00',
       stay_min: 60,
@@ -160,6 +170,7 @@ export const packed = (id = 'opt-packed') => ({
       seq: 1,
       place_id: 'D01',
       name: '장소 D01',
+      ...SPOT.D01,
       start: '10:10',
       end: '10:55',
       stay_min: 45,

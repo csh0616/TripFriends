@@ -13,6 +13,7 @@ import { initialPlanningState, planningReducer, type PlanningAction } from '@/li
 import { projectRoute } from '@/lib/project-route';
 import { screenFor } from '@/lib/screen-for';
 import { todayHoursText, type ChipKind } from '@/lib/today-hours-text';
+import { shadow } from '@/planning/theme';
 
 import { CONTRAST_PAIRS, COLORS, REJECTED_PAIRS } from '../test-support/design-table';
 import { batch, course, done, picks, session } from '../test-support/planning-fixtures';
@@ -492,5 +493,21 @@ describe('contrast', () => {
         expect(contrast(b, a)).toBeCloseTo(value, 10);
       }),
     );
+  });
+});
+
+// ---------- 그림자 토큰 -> RN 그림자 (§13-2 #1, §B-1: 번짐은 정확히 같지 않아도 된다) ----------
+
+describe('§13-2 #1 그림자 변환', () => {
+  test.each<[string, 'float' | 'sheet', number, number]>([
+    ['sh-float 첫 겹 0 6px 20px .14', 'float', 6, 0.14],
+    ['sh-sheet 0 -10px 32px .16', 'sheet', -10, 0.16],
+  ])('L44_S13_%s', (_name, name, y, alpha) => {
+    const style = shadow[name];
+    expect(style.shadowOffset).toEqual({ width: 0, height: y });
+    expect(style.shadowOpacity).toBeCloseTo(alpha);
+    expect(style.shadowColor).toBe(COLORS['on-brand']); // rgba(26,26,26) = on-brand, 주황 섞지 않음 (§4-3)
+    expect(style.shadowRadius).toBeGreaterThan(0);
+    expect(style.elevation).toBeGreaterThan(0);
   });
 });

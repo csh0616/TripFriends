@@ -1,4 +1,4 @@
-"""앱 화면용 서버 소작업. 근거: TASK-004 §A(A1~A5), §12-1(A6, A7, Q1, Q2, Q3), AC-2, AC-3, TASK-003 §5, §6, §10(원칙 1·2, Q6, Q37, Q38, R1, R4, R5, R11, R12)."""
+"""앱 화면용 서버 소작업. 근거: TASK-004 §A(A1~A5), §12-1(A6, A7, Q1, Q2, Q3), §13-1(A8), AC-2, AC-3, TASK-003 §5, §6, §10(원칙 1·2, Q6, Q37, Q38, R1, R4, R5, R11, R12)."""
 
 import json
 from datetime import date
@@ -1208,3 +1208,148 @@ def test_S97_A7_404는_아무것도_바꾸지_않는다(env):
     before = frozen(env, sid)
     assert resource_of(env.select(first_option_id(course))) == "option"
     assert frozen(env, sid) == before
+
+
+# ---------- A8 (§13-1): CourseItem의 lat, lng ----------
+
+
+def scattered():
+    """숙소(BASE)와 항목들이 일렬이 아닌 도시. 좌표가 전부 다르다."""
+    return as_dict(
+        [
+            place("P01", km=0.3, east_km=-0.2, hours=week_hours(), stay=FIXED_STAY),
+            place("P02", km=0.1, east_km=0.4, hours=week_hours(), stay=FIXED_STAY),
+            *[place(f"P{i:02d}", km=0.05 * i, east_km=0.03 * i, hours=week_hours(), stay=FIXED_STAY) for i in range(3, 12)],
+        ]
+    )
+
+
+def all_items(body: dict) -> list[dict]:
+    return [item for option in body["options"] for item in option["items"]]
+
+
+def test_S98_A8_코스_항목_lat_lng는_장소_좌표_POST와_GET_모든_안(env):
+    places = scattered()
+    sid, course = at_composing(env, places)
+    for body in (course, get_ok(env, sid)):
+        assert all_items(body)
+        for item in all_items(body):
+            assert type(item["lat"]) is float and type(item["lng"]) is float
+            assert (item["lat"], item["lng"]) == (places[item["place_id"]].lat, places[item["place_id"]].lng)
+
+
+def test_S99_A8_항목마다_좌표가_달라_숙소와_일렬이_아니다(env):
+    places = scattered()
+    sid, course = at_composing(env, places)
+    for body in (course, get_ok(env, sid)):
+        lodging = body["day"]["lodging"]
+        home = (lodging["lat"], lodging["lng"])
+        items = {i["place_id"]: (i["lat"], i["lng"]) for i in body["options"][0]["items"]}
+        first, second = items["P01"], items["P02"]
+        assert first != second
+        cross = (first[0] - home[0]) * (second[1] - home[1]) - (first[1] - home[1]) * (second[0] - home[0])
+        assert cross != 0
+
+
+def test_S100_A8_장소_있는_고정_일정은_장소_좌표(env):
+    places = scattered()
+    plan = day_plan(fixed=(fixed_event("15:00", "16:00", places["P05"]),))
+    sid, course = at_composing(env, places, plan)
+    for body in (course, get_ok(env, sid)):
+        fixed = next(i for i in body["options"][0]["items"] if i["is_fixed"])
+        assert fixed["place_id"] == "P05"
+        assert (fixed["lat"], fixed["lng"]) == (places["P05"].lat, places["P05"].lng)
+
+
+def test_S101_A8_장소_없는_고정_일정은_lat_lng_키가_있고_null(env):
+    sid, course = at_composing(env, scattered(), day_plan(fixed=(fixed_event("15:00", "16:00"),)))
+    for body in (course, get_ok(env, sid)):
+        for option in body["options"]:
+            fixed = next(i for i in option["items"] if i["is_fixed"])
+            assert fixed["place_id"] is None
+            assert "lat" in fixed and "lng" in fixed
+            assert fixed["lat"] is None and fixed["lng"] is None
+
+
+def test_S102_A8_장소_없는_고정_일정과_장소_항목이_한_코스에_섞여도_항목별로_맞다(env):
+    places = scattered()
+    sid, course = at_composing(env, places, day_plan(fixed=(fixed_event("15:00", "16:00"),)))
+    for body in (course, get_ok(env, sid)):
+        items = body["options"][0]["items"]
+        assert {i["is_fixed"] for i in items} == {True, False}
+        for item in items:
+            if item["place_id"] is None:
+                assert (item["lat"], item["lng"]) == (None, None)
+            else:
+                assert (item["lat"], item["lng"]) == (places[item["place_id"]].lat, places[item["place_id"]].lng)
+
+
+def test_S103_A8_조정_다시_짜기_자동_응답에도_좌표(env):
+    places = scattered()
+    sid, course = at_composing(env, places)
+    adjusted = env.adjust(sid, first_option_id(course), "P01", 15).json()
+    env.back(sid)
+    again = env.compose(sid).json()
+    auto = env.start(env.plant_day(places), mode="auto").json()
+    session = env.session(env.plant_day(places))
+    answered = env.client.post(f"/planning/{session['session_id']}/answer", json={"auto": True}).json()
+    for body in (adjusted, again, auto, answered):
+        assert all_items(body)
+        for item in all_items(body):
+            assert (item["lat"], item["lng"]) == (places[item["place_id"]].lat, places[item["place_id"]].lng)
+
+
+@given(
+    spots=st.lists(
+        st.tuples(st.floats(min_value=0.05, max_value=2.0), st.floats(min_value=-2.0, max_value=2.0)),
+        min_size=2,
+        max_size=6,
+    )
+)
+@settings(max_examples=15, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+def test_S104_A8_어떤_좌표든_응답_항목은_그_장소의_좌표와_같다(env, spots):
+    places = as_dict(
+        [place(f"P{i:02d}", km=km, east_km=east, hours=week_hours(), stay=FIXED_STAY) for i, (km, east) in enumerate(spots, start=1)]
+    )
+    sid, course = at_composing(env, places)
+    for body in (course, get_ok(env, sid)):
+        for item in all_items(body):
+            assert (item["lat"], item["lng"]) == (places[item["place_id"]].lat, places[item["place_id"]].lng)
+
+
+def test_S105_A8_명세의_코스_항목_lat_lng는_숫자_또는_null이고_빠지지_않는다():
+    spec = committed_openapi()
+    _, schema = course_part(spec, "items")
+    for field in ("lat", "lng"):
+        assert field in schema["required"]
+        types = {branch.get("type") for branch in schema["properties"][field]["anyOf"]}
+        assert types == {"number", "null"}
+
+
+def test_S106_A8_ts_타입에도_lat_lng():
+    source = (API_TYPES / "index.ts").read_text(encoding="utf-8")
+    name, _ = course_part(committed_openapi(), "items")
+    block = source.split(f"{name}: {{", 1)[1].split("};", 1)[0]
+    assert "lat: number | null" in block
+    assert "lng: number | null" in block
+
+
+def test_S107_A8_빠진_곳에는_좌표를_더하지_않는다(env):
+    target = place("P02", hours=opening("15:00", "15:29"))
+    places = as_dict([*cafes(1), target, *cafes(6, start=3)])
+    _, course = at_composing(env, places, day_plan(fixed=(fixed_event("15:00", "16:00"),)))
+    assert course["options"][0]["dropped"]
+    for entry in course["options"][0]["dropped"]:
+        assert set(entry) == {"place_id", "reason", "name"}
+
+
+# ---------- §13-3 "서버 정한 것": 고정 일정 title 시각순 짝짓기 ----------
+
+
+def test_S108_S13_장소_없는_고정_일정이_둘이면_title은_시각순으로_짝짓는다(env):
+    early = fixed_event("11:00", "12:00", fid="F1").model_copy(update={"title": "점심 약속"})
+    late = fixed_event("15:00", "16:00", fid="F2").model_copy(update={"title": "저녁 약속"})
+    sid, course = at_composing(env, city(), day_plan(fixed=(late, early)))  # 저장 순서를 일부러 거꾸로
+    for body in (course, get_ok(env, sid)):
+        fixed = {i["start"]: i["name"] for i in body["options"][0]["items"] if i["is_fixed"]}
+        assert fixed == {"11:00": "점심 약속", "15:00": "저녁 약속"}

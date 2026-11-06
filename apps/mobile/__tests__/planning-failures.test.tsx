@@ -1,5 +1,6 @@
 /// <reference types="jest" />
-// §7 실패하면 (줄마다). 근거: TASK-004 §7, §12(Q17~Q23·Q26), AC-10, TASK-003 §5, §10(Q2·Q24·Q41·R5)
+// §7 실패하면 (줄마다). 근거: TASK-004 §7, §12(Q17~Q23·Q26), §13(4·7·입력 글·저장 실패·Q36·Q37·Q40), AC-10, TASK-003 §5, §10(Q2·Q24·Q41·R5)
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, screen, waitFor } from '@testing-library/react-native';
 import { useFonts } from 'expo-font';
 
@@ -747,6 +748,256 @@ describe('§7 줄 5 422 COURSE_INFEASIBLE', () => {
     await pressId('compose-button');
     expect(await screen.findByText('둘째 꼭 갈 곳, 그날 쉬어')).toBeTruthy();
     expect(screen.queryByText('꼭 갈 박물관, 그날 쉬어')).toBeNull();
+  });
+});
+
+// ---------- §13-3 #4: 422 문구 표 ----------
+
+describe('§13-3 #4 422 이유 문구', () => {
+  const infeasible = (reason: string) => apiError(422, 'COURSE_INFEASIBLE', { reason, blocking: ['F1'], suggest_drop: [] });
+  const SCREENS: [string, Attempt][] = [
+    ['P2 코스 짜기', ATTEMPTS[8]],
+    ['P3 조정', ATTEMPTS[9]],
+    ['P1 알아서', ATTEMPTS[1]],
+  ];
+  const CASES: [string, string, string, Attempt][] = SCREENS.flatMap(([name, attempt]) => [
+    [name, 'fixed_unreachable', '고정 일정에 제때 못 가', attempt] as [string, string, string, Attempt],
+    [name, '표에_없는_이유', '이대로는 코스를 못 짜겠어', attempt] as [string, string, string, Attempt],
+  ]);
+
+  test.each(CASES)('Y52_S13_4_%s_이유_%s면_%s_화면_그대로_다시_없음', async (_screen, reason, message, attempt) => {
+    await failOnce(attempt, infeasible(reason));
+    expect(await screen.findByText(message)).toBeTruthy();
+    attempt.stays();
+    expect(screen.queryByText(RETRY)).toBeNull();
+    expect(screen.queryByText(/그날 쉬어/)).toBeNull();
+    expect(screen.queryByText('서버_내부_오류_문장')).toBeNull();
+    expect(hasStoredSession()).toBe(true);
+  });
+});
+
+// ---------- §13-2 #7: 이상한 담기 응답 (Q18) ----------
+
+describe('§13-2 #7 이상한 담기 응답은 500 줄처럼', () => {
+  const like = ATTEMPTS[3];
+  const WEIRD: [string, unknown][] = [
+    ['빈 객체', {}],
+    ['picks만', { picks: ['D01'] }],
+    ['숫자만', { picks_count: 1 }],
+    ['picks가 글', { picks: 'D01', picks_count: 1 }],
+    ['숫자가 글', { picks: ['D01'], picks_count: '1' }],
+    ['null', null],
+    ['배열', []],
+    ['모르는 stage', { ...picks(['D01']), stage: 'somewhere' }],
+  ];
+
+  test.each(WEIRD)('Y54_S13_7_Q18_%s면_문구와_다시_화면_숫자_저장값_그대로_다시는_같은_요청', async (_name, body) => {
+    const server = await failOnce(like, json(200, body));
+    expect(await screen.findByText(OOPS)).toBeTruthy();
+    expect(screen.getByText('0곳 담았어')).toBeTruthy();
+    expect(hasStoredSession()).toBe(true);
+    await expectRetrySendsSame(server, like, OOPS);
+    expect(server.sent(R.get)).toHaveLength(0);
+  });
+
+  test.each(WEIRD)('Y55_S13_7_%s_뒤_버튼이_풀려서_다음_요청을_보낼_수_있다', async (_name, body) => {
+    const server = await failOnce(like, json(200, body));
+    await screen.findByText(OOPS);
+    expect(screen.getByTestId('compose-button').props.accessibilityState?.disabled).not.toBe(true);
+    await pressId('compose-button');
+    expect(await screen.findByText('코스 짜 봤어')).toBeTruthy();
+    expect(server.sent(R.compose)).toHaveLength(1);
+  });
+
+  test('Y56_S13_7_정상_담기_응답은_문구가_없다', async () => {
+    const server = happyServer();
+    server.on(R.reactions, json(200, picks(['D01'])));
+    await toP2();
+    await pressId('like-D01');
+    await screen.findByText('1곳 담았어');
+    expect(screen.queryByText(OOPS)).toBeNull();
+  });
+});
+
+// ---------- §13-3 입력 글 ----------
+
+describe('§13-3 입력 글', () => {
+  const TEXT = '조용한 데';
+  const typed = () => screen.getByTestId('input-text').props.value;
+  const P1_TEXT = ATTEMPTS[2];
+  const P2_TEXT = ATTEMPTS[7];
+  const invalid = apiError(400, 'INVALID_REQUEST');
+  const CASES: [string, Attempt, Reply, string][] = [
+    ['P1 끊김', P1_TEXT, networkDown, OFFLINE],
+    ['P1 500', P1_TEXT, apiError(500, 'INTERNAL_ERROR'), OOPS],
+    ['P1 400', P1_TEXT, invalid, INVALID],
+    ['P2 끊김', P2_TEXT, networkDown, OFFLINE],
+    ['P2 500', P2_TEXT, apiError(500, 'INTERNAL_ERROR'), OOPS],
+    ['P2 400', P2_TEXT, invalid, INVALID],
+  ];
+
+  test.each(CASES)('Y57_S13_%s면_입력_글을_되돌려_놓는다', async (_name, attempt, reply, message) => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await failOnce(attempt, reply);
+    await screen.findByText(message);
+    expect(typed()).toBe(TEXT);
+  });
+
+  test('Y58_S13_시간_초과여도_입력_글을_되돌려_놓는다', async () => {
+    const server = happyServer();
+    await toP2();
+    server.once(R.next, hang);
+    jest.useFakeTimers();
+    await typeAndSend(TEXT);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(10000);
+    });
+    expect(screen.getByText(OFFLINE)).toBeTruthy();
+    expect(typed()).toBe(TEXT);
+  });
+
+  test('Y59_S13_성공하면_지운다_같은_화면에_남아도', async () => {
+    happyServer();
+    await toP2();
+    await typeAndSend(TEXT);
+    await screen.findByText('서버가_준_다음_묶음_말');
+    expect(typed()).toBe('');
+  });
+
+  test('Y60_S13_500_뒤_다시가_성공하면_지운다', async () => {
+    const server = await failOnce(P2_TEXT, apiError(500, 'INTERNAL_ERROR'));
+    await screen.findByText(OOPS);
+    expect(typed()).toBe(TEXT);
+    await tap(screen.getByText(RETRY));
+    await screen.findByText('서버가_준_다음_묶음_말');
+    expect(server.sent(R.next)).toHaveLength(2);
+    expect(typed()).toBe('');
+  });
+
+  test('Y61_S13_되돌린_글을_다시_보내서_성공하면_지운다', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const server = await failOnce(P2_TEXT, invalid);
+    await screen.findByText(INVALID);
+    expect(typed()).toBe(TEXT);
+    await typeAndSend(TEXT);
+    await screen.findByText('서버가_준_다음_묶음_말');
+    expect(server.sent(R.next).map((r) => r.body)).toEqual([{ text: TEXT }, { text: TEXT }]);
+    expect(typed()).toBe('');
+  });
+});
+
+// ---------- §13-3 저장 실패, §7 마지막 줄 ----------
+
+describe('§13-3 기기 저장 실패', () => {
+  function storageFails() {
+    jest.spyOn(AsyncStorage, 'setItem').mockRejectedValue(new Error('기기 저장 실패'));
+    return jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  }
+
+  test('Y62_S13_저장이_실패해도_P1로_가고_콘솔_경고', async () => {
+    const warn = storageFails();
+    happyServer();
+    await startApp();
+    await pressText('데모 여행 시작');
+    expect(await screen.findByText('서버가_준_첫_질문')).toBeTruthy();
+    expect(warn).toHaveBeenCalled();
+    for (const text of [OFFLINE, OOPS, INVALID]) expect(screen.queryByText(text)).toBeNull();
+  });
+
+  test('Y63_S13_저장이_실패해도_같은_세션으로_흐름이_이어진다', async () => {
+    storageFails();
+    const server = happyServer();
+    await startApp();
+    await pressText('데모 여행 시작');
+    await screen.findByText('서버가_준_첫_질문');
+    await pressText('아무거나 찾아 줘');
+    expect(await screen.findByTestId(P2_MARK)).toBeTruthy();
+    expect(server.sent(R.answer)).toHaveLength(1);
+    await pressId('compose-button');
+    expect(await screen.findByText('코스 짜 봤어')).toBeTruthy();
+  });
+
+  test('Y64_S13_S7_저장이_실패했으면_다시_켜면_S0이고_GET_없음', async () => {
+    storageFails();
+    const server = happyServer();
+    const app = await startApp();
+    await pressText('데모 여행 시작');
+    await screen.findByText('서버가_준_첫_질문');
+    await restart(app);
+    expect(await screen.findByText('데모 여행 시작')).toBeTruthy();
+    expect(server.sent(R.get)).toHaveLength(0);
+  });
+
+  test('Y65_S13_저장이_성공하면_경고가_없다', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    happyServer();
+    await startApp();
+    await pressText('데모 여행 시작');
+    await screen.findByText('서버가_준_첫_질문');
+    expect(warn).not.toHaveBeenCalled();
+    expect(hasStoredSession()).toBe(true);
+  });
+});
+
+// ---------- §13-3 Q36·Q37·Q40: 승인된 결정 고정 ----------
+
+describe('§13-3 승인된 결정 고정', () => {
+  test.each<[string, Reply]>([
+    ['404 route', apiError(404, 'NOT_FOUND', { resource: 'route' })],
+    ['409', apiError(409, 'STATE_CONFLICT', { stage: 'x' })],
+  ])('Y66_Q36_Q37_다시_켜는_GET_자신이_%s면_500_줄처럼_S0으로_안_보내고_다시는_GET', async (_name, reply) => {
+    const server = happyServer();
+    const app = await toP1();
+    server.once(R.get, reply);
+    await restart(app);
+    expect(await screen.findByText(OOPS)).toBeTruthy();
+    expect(screen.queryByText('데모 여행 시작')).toBeNull();
+    expect(hasStoredSession()).toBe(true);
+    await tap(screen.getByText(RETRY));
+    await screen.findByText('서버가_준_첫_질문');
+    expect(server.sent(R.get)).toHaveLength(2);
+  });
+
+  test('Y67_Q37_복구_GET_자신이_409면_500_줄처럼_원래_요청은_한_번', async () => {
+    const server = happyServer();
+    await toP2();
+    server.once(R.compose, apiError(409, 'STATE_CONFLICT', { stage: 'x' }));
+    server.once(R.get, apiError(409, 'STATE_CONFLICT', { stage: 'x' }));
+    server.on(R.get, json(200, course()));
+    await pressId('compose-button');
+    expect(await screen.findByText(OOPS)).toBeTruthy();
+    await tap(screen.getByText(RETRY));
+    await screen.findByText('코스 짜 봤어');
+    expect(server.sent(R.compose)).toHaveLength(1);
+    expect(server.sent(R.get)).toHaveLength(2);
+  });
+
+  test('Y68_Q37_S0_세션_시작의_404_day는_500_줄처럼_다시는_세션만', async () => {
+    const server = happyServer();
+    server.once(R.start, apiError(404, 'NOT_FOUND', { resource: 'day' }));
+    await startApp();
+    await pressText('데모 여행 시작');
+    expect(await screen.findByText(OOPS)).toBeTruthy();
+    await tap(screen.getByText(RETRY));
+    await screen.findByText('서버가_준_첫_질문');
+    expect(server.sent(R.seed)).toHaveLength(1);
+    expect(server.sent(R.start)).toHaveLength(2);
+  });
+
+  test('Y69_Q40_422_이름이_여럿이면_쉼표로_잇는다', async () => {
+    const server = happyServer();
+    const must_visits = [
+      { place_id: 'D20', name: '꼭 갈 박물관' },
+      { place_id: 'D21', name: '둘째 꼭 갈 곳' },
+    ];
+    server.on(R.answer, json(200, batch({ day: { ...day, must_visits } })));
+    await toP2();
+    server.once(
+      R.compose,
+      apiError(422, 'COURSE_INFEASIBLE', { reason: 'must_visit_closed', blocking: ['D20', 'D21'], suggest_drop: [] }),
+    );
+    await pressId('compose-button');
+    expect(await screen.findByText('꼭 갈 박물관, 둘째 꼭 갈 곳, 그날 쉬어')).toBeTruthy();
   });
 });
 
