@@ -19,3 +19,9 @@ jest.mock('expo-font', () => ({
   loadAsync: jest.fn(async () => undefined),
   isLoaded: jest.fn(() => true),
 }));
+
+// TASK-006 §B: 지도·시트·개발 빌드 패키지. 설치 전에도 테스트가 돌고, 설치 뒤에도 네이티브 대신 가짜를 쓴다 (virtual).
+// 가짜 부품은 실제로 그려지는지 알려 주지 않는다. 지도·시트 모습은 Maestro·폰에서 확인한다.
+jest.mock('react-native-maps', () => require('./test-support/maps-mock'), { virtual: true });
+jest.mock('@gorhom/bottom-sheet', () => require('./test-support/bottom-sheet-mock'), { virtual: true });
+jest.mock('expo-dev-client', () => ({}), { virtual: true });
