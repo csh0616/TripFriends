@@ -49,6 +49,8 @@
 | POST `/days/{day_id}/items/{item_id}/replace` | `{place_id}` | `TripDay` | FR-06 |
 
 ### 2-3. 여행 중 (FR-10~19)
+> **11-07**: `GET /days/{day_id}/now`의 요청·응답은 **TASK-006 §A-1·§11이 정본** (시간대 없는 `at`, 사건은 TASK-007)
+
 | 메서드·경로 | 요청 | 응답 | FR·AC |
 |---|---|---|---|
 | GET `/days/{day_id}/now?lat&lng&at` | 현재 위치·시간 (위치는 저장 안 함) | `NowView`: 지금 할 일, 다음 이동, 남은 일정, 숙소 가는 방법, 열린 사건·대안 | FR-10·16 |
