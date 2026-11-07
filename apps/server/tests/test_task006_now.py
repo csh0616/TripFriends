@@ -16,13 +16,13 @@ from planning_helpers import day_plan, fixed_event, hhmm, north_of, place
 
 from catalog import CourseItem as CatalogItem
 from catalog import NowProps
-from engine.compose import REASONS, OpenEvent, PlanItem, Snapshot, compose_screen
+from engine.compose import REASONS, PlanItem, Snapshot, compose_screen
 from engine.models import CourseItem, CourseOption, Place, StayRange
 from planning.repo import OptionRecord
 from planning.schemas import DaySummary
 
 DAY = date(2026, 12, 2)
-SUPPORTED = {"T-01", "T-02", "T-03", "T-07", "T-08"}  # A3
+SUPPORTED = {"T-01", "T-02", "T-03", "T-05", "T-06", "T-07", "T-08"}  # A3 + TASK-008 A·B6 (T-05·T-06)
 NOW_KEYS = {"day", "at", "status", "status_text", "reason", "main", "subs", "chip", "pins", "route", "position", "event"}  # event: TASK-007 B-5
 ITEM_KEYS = {"seq", "place_id", "name", "start", "end", "lat", "lng", "is_fixed", "facts"}  # §A-1 CourseItemView
 FACT_KEYS = {"field", "value", "status", "source_type", "checked_at"}
@@ -979,14 +979,9 @@ def test_S12_R3_끝난_뒤_위치를_보내도_남은_길은_그대로(env, plai
 # ---------- AC-4: A3 대체 ----------
 
 
-def unchecked_next(s):
-    return s.next_item.model_copy(update={"hours_checked": False})
-
-
 FORCED = [
     ("X-01", lambda s: {"safety": True}),
-    ("T-05", lambda s: {"arriving": True, "moving": False, "next_item": unchecked_next(s)}),
-    ("T-06", lambda s: {"open_events": [OpenEvent(kind="closed")]}),
+    # T-05·T-06은 TASK-008에서 지원 카드가 되어 뺐다 (TASK-008 A2·B6)
     ("T-09", lambda s: {"walked_km": 12.0}),
     ("T-10", lambda s: {"meal_eaten": False}),
     ("T-11", lambda s: {"chat_pick": "T-11"}),
