@@ -36,9 +36,9 @@ const CENTER = { x: 0.5, y: 0.5 } as const;
 
 // DESIGN-001 §4-6 핀 4상태: 지난 = route-done 채움, 지금 = ink 채움, 다음 = brand 고리 + 이름 말풍선, 나중 = 흰 채움 + ink 테두리.
 // 색 + 모양·크기로 구분한다. 핀 안은 Svg 없이 View와 Text뿐이다.
-// 겹침 순서(zIndex): 내 위치 점 < 핀 < 숙소. 내 위치가 숙소와 같은 자리여도 집 아이콘이 가려지지 않는다
+// 겹침 순서(zIndex): 내 위치 점 < 핀 < 숙소 < 다음 핀(+말풍선, TASK-007 F4·§11 Q18). 내 위치가 숙소와 같은 자리여도 집 아이콘이 가려지지 않고, 다음 핀은 숙소 아이콘에 가려지지 않는다
 const Z_POSITION = 1;
-const PIN_Z = { later: 2, done: 3, next: 4, now: 5 } as const;
+const PIN_Z = { later: 2, done: 3, now: 5, next: 7 } as const;
 const Z_HOME = 6;
 
 function PinFace({ pin }: { pin: NowPin }) {

@@ -27,7 +27,7 @@ export type Failure =
   | { kind: 'network' }
   | { kind: 'invalid' }
   | { kind: 'not_found'; resource: string | null }
-  | { kind: 'conflict' }
+  | { kind: 'conflict'; reason: string | null }
   | { kind: 'infeasible'; reason: string; blocking: string[] }
   | { kind: 'server' };
 
@@ -42,7 +42,7 @@ function classify(status: number, body: unknown): Failure {
     const resource = isRecord(detail) && typeof detail.resource === 'string' ? detail.resource : null;
     return resource === null ? { kind: 'server' } : { kind: 'not_found', resource };
   }
-  if (status === 409) return { kind: 'conflict' };
+  if (status === 409) return { kind: 'conflict', reason: isRecord(detail) && typeof detail.reason === 'string' ? detail.reason : null };
   // 미정(§13): detail.reason 없는 422는 아래 500 줄과 같다
   if (status === 422 && isRecord(detail) && typeof detail.reason === 'string') {
     const blocking = Array.isArray(detail.blocking) ? detail.blocking.map(String) : [];

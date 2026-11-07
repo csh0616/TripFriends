@@ -23,7 +23,7 @@ from planning.schemas import DaySummary
 
 DAY = date(2026, 12, 2)
 SUPPORTED = {"T-01", "T-02", "T-03", "T-07", "T-08"}  # A3
-NOW_KEYS = {"day", "at", "status", "status_text", "reason", "main", "subs", "chip", "pins", "route", "position"}
+NOW_KEYS = {"day", "at", "status", "status_text", "reason", "main", "subs", "chip", "pins", "route", "position", "event"}  # event: TASK-007 B-5
 ITEM_KEYS = {"seq", "place_id", "name", "start", "end", "lat", "lng", "is_fixed", "facts"}  # §A-1 CourseItemView
 FACT_KEYS = {"field", "value", "status", "source_type", "checked_at"}
 PIN_KEYS = {"seq", "place_id", "name", "lat", "lng", "start", "end", "travel_min", "state"}  # §11 Q15: start·end, §12 R6: travel_min
@@ -36,7 +36,6 @@ CARD_KEYS = {  # §A-1 표, §11 Q8: 평평하게
 }
 DAY_OVER = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1
 ON_TRACK = "동선대로 가는 중"
-DELAYED = "늦어지는 중"
 FREE = "다음까지 여유 있음"
 
 
@@ -114,6 +113,13 @@ def get_now(env, day_id: str, clock: str, **params):
 
 def now(env, day_id: str, clock: str, **params) -> dict:
     response = get_now(env, day_id, clock, **params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def check_now(env, day_id: str, clock: str, lat: float, lng: float) -> dict:
+    """TASK-007 B-4: 위치는 POST /check 본문으로만 받는다 (GET /now의 위치 쿼리는 무시). 위치를 쓰는 TASK-006 테스트는 이것으로 보낸다."""
+    response = env.client.post(f"/days/{day_id}/check", json={"at": at_time(clock), "lat": lat, "lng": lng})
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -297,7 +303,9 @@ LAT, LNG = 35.123456, 135.654321
 
 
 def test_A1_보낸_위치가_position에(env, plain):
-    assert now(env, plain, "13:20", lat=LAT, lng=LNG)["position"] == {"lat": LAT, "lng": LNG}
+    # TASK-007 B-4: 위치는 check 본문으로. GET /now의 위치 쿼리는 무시한다
+    assert check_now(env, plain, "13:20", LAT, LNG)["position"] == {"lat": LAT, "lng": LNG}
+    assert now(env, plain, "13:20", lat=LAT, lng=LNG)["position"] is None
 
 
 def test_S7_위치를_안_보내면_position은_null(env, plain):
@@ -322,8 +330,9 @@ def test_AC3_서버_로그에_위치_값이_없다(env, plain, caplog):
 
 @pytest.mark.parametrize("clock", ["09:00", "11:50", "12:05", "13:20", "19:00"])
 def test_A2_판단은_시각과_코스로만_위치는_결과를_안_바꾼다(env, plain, clock):
+    # TASK-007 B-4: 위치는 check 본문으로 (LAT·LNG는 어느 장소에서도 멀어 사건이 생기지 않는다)
     without = now(env, plain, clock)
-    moved = now(env, plain, clock, lat=LAT, lng=LNG)
+    moved = check_now(env, plain, clock, LAT, LNG)
     assert moved.pop("position") == {"lat": LAT, "lng": LNG}
     assert without.pop("position") is None
     # §11 Q11: 이동 중 route의 경계 점만 위치를 따른다
@@ -666,13 +675,13 @@ def test_S12_R2_쉬는_시간은_T_02이고_남은_분_출발부터_0(env, clock
 
 
 def test_S12_R2_쉬는_시간은_이동_중이_아니라_위치가_경계_점이_아니다(env):
-    route = now(env, plant(env, rest_items()), "12:05", lat=LAT, lng=LNG)["route"]
+    route = check_now(env, plant(env, rest_items()), "12:05", LAT, LNG)["route"]
     assert route["done"] == [HOME, *stops(1)]
     assert route["remaining"] == [*stops(1, 2), HOME]
 
 
 def test_S12_R2_출발_시각부터는_위치가_경계_점(env):
-    route = now(env, plant(env, rest_items()), "12:15", lat=LAT, lng=LNG)["route"]
+    route = check_now(env, plant(env, rest_items()), "12:15", LAT, LNG)["route"]
     assert route["done"] == [HOME, *stops(1), [LAT, LNG]]
 
 
@@ -715,13 +724,11 @@ BAD_QUERIES = [
     {},
     {"at": "아무말"},
     {"at": "2026-13-40T10:00:00"},
-    {"at": "2026-12-02T13:20:00", "lat": LAT},
-    {"at": "2026-12-02T13:20:00", "lng": LNG},  # §12 R9
     {"at": "2026-12-02T13:20:00+09:00"},  # §12 R9
     {"at": "2026-12-02T04:20:00Z"},  # §12 R9
-    {"at": "2026-12-02T13:20:00", "lat": "숫자아님", "lng": LNG},
 ]
-BAD_IDS = ["at_없음", "형식_오류", "없는_날짜", "lat만_보냄", "lng만_보냄", "시간대_붙음", "시간대_Z", "lat_형식_오류"]
+# TASK-007 B-4: GET /now의 위치 쿼리는 무시하므로 lat만·lng만·lat 형식 오류는 GET의 400에서 뺐다 (check 본문 400은 test_task007_trip)
+BAD_IDS = ["at_없음", "형식_오류", "없는_날짜", "시간대_붙음", "시간대_Z"]
 
 
 @pytest.mark.parametrize("params", BAD_QUERIES, ids=BAD_IDS)
@@ -746,13 +753,14 @@ def test_S11_Q23_쿼리_400이_고른_코스_없음_404보다_먼저(env, params
     ids=["위도_위", "위도_아래", "경도_위", "경도_아래"],
 )
 def test_S14_좌표_범위_밖은_400(env, plain, lat, lng):
-    response = env.client.get(f"/days/{plain}/now", params={"at": "2026-12-02T13:20:00", "lat": lat, "lng": lng})
+    # TASK-007 B-4: 위치는 check 본문으로 (GET /now의 위치 쿼리는 무시)
+    response = env.client.post(f"/days/{plain}/check", json={"at": "2026-12-02T13:20:00", "lat": lat, "lng": lng})
     assert_error(response, 400, "INVALID_REQUEST")
 
 
 @pytest.mark.parametrize("lat, lng", [(90.0, 180.0), (-90.0, -180.0)], ids=["위_끝", "아래_끝"])
 def test_S14_좌표_범위_끝은_200(env, plain, lat, lng):
-    assert now(env, plain, "13:20", lat=lat, lng=lng)["position"] == {"lat": lat, "lng": lng}
+    assert check_now(env, plain, "13:20", lat, lng)["position"] == {"lat": lat, "lng": lng}
 
 
 def test_S12_R9_하루_밖_날짜와_코스_없음이_겹치면_404가_먼저(env):
@@ -775,7 +783,7 @@ def test_S12_R9_하루_밖_날짜와_없는_날이_겹쳐도_404(env):
         ("11:30", "free", FREE),  # 출발까지 30분 정각
         ("11:31", "on_track", ON_TRACK),  # 29분
         ("18:30", "free", FREE),  # 다음 일정 없음
-        ("19:30", "free", FREE),
+        ("19:30", "free", "오늘 일정 끝"),  # TASK-007 §0-1 F1: 하루가 끝난 뒤 알약
     ],
     ids=["여유_30분_정각", "여유_29분", "마지막_일정_안", "끝난_뒤"],
 )
@@ -784,15 +792,17 @@ def test_A1_status는_compose_값이고_글자는_표대로(env, plain, clock, s
     assert (view["status"], view["status_text"]) == (status, text)
 
 
-def test_A1_delayed_글자(env, plain, monkeypatch):
-    force(monkeypatch, lambda s: {"open_events": [OpenEvent(kind="delay")]})
-    view = now(env, plain, "12:40")
-    assert (view["status"], view["status_text"]) == ("delayed", DELAYED)
+# TASK-007 B-5: delayed 글자는 사건의 분을 담는다 ("{delay_min}분 늦어지는 중"). 실제 사건으로 test_task007_trip에서 본다
 
 
-@pytest.mark.parametrize("clock, card", [("13:20", "T-01"), ("12:05", "T-02"), ("19:30", "T-08")])
+@pytest.mark.parametrize("clock, card", [("13:20", "T-01"), ("12:05", "T-02")])
 def test_A3_reason은_compose_문장_그대로(env, plain, clock, card):
     assert now(env, plain, clock)["reason"] == REASONS[card]
+
+
+def test_F2_하루가_끝난_뒤_T_08_이유는_한_문장(env, plain):
+    # TASK-007 §0-1 F2: compose가 고른 T-08(18시 뒤)도 §12 R1 문장 하나로
+    assert now(env, plain, "19:30")["reason"] == DAY_OVER
 
 
 def test_A3_T_07의_reason(env, with_fixed):
@@ -924,13 +934,13 @@ def test_S11_Q11_일정_안이면_지난_길은_그_장소까지_남은_길은_�
 
 
 def test_S11_Q11_이동_중이면_보낸_위치가_경계_점(env, plain):
-    route = now(env, plain, "12:10", lat=LAT, lng=LNG)["route"]
+    route = check_now(env, plain, "12:10", LAT, LNG)["route"]
     assert route["done"] == [HOME, *stops(1), [LAT, LNG]]
     assert route["remaining"] == [[LAT, LNG], *stops(2, 3), HOME]
 
 
 def test_S11_Q11_1번으로_가는_중이어도_보낸_위치가_경계_점(env, plain):
-    route = now(env, plain, "10:05", lat=LAT, lng=LNG)["route"]
+    route = check_now(env, plain, "10:05", LAT, LNG)["route"]
     assert route["done"] == [HOME, [LAT, LNG]]
     assert route["remaining"] == [[LAT, LNG], *stops(1, 2, 3), HOME]
 
@@ -960,7 +970,7 @@ def test_S12_R3_1번으로_가는_중_위치가_없으면_경계_점은_숙소(e
 
 
 def test_S12_R3_끝난_뒤_위치를_보내도_남은_길은_그대로(env, plain):
-    view = now(env, plain, "19:10", lat=LAT, lng=LNG)
+    view = check_now(env, plain, "19:10", LAT, LNG)
     assert view["route"]["done"] == [HOME, *stops(1, 2, 3)]
     assert view["route"]["remaining"] == [*stops(3), HOME]
     assert view["position"] == {"lat": LAT, "lng": LNG}
@@ -975,7 +985,6 @@ def unchecked_next(s):
 
 FORCED = [
     ("X-01", lambda s: {"safety": True}),
-    ("T-04", lambda s: {"open_events": [OpenEvent(kind="delay")]}),
     ("T-05", lambda s: {"arriving": True, "moving": False, "next_item": unchecked_next(s)}),
     ("T-06", lambda s: {"open_events": [OpenEvent(kind="closed")]}),
     ("T-09", lambda s: {"walked_km": 12.0}),
@@ -1001,6 +1010,31 @@ def test_AC4_지원_밖_카드가_나오면_T_01로_바꾸고_짝_표대로_칩�
     assert types(view["subs"]) == ["T-02", "T-03"]
     assert view["chip"] is None
     assert view["reason"] == REASONS["T-01"]  # §11 Q24
+
+
+DAY_OVER_FORCED = [
+    ("X-01", lambda s: {"safety": True}),
+    ("T-11", lambda s: {"chat_pick": "T-11"}),
+    ("T-13", lambda s: {"chat_pick": "T-13"}),
+]  # T-09는 하루가 끝난 뒤 compose가 내지 않아 뺐다 (시험 자체 확인에서 걸림)
+
+
+@pytest.mark.parametrize("card, change", DAY_OVER_FORCED, ids=[c for c, _ in DAY_OVER_FORCED])
+@pytest.mark.parametrize("clock", ["19:00", "19:30"], ids=["끝_정각", "끝_뒤"])
+def test_AC4_Q1_하루가_끝난_뒤_지원_밖_카드도_T_01을_거쳐_T_08(env, plain, monkeypatch, card, change, clock):
+    """A3로 T-01이 된 뒤에도 Q1(마지막 일정이 끝나면 T-08)과 R1(reason은 T-08 문장)이 그대로 적용된다."""
+
+    def forced(snapshot):
+        screen = compose_screen(snapshot.model_copy(update=change(snapshot)))
+        assert screen.main == card  # 시험 자체 확인: 강제가 실제로 그 카드를 낸다
+        return screen
+
+    monkeypatch.setattr("trip.now.compose_screen", forced)
+    view = now(env, plain, clock)
+    assert view["main"]["type"] == "T-08"
+    assert view["subs"] == []
+    assert view["chip"] is None
+    assert view["reason"] == DAY_OVER
 
 
 def test_AC4_대체하면_로그를_남긴다(env, plain, monkeypatch, caplog):

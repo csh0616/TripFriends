@@ -54,6 +54,9 @@ export function DemoPanel({
   onMinutes,
   onPlus,
   onTogglePlay,
+  delay,
+  onDelay,
+  onDelayReset,
 }: {
   start: string;
   end: string;
@@ -62,6 +65,10 @@ export function DemoPanel({
   onMinutes: (minutes: number) => void;
   onPlus: () => void;
   onTogglePlay: () => void;
+  /** TASK-007 C2: 위치만 이만큼 앞 시각 자리로 둔다 (분) */
+  delay: number;
+  onDelay: () => void;
+  onDelayReset: () => void;
 }) {
   const [from, to] = [toMinutes(start), toMinutes(end)];
   const ratio = to > from ? Math.min(1, Math.max(0, (minutes - from) / (to - from))) : 0;
@@ -84,6 +91,15 @@ export function DemoPanel({
           <SecondaryButton small testID="demo-play" label={playing ? '멈춤' : '재생'} onPress={onTogglePlay} />
         </View>
       </View>
+      <View style={styles.buttons}>
+        <View style={styles.grow}>
+          <SecondaryButton small testID="demo-delay-10" label="+10분 늦게" onPress={onDelay} />
+        </View>
+        <View style={styles.grow}>
+          <SecondaryButton small testID="demo-delay-reset" label="지연 초기화" onPress={onDelayReset} />
+        </View>
+      </View>
+      {delay > 0 ? <Text style={text('caption', 'muted')}>{`지연 ${delay}분`}</Text> : null}
     </View>
   );
 }

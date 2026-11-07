@@ -9,7 +9,7 @@ import { json, type Reply } from './fake-server';
 import { happyServer, pressText, R, toS9 } from './planning-driver';
 import { done } from './planning-fixtures';
 import { MOBILE_ROOT } from './source-files';
-import { NOW_ROUTE, nowView } from './trip-now-fixtures';
+import { CHECK_ROUTE, NOW_ROUTE, nowView } from './trip-now-fixtures';
 
 export const ENTER = '여행 중 화면 보기(데모)';
 export const KEY_NAME = 'GOOGLE_MAPS_IOS_API_KEY';
@@ -44,11 +44,22 @@ export function installConfig(key: string | null) {
   (Constants as unknown as { expoConfig: unknown }).expoConfig = buildConfig(key);
 }
 
-export type NowRequest = { path: string; at: string | null; lat: string | null; lng: string | null };
+/**
+ * 화면이 서버에 "지금"을 묻는 요청 한 개. TASK-007 C1부터 두 가지다:
+ *  - now: GET /days/{id}/now?at= (재실행 복구·첫 요청, 위치 쿼리는 서버가 무시)
+ *  - check: POST /days/{id}/check 본문 {at, lat, lng} (시각이 바뀔 때, 위치는 본문)
+ * at·lat·lng는 어느 쪽이든 같은 자리에서 읽는다 (쿼리 또는 본문, 글자로). TASK-006 테스트는 둘을 합친 목록을 본다.
+ */
+export type NowRequest = { kind: 'now' | 'check'; path: string; at: string | null; lat: string | null; lng: string | null; body?: unknown };
 
 const param = (query: string, name: string) => {
   const found = query.split('&').find((pair) => pair.startsWith(`${name}=`));
   return found ? decodeURIComponent(found.slice(name.length + 1)) : null;
+};
+
+const field = (body: unknown, name: string): string | null => {
+  const value = typeof body === 'object' && body !== null ? (body as Record<string, unknown>)[name] : undefined;
+  return value === undefined || value === null ? null : String(value);
 };
 
 export function nowServer(initial: object = nowView()) {
@@ -59,11 +70,27 @@ export function nowServer(initial: object = nowView()) {
   let reply: Reply | ((at: string | null) => Reply) = echo(initial);
   const hasPins = (initial as { pins?: unknown[] }).pins?.length !== 0;
   const queue: (Reply | Promise<Reply>)[] = [];
-  server.match(NOW_ROUTE, (sent) => {
+  // GET /now와 POST /check는 같은 응답 줄을 쓴다 (once·defer·show가 어느 쪽에든 걸린다)
+  const answer = (at: string | null) => {
     const queued = queue.shift();
     if (queued) return queued;
-    return typeof reply === 'function' ? reply(param(sent.path.split('?')[1] ?? '', 'at')) : reply;
-  });
+    return typeof reply === 'function' ? reply(at) : reply;
+  };
+  server.match(NOW_ROUTE, (sent) => answer(param(sent.path.split('?')[1] ?? '', 'at')));
+  server.match(CHECK_ROUTE, (sent) => answer(field(sent.body, 'at')));
+  const all = (): NowRequest[] =>
+    server.requests
+      .filter(
+        (r) =>
+          (r.method === 'GET' && r.path.split('?')[0] === NOW_ROUTE.slice(4)) || (r.method === 'POST' && r.path === CHECK_ROUTE.slice(5)),
+      )
+      .map((r) => {
+        if (r.method === 'POST') {
+          return { kind: 'check', path: r.path, at: field(r.body, 'at'), lat: field(r.body, 'lat'), lng: field(r.body, 'lng'), body: r.body };
+        }
+        const query = r.path.split('?')[1] ?? '';
+        return { kind: 'now', path: r.path, at: param(query, 'at'), lat: param(query, 'lat'), lng: param(query, 'lng') };
+      });
   return {
     server,
     hasPins,
@@ -82,13 +109,10 @@ export function nowServer(initial: object = nowView()) {
       queue.push(new Promise<Reply>((done_) => (resolve = done_)));
       return resolve;
     },
-    requests: (): NowRequest[] =>
-      server.requests
-        .filter((r) => r.method === 'GET' && r.path.split('?')[0] === NOW_ROUTE.slice(4))
-        .map((r) => {
-          const query = r.path.split('?')[1] ?? '';
-          return { path: r.path, at: param(query, 'at'), lat: param(query, 'lat'), lng: param(query, 'lng') };
-        }),
+    /** GET /now와 POST /check를 보낸 순서대로 */
+    requests: all,
+    gets: () => all().filter((r) => r.kind === 'now'),
+    checks: () => all().filter((r) => r.kind === 'check'),
   };
 }
 
@@ -100,7 +124,7 @@ export async function toNow(control: NowControl = nowServer()) {
   await pressText(ENTER);
   await screen.findByTestId('trip-now-screen');
   await screen.findByTestId('now-main');
-  // §12 R7: 첫 응답의 핀으로 위치를 계산해 한 번 더 부른다. 그 요청까지 끝난 뒤를 시작점으로 삼는다
+  // §12 R7: 첫 응답의 핀으로 위치를 계산해 한 번 더 부른다(TASK-007부터 그 한 번은 check). 그 요청까지 끝난 뒤를 시작점으로 삼는다
   if (control.hasPins) await waitFor(() => expect(control.requests().length).toBeGreaterThanOrEqual(2));
   await act(async () => undefined);
   return { app, control };

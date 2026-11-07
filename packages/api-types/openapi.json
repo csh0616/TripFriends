@@ -605,7 +605,7 @@
     },
     "/days/{day_id}/now": {
       "get": {
-        "summary": "여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 저장하지 않음)",
+        "summary": "여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 받지 않음, 위치는 POST /check)",
         "operationId": "get_now_days__day_id__now_get",
         "parameters": [
           {
@@ -631,42 +631,6 @@
                 }
               ],
               "title": "At"
-            }
-          },
-          {
-            "name": "lat",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 90,
-                  "minimum": -90
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Lat"
-            }
-          },
-          {
-            "name": "lng",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "number",
-                  "maximum": 180,
-                  "minimum": -180
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Lng"
             }
           }
         ],
@@ -700,6 +664,183 @@
               }
             },
             "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/days/{day_id}/check": {
+      "post": {
+        "summary": "여행 중 확인: 시각·위치로 늦어짐 감지 (위치는 저장하지 않음)",
+        "operationId": "check_days__day_id__check_post",
+        "parameters": [
+          {
+            "name": "day_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Day Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NowView"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/proposals/{proposal_id}/accept": {
+      "post": {
+        "summary": "대안 반영",
+        "operationId": "accept_proposals__proposal_id__accept_post",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NowView"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{event_id}/dismiss": {
+      "post": {
+        "summary": "대안 사양: 일정 그대로",
+        "operationId": "dismiss_events__event_id__dismiss_post",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NowView"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
@@ -1061,6 +1202,46 @@
           "props_schema"
         ],
         "title": "CardInfo"
+      },
+      "CheckRequest": {
+        "properties": {
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 90.0,
+                "minimum": -90.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 180.0,
+                "minimum": -180.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at"
+        ],
+        "title": "CheckRequest",
+        "description": "위치는 본문으로만 (주소·로그에 남지 않게). 저장하지 않는다."
       },
       "Choice": {
         "properties": {
@@ -1750,6 +1931,49 @@
         ],
         "title": "NowCardT03"
       },
+      "NowCardT04": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "T-04",
+            "title": "Type",
+            "default": "T-04"
+          },
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "delay_min": {
+            "type": "integer",
+            "title": "Delay Min"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/NowProposal"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "fixed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NowT04Fixed"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "delay_min",
+          "proposals",
+          "fixed"
+        ],
+        "title": "NowCardT04"
+      },
       "NowCardT07": {
         "properties": {
           "type": {
@@ -1884,6 +2108,75 @@
         "title": "NowCourseItem",
         "description": "여행 중 화면의 일정 한 개. 기존 CourseItemView(계획 화면)와 별개 (Q8)."
       },
+      "NowDropped": {
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place_id",
+          "name"
+        ],
+        "title": "NowDropped"
+      },
+      "NowEvent": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "type": {
+            "type": "string",
+            "const": "delay",
+            "title": "Type",
+            "default": "delay"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "low",
+              "high"
+            ],
+            "title": "Severity"
+          },
+          "delay_min": {
+            "type": "integer",
+            "title": "Delay Min"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "open_low",
+              "awaiting",
+              "resolved"
+            ],
+            "title": "State"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/NowProposal"
+            },
+            "type": "array",
+            "title": "Proposals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "severity",
+          "delay_min",
+          "state",
+          "proposals"
+        ],
+        "title": "NowEvent"
+      },
       "NowFixed": {
         "properties": {
           "name": {
@@ -1980,6 +2273,60 @@
         ],
         "title": "NowPin"
       },
+      "NowProposal": {
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "title": "Proposal Id"
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "relaxed",
+              "packed"
+            ],
+            "title": "Label"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "dropped": {
+            "items": {
+              "$ref": "#/components/schemas/NowDropped"
+            },
+            "type": "array",
+            "title": "Dropped"
+          },
+          "keeps_fixed": {
+            "type": "boolean",
+            "title": "Keeps Fixed"
+          },
+          "first_leave_at": {
+            "type": "string",
+            "title": "First Leave At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NowCourseItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "label",
+          "reason",
+          "dropped",
+          "keeps_fixed",
+          "first_leave_at",
+          "items"
+        ],
+        "title": "NowProposal",
+        "description": "늦어짐 대안 한 개 (TASK-007 B-5). items = 제안대로 바뀌는 남은 일정."
+      },
       "NowRoute": {
         "properties": {
           "done": {
@@ -2024,6 +2371,24 @@
         ],
         "title": "NowRoute"
       },
+      "NowT04Fixed": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "start"
+        ],
+        "title": "NowT04Fixed"
+      },
       "NowView": {
         "properties": {
           "day": {
@@ -2062,6 +2427,9 @@
                 "$ref": "#/components/schemas/NowCardT03"
               },
               {
+                "$ref": "#/components/schemas/NowCardT04"
+              },
+              {
                 "$ref": "#/components/schemas/NowCardT07"
               },
               {
@@ -2075,6 +2443,7 @@
                 "T-01": "#/components/schemas/NowCardT01",
                 "T-02": "#/components/schemas/NowCardT02",
                 "T-03": "#/components/schemas/NowCardT03",
+                "T-04": "#/components/schemas/NowCardT04",
                 "T-07": "#/components/schemas/NowCardT07",
                 "T-08": "#/components/schemas/NowCardT08"
               }
@@ -2093,6 +2462,9 @@
                   "$ref": "#/components/schemas/NowCardT03"
                 },
                 {
+                  "$ref": "#/components/schemas/NowCardT04"
+                },
+                {
                   "$ref": "#/components/schemas/NowCardT07"
                 },
                 {
@@ -2105,6 +2477,7 @@
                   "T-01": "#/components/schemas/NowCardT01",
                   "T-02": "#/components/schemas/NowCardT02",
                   "T-03": "#/components/schemas/NowCardT03",
+                  "T-04": "#/components/schemas/NowCardT04",
                   "T-07": "#/components/schemas/NowCardT07",
                   "T-08": "#/components/schemas/NowCardT08"
                 }
@@ -2131,6 +2504,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/LatLng"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NowEvent"
               },
               {
                 "type": "null"
