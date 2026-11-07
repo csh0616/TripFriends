@@ -2189,13 +2189,18 @@
           "travel_change_min": {
             "type": "integer",
             "title": "Travel Change Min"
+          },
+          "reordered": {
+            "type": "boolean",
+            "title": "Reordered"
           }
         },
         "type": "object",
         "required": [
           "alternative",
           "distance_m",
-          "travel_change_min"
+          "travel_change_min",
+          "reordered"
         ],
         "title": "NowClosedInfo",
         "description": "닫힘 대안 한 줄 (TASK-008 §12 Q21). 대안의 사실 칩은 제안 items 안 그 장소 줄의 facts."

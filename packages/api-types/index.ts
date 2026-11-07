@@ -741,6 +741,8 @@ export interface components {
             distance_m: number | null;
             /** Travel Change Min */
             travel_change_min: number;
+            /** Reordered */
+            reordered: boolean;
         };
         /**
          * NowCourseItem
