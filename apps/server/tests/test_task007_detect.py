@@ -7,9 +7,10 @@
     DelayFinding(k, delay_min, severity, dedupe_key)              # k = at_place의 seq, severity "low" | "high"
     detect_delay(course, at: datetime, position: tuple[lat, lng] | None) -> DelayFinding | None
 
-해석 (질문 목록에 올림):
-    - "150m 안"은 150m를 포함한다 (Q1). 150m 정각은 부동소수점 때문에 149.9999…m로 계산된다
-    - A4 "일정을 delay_min만큼 미뤘을 때"는 뒤 일정을 차례로 미는 방식: 다음 시작 = max(원래 시작, 앞 끝 + 이동). 일정 사이 빈 시간이 늦음을 흡수한다 (Q2)
+§11 답:
+    - "150m 안"은 150m를 포함한다 (Q1, 추천안 승인). 150m 정각은 부동소수점 때문에 149.9999…m로 계산된다
+    - A4 "일정을 delay_min만큼 미뤘을 때"는 뒤 일정을 차례로 민다. 사이의 빈 시간이 먼저 흡수하고, 흡수하지 못한 만큼만 다음으로 넘어간다 (Q2):
+      다음 시작 = max(원래 시작, 앞 끝 + 이동). 그 결과 고정 일정 시작에 늦으면 높음
 """
 
 from datetime import datetime, timedelta

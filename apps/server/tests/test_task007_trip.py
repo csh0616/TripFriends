@@ -1,7 +1,9 @@
 """TASK-007 §B G2 그래프·대안·반영·API·NowView, §6 실패, §7 겹침, §8 AC-2~4·AC-6~10, §0-1 F1·F2 (서버).
 
 근거 우선순위: TASK-007 > TASK-006 §11~§15 > TASK-003 §10 > GRAPH-001 §3 > SCREEN-001 §4-1·§5 > DATA-001 E.
-API-001 §2-3의 check·accept·dismiss 모양(응답 TripEvent[], dismiss가 /proposals 아래, 204)은 TASK-007 B-4와 달라 TASK-007을 따랐다 (질문 Q3).
+API-001 §2-3의 check·accept·dismiss 모양(응답 TripEvent[], dismiss가 /proposals 아래, 204)은 TASK-007 B-4와 달라 TASK-007을 따랐다 (§11 Q3: B-4가 정본).
+§11 답 반영: Q7(오래됨 15분 = 그날 마지막 check의 at), Q9(새로 계산한 뒤 옛 제안 accept = 409), Q11(resolved는 accept·dismiss 응답에만),
+Q12(열린 사건이 있는데 다른 장소에서 늦어지면 옛 사건은 낮음이든 awaiting이든 닫고 새 사건 하나만), Q15(서버 reason은 그대로).
 
 계약 (보고서 ④):
     POST /days/{day_id}/check  본문 {at, lat?, lng?} → 200 NowView(+event)
@@ -194,6 +196,13 @@ def test_B4_본문_400이_없는_날_404보다_먼저(env, body):
     assert_error(env.client.post("/days/없는-날/check", json=body), 400, "INVALID_REQUEST")
 
 
+@pytest.mark.parametrize("body", BAD_BODIES, ids=BAD_IDS)
+def test_B4_본문_400이_고른_코스_없음_404보다_먼저(env, body):
+    # TASK-006 §11 Q23과 같은 순서 (지운 GET /now 위치 쿼리 400 테스트의 대체)
+    day_id = env.plant_day({"P01": spot("P01", 1.0)})
+    assert_error(env.client.post(f"/days/{day_id}/check", json=body), 400, "INVALID_REQUEST")
+
+
 def test_B4_없는_날은_404_day(env):
     error = assert_error(check(env, "없는-날", "12:20", P01), 404, "NOT_FOUND")
     assert error["detail"]["resource"] == "day"
@@ -326,9 +335,11 @@ def test_B1_줄7_awaiting에서_accept면_반영하고_resolved(env):
     response = accept(env, proposal["proposal_id"])
     assert response.status_code == 200, response.text
     assert_view(response.json())
+    # §11 Q11: 처리 끝난 사건은 accept 응답에만 싣는다
+    assert (response.json()["event"]["event_id"], response.json()["event"]["state"]) == (view["event"]["event_id"], "resolved")
     assert chosen(env, day_id)[0] != old_id
     after = checked(env, day_id, "12:25", P01)
-    assert after["event"] is None or after["event"]["state"] == "resolved"
+    assert after["event"] is None  # §11 Q11: 그 뒤 check에는 싣지 않는다
     assert after["status"] != "delayed"
     assert after["main"]["type"] != "T-04"
 
@@ -340,9 +351,11 @@ def test_B1_줄8_awaiting에서_dismiss면_일정_그대로_resolved(env):
     assert response.status_code == 200, response.text
     assert_view(response.json())
     assert response.json()["main"]["type"] != "T-04"
+    # §11 Q11: 처리 끝난 사건은 dismiss 응답에만 싣는다
+    assert (response.json()["event"]["event_id"], response.json()["event"]["state"]) == (view["event"]["event_id"], "resolved")
     assert chosen(env, day_id) == before
     after = checked(env, day_id, "12:25", P01)
-    assert after["event"] is None or after["event"]["state"] == "resolved"
+    assert after["event"] is None  # §11 Q11
     assert after["status"] != "delayed"
 
 
@@ -353,10 +366,21 @@ def test_B1_줄9_resolved에서_같은_키_check는_아무것도_안_한다(env)
     before = without_logs(stores(env))
     again = checked(env, day_id, "12:50", P01)  # 더 늦어짐 (§7: 다시 안 알린다)
     assert without_logs(stores(env)) == before
-    assert again["event"] == first["event"]
-    assert again["event"] is None or (again["event"]["state"], again["event"]["delay_min"]) == ("resolved", 20)
+    assert (first["event"], again["event"]) == (None, None)  # §11 Q11: resolved 사건은 check에 싣지 않는다
     assert again["status"] != "delayed"
     assert again["main"]["type"] != "T-04"
+
+
+@pytest.mark.parametrize("decide", ["accept", "dismiss"])
+def test_S11_Q11_resolved_사건은_그_뒤_GET_now에도_싣지_않는다(env, decide):
+    day_id, view = high(env)
+    if decide == "accept":
+        response = accept(env, view["event"]["proposals"][0]["proposal_id"])
+    else:
+        response = dismiss(env, view["event"]["event_id"])
+    assert response.json()["event"]["state"] == "resolved"
+    for clock in ("12:21", "12:40", "13:30"):
+        assert now(env, day_id, clock)["event"] is None
 
 
 def test_B1_스레드_ID는_사건_ID이고_awaiting이면_interrupt에서_기다린다(env):
@@ -572,6 +596,13 @@ def test_AC7_반영_응답과_뒤_NowView는_새_코스_기준(env, ac05):
     assert pin_slots(now(env, day_id, "13:30")) == expected
 
 
+def test_S11_Q15_accept_응답의_reason은_서버_compose_문장_그대로(env, ac05):
+    day_id, view = ac05
+    response = accept(env, view["event"]["proposals"][0]["proposal_id"]).json()
+    assert response["reason"] != "바꾼 일정으로 안내할게"  # 그 문장은 앱이 accept 직후 보여 준다
+    assert response["reason"] == now(env, day_id, response["at"][11:16])["reason"]
+
+
 def test_AC7_dismiss는_코스를_바꾸지_않는다(env, ac05):
     day_id, view = ac05
     before = chosen(env, day_id)
@@ -604,6 +635,19 @@ def test_B4_제안을_만든_뒤_at이_15분_이상_지나면_accept는_409_stal
         assert send().status_code == 200
 
 
+def test_S11_Q7_15분의_기준은_GET_now가_아니라_그날_마지막_check의_at(env):
+    day_id, view = high(env)
+    now(env, day_id, "12:40")  # GET은 check가 아니다
+    assert accept(env, view["event"]["proposals"][0]["proposal_id"]).status_code == 200
+
+
+def test_S11_Q7_마지막_check가_앞_시각으로_돌아가면_그_at이_기준(env):
+    day_id, view = high(env)
+    checked(env, day_id, "12:35", FAR)  # 15분 지남
+    checked(env, day_id, "12:21", FAR)  # 마지막 check는 12:21 = 1분
+    assert accept(env, view["event"]["proposals"][0]["proposal_id"]).status_code == 200
+
+
 def test_B4_stale_뒤_check는_같은_사건의_제안을_한_번_새로_계산하고_새_사건은_아니다(env):
     day_id, view = high(env)
     checked(env, day_id, "12:30", P01)
@@ -627,7 +671,7 @@ def test_B4_새로_계산한_뒤_옛_제안은_반영되지_않는다(env):
     assert accept(env, old).status_code == 409
     checked(env, day_id, "12:31", P01)
     before = chosen(env, day_id)
-    assert accept(env, old).status_code != 200
+    assert_conflict_keeps(env, lambda: accept(env, old))  # §11 Q9 (추천안 승인): 409 STATE_CONFLICT, 그대로
     assert chosen(env, day_id) == before
 
 
@@ -844,7 +888,7 @@ def test_S7_resolved_뒤_같은_장소에서_더_늦어져도_다시_안_알린�
     assert dismiss(env, view["event"]["event_id"]).status_code == 200
     for clock in ("12:40", "13:00", "13:30"):
         later = checked(env, day_id, clock, P01)
-        assert later["event"] is None or later["event"]["event_id"] == view["event"]["event_id"]
+        assert later["event"] is None  # §11 Q11
         assert later["status"] != "delayed"
         assert later["main"]["type"] != "T-04"
 
@@ -858,10 +902,31 @@ def test_S7_B1_다음_장소에서_늦어지면_새_사건(env):
     assert later["main"]["type"] == "T-04"
 
 
-def test_S7_B1_사건이_열린_채로_다른_장소에서_늦어져도_새_사건(env):
+def test_S7_B1_S11_Q12_낮음_사건이_열린_채로_다른_장소에서_늦어지면_옛_사건은_닫고_새_사건(env):
     day_id, first = low(env)
     later = checked(env, day_id, "14:20", P02)
     assert later["event"]["event_id"] != first["event"]["event_id"]
+    assert (later["event"]["state"], later["event"]["delay_min"]) == ("awaiting", 20)
+    assert now(env, day_id, "14:21")["event"]["event_id"] == later["event"]["event_id"]  # 화면에는 새 사건 하나만
+    # 옛 사건은 resolved(사용자 선택 없음): 표 밖 이벤트는 409
+    assert_conflict_keeps(env, lambda: dismiss(env, first["event"]["event_id"]))
+
+
+def test_S7_B1_S11_Q12_awaiting_사건이_열린_채로_다른_장소에서_늦어지면_옛_사건도_닫고_새_사건(env):
+    day_id, first = high(env)
+    course_before = chosen(env, day_id)
+    later = checked(env, day_id, "14:20", P02)
+    event = later["event"]
+    assert event["event_id"] != first["event"]["event_id"]
+    assert (event["state"], event["delay_min"]) == ("awaiting", 20)
+    assert later["main"]["type"] == "T-04"
+    assert later["main"]["event_id"] == event["event_id"]  # 화면에는 새 사건 하나만
+    assert now(env, day_id, "14:21")["event"]["event_id"] == event["event_id"]
+    # 옛 사건은 resolved(사용자 선택 없음): 옛 제안 accept·옛 사건 dismiss는 409이고 일정은 그대로
+    for proposal in first["event"]["proposals"]:
+        assert_conflict_keeps(env, lambda pid=proposal["proposal_id"]: accept(env, pid))
+    assert_conflict_keeps(env, lambda: dismiss(env, first["event"]["event_id"]))
+    assert chosen(env, day_id) == course_before
 
 
 # ---------- AC-3 (SRS AC-06): 고르기 전에는 일정 그대로 ----------

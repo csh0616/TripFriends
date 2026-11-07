@@ -167,6 +167,24 @@ describe('C1 check', () => {
     expect(after[0].at).toBe(AT('10:10'));
   });
 
+  // §11 Q5: 앱 재실행은 GET /now로 화면을 받은 뒤 check를 한 번 보낸다
+  test('T7_C1_S11_Q5_재실행하면_GET_now_다음에_check를_정확히_한_번', async () => {
+    const { app, control } = await toNow();
+    await pressId('demo-toggle');
+    await pressId('demo-plus-10');
+    await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('10:10')));
+    const before = control.requests().length;
+    await restart(app);
+    await screen.findByTestId('now-main');
+    await waitFor(() => expect(control.requests().length).toBeGreaterThanOrEqual(before + 2));
+    await new Promise((resolve) => setTimeout(resolve, 400)); // 디바운스(300ms)가 지나도 더 가지 않는다
+    const after = control.requests().slice(before);
+    expect(after.map((request) => request.kind)).toEqual(['now', 'check']);
+    expect(after[1].at).toBe(AT('10:10'));
+    expect(after[1].lat).not.toBeNull();
+    expect(after[1].lng).not.toBeNull();
+  });
+
   test('T7_C1_B8_check도_300ms_디바운스이고_연달아_바꾸면_마지막_시각으로_한_번', async () => {
     const { control } = await toNow();
     await pressId('demo-toggle');
@@ -394,11 +412,12 @@ describe('C4 이걸로·그대로 갈래', () => {
     expect(screen.queryByTestId('map-pin-3')).toBeNull();
   });
 
-  test('T7_C4_accept_뒤_이유_한_줄은_바꾼_일정으로_안내할게', async () => {
+  test('T7_C4_S11_Q15_accept_직후_이유_한_줄은_앱이_바꾼_일정으로_안내할게', async () => {
     await ready();
     await pressId('proposal-accept-prop-relaxed');
     await screen.findByTestId('card-T-01');
     expect(inCard('now-reason').getByText('바꾼 일정으로 안내할게')).toBeTruthy();
+    expect(inCard('now-reason').queryByText('서버_바뀐_이유')).toBeNull(); // 응답 reason 대신 앱 문장
   });
 
   test('T7_C4_그대로_갈래는_dismiss_본문_없이_한_번이고_응답을_그린다', async () => {
@@ -633,6 +652,14 @@ describe('F4·F6 지도', () => {
     const next = pins.find((pin) => pin.state === 'next') as { seq: number };
     expect(z(`map-pin-${next.seq}`)).toBeGreaterThan(z('map-home'));
     expect(inCard(`map-pin-${next.seq}`).getByText(pins[next.seq - 1].name)).toBeTruthy(); // 말풍선이 같은 마커 안
+  });
+
+  // §11 Q18: 다음 핀만 숙소 아이콘 위에 그린다
+  test('T7_F4_S11_Q18_다음_핀이_아닌_핀은_숙소_아이콘보다_위가_아니다', async () => {
+    await toNow();
+    const others = pins.filter((pin) => pin.state !== 'next');
+    expect(others.length).toBeGreaterThan(0); // 시험 자체 확인: 지난 핀·지금 핀이 있다
+    for (const pin of others) expect([pin.seq, z(`map-pin-${pin.seq}`) <= z('map-home')]).toEqual([pin.seq, true]);
   });
 
   test('T7_F6_f85d63d_숙소_아이콘은_내_위치_점보다_위', async () => {
