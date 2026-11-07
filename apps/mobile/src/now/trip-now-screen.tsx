@@ -20,7 +20,7 @@ import { SecondaryButton } from '@/components/planning/secondary-button';
 import { SosButton } from '@/components/planning/sos-button';
 import { SosSheet } from '@/components/planning/sos-sheet';
 import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBOUNCE_MS, toMinutes } from '@/lib/demo-clock';
-import { fakePosition } from '@/lib/fake-position';
+import { delayedPosition } from '@/lib/fake-position';
 import { acceptRequest, checkRequest, dismissRequest, nowRequest, type NowCard, type NowParams, type NowView } from '@/lib/now-api';
 import { send, type DaySummary, type Request, type Result } from '@/lib/planning-api';
 import { layout } from '@/planning/layout';
@@ -157,9 +157,8 @@ export function TripNowScreen({
     (when: string): { lat?: number; lng?: number } => {
       const now = viewRef.current;
       if (!now || now.pins.length === 0) return {};
-      // C2: 지연 중이면 "아직 앞 장소에 있는" 시각의 위치 (at − delay_offset)
-      const shifted = minutesOfAt(when);
-      const spot = fakePosition(shifted === null ? when : atOf(day.date, Math.max(0, shifted - delayRef.current)), {
+      // C2·§14: 지연 중이면 길 위가 아니라 "아직 머무는" 장소 (일정 안 = 그 장소, 이동 중 = 앞 장소, 첫 일정 전 = 숙소)
+      const spot = delayedPosition(when, delayRef.current, {
         lodging: day.lodging,
         go_home_min: homeMin.current,
         items: now.pins.map((pin) => ({ lat: pin.lat, lng: pin.lng, start: pin.start, end: pin.end, travel_min: pin.travel_min })),

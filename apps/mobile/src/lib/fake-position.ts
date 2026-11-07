@@ -48,8 +48,15 @@ export function fakePosition(at: string, course: FakeCourse): Spot | null {
  * 지연 중이면 (at − delayMin) 시각의 예정 상태를 길 위가 아니라 장소에 머물게 한다 (테스트 먼저, 구현은 code-session).
  */
 export function delayedPosition(at: string, delayMin: number, course: FakeCourse): Spot | null {
-  void at;
-  void delayMin;
-  void course;
-  throw new Error('not implemented');
+  if (delayMin <= 0) return fakePosition(at, course);
+  const now = minutesOfAt(at);
+  const { items, lodging } = course;
+  if (now === null || items.length === 0) return null;
+  const t = now - delayMin;
+  // 시작이 t 이하인 마지막 장소 = 일정 안이면 그 장소, 이동 중이면 막 떠난 앞 장소. 없으면(첫 일정 전) 숙소
+  let staying: Spot = lodging;
+  for (const item of items) {
+    if (toMinutes(item.start) <= t) staying = item;
+  }
+  return { lat: staying.lat, lng: staying.lng };
 }
