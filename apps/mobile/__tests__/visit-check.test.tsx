@@ -8,15 +8,18 @@
 //     [구글 지도에서 보기] 'visit-map-link' → Linking.openURL(map_url)
 //     [열었어] 'visit-open', [닫혔어] 'visit-closed' → POST /places/{place_id}/visit-checks 본문 {day_id, at, was_open}
 //   T-06 카드 'card-T-06': 서버 값 {type, event_id, closed:{place_id,name}, proposals[]}
-//     대안 칸 'proposal-{proposal_id}', 그 안 [이걸로] 'proposal-accept-{proposal_id}' (TASK-007과 같은 이름)
-//     [빼고 가기] 'closed-skip' → kind "skip" 제안의 accept, [그대로 둘게] 'event-dismiss' → dismiss
+//     제안 = TASK-007 제안 {proposal_id, label, reason, dropped, keeps_fixed, first_leave_at, items}
+//            + closed {alternative:{place_id,name}|null, distance_m, travel_change_min} (§11 Q4)
+//     대안 칸(alternative 있음) 'proposal-{proposal_id}': 이름 = closed.alternative.name, 거리 = closed.distance_m,
+//       이동 변화 = closed.travel_change_min, 사실 칩 = items 안 그 대안 줄의 facts. [이걸로] 'proposal-accept-{proposal_id}'
+//     [빼고 가기] 'closed-skip' → closed.alternative가 null인 제안의 accept, [그대로 둘게] 'event-dismiss' → dismiss
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import fc from 'fast-check';
 import { Linking, StyleSheet } from 'react-native';
 
 import { sheetControl } from '../test-support/bottom-sheet-mock';
 import { COLORS } from '../test-support/design-table';
-import { json, networkDown } from '../test-support/fake-server';
+import { apiError, json, networkDown } from '../test-support/fake-server';
 import { mapControl } from '../test-support/maps-mock';
 import { expectNoBody, pressId, resetDevice } from '../test-support/planning-driver';
 import { SPOT } from '../test-support/planning-fixtures';
@@ -89,28 +92,38 @@ const checkView = (over: object = {}) => nowView({ main: t05(), subs: [t02()], r
 const confirmedSecond = { ...second, facts: [hoursFact('confirmed', { source_type: 'user', checked_at: AT('10:00') })] };
 const openedView = () => nowView({ main: t01({ item: confirmedSecond }), subs: [t03({ items: [confirmedSecond] })] });
 
-const replace = (over: object = {}) => ({
+// §11 Q4: TASK-007 제안 + closed
+const altItem = (placeId: string, name: string, status: string) => ({
+  ...nowItem(2, name, '12:20', '13:00', 'confirmed', PROPOSAL_SPOT),
+  place_id: placeId,
+  facts: [hoursFact(status, { value: '08:00-19:00', source_type: 'demo' })],
+});
+const LATER_ITEM = { ...nowItem(3, '서버_뒤_장소', '13:30', '15:00', 'unknown'), place_id: 'D03' };
+const replace = (over: object = {}, closed: object = {}) => ({
   proposal_id: 'alt-1',
-  kind: 'replace',
-  place: { place_id: 'D09', name: '서버_대안_장소' },
-  distance_m: 350,
-  travel_change_min: 4,
-  facts: [hoursFact('unverified', { value: '08:00-19:00', source_type: 'demo' })],
-  reason: null,
-  items: [nowItem(2, '서버_대안_장소', '12:20', '13:00', 'unverified', PROPOSAL_SPOT)],
+  label: 'relaxed',
+  reason: '서버_대안_이유',
+  dropped: [],
+  keeps_fixed: true,
+  first_leave_at: '12:00',
+  items: [altItem('D09', '서버_대안_장소', 'unverified'), LATER_ITEM],
+  closed: { alternative: { place_id: 'D09', name: '서버_대안_장소' }, distance_m: 350, travel_change_min: 4, ...closed },
   ...over,
 });
 const replace2 = () =>
-  replace({ proposal_id: 'alt-2', place: { place_id: 'D10', name: '서버_대안_둘' }, distance_m: 800, travel_change_min: 7, facts: [hoursFact('confirmed')] });
+  replace(
+    { proposal_id: 'alt-2', items: [altItem('D10', '서버_대안_둘', 'confirmed'), LATER_ITEM] },
+    { alternative: { place_id: 'D10', name: '서버_대안_둘' }, distance_m: 800, travel_change_min: 7 },
+  );
 const skip = (over: object = {}) => ({
   proposal_id: 'skip-1',
-  kind: 'skip',
-  place: null,
-  distance_m: null,
-  travel_change_min: -5,
-  facts: [],
-  reason: null,
-  items: [],
+  label: 'relaxed',
+  reason: '서버_빼고_이유',
+  dropped: [{ place_id: 'D02', name: '서버_닫힌_곳' }],
+  keeps_fixed: true,
+  first_leave_at: '12:00',
+  items: [LATER_ITEM],
+  closed: { alternative: null, distance_m: null, travel_change_min: -5 },
   ...over,
 });
 const t06 = (over: object = {}) => ({
@@ -274,6 +287,20 @@ describe('§6 visit-check 실패', () => {
   });
 });
 
+describe('§11 Q10 visit-check 409', () => {
+  test('T8_S6_Q10_409면_다시_보내지_않고_GET_now로_지금_상태를_받는다', async () => {
+    const control = nowServer(checkView());
+    control.server.once(VISIT_ROUTE('D02'), apiError(409, 'STATE_CONFLICT'));
+    await toNow(control);
+    const before = control.gets().length;
+    control.show(openedView());
+    await pressId('visit-open');
+    await waitFor(() => expect(control.gets().length).toBe(before + 1));
+    await screen.findByTestId('card-T-01');
+    expect(control.server.sent(VISIT_ROUTE('D02'))).toHaveLength(1);
+  });
+});
+
 // ---------- C3 T-06 카드 ----------
 
 describe('C3 T-06 카드', () => {
@@ -295,7 +322,7 @@ describe('C3 T-06 카드', () => {
     expect(row.getByText('서버_대안_장소')).toBeTruthy();
     expect(words('proposal-alt-1')).toContain('350m');
     expect(words('proposal-alt-1')).toContain('+4분');
-    expect(row.getByText('미확인')).toBeTruthy();
+    expect(row.getByText('미확인')).toBeTruthy(); // items 안 대안(D09) 줄의 facts
     expect(within(byId('proposal-accept-alt-1') as never).getByText('이걸로')).toBeTruthy();
     expect(inCard('proposal-alt-2').getByText('확인됨')).toBeTruthy();
     expect(words('proposal-alt-2')).toContain('+7분');
@@ -311,6 +338,31 @@ describe('C3 T-06 카드', () => {
     const unique = [...new Set(order)];
     expect(unique.at(-1)).toBe('event-dismiss');
     expect(unique.indexOf('closed-skip')).toBeGreaterThan(unique.indexOf('proposal-alt-2'));
+  });
+
+  test('T8_C3_Q4_대안의_사실_칩은_items_안_그_대안_줄에서_온다', async () => {
+    // 대안 줄(D09)이 items 둘째에 있어도 그 줄의 상태를 쓴다 (첫 줄 LATER_ITEM은 모름)
+    await shows({ main: t06({ proposals: [replace({ items: [LATER_ITEM, altItem('D09', '서버_대안_장소', 'confirmed')] }), skip()] }) });
+    expect(inCard('proposal-alt-1').getByText('확인됨')).toBeTruthy();
+  });
+
+  test.each([
+    [354, '350m'],
+    [995, '1.0km'],
+    [1200, '1.2km'],
+  ])('T8_C3_Q15_거리_%sm는_%s', async (meters, label) => {
+    await shows({ main: t06({ proposals: [replace({}, { distance_m: meters }), skip()] }) });
+    expect(words('proposal-alt-1')).toContain(label);
+  });
+
+  test('T8_C3_Q4_빼고_가기는_목록_자리가_아니라_alternative_null인_제안', async () => {
+    const control = nowServer(closedView({ main: t06({ proposals: [skip({ proposal_id: 'x-9' }), replace()] }) }));
+    control.server.on(ACCEPT_ROUTE('x-9'), json(200, nowView({ main: t01(), subs: [t03()] })));
+    await toNow(control);
+    expect(screen.queryByTestId('proposal-accept-x-9')).toBeNull(); // 대안 칸으로 그리지 않는다
+    await pressId('closed-skip');
+    await waitFor(() => expect(control.server.sent(ACCEPT_ROUTE('x-9'))).toHaveLength(1));
+    expect(control.server.sent(ACCEPT_ROUTE('alt-1'))).toEqual([]);
   });
 
   test('T8_C3_B4_대안이_0곳이면_안내와_빼고_가기_그대로_둘게만', async () => {

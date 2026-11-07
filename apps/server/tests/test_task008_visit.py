@@ -1,18 +1,24 @@
 """TASK-008 영업 확인(T-05)·닫힘 대안(T-06), 서버. 근거: TASK-008 §0-1 G2, §A A1~A6, §B B1~B6, §C C4(서버 시드), §6, §7, §8 AC-2~AC-6·AC-9,
 SRS-001 FR-14·15 AC-07·08, SCREEN-001 §3-2·§4-1(순위 2·3·4·5·6)·§5, DATA-001 E(visit_checks)·B(place_facts), TASK-007 B-1·B-3·B-4.
 
-API 본문은 TASK-008 A5(`{day_id, at, was_open}`)를 따랐다. API-001 §2-3의 `{trip_day_id, was_open}`과 다르다 (TASK-007 §11 Q3처럼 TASK가 정본으로 봄, 질문).
+API 본문은 TASK-008 A5(`{day_id, at, was_open}`)가 정본 (§11 Q1, API-001 §2-3 표시).
 
-계약 (보고서 ④, test-writer가 정한 것은 [정함] 표시):
+계약 (§11 Q2·Q3·Q4 승인. test-writer가 정한 것은 [정함] 표시):
     POST /places/{place_id}/visit-checks  본문 {day_id, at, was_open}
-        → 200 NowView [정함: 200]. 열었어면 T-05가 사라지고, 닫혔어면 메인 T-06
-        → 400 INVALID_REQUEST(본문) [정함], 404 NOT_FOUND detail.resource "day"·"place" [정함], 409 STATE_CONFLICT(A6)
-    T-05 카드 [정함]: {type:"T-05", place:{place_id,name}, facts:[Fact], map_url}
+        → 200 NowView (Q2). 열었어면 T-05가 사라지고, 닫혔어면 메인 T-06
+        → 400 INVALID_REQUEST(본문), 404 NOT_FOUND detail.resource "day"·"place" (Q2), 409 STATE_CONFLICT(A6)
+    T-05 카드 (Q3): {type:"T-05", place:{place_id,name}, facts:[Fact], map_url}
         map_url = https://www.google.com/maps/search/?api=1&query={lat},{lng} (구글 지도 장소 검색, 좌표)
     T-06 카드 (B6): {type:"T-06", event_id, closed:{place_id,name}, proposals:[T06Proposal]}
-    T06Proposal [정함]: {proposal_id, kind:"replace"|"skip", place:{place_id,name}|null, distance_m:int|null,
-                        travel_change_min:int, facts:[Fact], reason:str|null, items:[NowCourseItem]}
-        replace는 가까운 순, skip([빼고 가기])은 항상 하나·맨 끝. items = 닫힌 곳 자리부터의 남은 일정
+    T06Proposal (§11 Q4 = TASK-007 제안 + closed):
+        TASK-007 B-5 키 그대로 {proposal_id, label:"relaxed"|"packed", reason:str, dropped:[{place_id,name}],
+                                keeps_fixed:bool, first_leave_at:"HH:MM", items:[NowCourseItem]}
+        + closed [정함 안쪽 키]: {alternative:{place_id,name}|null, distance_m:int|null, travel_change_min:int}
+            alternative = 닫힌 곳 대신 갈 대안 (C3 이름), distance_m = 닫힌 곳에서 직선거리 m (C3 거리),
+            travel_change_min = 남은 이동 분 합(숙소 복귀 포함), 바뀐 뒤 − 바뀌기 전 (Q4, C3 이동 변화)
+            [빼고 가기] = alternative null (그 제안의 dropped에 닫힌 곳이 들어 있다)
+        대안의 사실 칩은 items 안 그 대안 줄의 facts (TASK-007 NowCourseItem 그대로)
+        대안 제안은 가까운 순, [빼고 가기]는 항상 하나·맨 끝(B4 "덧붙인다"). items = 닫힌 곳 자리부터의 남은 일정
     NowView.event (닫힘 사건이 하나만 열려 있을 때): type "closed", severity "high", state "awaiting"
     trip 저장소(app.state.trip_repo):
         event_by_key(day_id, "closed:{day_id}:{place_id}") → EventRecord (TASK-007 그대로, B1)
@@ -36,6 +42,7 @@ from trip_helpers import (
     NOW_KEYS,
     OPEN_LATE,
     P01,
+    PROPOSAL_KEYS,
     accept,
     at_time,
     checked,
@@ -54,11 +61,13 @@ from trip_helpers import (
 from deciders import JevDecider
 from engine.compose import REASONS, compose_screen
 from engine.models import StayRange
+from engine.planning import distance_km
 
 SERVER = Path(__file__).parents[1]
 T05_KEYS = {"type", "place", "facts", "map_url"}
 T06_KEYS = {"type", "event_id", "closed", "proposals"}
-T06_PROPOSAL_KEYS = {"proposal_id", "kind", "place", "distance_m", "travel_change_min", "facts", "reason", "items"}
+T06_PROPOSAL_KEYS = PROPOSAL_KEYS | {"closed"}  # §11 Q4: TASK-007 제안 + closed
+T06_CLOSED_KEYS = {"alternative", "distance_m", "travel_change_min"}  # closed 안쪽 [정함]
 STATUSES = {"confirmed", "unverified", "unknown"}
 STAY = StayRange(min=30, typical=60, max=120)
 TIGHT = StayRange(min=30, typical=30, max=30)  # 머무는 시간이 하나뿐이라 relaxed·packed가 같다
@@ -163,13 +172,36 @@ def string_leaves(value) -> list[str]:
 
 
 def replaces(card: dict) -> list[dict]:
-    return [p for p in card["proposals"] if p["kind"] == "replace"]
+    return [p for p in card["proposals"] if p["closed"]["alternative"] is not None]
 
 
 def skip_of(card: dict) -> dict:
-    found = [p for p in card["proposals"] if p["kind"] == "skip"]
+    found = [p for p in card["proposals"] if p["closed"]["alternative"] is None]
     assert len(found) == 1
     return found[0]
+
+
+def alt_id(proposal: dict) -> str:
+    return proposal["closed"]["alternative"]["place_id"]
+
+
+def alt_ids(card: dict) -> list[str]:
+    return [alt_id(p) for p in replaces(card)]
+
+
+def alt_facts(proposal: dict) -> list[dict]:
+    """대안의 사실 칩 = items 안 그 대안 줄의 facts."""
+    found = [e["facts"] for e in proposal["items"] if e["place_id"] == alt_id(proposal)]
+    assert len(found) == 1
+    return found[0]
+
+
+def dropped_ids(proposal: dict) -> set[str]:
+    return {gone["place_id"] for gone in proposal["dropped"]}
+
+
+def is_hhmm(value) -> bool:
+    return isinstance(value, str) and len(value) == 5 and value[2] == ":" and value[:2].isdigit() and value[3:].isdigit()
 
 
 def item_ids(entries: list[dict]) -> list[str | None]:
@@ -312,6 +344,24 @@ def test_T8_A5_C2_열었어면_그날_그_장소의_사실은_확인됨_user_che
             assert (facts[0]["status"], facts[0]["source_type"], facts[0]["checked_at"]) == ("confirmed", "user", at_time("11:40"))
 
 
+def test_T8_A5_Q17_열었어면_사실_값은_원래_영업시간_그대로(env):
+    day_id = visit_day(env)
+    value = now(env, day_id, "11:30")["main"]["facts"][0]["value"]
+    assert value is not None  # 시험 자체 확인 (영업시간 있는 곳)
+    view = answered(env, day_id, "P02", "11:40", True)
+    for facts in facts_of(view, "P02"):
+        assert facts[0]["value"] == value
+
+
+def test_T8_A5_Q17_영업시간_모름인_곳에_열었어면_값은_null이고_확인됨(env):
+    day_id = visit_day(env, second=unverified(hours=None))
+    view = answered(env, day_id, "P02", "11:40", True)
+    found = facts_of(view, "P02")
+    assert found
+    for facts in found:
+        assert (facts[0]["value"], facts[0]["status"], facts[0]["source_type"]) == (None, "confirmed", "user")
+
+
 def test_T8_A5_열었어면_visit_checks에_기록(env):
     day_id = visit_day(env)
     answered(env, day_id, "P02", "11:40", True)
@@ -414,6 +464,25 @@ def test_T8_A5_그날_데이터에_없는_장소는_404_place(env):
     assert error["detail"]["resource"] == "place"
 
 
+@pytest.mark.parametrize("pid", ["P01", "P03"], ids=["지금_장소_확인됨", "다음_아닌_장소_확인됨"])
+def test_T8_A5_Q9_확인_대상이_아닌_확인됨_장소는_409이고_그대로(env, pid):
+    day_id = visit_day(env)
+    before = without_logs(stores(env))
+    assert_error(visit_check(env, day_id, pid, "11:40", False), 409, "STATE_CONFLICT")
+    assert without_logs(stores(env)) == before
+    assert trip_repo(env).get_visit_check(day_id, pid) is None
+
+
+def test_T8_A5_Q9_미확인이어도_다음_일정이_아니면_409(env):
+    # P03도 미확인. 11:40의 다음 일정은 P02라 P03은 대상이 아니다 (A1 "다음 일정 장소")
+    places = {"P01": spot("P01", 1.0), "P02": unverified(), "P03": unverified("P03", km=3.0)}
+    items = [item(1, "P01", "10:12", "12:00", 12), item(2, "P02", "12:20", "14:00", 20), item(3, "P03", "14:30", "19:00", 30)]
+    day_id = plant(env, items, places)
+    before = without_logs(stores(env))
+    assert_error(visit_check(env, day_id, "P03", "11:40", False), 409, "STATE_CONFLICT")
+    assert without_logs(stores(env)) == before
+
+
 def test_T8_A5_하루_밖_날짜는_400(env):
     day_id = visit_day(env)
     response = env.client.post("/places/P02/visit-checks", json={"day_id": day_id, "at": "2026-12-03T11:40:00", "was_open": True})
@@ -465,7 +534,7 @@ def test_T8_B6_메인_T_06_짝_T_03_이유는_compose_문장(env):
     assert view["reason"] == REASONS["T-06"]
 
 
-def test_T8_B6_T_06_카드_모양(env):
+def test_T8_B6_Q4_T_06_카드와_제안_모양은_TASK007_제안_더하기_closed(env):
     _, view = closed_view(env)
     card = view["main"]
     assert set(card) == T06_KEYS
@@ -473,8 +542,20 @@ def test_T8_B6_T_06_카드_모양(env):
     for proposal in card["proposals"]:
         assert set(proposal) == T06_PROPOSAL_KEYS
         assert type(proposal["proposal_id"]) is str and proposal["proposal_id"]
-        assert proposal["kind"] in {"replace", "skip"}
-        assert type(proposal["travel_change_min"]) is int
+        assert proposal["label"] in {"relaxed", "packed"}
+        assert type(proposal["reason"]) is str and proposal["reason"]
+        assert type(proposal["keeps_fixed"]) is bool
+        assert is_hhmm(proposal["first_leave_at"])
+        for gone in proposal["dropped"]:
+            assert set(gone) == {"place_id", "name"}
+        info = proposal["closed"]
+        assert set(info) == T06_CLOSED_KEYS
+        assert type(info["travel_change_min"]) is int
+        if info["alternative"] is None:
+            assert info["distance_m"] is None
+        else:
+            assert set(info["alternative"]) == {"place_id", "name"}
+            assert type(info["distance_m"]) is int
 
 
 def test_T8_B6_GET_now에도_T_06이_계속_메인(env):
@@ -492,20 +573,33 @@ def test_T8_B6_GET_now에도_T_06이_계속_메인(env):
 def test_T8_B2_AC3_대안은_가까운_순_최대_3곳이고_빼고_가기가_맨_끝(env):
     _, view = closed_view(env)
     card = view["main"]
-    assert [p["place"]["place_id"] for p in replaces(card)] == ["A01", "A02", "A03"]
-    assert card["proposals"][-1]["kind"] == "skip"
+    assert alt_ids(card) == ["A01", "A02", "A03"]
+    assert card["proposals"][-1]["closed"]["alternative"] is None
     assert len(card["proposals"]) == 4
 
 
 def test_T8_B2_AC4_1_5km_안팎(env):
     _, view = closed_view(env, extra=(alt("N01", 1.49), alt("X01", 1.51)))
-    assert [p["place"]["place_id"] for p in replaces(view["main"])] == ["N01"]
+    assert alt_ids(view["main"]) == ["N01"]
+
+
+def test_T8_B2_AC4_Q5_1_5km_정각은_안(env):
+    # P02(북 2.0km)에서 정북 1.5km (계산 거리 1500.0000000002m). §11 Q5: 정각 포함
+    exact = place("E01", km=3.5, hours=OPEN_LATE, stay=STAY)
+    _, view = closed_view(env, extra=(exact,))
+    assert alt_ids(view["main"]) == ["E01"]
 
 
 def test_T8_B2_AC4_unknown과_다른_종류는_빠진다(env):
     extra = (alt("U01", 0.1, hours=None), alt("F01", 0.2, category="food"), alt("A01", 0.5))
     _, view = closed_view(env, extra=extra)
-    assert [p["place"]["place_id"] for p in replaces(view["main"])] == ["A01"]
+    assert alt_ids(view["main"]) == ["A01"]
+
+
+def test_T8_B2_Q20_영업시간이_있으면_hours_status가_unknown이어도_후보(env):
+    # §11 Q20: 화면 사실 기준(영업시간 있음 → unverified)으로 넣는다
+    _, view = closed_view(env, extra=(alt("H01", 0.4, status="unknown"),))
+    assert alt_ids(view["main"]) == ["H01"]
 
 
 def test_T8_B2_코스에_있는_곳은_대안이_아니다(env):
@@ -517,25 +611,52 @@ def test_T8_B2_코스에_있는_곳은_대안이_아니다(env):
 def test_T8_B4_대안이_0곳이면_빼고_가기만(env):
     _, view = closed_view(env, extra=())
     proposals = view["main"]["proposals"]
-    assert [p["kind"] for p in proposals] == ["skip"]
+    assert [p["closed"]["alternative"] for p in proposals] == [None]
 
 
 def test_T8_B3_대안_칸의_값(env):
     _, view = closed_view(env)
     first = replaces(view["main"])[0]
-    assert first["place"] == {"place_id": "A01", "name": "가상 A01"}
-    assert abs(first["distance_m"] - 300) <= 1
-    assert first["facts"] and first["facts"][0]["field"] == "opening_hours"
-    assert first["facts"][0]["status"] in STATUSES
+    assert first["closed"]["alternative"] == {"place_id": "A01", "name": "가상 A01"}
+    assert abs(first["closed"]["distance_m"] - 300) <= 1
+    facts = alt_facts(first)
+    assert facts and facts[0]["field"] == "opening_hours"
+    assert facts[0]["status"] in STATUSES
     ids = item_ids(first["items"])
     assert "A01" in ids and "P02" not in ids and "P03" in ids
     assert "P01" not in ids  # 지난 일정은 제안에 없다
+    assert "A01" not in dropped_ids(first)  # §11 Q8: 대안이 빠진 안은 대안이 아니다
+
+
+def test_T8_B3_Q7_첫_출발_시각은_앞_장소_끝_뒤이고_첫_일정_전(env):
+    # TASK-007 first_leave_at과 같은 뜻 (§11 Q4). Q7: 앞 장소(P01, 끝 12:00)에서 max(at 11:40, 12:00)부터 출발
+    _, view = closed_view(env)
+    for proposal in view["main"]["proposals"]:
+        assert to_min("12:00") <= to_min(proposal["first_leave_at"]) <= to_min(proposal["items"][0]["start"])
+
+
+def remaining_travel(course, start_index: int) -> int:
+    """남은 이동 분 합 = start_index번째 항목부터 오는 이동 + 숙소 복귀 (§11 Q4)."""
+    return sum(i.travel_min for i in course.items[start_index:]) + course.go_home_min
+
+
+@pytest.mark.parametrize("which", ["대안", "빼고_가기"])
+def test_T8_B3_Q4_이동_변화_분은_남은_이동_합_숙소_복귀_포함_바뀐_뒤_빼기_바뀌기_전(env, which):
+    day_id, view = closed_view(env)
+    _, old = chosen(env, day_id)
+    proposal = replaces(view["main"])[0] if which == "대안" else skip_of(view["main"])
+    assert accept(env, proposal["proposal_id"]).status_code == 200
+    _, new = chosen(env, day_id)
+    before = remaining_travel(old, 1)  # 닫힌 곳(2번)으로 가는 이동부터: 20 + 30 + 숙소 25
+    after = remaining_travel(new, 1)  # 지난 1번은 그대로 (B-3), 그 뒤 = 제안 일정
+    assert proposal["closed"]["travel_change_min"] == after - before
 
 
 def test_T8_B4_빼고_가기_칸의_값(env):
     _, view = closed_view(env)
     skip = skip_of(view["main"])
-    assert (skip["place"], skip["distance_m"], skip["facts"]) == (None, None, [])
+    assert (skip["closed"]["alternative"], skip["closed"]["distance_m"]) == (None, None)
+    assert {"place_id": "P02", "name": "가상 P02"} in skip["dropped"]  # TASK-007 dropped = 빠지는 곳
     assert item_ids(skip["items"]) == ["P03"]
 
 
@@ -569,10 +690,11 @@ def test_T8_B3_고정_일정을_못_지키는_대안은_뺀다(env):
     day_id = tight_day(env)
     view = answered(env, day_id, "C02", "11:40", False)
     card = view["main"]
-    assert [p["place"]["place_id"] for p in replaces(card)] == ["N01"]
+    assert alt_ids(card) == ["N01"]
     kept = [(e["place_id"], e["start"], e["end"]) for e in replaces(card)[0]["items"] if e["is_fixed"]]
     assert kept == [("F03", "12:40", "13:40")]
-    assert card["proposals"][-1]["kind"] == "skip"
+    assert card["proposals"][-1]["closed"]["alternative"] is None
+    assert all(p["keeps_fixed"] is True for p in card["proposals"])  # TASK-007 keeps_fixed
 
 
 # ---------- B5 [이걸로]·[그대로 둘게] ----------
@@ -660,6 +782,22 @@ def test_T8_S6_대안_accept_오래됨은_TASK007_B4와_같다(env, clock, statu
         assert assert_error(response, 409, "STATE_CONFLICT")["detail"]["reason"] == "stale"
 
 
+def test_T8_S6_Q11_stale_뒤_check는_같은_사건의_제안을_한_번_새로_계산하고_다시_알리지_않는다(env):
+    day_id, view = closed_view(env)
+    checked(env, day_id, "11:55")
+    assert accept(env, replaces(view["main"])[0]["proposal_id"]).status_code == 409
+    fresh = checked(env, day_id, "11:56")
+    card = fresh["main"]
+    assert card["type"] == "T-06"
+    assert card["event_id"] == view["main"]["event_id"]  # 새 사건이 아니다
+    assert trip_repo(env).event_by_key(day_id, closed_key(day_id)).state == "awaiting"
+    old_ids = {p["proposal_id"] for p in view["main"]["proposals"]}
+    assert card["proposals"] and not old_ids & {p["proposal_id"] for p in card["proposals"]}
+    again = checked(env, day_id, "11:57")  # 한 번만
+    assert again["main"]["proposals"] == card["proposals"]
+    assert accept(env, replaces(card)[0]["proposal_id"]).status_code == 200
+
+
 # ---------- §7 겹치면 (AC-5) ----------
 
 
@@ -667,12 +805,14 @@ def test_T8_S7_늦어짐_awaiting과_닫힘_awaiting이면_T_04가_메인이고_
     day_id, closed = closed_view(env)
     late = checked(env, day_id, "12:20", P01)  # 1번에서 20분 늦음 → 높음
     assert late["main"]["type"] == "T-04"
+    assert (late["event"]["type"], late["event"]["event_id"]) == ("delay", late["main"]["event_id"])  # §11 Q12: 메인 카드의 사건
     assert "T-06" not in types(cards(late))
     assert trip_repo(env).event_by_key(day_id, closed_key(day_id)).state == "awaiting"  # 종류가 다르면 닫지 않는다
     assert dismiss(env, late["main"]["event_id"]).status_code == 200
     after = now(env, day_id, "12:21")
     assert after["main"]["type"] == "T-06"
     assert after["main"]["event_id"] == closed["main"]["event_id"]
+    assert (after["event"]["type"], after["event"]["event_id"]) == ("closed", closed["main"]["event_id"])
 
 
 def fixed_after_closed(env) -> str:
@@ -692,13 +832,13 @@ def test_T8_S7_고정_일정_임박이면_T_07이_메인(env, clock, main):
 def test_T8_S7_닫힌_곳이_꼭_갈_곳이면_대안은_같게_빼고_가기_이유에_표시(env):
     _, view = closed_view(env, must=("P02",))
     card = view["main"]
-    assert [p["place"]["place_id"] for p in replaces(card)] == ["A01", "A02", "A03"]
-    assert "꼭 갈 곳이었어" in (skip_of(card)["reason"] or "")
+    assert alt_ids(card) == ["A01", "A02", "A03"]
+    assert "꼭 갈 곳이었어" in skip_of(card)["reason"]
 
 
 def test_T8_S7_꼭_갈_곳이_아니면_그_표시가_없다(env):
     _, view = closed_view(env)
-    assert "꼭 갈 곳" not in (skip_of(view["main"])["reason"] or "")
+    assert "꼭 갈 곳" not in skip_of(view["main"])["reason"]
 
 
 def test_T8_S7_꼭_갈_곳을_대안으로_바꾸면_꼭_갈_곳_목록도_대안으로(env):
@@ -716,8 +856,10 @@ def test_T8_AC6_T_06의_모든_장소_사실에_상태가_있고_이름은_데�
     card = view["main"]
     names = {p.id: p.name for p in ALTS}
     for proposal in replaces(card):
-        assert proposal["place"]["name"] == names[proposal["place"]["place_id"]]
-        assert proposal["facts"] and all(f["status"] in STATUSES for f in proposal["facts"])
+        alternative = proposal["closed"]["alternative"]
+        assert alternative["name"] == names[alternative["place_id"]]
+        facts = alt_facts(proposal)
+        assert facts and all(f["status"] in STATUSES for f in facts)
 
 
 @pytest.mark.parametrize("was_open", [True, False])
@@ -730,7 +872,10 @@ def test_T8_AC6_영업_여부를_지어낸_문장이_없다(env, was_open):
             assert not any(word in text for word in guesses), text
 
 
-# ---------- C4 데모 시드 (서버) ----------
+# ---------- C4 데모 시드 (서버, §11 Q18로 고친 C4) ----------
+# 데모 시나리오 장소 = chosen: true 코스의 2~5번 중 B2 대안이 1곳 이상 있는 첫 장소.
+# 원래 confirmed면 시드에서만 그날 unverified. demo_city.json 30곳으로 조건에 맞는 장소가 없을 때만
+# 시드 전용 장소(demo_extra.json) 1곳을 chosen일 때만 더한다. 어느 장소인지 고정하지 않고 규칙으로 센다.
 
 
 def seed_chosen(env, chosen_flag: bool = True) -> dict:
@@ -739,23 +884,84 @@ def seed_chosen(env, chosen_flag: bool = True) -> dict:
     return response.json()
 
 
-def third(env, day_id: str):
-    return env.repo.get_option(env.repo.chosen_option(day_id)).course.items[2]
+def b2_alternatives(places: dict, course, entry, weekday: int) -> list[str]:
+    """B2 규칙 그대로 (같은 종류, 코스에 없음, 영업시간 있음(Q20: hours_status와 무관), 좌표 있음,
+    예정 도착 = 그 장소 예정 시작에 영업 중(Q6: 여는 ≤ 도착 < 닫는), 1.5km 안(Q5: 정각 포함))."""
+    closed = places[entry.place_id]
+    in_course = {i.place_id for i in course.items if i.place_id}
+    arrive = to_min(entry.start)
+    found = []
+    for p in places.values():
+        if p.id in in_course or p.category != closed.category or p.hours is None or p.lat is None or p.lng is None:
+            continue
+        if distance_km((closed.lat, closed.lng), (p.lat, p.lng)) > 1.5 + 1e-9:
+            continue
+        if any(o.weekday == weekday and to_min(o.open) <= arrive < to_min(o.close) for o in p.hours):
+            found.append(p.id)
+    return found
 
 
-def test_T8_C4_데모_3번_장소는_그날_미확인이고_출처_demo(env):
-    day_id = seed_chosen(env)["day_ids"][1]
-    entry = third(env, day_id)
-    view = now(env, day_id, entry.start)  # 3번 일정 안: 메인 T-01이 3번
-    assert view["main"]["item"]["place_id"] == entry.place_id
-    fact = view["main"]["item"]["facts"][0]
-    assert (fact["status"], fact["source_type"]) == ("unverified", "demo")
+def scenario_entry(places: dict, course, weekday: int):
+    """2~5번 중 B2 대안이 1곳 이상 있는 첫 항목. 없으면 None."""
+    for entry in course.items:
+        if entry.place_id and 2 <= entry.seq <= 5 and b2_alternatives(places, course, entry, weekday):
+            return entry
+    return None
 
 
-def test_T8_C4_AC2_데모_3번_출발_30분_전에_T_05_31분_전에는_없다(env):
-    day_id = seed_chosen(env)["day_ids"][1]
-    entry = third(env, day_id)
-    leave = to_min(entry.start) - entry.travel_min
+def demo_day(env):
+    seeded = seed_chosen(env)
+    day_id = seeded["day_ids"][1]
+    record = env.repo.get_day(day_id)
+    course = env.repo.get_option(env.repo.chosen_option(day_id)).course
+    return seeded, day_id, record, course
+
+
+def demo_scenario(env):
+    seeded, day_id, record, course = demo_day(env)
+    entry = scenario_entry(record.places, course, record.plan.date.weekday())
+    assert entry is not None, "§11 Q18: 2~5번 중 B2 대안이 있는 장소가 있어야 한다"
+    return seeded, day_id, entry
+
+
+def leave_of(entry) -> int:
+    return to_min(entry.start) - entry.travel_min
+
+
+def test_T8_C4_Q18_데모_시나리오_장소가_있다(env):
+    _, _, entry = demo_scenario(env)
+    assert 2 <= entry.seq <= 5
+
+
+def test_T8_C4_Q18_demo_city_30곳으로_안_되면_시드_전용_장소_1곳만_더한다(env):
+    seeded, _, record, course = demo_day(env)
+    original = demo_places()
+    weekday = record.plan.date.weekday()
+    base = {pid: record.places[pid] for pid in original}
+    extra = set(record.places) - set(original)
+    assert set(original) <= set(record.places)
+    if scenario_entry(base, course, weekday) is None:
+        assert len(extra) == 1  # demo_extra.json 1곳
+    else:
+        assert extra == set()  # 30곳으로 되면 더하지 않는다
+    for index in (0, 2):  # 다른 날에는 더하지 않는다
+        assert set(env.repo.get_day(seeded["day_ids"][index]).places) == set(original)
+
+
+def test_T8_C4_Q18_시나리오_장소는_그날_미확인_또는_모름이고_원래_확인됨이면_미확인_출처_demo(env):
+    _, day_id, entry = demo_scenario(env)
+    view = now(env, day_id, hhmm(leave_of(entry) - 30))
+    fact = view["main"]["facts"][0]
+    original = demo_places().get(entry.place_id)
+    assert fact["status"] in {"unverified", "unknown"}
+    if original is None or original.hours_status == "confirmed":
+        assert fact["status"] == "unverified"
+    assert fact["source_type"] == "demo"
+
+
+def test_T8_C4_AC2_데모_시나리오_장소_출발_30분_전에_T_05_31분_전에는_없다(env):
+    _, day_id, entry = demo_scenario(env)
+    leave = leave_of(entry)
     before = now(env, day_id, hhmm(leave - 31))
     assert not [c for c in cards(before) if c["type"] == "T-05" and c["place"]["place_id"] == entry.place_id]
     view = now(env, day_id, hhmm(leave - 30))
@@ -763,12 +969,32 @@ def test_T8_C4_AC2_데모_3번_출발_30분_전에_T_05_31분_전에는_없다(e
     assert view["main"]["place"]["place_id"] == entry.place_id
 
 
+def test_T8_C4_AC8_데모_시나리오_장소가_닫혔어면_대안이_1곳_이상(env):
+    # AC-8 Maestro: T-05 → [닫혔어] → T-06 → [이걸로]
+    _, day_id, entry = demo_scenario(env)
+    view = answered(env, day_id, entry.place_id, hhmm(leave_of(entry) - 30), False)
+    assert view["main"]["type"] == "T-06"
+    assert replaces(view["main"])
+
+
+def test_T8_C4_Q19_시나리오_장소_말고는_그날도_원본_상태(env):
+    # §11 Q19: 2번·6번처럼 원래 미확인·모름인 곳은 데이터 그대로 (T-05가 떠도 그대로 둔다)
+    _, day_id, entry = demo_scenario(env)
+    places = env.repo.get_day(day_id).places
+    for pid, original in demo_places().items():
+        if pid != entry.place_id:
+            assert places[pid].hours_status == original.hours_status, pid
+
+
 def test_T8_C4_다른_날의_같은_장소는_원본_상태(env):
-    seeded = seed_chosen(env)
-    pid = third(env, seeded["day_ids"][1]).place_id
-    original = demo_places()[pid].hours_status
+    seeded, _, entry = demo_scenario(env)
+    original = demo_places().get(entry.place_id)
     for index in (0, 2):
-        assert env.repo.get_day(seeded["day_ids"][index]).places[pid].hours_status == original
+        places = env.repo.get_day(seeded["day_ids"][index]).places
+        if original is None:
+            assert entry.place_id not in places
+        else:
+            assert places[entry.place_id].hours_status == original.hours_status
 
 
 def test_T8_C4_chosen이_아니면_장소_상태는_원본_그대로(env):

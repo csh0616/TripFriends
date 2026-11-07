@@ -8,7 +8,8 @@
             A1·A6: 영업 사실 상태가 unverified·unknown이고 그날 확인 기록이 없을 때만 True
         closed_candidates(closed: Place, places: Mapping[str, Place], exclude: Collection[str], weekday: int, arrive_min: int) -> list[Candidate]
             B2: 같은 category, exclude(코스에 있는 곳 + 그날 닫힘 확인 기록) 밖, arrive_min에 영업 중
-            (fact confirmed·unverified, 영업시간 모름(unknown) 제외), 닫힌 곳에서 1.5km 안, 가까운 순 최대 3곳.
+            (fact confirmed·unverified, 영업시간 모름(unknown) 제외. 영업시간이 있으면 hours_status와 무관 §11 Q20), 닫힌 곳에서 1.5km 안(정각 포함, §11 Q5), 가까운 순 최대 3곳.
+            영업 중 = 여는 시각 ≤ 도착 < 닫는 시각 (§11 Q6).
             좌표가 없는 장소는 뺀다 (§6). Candidate는 .place_id(str), .distance_m(int, 닫힌 곳에서 직선거리 m)
 """
 
@@ -109,6 +110,13 @@ def test_T8_B2_AC4_닫힌_곳에서_1_5km_안만(east, inside):
     assert ids(pick([cafe("A01", east)])) == (["A01"] if inside else [])
 
 
+def test_T8_B2_AC4_Q5_1_5km_정각은_안():
+    # §11 Q5: 1.5km 정각은 포함. 닫힌 곳(북 2.0km)에서 정북 1.5km (계산 거리 1500.0000000002m, 부동소수 오차만큼 넘음)
+    exact = cafe("A01", 0.0, km=3.5)
+    assert ids(pick([exact])) == ["A01"]
+    assert abs(pick([exact])[0].distance_m - 1500) <= 1
+
+
 def test_T8_B2_AC4_같은_종류만():
     found = pick([cafe("F01", 0.1, category="food"), cafe("A01", 0.5), cafe("M01", 0.2, category="museum")])
     assert ids(found) == ["A01"]
@@ -123,6 +131,13 @@ def test_T8_B2_AC4_영업시간_모름_unknown은_뺀다():
 @pytest.mark.parametrize("status", ["confirmed", "unverified"])
 def test_T8_B2_확인됨과_미확인은_후보(status):
     assert ids(pick([cafe("A01", 0.5, status=status)])) == ["A01"]
+
+
+def test_T8_B2_Q20_영업시간이_있으면_hours_status가_unknown이어도_후보():
+    # §11 Q20: 화면 사실 기준(영업시간 있음 → unverified, TASK-003 Q9·10)으로 넣는다. 빼는 것은 영업시간 자체가 없는 곳
+    odd = cafe("A01", 0.5, status="unknown")
+    assert (odd.hours is not None, odd.hours_status) == (True, "unknown")  # 시험 자체 확인
+    assert ids(pick([odd])) == ["A01"]
 
 
 def test_T8_B2_코스에_있는_곳은_뺀다():
@@ -161,12 +176,13 @@ def hours_on(weekday: int, open_at: str, close_at: str) -> list[Opening]:
         ("12:00", "20:00", True),  # 도착 시각에 막 연다
         ("12:01", "20:00", False),  # 도착 1분 뒤에 연다
         ("08:00", "12:01", True),  # 도착 1분 뒤에 닫는다
+        ("08:00", "12:00", False),  # 도착 시각에 닫는다 (§11 Q6: 도착 < 닫는 시각)
         ("08:00", "11:59", False),  # 도착 1분 전에 닫았다
     ],
-    ids=["여는_정각", "여는_1분_전", "닫기_1분_전", "닫은_1분_뒤"],
+    ids=["여는_정각", "여는_1분_전", "닫기_1분_전", "닫는_정각", "닫은_1분_뒤"],
 )
-def test_T8_B2_AC4_예정_도착_시각에_영업_중인_곳만(open_at, close_at, inside):
-    # 닫는 시각 정각(도착 = close)은 문서에 없어 질문으로 남겼다
+def test_T8_B2_AC4_Q6_예정_도착_시각에_영업_중인_곳만(open_at, close_at, inside):
+    # §11 Q6: 영업 중 = 여는 시각 ≤ 도착 < 닫는 시각
     alt = cafe("A01", 0.5, hours=hours_on(WEDNESDAY, open_at, close_at))
     assert ids(pick([alt], arrive_min=NOON)) == (["A01"] if inside else [])
 
@@ -235,7 +251,7 @@ def _build(specs) -> tuple[list[Place], set[str]]:
 def _eligible(p: Place, exclude: set[str], arrive: int) -> bool:
     if p.id in exclude or p.id == CLOSED.id or p.category != CLOSED.category or p.hours is None:
         return False
-    within = _distance_m(CLOSED, p) < 1500 - 1  # 1.5km 정각 근처(±1m)는 질문이라 속성에서 판정하지 않는다
+    within = _distance_m(CLOSED, p) < 1500 - 1  # 1.5km 정각 근처(±1m)는 정각 테스트가 따로 본다 (§11 Q5)
     is_open = any(o.weekday == WEDNESDAY and int(o.open[:2]) * 60 + int(o.open[3:]) <= arrive < int(o.close[:2]) * 60 + int(o.close[3:]) for o in p.hours)
     return within and is_open
 
@@ -256,8 +272,8 @@ def test_T8_B2_속성_결과는_규칙을_지키고_가까운_순_최대_3곳(sp
         assert p.id not in exclude
         assert p.hours is not None  # unknown 제외
         assert _distance_m(CLOSED, p) <= 1500 + 1
-        # 영업 중: 여는 시각 ≤ 도착 (닫는 정각은 질문이라 ≤ close로 느슨하게)
-        assert any(o.weekday == WEDNESDAY and int(o.open[:2]) * 60 <= arrive <= int(o.close[:2]) * 60 for o in p.hours)
+        # 영업 중: 여는 시각 ≤ 도착 < 닫는 시각 (§11 Q6)
+        assert any(o.weekday == WEDNESDAY and int(o.open[:2]) * 60 <= arrive < int(o.close[:2]) * 60 for o in p.hours)
     # 빠뜨리지 않는다: 조건을 확실히 만족하는데 결과에 없으면, 결과가 이미 3곳이고 모두 그보다 가깝다
     for p in places:
         if _eligible(p, exclude, arrive) and p.id not in ids(found):
