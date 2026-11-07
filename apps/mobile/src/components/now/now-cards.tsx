@@ -3,9 +3,10 @@
 import { Linking, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { PrimaryButton } from '@/components/planning/primary-button';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { StatusChip } from '@/components/planning/status-chip';
-import type { NowCard, NowCourseItem } from '@/lib/now-api';
+import type { NowCard, NowCourseItem, NowProposal } from '@/lib/now-api';
 import { todayHoursText } from '@/lib/today-hours-text';
 import { layout } from '@/planning/layout';
 import { color, radius, space, text } from '@/planning/theme';
@@ -33,14 +34,38 @@ function BigMinutes({ value, unit }: { value: number; unit: string }) {
   );
 }
 
+function ProposalBox({ proposal, onAccept }: { proposal: NowProposal; onAccept: () => void }) {
+  return (
+    <View testID={`proposal-${proposal.proposal_id}`} style={styles.proposal}>
+      <Text style={text('body')}>{proposal.reason}</Text>
+      {proposal.dropped.length > 0 ? (
+        <View style={styles.chips}>
+          {proposal.dropped.map((place) => (
+            <View key={place.place_id} style={styles.dropChip}>
+              <Text style={text('caption')}>{place.name}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      <Text style={text('caption', 'muted')}>{`${proposal.first_leave_at}에 출발`}</Text>
+      <PrimaryButton testID={`proposal-accept-${proposal.proposal_id}`} label="이걸로" onPress={onAccept} />
+    </View>
+  );
+}
+
 export function NowCardView({
   card,
   main,
   onOpenFailed,
+  onAccept,
+  onDismiss,
 }: {
   card: NowCard;
   main: boolean;
   onOpenFailed: () => void;
+  /** T-04 [이걸로] / [그대로 갈래]: 고르기 전에는 아무것도 바뀌지 않는다 (FR-13) */
+  onAccept?: (proposalId: string) => void;
+  onDismiss?: (eventId: string) => void;
 }) {
   switch (card.type) {
     case 'T-01':
@@ -96,6 +121,22 @@ export function NowCardView({
           ))}
         </Shell>
       );
+    case 'T-04':
+      return (
+        <Shell id="card-T-04" main={main}>
+          <Text style={text('label', 'muted')}>일정이 늦어졌어</Text>
+          <Text style={text('title')}>{`${card.delay_min}분 늦어지고 있어`}</Text>
+          {card.proposals.length === 0 ? (
+            <Text style={text('body')}>{`어떻게 해도 ${card.fixed ? card.fixed.title : '일정'}에 늦어`}</Text>
+          ) : card.fixed ? (
+            <Text style={text('body')}>{`${card.fixed.title} ${card.fixed.start}은 지킬게`}</Text>
+          ) : null}
+          {card.proposals.map((proposal) => (
+            <ProposalBox key={proposal.proposal_id} proposal={proposal} onAccept={() => onAccept?.(proposal.proposal_id)} />
+          ))}
+          <SecondaryButton testID="event-dismiss" label="그대로 갈래" onPress={() => onDismiss?.(card.event_id)} />
+        </Shell>
+      );
     case 'T-07':
       return (
         <Shell id="card-T-07" main={main}>
@@ -133,6 +174,9 @@ const styles = StyleSheet.create({
   sub: { backgroundColor: color['bg-2'], borderRadius: radius['r-lg'], padding: space['space-4'] },
   grow: { flexShrink: 1, flexGrow: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], flexWrap: 'wrap' },
+  proposal: { backgroundColor: color.surface, borderRadius: radius['r-md'], padding: space['space-3'], gap: space['space-2'] },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['space-2'] },
+  dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },
   big: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },
   restRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], minHeight: layout.courseRow },
   restTime: { ...text('num-md'), width: layout.timeColumn },

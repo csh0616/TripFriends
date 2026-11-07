@@ -10,7 +10,9 @@
     "src/lib/today-hours-text.ts",
     "src/lib/project-route.ts",
     "src/lib/placeholder-for.ts",
-    "src/lib/contrast.ts"
+    "src/lib/contrast.ts",
+    "src/lib/fake-position.ts",
+    "src/lib/demo-clock.ts"
   ],
   "reporters": [
     "clear-text",
@@ -31,7 +33,8 @@
         "./jest.setup.ts"
       ],
       "testMatch": [
-        "<rootDir>/__tests__/planning-lib.test.ts"
+        "<rootDir>/__tests__/planning-lib.test.ts",
+        "<rootDir>/__tests__/fake-position.test.ts"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",

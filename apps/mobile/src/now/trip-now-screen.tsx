@@ -21,8 +21,8 @@ import { SosButton } from '@/components/planning/sos-button';
 import { SosSheet } from '@/components/planning/sos-sheet';
 import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBOUNCE_MS, toMinutes } from '@/lib/demo-clock';
 import { fakePosition } from '@/lib/fake-position';
-import { nowRequest, type NowCard, type NowParams, type NowView } from '@/lib/now-api';
-import { send, type DaySummary } from '@/lib/planning-api';
+import { acceptRequest, checkRequest, dismissRequest, nowRequest, type NowCard, type NowParams, type NowView } from '@/lib/now-api';
+import { send, type DaySummary, type Request, type Result } from '@/lib/planning-api';
 import { layout } from '@/planning/layout';
 import { color, control, radius, shadow, space, text } from '@/planning/theme';
 
@@ -36,6 +36,13 @@ const MAP_FAILED = '지도를 불러오지 못했어';
 const OPEN_FAILED = '구글 지도를 열 수 없어';
 const INPUT_HINT = '곧 말로도 바꿀 수 있어';
 const TOAST_MS = 2000;
+const ACCEPTED_NOTE = '바꾼 일정으로 안내할게'; // §11 Q15: 서버 reason 대신 앱이 accept 직후에만
+const STALE_NOTE = '시간이 지나서 다시 찾아봤어'; // §6: accept 409 stale 뒤
+const DELAY_STEP_MIN = 10; // C2
+const DELAY_MAX_MIN = 60;
+
+/** 시각이 바뀔 때는 POST check(위치는 본문), 재실행·되돌림은 GET now (위치 없음). C1 */
+type Call = { kind: 'now' | 'check'; params: NowParams };
 const MAX_CARDS = 4; // SCREEN-001 §2·§5: 메인 1 + 보조 최대 3
 
 type Problem = 'offline' | 'oops' | 'no_course';
@@ -112,11 +119,17 @@ export function TripNowScreen({
   const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [areaHeight, setAreaHeight] = useState(0);
+  const [delay, setDelay] = useState(0); // C2: 위치만 이만큼 앞 시각 자리
+  const [note, setNote] = useState<string | null>(null);
+  const [sheetIndex, setSheetIndex] = useState(1);
 
   const alive = useRef(true);
   const signals = useRef(new Set<AbortController>());
   const seq = useRef(0); // 마지막으로 보낸 요청 번호: 앞 요청의 늦은 응답은 버린다 (B8)
-  const last = useRef<NowParams | null>(null);
+  const last = useRef<Call | null>(null);
+  const lastCheck = useRef<NowParams | null>(null); // accept 409 stale 뒤 같은 시각·위치로 다시 묻는다
+  const delayRef = useRef(0);
+  const busy = useRef(false); // 이걸로·그대로 갈래 요청 중에는 다시 받지 않는다
   const viewRef = useRef<NowView | null>(null);
   const homeMin = useRef<number | null>(null);
   const positioned = useRef(false); // §12 R7: 첫 응답 뒤 위치를 넣어 한 번 더
@@ -127,6 +140,7 @@ export function TripNowScreen({
 
   const at = atOf(day.date, minutes);
   currentAt.current = at;
+  delayRef.current = delay;
 
   useEffect(() => {
     alive.current = true;
@@ -143,70 +157,110 @@ export function TripNowScreen({
     (when: string): { lat?: number; lng?: number } => {
       const now = viewRef.current;
       if (!now || now.pins.length === 0) return {};
-      const spot = fakePosition(when, {
+      // C2: 지연 중이면 "아직 앞 장소에 있는" 시각의 위치 (at − delay_offset)
+      const shifted = minutesOfAt(when);
+      const spot = fakePosition(shifted === null ? when : atOf(day.date, Math.max(0, shifted - delayRef.current)), {
         lodging: day.lodging,
         go_home_min: homeMin.current,
         items: now.pins.map((pin) => ({ lat: pin.lat, lng: pin.lng, start: pin.start, end: pin.end, travel_min: pin.travel_min })),
       });
       return spot ? { lat: spot.lat, lng: spot.lng } : {};
     },
-    [day.lodging],
+    [day.lodging, day.date],
   );
 
+  /** 응답(성공·실패)을 화면에 반영한다. 반영했으면 true */
+  const show = useCallback((result: Result, shownNote: string | null): boolean => {
+    if (!result.ok) {
+      const failure = result.failure;
+      if (failure.kind === 'not_found' && failure.resource === 'day') {
+        onExit(); // 이 날이 서버에 없다: 저장값을 지우고 S0, 안내 없음
+        return false;
+      }
+      if (failure.kind === 'network') setProblem('offline');
+      else if (failure.kind === 'not_found' && failure.resource === 'course') setProblem('no_course');
+      else setProblem('oops'); // 500, 400, course가 아닌 404, 409 (§11 Q22)
+      return false;
+    }
+    if (!isNowView(result.data)) {
+      setProblem('oops');
+      return false;
+    }
+    const data = result.data;
+    for (const card of [data.main, ...data.subs]) if (card.type === 'T-08') homeMin.current = card.go_home_min;
+    viewRef.current = data;
+    setView(data);
+    setNote(shownNote);
+    setProblem(null);
+    return true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchNow = useCallback(
-    async (params: NowParams): Promise<void> => {
+    async (call: Call, shownNote: string | null = null): Promise<void> => {
       seq.current += 1;
       const mine = seq.current;
-      last.current = params;
-      const result = await send(nowRequest(record.day_id, params), signals.current);
+      last.current = call;
+      if (call.kind === 'check') lastCheck.current = call.params;
+      const request = call.kind === 'check' ? checkRequest(record.day_id, call.params) : nowRequest(record.day_id, call.params.at);
+      const result = await send(request, signals.current);
       if (!alive.current || mine !== seq.current) return;
-      if (!result.ok) {
-        const failure = result.failure;
-        if (failure.kind === 'not_found' && failure.resource === 'day') {
-          onExit(); // 이 날이 서버에 없다: 저장값을 지우고 S0, 안내 없음
-          return;
-        }
-        if (failure.kind === 'network') setProblem('offline');
-        else if (failure.kind === 'not_found' && failure.resource === 'course') setProblem('no_course');
-        else setProblem('oops'); // 500, 400, course가 아닌 404, 409 (§11 Q22)
-        return;
-      }
-      if (!isNowView(result.data)) {
-        setProblem('oops');
-        return;
-      }
-      const data = result.data;
-      for (const card of [data.main, ...data.subs]) if (card.type === 'T-08') homeMin.current = card.go_home_min;
-      viewRef.current = data;
-      setView(data);
-      setProblem(null);
-      if (!positioned.current) {
+      if (!show(result, shownNote)) return;
+      const data = viewRef.current;
+      if (!positioned.current && data) {
         positioned.current = true;
-        // 같은 시각으로 위치를 넣어 한 번 더 (같은 시각이 아직 화면에 남아 있을 때만)
-        if (data.pins.length > 0 && params.at === currentAt.current && params.lat === undefined) {
-          const position = positionFor(params.at);
-          if (position.lat !== undefined) void fetchNow({ at: params.at, ...position });
+        // §11 Q5·§12 R7: GET /now로 화면을 받은 뒤, 같은 시각으로 위치를 넣어 check를 한 번 (같은 시각이 아직 화면에 남아 있을 때만)
+        if (call.kind === 'now' && data.pins.length > 0 && call.params.at === currentAt.current) {
+          const position = positionFor(call.params.at);
+          if (position.lat !== undefined) void fetchNow({ kind: 'check', params: { at: call.params.at, ...position } });
         }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [record.day_id, positionFor],
+    [record.day_id, positionFor, show],
   );
+
+  /** [이걸로]·[그대로 갈래]: 같은 요청을 다시 보내지 않는다 (이미 반영됐을 수 있다, §6) */
+  const decide = async (request: Request, accepted: boolean): Promise<void> => {
+    if (busy.current) return;
+    busy.current = true;
+    seq.current += 1;
+    const mine = seq.current;
+    const result = await send(request, signals.current);
+    busy.current = false;
+    if (!alive.current || mine !== seq.current) return;
+    if (result.ok) {
+      show(result, accepted ? ACCEPTED_NOTE : null);
+      return;
+    }
+    const failure = result.failure;
+    const now: Call = { kind: 'now', params: { at: currentAt.current } };
+    if (failure.kind === 'conflict' && failure.reason === 'stale' && accepted) {
+      const again = lastCheck.current ?? { at: currentAt.current, ...positionFor(currentAt.current) };
+      await fetchNow({ kind: 'check', params: again }, STALE_NOTE);
+    } else if (failure.kind === 'network' || failure.kind === 'conflict') {
+      await fetchNow(now);
+    } else {
+      show(result, null);
+      last.current = now; // 다시는: 요청을 다시 보내지 않고 지금 상태를 받는다
+    }
+  };
 
   // 시각이 바뀔 때마다 서버에 다시 묻는다. 처음 한 번은 바로, 그 뒤는 300ms 디바운스 (B8)
   const firstRun = useRef(true);
   useEffect(() => {
     onAtChange(at);
-    const run = () => void fetchNow({ at, ...positionFor(at) });
+    // 첫 요청은 GET /now (위치 없음), 그 뒤 시각·지연이 바뀔 때는 POST /check
     if (firstRun.current) {
       firstRun.current = false;
-      run();
+      void fetchNow({ kind: 'now', params: { at } });
       return undefined;
     }
+    const run = () => void fetchNow({ kind: 'check', params: { at, ...positionFor(at) } });
     const timer = setTimeout(run, NOW_DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [at]);
+  }, [at, delay]);
 
   // 재생: 1초에 5분. 하루 끝에서 멈춘다 (§11 Q22)
   useEffect(() => {
@@ -236,6 +290,9 @@ export function TripNowScreen({
   const retry = () => {
     if (last.current) void fetchNow(last.current);
   };
+
+  const accept = (proposalId: string) => void decide(acceptRequest(proposalId), true);
+  const dismiss = (eventId: string) => void decide(dismissRequest(eventId), false);
 
   const showToast = () => {
     setToast(OPEN_FAILED);
@@ -357,29 +414,35 @@ export function TripNowScreen({
                 playing={playing}
                 onMinutes={setMinutes}
                 onPlus={() => setMinutes((now) => Math.min(endMin, now + DEMO_PLUS_MIN))}
+                delay={delay}
+                onDelay={() => setDelay((now) => Math.min(DELAY_MAX_MIN, now + DELAY_STEP_MIN))}
+                onDelayReset={() => setDelay(0)}
                 onTogglePlay={() => setPlaying((now) => !now)}
               />
             ) : null
           ) : null}
-          <View pointerEvents="box-none" style={styles.floatRow}>
-            {record.demo || __DEV__ ? (
-              <SecondaryButton small testID="demo-toggle" label={demoOpen ? '데모 접기' : '데모'} onPress={() => setDemoOpen((now) => !now)} />
-            ) : (
-              <View />
-            )}
-            <Pressable
-              testID="my-location-button"
-              accessibilityRole="button"
-              accessibilityLabel="내 위치"
-              disabled={position === null}
-              onPress={() => {
-                if (position) mapRef.current?.moveTo({ latitude: position.lat, longitude: position.lng });
-              }}
-              style={[styles.locate, position === null && styles.locateOff]}
-            >
-              <LocateIcon color={position === null ? color.muted : color.ink} />
-            </Pressable>
-          </View>
+          {/* F3: 시트가 가장 높을 때 [데모]·[내 위치]는 숨긴다 (열린 패널은 시트 뒤로 간다) */}
+          {sheetIndex < snapPoints.length - 1 ? (
+            <View pointerEvents="box-none" style={styles.floatRow}>
+              {record.demo || __DEV__ ? (
+                <SecondaryButton small testID="demo-toggle" label={demoOpen ? '데모 접기' : '데모'} onPress={() => setDemoOpen((now) => !now)} />
+              ) : (
+                <View />
+              )}
+              <Pressable
+                testID="my-location-button"
+                accessibilityRole="button"
+                accessibilityLabel="내 위치"
+                disabled={position === null}
+                onPress={() => {
+                  if (position) mapRef.current?.moveTo({ latitude: position.lat, longitude: position.lng });
+                }}
+                style={[styles.locate, position === null && styles.locateOff]}
+              >
+                <LocateIcon color={position === null ? color.muted : color.ink} />
+              </Pressable>
+            </View>
+          ) : null}
         </Animated.View>
 
         <BottomSheet
@@ -387,6 +450,7 @@ export function TripNowScreen({
           // 기본값(true)이면 시트 안 카드가 하나로 묶여 보조 기술·자동 확인에 낱개로 안 보인다
           accessible={false}
           snapPoints={snapPoints}
+          onChange={setSheetIndex}
           animatedPosition={sheetTop}
           enableDynamicSizing={false}
           style={shadow.sheet}
@@ -397,13 +461,13 @@ export function TripNowScreen({
             {view ? (
               <>
                 <View testID="now-main" style={styles.mainBox}>
-                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} /> : null}
+                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} onAccept={accept} onDismiss={dismiss} /> : null}
                   <View testID="now-reason">
-                    <Text style={text('caption', 'muted')}>{view.reason}</Text>
+                    <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
                   </View>
                 </View>
                 {subCards.map((card, index) => (
-                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} />
+                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} onAccept={accept} onDismiss={dismiss} />
                 ))}
               </>
             ) : problem === null ? (
