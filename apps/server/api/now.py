@@ -2,13 +2,10 @@
 
 import re
 from datetime import datetime
-from typing import Annotated
-
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Request
 
 from api.planning import _doc
 from planning.service import PlanningError
-from trip.now import build_now_view
 from trip.schemas import NowView
 
 router = APIRouter()
@@ -33,28 +30,9 @@ def parse_at(raw: str | None) -> datetime:
 @router.get(
     "/days/{day_id}/now",
     responses=_doc(400, 404),
-    summary="여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 저장하지 않음)",
+    summary="여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 받지 않음, 위치는 POST /check)",
 )
-def get_now(
-    day_id: str,
-    request: Request,
-    at: str | None = None,
-    lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
-    lng: Annotated[float | None, Query(ge=-180, le=180)] = None,
-) -> NowView:
+def get_now(day_id: str, request: Request, at: str | None = None) -> NowView:
     # 순서 (TASK-003 Q40, TASK-006 R9): 쿼리 형식 400 -> 없는 날 404 -> 고른 코스 없음 404 -> 하루 밖 날짜 400
-    when = parse_at(at)
-    if (lat is None) != (lng is None):
-        raise _bad("lat과 lng는 함께 보내요")
-    repo = request.app.state.planning_service.repo
-    day = repo.get_day(day_id)
-    if day is None:
-        raise PlanningError("NOT_FOUND", "없는 날이에요", {"resource": "day", "day_id": day_id})
-    option_id = repo.chosen_option(day_id)
-    option = repo.get_option(option_id) if option_id else None
-    if option is None:
-        raise PlanningError("NOT_FOUND", "고른 코스가 없어요", {"resource": "course", "day_id": day_id})
-    if when.date() != day.plan.date:
-        raise _bad("at이 그날이 아니에요")  # Q7: 날짜 그대로 비교
-    position = (lat, lng) if lat is not None and lng is not None else None
-    return build_now_view(day_id, day, option.course, when, position, repo.stay_overrides(option.session_id))
+    # TASK-007 B-4: lat·lng 쿼리는 받지 않는다 (보내도 무시)
+    return request.app.state.trip_service.now(day_id, parse_at(at))

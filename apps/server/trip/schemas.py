@@ -51,6 +51,45 @@ class NowCardT03(BaseModel):
     items: list[NowCourseItem]
 
 
+class NowDropped(BaseModel):
+    place_id: str
+    name: str
+
+
+class NowProposal(BaseModel):
+    """늦어짐 대안 한 개 (TASK-007 B-5). items = 제안대로 바뀌는 남은 일정."""
+
+    proposal_id: str
+    label: Literal["relaxed", "packed"]
+    reason: str
+    dropped: list[NowDropped]
+    keeps_fixed: bool
+    first_leave_at: str
+    items: list[NowCourseItem]
+
+
+class NowEvent(BaseModel):
+    event_id: str
+    type: Literal["delay"] = "delay"
+    severity: Literal["low", "high"]
+    delay_min: int
+    state: Literal["open_low", "awaiting", "resolved"]
+    proposals: list[NowProposal]
+
+
+class NowT04Fixed(BaseModel):
+    title: str
+    start: str
+
+
+class NowCardT04(BaseModel):
+    type: Literal["T-04"] = "T-04"
+    event_id: str
+    delay_min: int
+    proposals: list[NowProposal]
+    fixed: NowT04Fixed | None
+
+
 class NowCardT07(BaseModel):
     type: Literal["T-07"] = "T-07"
     fixed: NowFixed
@@ -65,7 +104,7 @@ class NowCardT08(BaseModel):
     map_url: str
 
 
-NowCard = Annotated[NowCardT01 | NowCardT02 | NowCardT03 | NowCardT07 | NowCardT08, Field(discriminator="type")]
+NowCard = Annotated[NowCardT01 | NowCardT02 | NowCardT03 | NowCardT04 | NowCardT07 | NowCardT08, Field(discriminator="type")]
 
 
 class NowPin(BaseModel):
@@ -97,3 +136,4 @@ class NowView(BaseModel):
     pins: list[NowPin]
     route: NowRoute
     position: LatLng | None
+    event: NowEvent | None = None  # TASK-007 B-5: 지금 열린 사건 (처리 끝난 사건은 accept·dismiss 응답에만)

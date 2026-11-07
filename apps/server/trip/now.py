@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, time
 from typing import Literal
 
-from engine.compose import REASONS, FixedEvent, PlanItem, Screen, Snapshot, compose_screen
+from engine.compose import REASONS, FixedEvent, OpenEvent, PlanItem, Screen, Snapshot, compose_screen
 from engine.models import CourseOption, Place
 from planning.presenter import _opening_fact, day_summary
 from planning.repo import DayRecord
@@ -19,20 +19,31 @@ from trip.schemas import (
     NowCardT01,
     NowCardT02,
     NowCardT03,
+    NowCardT04,
     NowCardT07,
     NowCardT08,
     NowCourseItem,
+    NowDropped,
+    NowEvent,
     NowFixed,
     NowPin,
+    NowProposal,
     NowRoute,
+    NowT04Fixed,
     NowView,
 )
+from trip.repo import EventRecord, ProposalRecord
 
 log = logging.getLogger(__name__)
 
-SUPPORTED = ("T-01", "T-02", "T-03", "T-07", "T-08")  # A3: 이번에 만드는 카드
+SUPPORTED = ("T-01", "T-02", "T-03", "T-04", "T-07", "T-08")  # A3: 이번에 만드는 카드 (T-04: TASK-007)
 STATUS_TEXT = {"on_track": "동선대로 가는 중", "delayed": "늦어지는 중", "free": "다음까지 여유 있음"}
-DAY_OVER_REASON = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1
+DAY_OVER_REASON = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1, TASK-007 F2
+DAY_OVER_PILL = "오늘 일정 끝"  # TASK-007 F1
+
+
+def delayed_text(delay_min: int) -> str:
+    return f"{delay_min}분 늦어지는 중"  # TASK-007 B-5
 EMPTY_COURSE_REASON = "오늘 코스가 비어 있어"  # §11 Q13
 T01_PAIRS = ("T-02", "T-03")  # SCREEN-001 §5 짝 표: T-01의 보조
 
@@ -136,7 +147,7 @@ def _moment(entries: list[_Entry], now_min: int) -> _Moment:
     return _Moment(now_min, current, following, upcoming_fixed, remaining, after_leave, between)
 
 
-def _snapshot(m: _Moment) -> Snapshot:
+def _snapshot(m: _Moment, delayed: bool = False) -> Snapshot:
     """A2: 이번에 안 만드는 카드로 가는 신호는 중립값 (+ Q25).
 
     moving: 일정 사이(쉬는 시간 포함)면 True. 쉬는 시간도 메인이 T-02여야 해서(R2) compose의 "이동 중" 입구를 이렇게 쓴다.
@@ -148,7 +159,7 @@ def _snapshot(m: _Moment) -> Snapshot:
         current_item=_plan_item(m.current) if m.current else None,
         next_item=_plan_item(m.following) if m.following else None,
         fixed_event=FixedEvent(name=fixed.name, leave_by=_time(fixed.leave_min)) if fixed else None,
-        open_events=[],
+        open_events=[OpenEvent(kind="delay")] if delayed else [],  # B-5: awaiting 사건만 (open_low는 알약만)
         meal_eaten=True,
         rain_prob_2h=0,
         walked_km=0,
@@ -174,7 +185,9 @@ def _transit_url(lat: float, lng: float) -> str:
     return f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}&travelmode=transit"
 
 
-def _card(kind: str, m: _Moment, entries: list[_Entry], course: CourseOption, day: DayRecord, weekday: int) -> NowCard | None:
+def _card(
+    kind: str, m: _Moment, entries: list[_Entry], course: CourseOption, day: DayRecord, weekday: int, event: NowEvent | None = None
+) -> NowCard | None:
     """카드 값 채우기 (A4). 지금 이 카드를 만들 수 없으면 None."""
     if kind == "T-01":
         entry = m.current or m.following  # 하루 시작 전 미리보기는 1번 (ends_in_min=null)
@@ -196,6 +209,16 @@ def _card(kind: str, m: _Moment, entries: list[_Entry], course: CourseOption, da
     if kind == "T-03":
         later = [e for e in entries if e.start_min > m.now_min]  # 지금 일정 제외
         return NowCardT03(items=[_view(e, weekday) for e in later])
+    if kind == "T-04":
+        if event is None:
+            return None
+        upcoming = m.upcoming_fixed
+        return NowCardT04(
+            event_id=event.event_id,
+            delay_min=event.delay_min,
+            proposals=event.proposals,
+            fixed=NowT04Fixed(title=upcoming.title, start=upcoming.start) if upcoming else None,
+        )
     if kind == "T-07":
         fixed = m.upcoming_fixed
         if fixed is None:
@@ -263,6 +286,7 @@ def build_now_view(
     at: datetime,
     position: tuple[float, float] | None,
     stay_overrides: dict[str, int] | None = None,
+    event: NowEvent | None = None,
 ) -> NowView:
     """at는 시간대 없는 그날의 시각. 날짜 검사는 부르는 쪽 몫."""
     summary = day_summary(day_id, day, stay_overrides)
@@ -271,25 +295,35 @@ def build_now_view(
     now_min = at.hour * 60 + at.minute
     entries = _entries(day, course)
     m = _moment(entries, now_min)
-    screen = compose_screen(_snapshot(m))
+    open_low = event is not None and event.state == "open_low"
+    awaiting = event is not None and event.state == "awaiting"
+    screen = compose_screen(_snapshot(m, awaiting))
 
     main_kind, subs_kinds, reason = _decide(screen, m, entries)
-    main = _card(main_kind, m, entries, course, day, weekday)
+    main = _card(main_kind, m, entries, course, day, weekday, event)
     if main is None:  # 만들 수 없는 카드는 T-01로 (A3와 같은 안전장치)
         main_kind, subs_kinds, reason = _replace_with_t01(main_kind, screen)
         main = _card("T-01", m, entries, course, day, weekday)
+    day_over = m.current is None and m.following is None
+    if event is not None and (open_low or awaiting):
+        status, status_text = "delayed", delayed_text(event.delay_min)  # B-5
+    elif day_over:
+        status, status_text = screen.move_status, DAY_OVER_PILL  # F1
+    else:
+        status, status_text = screen.move_status, STATUS_TEXT[screen.move_status]
     assert main is not None  # 코스가 비지 않았고 하루가 끝나지 않았다면 지금 일정이나 다음 일정이 있다
     return NowView(
         day=summary,
         at=at.isoformat(),
-        status=screen.move_status,
-        status_text=STATUS_TEXT[screen.move_status],
+        status=status,
+        status_text=status_text,
         reason=reason,
         main=main,
         subs=_subs(subs_kinds, m, entries, course, day, weekday),
         pins=_pins(entries, m),
         route=_route(entries, m, home, position),
         position=LatLng(lat=position[0], lng=position[1]) if position else None,
+        event=event,
     )
 
 
@@ -307,6 +341,26 @@ def _decide(screen: Screen, m: _Moment, entries: list[_Entry]) -> tuple[str, lis
     day_over = m.current is None and m.following is None
     if not entries:
         return "T-08", [], EMPTY_COURSE_REASON  # Q13: 빈 코스를 고른 날
-    if day_over and kind == "T-01":
-        return "T-08", [], DAY_OVER_REASON  # Q1: 마지막 일정이 끝나면 시각과 무관하게 T-08 (compose는 18시 전이면 T-01)
+    if day_over and kind in ("T-01", "T-08"):
+        return "T-08", [], DAY_OVER_REASON  # Q1·F2: 마지막 일정이 끝나면 시각과 무관하게 T-08, 이유는 문장 하나 (compose는 18시 전이면 T-01)
     return kind, subs, reason
+
+
+def event_view(record: EventRecord, proposals: list[ProposalRecord], day: DayRecord) -> NowEvent:
+    """저장된 사건·제안 -> 응답. 이름·일정은 코스와 장소 데이터에서만 가져온다 (LLM 없음)."""
+    weekday = day.plan.date.weekday()
+    views = []
+    for p in proposals:
+        entries = _entries(day, p.course)[p.from_index :]
+        views.append(
+            NowProposal(
+                proposal_id=p.proposal_id,
+                label=p.label,
+                reason=p.reason,
+                dropped=[NowDropped(place_id=pid, name=day.places[pid].name) for pid in p.dropped],
+                keeps_fixed=p.keeps_fixed,
+                first_leave_at=p.first_leave_at,
+                items=[_view(e, weekday) for e in entries],
+            )
+        )
+    return NowEvent(event_id=record.event_id, severity=record.severity, delay_min=record.delay_min, state=record.state, proposals=views)

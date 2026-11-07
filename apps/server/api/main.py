@@ -14,10 +14,13 @@ from pydantic import BaseModel
 from catalog import get_catalog
 from deciders import JevDecider, RuleDecider
 from api.now import router as now_router
+from api.trip import router as trip_router
 from api.planning import drop_default_422, http_error_response, is_planning_path, planning_error_handler, planning_validation_handler, router as planning_router
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
 from planning.repo import MemoryPlanningRepo
+from trip.repo import MemoryTripRepo
+from trip.service import TripService
 from planning.schemas import ErrorResponse, SeedChosenResult, SeedRequest, SeedResult
 from planning.service import PlanningError, PlanningService
 
@@ -44,6 +47,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.planning_repo = MemoryPlanningRepo()
     app.state.planning_graph = build_planning_graph(app.state.planning_repo)
     app.state.planning_service = PlanningService(app.state.planning_repo, app.state.planning_graph)
+    app.state.trip_repo = MemoryTripRepo()  # TASK-007: 사건·제안
+    app.state.trip_service = TripService(app.state.trip_repo, app.state.planning_repo)
+    app.state.trip_graph = app.state.trip_service.graph  # G2, 스레드 ID = 사건 ID
     app.state.jev = None
     if os.environ.get("AI_GATEWAY_API_KEY"):
         # Jev가 답하지 못하면 되묻기 (SCREEN-001 §4-3 5번)
@@ -91,6 +97,7 @@ async def unexpected_error_handler(request: Request, exc: Exception):
 
 app.include_router(planning_router)
 app.include_router(now_router)
+app.include_router(trip_router)
 
 _default_openapi = app.openapi
 
