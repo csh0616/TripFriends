@@ -164,10 +164,61 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 저장하지 않음) */
+        /** 여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 받지 않음, 위치는 POST /check) */
         get: operations["get_now_days__day_id__now_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/days/{day_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 여행 중 확인: 시각·위치로 늦어짐 감지 (위치는 저장하지 않음) */
+        post: operations["check_days__day_id__check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/proposals/{proposal_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 대안 반영 */
+        post: operations["accept_proposals__proposal_id__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/{event_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 대안 사양: 일정 그대로 */
+        post: operations["dismiss_events__event_id__dismiss_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -325,6 +376,18 @@ export interface components {
             props_schema: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * CheckRequest
+         * @description 위치는 본문으로만 (주소·로그에 남지 않게). 저장하지 않는다.
+         */
+        CheckRequest: {
+            /** At */
+            at: string;
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
         };
         /** Choice */
         Choice: {
@@ -578,6 +641,21 @@ export interface components {
             /** Items */
             items: components["schemas"]["NowCourseItem"][];
         };
+        /** NowCardT04 */
+        NowCardT04: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "T-04";
+            /** Event Id */
+            event_id: string;
+            /** Delay Min */
+            delay_min: number;
+            /** Proposals */
+            proposals: components["schemas"]["NowProposal"][];
+            fixed: components["schemas"]["NowT04Fixed"] | null;
+        };
         /** NowCardT07 */
         NowCardT07: {
             /**
@@ -628,6 +706,38 @@ export interface components {
             /** Facts */
             facts: components["schemas"]["Fact"][];
         };
+        /** NowDropped */
+        NowDropped: {
+            /** Place Id */
+            place_id: string;
+            /** Name */
+            name: string;
+        };
+        /** NowEvent */
+        NowEvent: {
+            /** Event Id */
+            event_id: string;
+            /**
+             * Type
+             * @default delay
+             * @constant
+             */
+            type: "delay";
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "low" | "high";
+            /** Delay Min */
+            delay_min: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "open_low" | "awaiting" | "resolved";
+            /** Proposals */
+            proposals: components["schemas"]["NowProposal"][];
+        };
         /**
          * NowFixed
          * @description T-07의 고정 일정. name = 장소 이름(없으면 title), title = 저장된 제목 (R4).
@@ -668,6 +778,29 @@ export interface components {
              */
             state: "done" | "now" | "next" | "later";
         };
+        /**
+         * NowProposal
+         * @description 늦어짐 대안 한 개 (TASK-007 B-5). items = 제안대로 바뀌는 남은 일정.
+         */
+        NowProposal: {
+            /** Proposal Id */
+            proposal_id: string;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "relaxed" | "packed";
+            /** Reason */
+            reason: string;
+            /** Dropped */
+            dropped: components["schemas"]["NowDropped"][];
+            /** Keeps Fixed */
+            keeps_fixed: boolean;
+            /** First Leave At */
+            first_leave_at: string;
+            /** Items */
+            items: components["schemas"]["NowCourseItem"][];
+        };
         /** NowRoute */
         NowRoute: {
             /** Done */
@@ -680,6 +813,13 @@ export interface components {
                 number,
                 number
             ][];
+        };
+        /** NowT04Fixed */
+        NowT04Fixed: {
+            /** Title */
+            title: string;
+            /** Start */
+            start: string;
         };
         /** NowView */
         NowView: {
@@ -696,15 +836,16 @@ export interface components {
             /** Reason */
             reason: string;
             /** Main */
-            main: components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"];
+            main: components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT04"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"];
             /** Subs */
-            subs: (components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"])[];
+            subs: (components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT04"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"])[];
             /** Chip */
             chip?: null;
             /** Pins */
             pins: components["schemas"]["NowPin"][];
             route: components["schemas"]["NowRoute"];
             position: components["schemas"]["LatLng"] | null;
+            event?: components["schemas"]["NowEvent"] | null;
         };
         /**
          * OpenEvent
@@ -1438,8 +1579,6 @@ export interface operations {
         parameters: {
             query?: {
                 at?: string | null;
-                lat?: number | null;
-                lng?: number | null;
             };
             header?: never;
             path: {
@@ -1474,6 +1613,148 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    check_days__day_id__check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NowView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    accept_proposals__proposal_id__accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NowView"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_events__event_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NowView"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
