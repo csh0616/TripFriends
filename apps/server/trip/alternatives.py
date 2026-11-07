@@ -197,11 +197,6 @@ def remaining_travel_min(course: CourseOption, from_index: int) -> int:
     return sum(item.travel_min for item in course.items[from_index:]) + course.go_home_min
 
 
-def closed_reason(base: str, was_must: bool) -> str:
-    """§7·§12 Q23: TASK-007 대본 그대로, 꼭 갈 곳이었으면 덧붙인다 ([빼고 가기] 이유에)."""
-    return f"{base} (꼭 갈 곳이었어)" if was_must else base
-
-
 # ---------- 닫힌 곳 자리에 그대로 넣기 (TASK-008 §14~§16) ----------
 
 
@@ -252,14 +247,3 @@ def in_place(day: DayRecord, course: CourseOption, closed_id: PlaceId, replaceme
     )
     first_leave = _hhmm(_minutes(items[0].start) - items[0].travel_min) if items else _hhmm(ready)
     return Shaped(full, index, (), True, first_leave)
-
-
-def next_fixed_title(day: DayRecord, course: CourseOption, closed_id: PlaceId) -> str | None:
-    """닫힌 곳 뒤 첫 고정 일정의 제목 (이유 문장용). 없으면 None."""
-    index = next(i for i, item in enumerate(course.items) if item.place_id == closed_id)
-    for item in course.items[index + 1 :]:
-        if item.is_fixed:
-            match = next((f for f in day.plan.fixed if f.place_id == item.place_id and f.start == item.start and f.end == item.end), None)
-            if match is not None:
-                return match.title
-    return None

@@ -31,7 +31,8 @@ from pydantic import BaseModel
 from engine.models import CourseOption, Dropped, Infeasible
 from engine.planning import compose_courses
 from planning.repo import DayRecord, OptionRecord, PlanningRepo
-from trip.alternatives import alternative_input, closed_input, closed_reason, go_home_only, in_place, next_fixed_title, reason_text, remaining_travel_min, shape
+from trip.phrase import reorder_reason, skip_reason, swap_reason
+from trip.alternatives import alternative_input, closed_input, go_home_only, in_place, reason_text, remaining_travel_min, shape
 from trip.detect import DelayFinding, is_stale
 from trip.now import event_view
 from trip.repo import ClosedInfo, EventRecord, ProposalRecord, TripRepo
@@ -182,15 +183,19 @@ def _closed_proposal(run: _Run, event_id: str, finding: ClosedFinding, replaceme
     if replacement is None:
         dropped = (finding.place_id, *dropped)  # B4: [빼고 가기]는 닫힌 곳이 빠지는 곳
         full = full.model_copy(update={"dropped": [*full.dropped, Dropped(place_id=finding.place_id, reason="closed_at_time")]})
-    names = [day.places[pid].name for pid in dropped]
-    base = reason_text(names, next_fixed_title(day, course, finding.place_id))
+    if replacement is None:
+        reason = skip_reason(day.places[finding.place_id].name, was_must)
+    elif reordered:
+        reason = reorder_reason(next(i.start for i in full.items if i.place_id == replacement))
+    else:
+        reason = swap_reason(day.places[replacement].name)
     index = shaped.from_index
     change = remaining_travel_min(full, index) - remaining_travel_min(course, index)
     return ProposalRecord(
         proposal_id=str(uuid.uuid4()),
         event_id=event_id,
         label="relaxed",  # §12 Q22
-        reason=closed_reason(base, was_must) if replacement is None else base,
+        reason=reason,
         dropped=dropped,
         keeps_fixed=shaped.keeps_fixed,
         first_leave_at=shaped.first_leave_at,
