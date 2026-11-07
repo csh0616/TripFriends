@@ -810,7 +810,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SeedResult"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SeedResult"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SeedChosenResult"
+                    }
+                  ],
+                  "title": "Response Debug Seed Demo Debug Seed Demo Post"
                 }
               }
             }
@@ -2457,6 +2465,32 @@
         ],
         "title": "Screen",
         "description": "compose_screen 출력."
+      },
+      "SeedChosenResult": {
+        "properties": {
+          "trip_id": {
+            "type": "string",
+            "title": "Trip Id"
+          },
+          "day_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Day Ids"
+          },
+          "day": {
+            "$ref": "#/components/schemas/DaySummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "trip_id",
+          "day_ids",
+          "day"
+        ],
+        "title": "SeedChosenResult",
+        "description": "`{\"chosen\": true}` 응답 (TASK-006 A5·Q1). 일반 시드 응답에는 day 키가 없다 (null도 아님)."
       },
       "SeedRequest": {
         "properties": {

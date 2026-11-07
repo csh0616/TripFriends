@@ -244,6 +244,12 @@ class SeedResult(BaseModel):
     day_ids: list[str]
 
 
+class SeedChosenResult(SeedResult):
+    """`{"chosen": true}` 응답 (TASK-006 A5·Q1). 일반 시드 응답에는 day 키가 없다 (null도 아님)."""
+
+    day: "DaySummary"
+
+
 class ErrorBody(BaseModel):
     """공통 오류 (§5). code는 NOT_FOUND·INVALID_REQUEST·STATE_CONFLICT·COURSE_INFEASIBLE·INTERNAL_ERROR 5개뿐 (§10 Q24, §10-10 R3)."""
 

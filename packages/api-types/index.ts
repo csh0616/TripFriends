@@ -856,6 +856,17 @@ export interface components {
             reason: string;
         };
         /**
+         * SeedChosenResult
+         * @description `{"chosen": true}` 응답 (TASK-006 A5·Q1). 일반 시드 응답에는 day 키가 없다 (null도 아님).
+         */
+        SeedChosenResult: {
+            /** Trip Id */
+            trip_id: string;
+            /** Day Ids */
+            day_ids: string[];
+            day: components["schemas"]["DaySummary"];
+        };
+        /**
          * SeedRequest
          * @description TASK-006 A5·Q14: JSON 본문. 본문이 없으면 예전 시드 그대로.
          */
@@ -1559,7 +1570,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SeedResult"];
+                    "application/json": components["schemas"]["SeedResult"] | components["schemas"]["SeedChosenResult"];
                 };
             };
             /** @description Validation Error */

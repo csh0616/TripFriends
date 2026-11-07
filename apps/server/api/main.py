@@ -18,7 +18,7 @@ from api.planning import drop_default_422, http_error_response, is_planning_path
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
 from planning.repo import MemoryPlanningRepo
-from planning.schemas import ErrorResponse, SeedRequest, SeedResult
+from planning.schemas import ErrorResponse, SeedChosenResult, SeedRequest, SeedResult
 from planning.service import PlanningError, PlanningService
 
 log = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ if os.environ.get("APP_ENV", "development") != "production":
 
 
     @app.post("/debug/seed-demo", status_code=201)
-    def debug_seed_demo(request: Request, body: SeedRequest | None = None) -> SeedResult:
+    def debug_seed_demo(request: Request, body: SeedRequest | None = None) -> SeedResult | SeedChosenResult:
         """개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.
         `{"chosen": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다."""
         return request.app.state.planning_service.seed(chosen=bool(body and body.chosen))
