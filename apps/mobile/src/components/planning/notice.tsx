@@ -13,14 +13,15 @@ export function Notice({
   retryDisabled,
 }: {
   message: string;
-  tone?: 'plain' | 'problem';
+  tone?: 'plain' | 'problem' | 'warn';
   onRetry?: () => void;
   retryDisabled?: boolean;
 }) {
-  const problem = tone === 'problem';
+  // warn: 연결이 끊겨 저장된 값만 보일 때의 띠 (TASK-006 §13 E5)
+  const look = tone === 'problem' ? (['alert', 'alert-bg'] as const) : tone === 'warn' ? (['warn', 'warn-bg'] as const) : (['ink', 'bg-2'] as const);
   return (
-    <View style={[styles.box, { backgroundColor: color[problem ? 'alert-bg' : 'bg-2'] }]}>
-      <Text style={[styles.message, text('body', problem ? 'alert' : 'ink')]}>{message}</Text>
+    <View style={[styles.box, { backgroundColor: color[look[1]] }]}>
+      <Text style={[styles.message, text('body', look[0])]}>{message}</Text>
       {onRetry ? <SecondaryButton small label="다시" onPress={onRetry} disabled={retryDisabled} testID="retry-button" /> : null}
     </View>
   );

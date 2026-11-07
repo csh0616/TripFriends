@@ -296,7 +296,7 @@ export function TripNowScreen({
         <View pointerEvents="box-none" style={[styles.bands, { top: bandTop + control.sos }]}>
           {problem === 'offline' ? (
             <View testID="now-band">
-              <Notice message={OFFLINE_BAND} onRetry={retry} />
+              <Notice message={OFFLINE_BAND} tone="warn" onRetry={retry} />
             </View>
           ) : null}
           {problem === 'oops' ? (

@@ -16,6 +16,7 @@ import {
   type Failure,
   type PlanningSession,
   type Request,
+  type SeedChosenResult,
   type SeedResult,
   type StageResponse,
 } from '@/lib/planning-api';
@@ -39,6 +40,7 @@ const STORAGE_KEY = 'tripfriends.planning_session_id';
 const NOW_KEY = 'tripfriends.trip_now'; // 마지막 화면이 SC-04였는지 + 하루 요약 + 마지막 데모 시각 (§11 Q16)
 const DAY_KEY = 'tripfriends.course_day'; // 코스를 고른 날의 하루 요약 (S9에서 SC-04로 갈 때 필요)
 const DEMO_KEY = 'tripfriends.demo_day'; // 시드로 만든 날 (§12 R10)
+const NOW_DEMO_START = '17:50'; // §14: 바로 보기는 고정 일정(18:30) 직전부터 시작
 
 // 사용자에게 보이는 문구 (TASK-004 §7)
 const OFFLINE = '연결이 안 돼. 다시 해 볼까?';
@@ -375,6 +377,40 @@ function Session({
     }
   }, [fail]);
 
+  // ---------- S0: [여행 중 데모 바로 보기] (개발 빌드 전용, TASK-006 §14) ----------
+  // chosen 시드의 응답 day로 둘째 날 SC-04를 그날 17:50부터 연다. 계획 세션은 시작하지 않는다
+  const startNowDemo = useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setShowRestart(false);
+    setProblem(null);
+    dispatch({ type: 'request_start' });
+    const stop = (failure: Failure) => {
+      const again = () => void startNowDemo();
+      if (failure.kind === 'network') fail(OFFLINE, { tone: 'plain', retry: again });
+      else if (failure.kind === 'invalid') {
+        console.warn('INVALID_REQUEST', 'S0');
+        fail(INVALID, { tone: 'plain', retry: null });
+      } else fail(OOPS, { tone: 'plain', retry: again });
+    };
+    try {
+      const seeded = await send(requests.seedChosen(), signals.current);
+      if (!alive.current) return;
+      if (!seeded.ok) return stop(seeded.failure);
+      const day = (seeded.data as SeedChosenResult | null)?.day;
+      if (!day || typeof day.day_id !== 'string' || typeof day.date !== 'string') return stop({ kind: 'server' });
+      lastDay.current = day;
+      demoDay.current = day.day_id;
+      void rememberQuietly(DEMO_KEY, day.day_id);
+      const record: NowRecord = { day_id: day.day_id, day, at: `${day.date}T${NOW_DEMO_START}:00`, demo: true };
+      nowRef.current = record;
+      dispatch({ type: 'request_success', response: null });
+      setNowRecord(record);
+    } finally {
+      busy.current = false;
+    }
+  }, [fail]);
+
   // ---------- 화면이 부르는 동작 ----------
   const id = () => sid.current ?? '';
   // 글(text)이 들어 있는 요청은 입력창에서 온 것: 성공하면 입력 글을 지운다
@@ -423,7 +459,7 @@ function Session({
     if (state.response === null) {
       if (sessionId === null) {
         const shown = notice ?? (showRestart && restartNotice ? { message: restartNotice, tone: 'plain' as const } : null);
-        return <S0Screen busy={busyNow} notice={shown} onStart={() => void startDemo()} />;
+        return <S0Screen busy={busyNow} notice={shown} onStart={() => void startDemo()} onStartNow={__DEV__ ? () => void startNowDemo() : undefined} />;
       }
       // 다시 켠 뒤 GET 중이거나 실패: S0으로 보내지 않는다 (Q17)
       return busyNow || !notice ? (

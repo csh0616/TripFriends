@@ -101,7 +101,8 @@ export function NowCardView({
         <Shell id="card-T-07" main={main}>
           <Text style={text('label', 'muted')}>고정 일정이 곧이야</Text>
           <View style={styles.titleRow}>
-            <Text style={[text('title'), styles.grow]}>{card.fixed.title}</Text>
+            {/* §14: 고정 일정 제목 + 시작~끝 시각 ("저녁 예약 · 18:30~19:30") */}
+            <Text style={[text('title'), styles.grow]}>{`${card.fixed.title} · ${card.fixed.start}~${card.fixed.end}`}</Text>
             <FactChip facts={card.fixed.facts} />
           </View>
           <Text style={text('body')}>{`${card.leave_by}까지 출발해야 해`}</Text>
@@ -113,6 +114,15 @@ export function NowCardView({
         <Shell id="card-T-08" main={main}>
           <Text style={text('label', 'muted')}>숙소 가는 법</Text>
           <Text style={text('title')}>{card.go_home_min > 0 ? `숙소까지 ${card.go_home_min}분` : '숙소로 돌아가자'}</Text>
+          {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
+          <SecondaryButton
+            small
+            testID="home-directions-button"
+            label="숙소로 길 안내"
+            onPress={() => {
+              Linking.openURL(card.map_url).catch(onOpenFailed);
+            }}
+          />
         </Shell>
       );
   }
