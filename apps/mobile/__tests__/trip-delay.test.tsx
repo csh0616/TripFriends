@@ -230,11 +230,12 @@ describe('C2 데모 지연', () => {
     expect(within(byId('demo-panel') as never).getByTestId('demo-delay-reset')).toBeTruthy();
   });
 
-  test('T7_C2_늦게를_누르면_같은_시각으로_check하고_위치는_10분_전_자리', async () => {
+  // §14(승현 결정): 지연 중 위치 = (at − 지연) 시각의 예정 상태, 길 위가 아니라 장소. 이동 중이면 막 떠난 앞 장소
+  test('T7_C2_S14_늦게를_누르면_같은_시각으로_check하고_위치는_10분_전에_머물던_장소', async () => {
     const control = await at1220();
     expectSentAt(control.checks().at(-1), SPOT.D20); // 지연 0: 2번 장소
     await pressDelay(1);
-    await waitFor(() => expectSentAt(control.checks().at(-1), mid(SPOT.D01, SPOT.D20))); // 12:10 = 1번과 2번 사이 가운데
+    await waitFor(() => expectSentAt(control.checks().at(-1), SPOT.D01)); // 12:10 = 1번→2번 이동 중 → 막 떠난 1번 (길 위 가운데가 아님)
     expect(control.checks().at(-1)?.at).toBe(AT('12:20'));
   });
 
@@ -245,13 +246,16 @@ describe('C2 데모 지연', () => {
     expect(control.checks().at(-1)?.at).toBe(AT('12:20'));
   });
 
-  test('T7_C2_지연은_시각이_바뀌어도_이어진다', async () => {
+  test('T7_C2_S14_지연은_시각이_바뀌어도_이어진다', async () => {
     const control = await at1220();
     await pressDelay(2);
     await waitFor(() => expectSentAt(control.checks().at(-1), SPOT.D01));
-    await pressId('demo-plus-10'); // 12:30, 지연 20 → 12:10 자리
+    await pressId('demo-plus-10'); // 12:30, 지연 20 → 12:10 = 이동 중 → 1번
     await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('12:30')));
-    expectSentAt(control.checks().at(-1), mid(SPOT.D01, SPOT.D20));
+    expectSentAt(control.checks().at(-1), SPOT.D01);
+    await pressId('demo-plus-10'); // 12:40, 지연 20 → 12:20 = 2번 시작 정각 → 2번
+    await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('12:40')));
+    expectSentAt(control.checks().at(-1), SPOT.D20);
   });
 
   test('T7_C2_지연_초기화면_지금_자리로', async () => {
@@ -263,23 +267,90 @@ describe('C2 데모 지연', () => {
     expect(control.checks().at(-1)?.at).toBe(AT('12:20'));
   });
 
-  test('T7_C2_지연은_최대_60분', async () => {
+  test('T7_C2_S14_이동_중에_지연이_0이면_길_위_가운데이고_지연을_주면_앞_장소_초기화하면_다시_길_위', async () => {
     const { control } = await toNow();
     await pressId('demo-toggle');
-    await pressPlus(19); // 13:10
-    await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('13:10')));
-    await pressDelay(6); // 60분 → 12:10 = 1번과 2번 사이 가운데
+    await pressPlus(13); // 12:10 = 1번→2번 이동 중
+    await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('12:10')));
+    expectSentAt(control.checks().at(-1), mid(SPOT.D01, SPOT.D20)); // 지연 0: fakePosition 그대로
+    await pressDelay(1); // 기준 12:00 = 1번 끝 정각 → 1번
+    await waitFor(() => expectSentAt(control.checks().at(-1), SPOT.D01));
+    await pressId('demo-delay-reset');
     await waitFor(() => expectSentAt(control.checks().at(-1), mid(SPOT.D01, SPOT.D20)));
-    await pressDelay(1); // 70분이면 12:00(1번)이겠지만 60에서 멈춘다
+  });
+
+  test('T7_C2_S14_지연은_최대_60분', async () => {
+    const { control } = await toNow();
+    await pressId('demo-toggle');
+    await pressPlus(20); // 13:20
+    await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('13:20')));
+    await pressDelay(6); // 60분 → 12:20 = 2번 시작 정각 → 2번
+    await waitFor(() => expectSentAt(control.checks().at(-1), SPOT.D20));
+    await pressDelay(1); // 70분이면 12:10(이동 중 → 1번)이겠지만 60에서 멈춘다
     await act(async () => undefined);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    expectSentAt(control.checks().at(-1), mid(SPOT.D01, SPOT.D20));
+    expectSentAt(control.checks().at(-1), SPOT.D20);
   });
 
   test('T7_C2_지연은_위치만_바꾸고_데모_시각은_그대로', async () => {
     await at1220();
     await pressDelay(3);
     expect(textOf(byId('demo-time').queryAll((h) => h.type === 'Text')[0])).toBe('12:20');
+  });
+});
+
+// ---------- §14 시드 코스 시나리오 (§13 데모 13:05 → [+10분 늦게] → 13:15) ----------
+
+// 데모 시드 코스와 같은 시각: 2번 12:10~12:40, 3번 13:11 시작·이동 16분 (예정 출발 12:55). 1번은 시나리오와 무관해 아무 시각
+const SEED_PINS = [
+  { seq: 1, place_id: 'D01', name: '서버_첫째_장소', ...SPOT.D01, start: '10:20', end: '11:50', travel_min: 20, state: 'done' },
+  { seq: 2, place_id: 'D02', name: '서버_둘째_장소', ...SPOT.D20, start: '12:10', end: '12:40', travel_min: 20, state: 'now' },
+  { seq: 3, place_id: 'D03', name: '서버_셋째_장소', ...SPOT.D30, start: '13:11', end: '15:00', travel_min: 16, state: 'next' },
+];
+
+describe('§14 시드 코스 데모 지연', () => {
+  /** 데모 시각을 13:05로: [+10분] 18번(10:00 → 13:00) + 시각 막대 한 칸(5분) */
+  async function at1305() {
+    const control = nowServer(nowView({ pins: SEED_PINS }));
+    await toNow(control);
+    await pressId('demo-toggle');
+    await pressPlus(18);
+    await act(async () => {
+      fireEvent(byId('demo-bar') as never, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    });
+    await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('13:05')));
+    return control;
+  }
+
+  test('T7_S14_시드_13시05분_지연_0은_길_위_fakePosition_그대로', async () => {
+    const control = await at1305();
+    // 12:40~13:11 사이 25/31 지점 (지연 0은 TASK-006 그대로)
+    const ratio = 25 / 31;
+    expectSentAt(control.checks().at(-1), {
+      lat: SPOT.D20.lat + (SPOT.D30.lat - SPOT.D20.lat) * ratio,
+      lng: SPOT.D20.lng + (SPOT.D30.lng - SPOT.D20.lng) * ratio,
+    });
+  });
+
+  test('T7_S14_시드_13시05분_늦게_한_번이면_check_위치는_2번_장소', async () => {
+    const control = await at1305();
+    await pressDelay(1); // 기준 12:55 = 2번→3번 이동 중 → 막 떠난 2번 (서버 A1 150m 안)
+    await waitFor(() => expectSentAt(control.checks().at(-1), SPOT.D20));
+    expect(control.checks().at(-1)?.at).toBe(AT('13:05'));
+    const body = control.checks().at(-1)?.body as Record<string, unknown>;
+    expect(body.lat).toBe(SPOT.D20.lat);
+    expect(body.lng).toBe(SPOT.D20.lng);
+  });
+
+  test('T7_S14_시드_13시15분_지연_10이어도_check_위치는_같은_2번_장소', async () => {
+    const control = await at1305();
+    await pressDelay(1);
+    await waitFor(() => expectSentAt(control.checks().at(-1), SPOT.D20));
+    await pressId('demo-plus-10'); // 13:15, 기준 13:05 = 여전히 이동 중 → 2번
+    await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('13:15')));
+    const body = control.checks().at(-1)?.body as Record<string, unknown>;
+    expect(body.lat).toBe(SPOT.D20.lat);
+    expect(body.lng).toBe(SPOT.D20.lng);
   });
 });
 

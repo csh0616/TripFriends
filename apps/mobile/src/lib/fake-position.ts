@@ -42,3 +42,14 @@ export function fakePosition(at: string, course: FakeCourse): Spot | null {
   if (home > 0 && passed < home) return between(last, lodging, passed / home);
   return { lat: lodging.lat, lng: lodging.lng };
 }
+
+/**
+ * TASK-007 §14: 데모 지연 위치. delayMin = 0이면 fakePosition(at) 그대로.
+ * 지연 중이면 (at − delayMin) 시각의 예정 상태를 길 위가 아니라 장소에 머물게 한다 (테스트 먼저, 구현은 code-session).
+ */
+export function delayedPosition(at: string, delayMin: number, course: FakeCourse): Spot | null {
+  void at;
+  void delayMin;
+  void course;
+  throw new Error('not implemented');
+}
