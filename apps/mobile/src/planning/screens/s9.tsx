@@ -1,14 +1,16 @@
-// S9 완료 (TASK-004 §B-2, §12 Q4). 여행 중 화면은 TASK-005.
-import { StyleSheet, Text, View } from 'react-native';
+// S9 완료 (TASK-004 §B-2, §12 Q4). [여행 중 화면 보기(데모)]는 TASK-006 B9.
+import { StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { CheckIcon } from '@/components/planning/icons';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
+import { SecondaryButton } from '@/components/planning/secondary-button';
 
 import { layout } from '../layout';
 import { color, radius, space, text } from '../theme';
 
-export function S9Screen({ onRestart }: { onRestart: () => void }) {
+export function S9Screen({ onRestart, onEnterNow }: { onRestart: () => void; onEnterNow: () => void }) {
   return (
     <ScreenFrame>
       <View style={styles.center}>
@@ -17,12 +19,17 @@ export function S9Screen({ onRestart }: { onRestart: () => void }) {
         </View>
         <Text style={text('title')}>코스 저장했어</Text>
       </View>
-      <PrimaryButton label="처음부터" onPress={onRestart} />
+      <View style={styles.actions}>
+        {/* TASK-006 B9: 데모 시계로 여행 중 화면을 본다 */}
+        <PrimaryButton label="여행 중 화면 보기(데모)" onPress={onEnterNow} />
+        <SecondaryButton label="처음부터" onPress={onRestart} />
+      </View>
     </ScreenFrame>
   );
 }
 
 const styles = StyleSheet.create({
+  actions: { gap: space['space-3'] },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space['space-4'], minHeight: layout.photo },
   badge: {
     width: layout.successCircle,

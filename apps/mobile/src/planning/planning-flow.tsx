@@ -23,6 +23,8 @@ import { initialPlanningState, planningReducer } from '@/lib/planning-reducer';
 import { responseChanged } from '@/lib/response-changed';
 import { screenFor } from '@/lib/screen-for';
 
+import { TripNowScreen, type NowRecord } from '@/now/trip-now-screen';
+
 import { fontAssets } from './fonts';
 import { color } from './theme';
 import { P1Screen, type AnswerBody } from './screens/p1';
@@ -33,6 +35,10 @@ import { S9Screen } from './screens/s9';
 import type { NoticeData } from './screens/types';
 
 const STORAGE_KEY = 'tripfriends.planning_session_id';
+// TASK-006: 여행 중 화면(SC-04)을 위해 기기에 남기는 값. 위치는 저장하지 않는다
+const NOW_KEY = 'tripfriends.trip_now'; // 마지막 화면이 SC-04였는지 + 하루 요약 + 마지막 데모 시각 (§11 Q16)
+const DAY_KEY = 'tripfriends.course_day'; // 코스를 고른 날의 하루 요약 (S9에서 SC-04로 갈 때 필요)
+const DEMO_KEY = 'tripfriends.demo_day'; // 시드로 만든 날 (§12 R10)
 
 // 사용자에게 보이는 문구 (TASK-004 §7)
 const OFFLINE = '연결이 안 돼. 다시 해 볼까?';
@@ -43,6 +49,36 @@ const INFEASIBLE_FALLBACK_NAME = '꼭 갈 곳';
 const UNREACHABLE = '고정 일정에 제때 못 가';
 const TOO_MANY = '하루에 넣기엔 너무 많아. 몇 곳 빼 볼래?';
 const INFEASIBLE_OTHER = '이대로는 코스를 못 짜겠어'; // 표에 없는 이유 (사실과 다른 문구 금지, §13-3 #4)
+
+/** 기기 저장은 실패해도 흐름을 막지 않는다 */
+async function rememberQuietly(key: string, value: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(key, value);
+  } catch {
+    console.warn('STORAGE_FAILED');
+  }
+}
+
+async function readQuietly(key: string): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function parseRecord(raw: string | null): NowRecord | null {
+  if (raw === null) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<NowRecord> | null;
+    if (value && typeof value.day_id === 'string' && typeof value.at === 'string' && typeof value.day === 'object' && value.day !== null) {
+      return { day_id: value.day_id, day: value.day, at: value.at, demo: value.demo === true };
+    }
+  } catch {
+    // 깨진 값은 없는 것으로 본다
+  }
+  return null;
+}
 
 type Kind = 'stage' | 'picks' | 'select';
 type Problem = { tone: 'plain' | 'problem'; retry: (() => void) | null };
@@ -84,11 +120,15 @@ function Session({
   const [problem, setProblem] = useState<Problem | null>(null);
   const [showRestart, setShowRestart] = useState(restartNotice !== null);
   const [inputCleared, setInputCleared] = useState(0); // 올라가면 입력창이 글을 지운다 (보낸 글이 성공했을 때만)
+  const [nowRecord, setNowRecord] = useState<NowRecord | null>(null); // 있으면 여행 중 화면 (TASK-006 B9)
 
   const alive = useRef(true);
   const busy = useRef(false); // 한 번에 한 요청 (§6)
   const sid = useRef<string | null>(null);
   const seedDay = useRef<string | null>(null); // S0: 시드는 됐고 세션만 남았을 때 (Q19)
+  const lastDay = useRef<PlanningSession['day'] | null>(null); // 마지막으로 받은 하루 요약 (SC-04 진입용)
+  const demoDay = useRef<string | null>(null); // 시드로 만든 날 id (데모 시계 버튼용)
+  const nowRef = useRef<NowRecord | null>(null);
   const signals = useRef(new Set<AbortController>());
   const latest = useRef(state);
   latest.current = state;
@@ -114,6 +154,13 @@ function Session({
         await AsyncStorage.removeItem(STORAGE_KEY);
       } catch {
         console.warn('STORAGE_CLEAR_FAILED'); // 지우기 실패해도 처음으로 돌아간다
+      }
+      for (const key of [NOW_KEY, DAY_KEY, DEMO_KEY]) {
+        try {
+          await AsyncStorage.removeItem(key);
+        } catch {
+          // 여행 중 화면용 값: 지우기 실패해도 계속
+        }
       }
       if (alive.current) onReset(notice);
     },
@@ -186,6 +233,9 @@ function Session({
         return odd();
       }
     }
+    const dayInResponse = (response as { day?: PlanningSession['day'] } | null)?.day;
+    if (typeof dayInResponse === 'object' && dayInResponse !== null) lastDay.current = dayInResponse;
+    if (kind === 'select' && lastDay.current) void rememberQuietly(DAY_KEY, JSON.stringify(lastDay.current));
     // C1: 복구 GET은 응답이 요청 전과 달라졌을 때만 입력 글을 지운다 (지금 화면 응답은 아직 바뀌기 전이다)
     const cleared = fromInput || (recovery && responseChanged(latest.current.response, response));
     dispatch({ type: 'request_success', response });
@@ -243,6 +293,23 @@ function Session({
         console.warn('STORAGE_READ_FAILED'); // 읽기 실패는 저장값 없음처럼 S0
       }
       if (!alive.current) return;
+      const [nowRaw, dayRaw, demoRaw] = await Promise.all([readQuietly(NOW_KEY), readQuietly(DAY_KEY), readQuietly(DEMO_KEY)]);
+      if (!alive.current) return;
+      demoDay.current = demoRaw;
+      try {
+        lastDay.current = dayRaw ? (JSON.parse(dayRaw) as PlanningSession['day']) : null;
+      } catch {
+        lastDay.current = null;
+      }
+      const resumed = parseRecord(nowRaw);
+      if (resumed) {
+        // 마지막 화면이 SC-04였다: 마지막 데모 시각으로 바로 돌아간다 (B9, §11 Q16)
+        sid.current = stored;
+        nowRef.current = resumed;
+        setNowRecord(resumed);
+        setReady(true);
+        return;
+      }
       if (stored) {
         sid.current = stored;
         setSessionId(stored);
@@ -299,6 +366,9 @@ function Session({
       if (!alive.current) return;
       sid.current = session.session_id;
       setSessionId(session.session_id);
+      lastDay.current = session.day;
+      demoDay.current = seedDay.current; // 시드로 만든 날은 데모 시계를 쓴다 (§12 R10)
+      void rememberQuietly(DEMO_KEY, String(seedDay.current));
       dispatch({ type: 'request_success', response: session });
     } finally {
       busy.current = false;
@@ -318,6 +388,23 @@ function Session({
   const onBack = () => execute(requests.back(id()), 'stage');
   const onSelect = (optionId: string) => execute(requests.select(optionId), 'select');
 
+  const onEnterNow = () => {
+    const day = lastDay.current;
+    if (!day) {
+      console.warn('NOW_DAY_MISSING');
+      return;
+    }
+    const record: NowRecord = { day_id: day.day_id, day, at: `${day.date}T${day.start}:00`, demo: demoDay.current === day.day_id };
+    nowRef.current = record;
+    setNowRecord(record);
+  };
+  /** 시각이 바뀔 때마다 마지막 데모 시각을 기기에 남긴다 (§11 Q16) */
+  const saveAt = useCallback((at: string) => {
+    if (!nowRef.current) return;
+    nowRef.current = { ...nowRef.current, at };
+    void rememberQuietly(NOW_KEY, JSON.stringify(nowRef.current));
+  }, []);
+
   const busyNow = state.inFlight;
   // 요청 중에는 이전 오류를 숨긴다 (다시 시도하는 중)
   const notice: NoticeData | null =
@@ -328,6 +415,10 @@ function Session({
   // ---------- 어떤 화면을 그릴지: 응답 stage가 정한다 ----------
   const renderScreen = (): React.ReactNode => {
     if (!ready) return <Loading />;
+
+    if (nowRecord) {
+      return <TripNowScreen key={nowRecord.day_id} record={nowRecord} onAtChange={saveAt} onNoCourse={() => void clearStoredAndReset(null)} />;
+    }
 
     if (state.response === null) {
       if (sessionId === null) {
@@ -375,7 +466,7 @@ function Session({
           />
         );
       case 'S9':
-        return <S9Screen key="S9" onRestart={() => void clearStoredAndReset(null)} />;
+        return <S9Screen key="S9" onRestart={() => void clearStoredAndReset(null)} onEnterNow={onEnterNow} />;
     }
   };
 
