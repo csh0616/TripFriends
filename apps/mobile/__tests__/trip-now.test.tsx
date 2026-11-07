@@ -1432,3 +1432,54 @@ describe('리뷰 시트 안 접근성', () => {
     expect(grouping.map((host) => host.props.testID ?? host.type)).toEqual([]);
   });
 });
+
+// ---------- 리뷰 재점검: §7 띠·안내가 시트 뒤로 가림 (§7, §14 "끊김 띠를 알약 아래에 둠(시트가 낮아도 보이게)") ----------
+// 띠 윗면은 약 160(리뷰 측정), 높게 단 시트 윗면은 약 90(위 AREA 계산)이라 겹친다. 그래서 그리는 순서를 본다
+
+type Failing = 'offline' | 'oops' | 'no_course' | 'toast';
+
+/** 시트를 index 단에 둔 채 그 실패를 일으키고, 보여야 할 요소(띠와 그 안의 버튼)의 testID를 돌려준다 */
+async function failedAtLevel(kind: Failing, index: number): Promise<string[]> {
+  const control = nowServer(kind === 'toast' ? nowView({ main: t02(), subs: [] }) : nowView());
+  if (kind === 'toast') jest.spyOn(Linking, 'openURL').mockClear().mockRejectedValue(new Error('열 수 없음'));
+  await toNow(control);
+  await pressId('demo-toggle');
+  const area = chain(byId('card-sheet')).find((host) => typeof host.props.onLayout === 'function') as Tree;
+  await act(async () => sheetControl.settle(index, AREA));
+  await fireEvent(area as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: AREA } } });
+  if (kind === 'toast') {
+    await pressId('directions-button');
+    await screen.findByText('구글 지도를 열 수 없어');
+    return ['now-toast'];
+  }
+  control.once(
+    kind === 'offline' ? networkDown : kind === 'oops' ? apiError(500, 'INTERNAL_ERROR') : apiError(404, 'NOT_FOUND', { resource: 'course' }),
+  );
+  await pressId('demo-plus-10');
+  await screen.findByTestId('now-band');
+  return kind === 'no_course' ? ['now-band', 'replan-button'] : ['now-band', 'retry-button'];
+}
+
+const FAILINGS: [string, Failing][] = [
+  ['끊김 띠와 다시', 'offline'],
+  ['500 줄과 다시', 'oops'],
+  ['고른 코스가 없어와 계획 다시 하기', 'no_course'],
+  ['구글 지도를 열 수 없어 안내', 'toast'],
+];
+
+const FAILING_AT_LEVEL = FAILINGS.flatMap(([name, kind]) => LEVELS.map(([level, index]) => [`${name}_시트_${level}`, kind, index] as [string, Failing, number]));
+
+describe('리뷰 재점검 §7 띠 가림', () => {
+  test.each(FAILING_AT_LEVEL)('T6_S7_S14_%s_띠가_시트보다_위에_그려진다', async (_name, kind, index) => {
+    const ids = await failedAtLevel(kind, index);
+    for (const id of ids) expect([id, drawnAbove(byId(id), byId('card-sheet'))]).toEqual([id, true]);
+  });
+
+  test.each(FAILING_AT_LEVEL)('T6_S7_S14_%s_띠가_떠_있는_줄보다_위에_그려진다', async (_name, kind, index) => {
+    const ids = await failedAtLevel(kind, index);
+    for (const id of ids) {
+      expect([id, drawnAbove(byId(id), floatBox())]).toEqual([id, true]);
+      expect([id, drawnAbove(byId(id), byId('demo-panel'))]).toEqual([id, true]);
+    }
+  });
+});
