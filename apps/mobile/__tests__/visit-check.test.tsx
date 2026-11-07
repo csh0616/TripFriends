@@ -9,7 +9,9 @@
 //     [열었어] 'visit-open', [닫혔어] 'visit-closed' → POST /places/{place_id}/visit-checks 본문 {day_id, at, was_open}
 //   T-06 카드 'card-T-06': 서버 값 {type, event_id, closed:{place_id,name}, proposals[]}
 //     제안 = TASK-007 제안 {proposal_id, label, reason, dropped, keeps_fixed, first_leave_at, items}
-//            + closed {alternative:{place_id,name}|null, distance_m, travel_change_min} (§11 Q4)
+//            + closed {alternative:{place_id,name}|null, distance_m, travel_change_min, reordered} (§11 Q4, reordered는 §14)
+//     §14: closed.reordered가 true면 대안 칸에 "순서를 바꿔야 들어가 · {HH:MM}에 들러", 시각 = items 안 그 대안 줄의 start
+//     §14: 제안이 0개면 "지금은 바꿀 방법을 못 찾았어" + [그대로 둘게]만
 //     대안 칸(alternative 있음) 'proposal-{proposal_id}': 이름 = closed.alternative.name, 거리 = closed.distance_m,
 //       이동 변화 = closed.travel_change_min, 사실 칩 = items 안 그 대안 줄의 facts. [이걸로] 'proposal-accept-{proposal_id}'
 //     [빼고 가기] 'closed-skip' → closed.alternative가 null인 제안의 accept, [그대로 둘게] 'event-dismiss' → dismiss
@@ -107,13 +109,13 @@ const replace = (over: object = {}, closed: object = {}) => ({
   keeps_fixed: true,
   first_leave_at: '12:00',
   items: [altItem('D09', '서버_대안_장소', 'unverified'), LATER_ITEM],
-  closed: { alternative: { place_id: 'D09', name: '서버_대안_장소' }, distance_m: 350, travel_change_min: 4, ...closed },
+  closed: { alternative: { place_id: 'D09', name: '서버_대안_장소' }, distance_m: 350, travel_change_min: 4, reordered: false, ...closed },
   ...over,
 });
 const replace2 = () =>
   replace(
     { proposal_id: 'alt-2', items: [altItem('D10', '서버_대안_둘', 'confirmed'), LATER_ITEM] },
-    { alternative: { place_id: 'D10', name: '서버_대안_둘' }, distance_m: 800, travel_change_min: 7 },
+    { alternative: { place_id: 'D10', name: '서버_대안_둘' }, distance_m: 800, travel_change_min: 7, reordered: false },
   );
 const skip = (over: object = {}) => ({
   proposal_id: 'skip-1',
@@ -123,7 +125,7 @@ const skip = (over: object = {}) => ({
   keeps_fixed: true,
   first_leave_at: '12:00',
   items: [LATER_ITEM],
-  closed: { alternative: null, distance_m: null, travel_change_min: -5 },
+  closed: { alternative: null, distance_m: null, travel_change_min: -5, reordered: false },
   ...over,
 });
 const t06 = (over: object = {}) => ({
@@ -400,6 +402,37 @@ describe('C3 T-06 카드', () => {
   test('T8_C3_AC6_영업_여부를_지어낸_글자가_없다', async () => {
     await shows();
     expect(words('card-T-06')).not.toMatch(GUESSES);
+  });
+
+  // §14: 닫힌 곳 자리에 못 넣어 다시 짠 대안. 들르는 시각은 items 안 그 대안 줄의 start (뒤 줄 LATER_ITEM이 앞에 온다)
+  const moved = (start: string) =>
+    replace({ items: [LATER_ITEM, { ...altItem('D09', '서버_대안_장소', 'unverified'), seq: 3, start, end: '23:59' }] }, { reordered: true });
+
+  test.each(['17:45', '00:00', '23:58'])('T8_S14_다시_짠_대안은_순서를_바꿔야_들어가_%s에_들러', async (start) => {
+    await shows({ main: t06({ proposals: [moved(start), skip()] }) });
+    expect(words('proposal-alt-1')).toContain('순서를 바꿔야 들어가');
+    expect(words('proposal-alt-1')).toContain(`${start}에 들러`);
+  });
+
+  test('T8_S14_자리에_들어간_대안에는_순서_안내가_없다', async () => {
+    await shows({ main: t06({ proposals: [replace(), { ...moved('17:45'), proposal_id: 'alt-2' }, skip()] }) });
+    expect(words('proposal-alt-1')).not.toContain('순서를 바꿔야');
+    expect(words('proposal-alt-1')).not.toContain('에 들러');
+    expect(words('proposal-alt-2')).toContain('순서를 바꿔야 들어가');
+  });
+
+  test('T8_S14_제안이_0개면_못_찾았어와_그대로_둘게만', async () => {
+    await shows({ main: t06({ proposals: [] }) });
+    expect(words('card-T-06')).toContain('지금은 바꿀 방법을 못 찾았어');
+    expect(screen.queryAllByTestId(/^proposal-accept-/)).toEqual([]);
+    expect(screen.queryByTestId('closed-skip')).toBeNull();
+    expect(byId('event-dismiss')).toBeTruthy();
+    expect(inCard('card-T-06').getAllByText('그대로 둘게')).toHaveLength(1);
+  });
+
+  test('T8_S14_제안이_있으면_못_찾았어_안내가_없다', async () => {
+    await shows();
+    expect(words('card-T-06')).not.toContain('지금은 바꿀 방법을 못 찾았어');
   });
 
   test('T8_C3_짝은_서버_순서_그대로_T_06_T_03', async () => {

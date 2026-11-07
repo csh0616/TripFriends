@@ -13,17 +13,21 @@ API 본문은 TASK-008 A5(`{day_id, at, was_open}`)가 정본 (§11 Q1, API-001 
     T06Proposal (§11 Q4 = TASK-007 제안 + closed):
         TASK-007 B-5 키 그대로 {proposal_id, label:"relaxed"(§12 Q22), reason:str, dropped:[{place_id,name}],
                                 keeps_fixed:bool, first_leave_at:"HH:MM", items:[NowCourseItem]}
-        + closed [정함 안쪽 키]: {alternative:{place_id,name}|null, distance_m:int|null, travel_change_min:int}
+        + closed [정함 안쪽 키]: {alternative:{place_id,name}|null, distance_m:int|null, travel_change_min:int, reordered:bool}
             alternative = 닫힌 곳 대신 갈 대안 (C3 이름), distance_m = 닫힌 곳에서 직선거리 m (C3 거리),
             travel_change_min = 남은 이동 분 합(숙소 복귀 포함), 바뀐 뒤 − 바뀌기 전 (Q4, C3 이동 변화)
-            [빼고 가기] = alternative null (그 제안의 dropped에 닫힌 곳이 들어 있다)
+                reordered = §14: 닫힌 곳 자리에 넣어서는 영업시간·고정 일정·하루 끝을 못 지켜 compose_courses로 다시 짠 안이면 true [정함 위치]
+        [빼고 가기] = alternative null (그 제안의 dropped에 닫힌 곳이 들어 있다), reordered 늘 false (§14 순서 그대로)
         대안의 사실 칩은 items 안 그 대안 줄의 facts (TASK-007 NowCourseItem 그대로)
+        대안이 들르는 시각("{HH:MM}에 들러", §14) = items 안 그 대안 줄의 start [정함, 새 키 없음 — §12 Q21처럼 값의 출처를 한 곳으로]
         대안 제안은 가까운 순, [빼고 가기]는 항상 하나·맨 끝(B4 "덧붙인다"). items = 닫힌 곳 자리부터의 남은 일정
+        §14 (B3 고침): 대안은 닫힌 곳의 같은 순번(seq)에, 뒤 일정은 순서·머무는 시간 그대로 시각만 다시 계산.
+            [빼고 가기]도 순서 그대로 시각만. [빼고 가기]도 못 만들면(그리고 대안도 없으면) 제안 0개
     NowView.event (닫힘 사건이 하나만 열려 있을 때): type "closed", severity "high", state "awaiting"
     trip 저장소(app.state.trip_repo):
         event_by_key(day_id, "closed:{day_id}:{place_id}") → EventRecord (TASK-007 그대로, B1)
         get_visit_check(day_id, place_id) → VisitCheckRecord | None (.place_id, .day_id, .was_open, .checked_at: datetime) [정함]
-    대안 계산은 graphs/trip.py의 모듈 이름 compose_courses (TASK-007 계약 그대로, 예외 주입 자리)
+    다시 짜는 계산은 graphs/trip.py의 모듈 이름 compose_courses (TASK-007 계약 그대로, 예외 주입 자리. §14부터는 닫힌 곳 자리에 못 넣을 때만 부른다)
     대안을 반영(accept)하면 그날 꼭 갈 곳 목록이 planning 저장소 get_day(day_id).plan.must_visit에서 바뀐다 (§7)
 """
 
@@ -67,7 +71,7 @@ SERVER = Path(__file__).parents[1]
 T05_KEYS = {"type", "place", "facts", "map_url"}
 T06_KEYS = {"type", "event_id", "closed", "proposals"}
 T06_PROPOSAL_KEYS = PROPOSAL_KEYS | {"closed"}  # §11 Q4: TASK-007 제안 + closed
-T06_CLOSED_KEYS = {"alternative", "distance_m", "travel_change_min"}  # closed 안쪽 [정함]
+T06_CLOSED_KEYS = {"alternative", "distance_m", "travel_change_min", "reordered"}  # closed 안쪽 [정함], reordered는 §14
 STATUSES = {"confirmed", "unverified", "unknown"}
 STAY = StayRange(min=30, typical=60, max=120)
 TIGHT = StayRange(min=30, typical=30, max=30)  # 머무는 시간이 하나뿐이라 relaxed·packed가 같다
@@ -567,8 +571,10 @@ def test_T8_B6_Q4_T_06_카드와_제안_모양은_TASK007_제안_더하기_close
         info = proposal["closed"]
         assert set(info) == T06_CLOSED_KEYS
         assert type(info["travel_change_min"]) is int
+        assert type(info["reordered"]) is bool  # §14
         if info["alternative"] is None:
             assert info["distance_m"] is None
+            assert info["reordered"] is False  # §14: [빼고 가기]는 순서 그대로
         else:
             assert set(info["alternative"]) == {"place_id", "name"}
             assert type(info["distance_m"]) is int
@@ -719,6 +725,21 @@ def test_T8_B3_고정_일정을_못_지키는_대안은_뺀다(env):
     assert all(p["keeps_fixed"] is True for p in card["proposals"])  # TASK-007 keeps_fixed
 
 
+def reorder_day(env) -> str:
+    """§14 다시 짜야 하는 대안: tight_day와 같은 앞부분, 대안은 R01 하나, 하루 끝 21:00.
+    R01을 닫힌 곳(C02) 자리에 넣으면 P01→R01 16분 + 30분 + R01→F03 16분 = 62분 → 11:50에 떠나도 12:52 도착 (고정 12:40을 못 지킴).
+    하루 끝이 넉넉하니 compose_courses로 다시 짜면 R01은 고정 일정 F03(12:40~13:40) 뒤에 들어간다 (reordered).
+    머무는 시간은 모두 30분 하나(TIGHT)라 대안의 머무는 시간 규칙과 무관하다."""
+    places = {
+        "P01": place("P01", km=1.0, hours=OPEN_LATE, stay=TIGHT),
+        "C02": place("C02", km=1.3, hours=OPEN_LATE, status="unverified", stay=TIGHT),
+        "F03": place("F03", category="experience", km=1.0, east_km=0.3, hours=OPEN_LATE, stay=TIGHT),
+        "R01": place("R01", km=2.75, hours=OPEN_LATE, stay=TIGHT),
+    }
+    items = [item(1, "P01", "10:12", "11:50", 12), item(2, "C02", "12:00", "12:30", 10), item(3, "F03", "12:40", "13:40", 7, fixed=True)]
+    return plant(env, items, places, fixed=(fixed_at(places["F03"], "12:40", "13:40"),), end="21:00")
+
+
 # ---------- B5 [이걸로]·[그대로 둘게] ----------
 
 
@@ -778,18 +799,19 @@ def test_T8_B5_처리된_사건에_다시_고르면_409이고_그대로(env):
 
 
 def test_T8_S6_대안_계산_중_예외면_500이고_기록_사건_일정_답_모두_그대로(quiet_env, monkeypatch):
+    # §14: compose_courses는 닫힌 곳 자리에 못 넣을 때만 부르므로, 다시 짜야 하는 하루(reorder_day, R01)에서 예외를 넣는다
     env = quiet_env
-    day_id = visit_day(env, extra=ALTS)
+    day_id = reorder_day(env)
     before, course = without_logs(stores(env)), chosen(env, day_id)
     with monkeypatch.context() as patch:
         patch.setattr("graphs.trip.compose_courses", raise_forced)
-        assert_error(visit_check(env, day_id, "P02", "11:40", False), 500, "INTERNAL_ERROR")
+        assert_error(visit_check(env, day_id, "C02", "11:40", False), 500, "INTERNAL_ERROR")
     assert without_logs(stores(env)) == before
     assert chosen(env, day_id) == course
-    assert trip_repo(env).get_visit_check(day_id, "P02") is None
-    assert trip_repo(env).event_by_key(day_id, closed_key(day_id)) is None
-    assert now(env, day_id, "11:41")["main"]["type"] == "T-05"  # 확인 답도 저장 안 됨 → 다시 묻는다
-    retry = visit_check(env, day_id, "P02", "11:42", False)  # 다음 요청은 정상 (409 아님)
+    assert trip_repo(env).get_visit_check(day_id, "C02") is None
+    assert trip_repo(env).event_by_key(day_id, closed_key(day_id, "C02")) is None
+    assert "T-05" in types(cards(now(env, day_id, "11:41")))  # 확인 답도 저장 안 됨 → 다시 묻는다 (C02 출발 11:50의 9분 전이라 T-02의 짝, A3)
+    retry = visit_check(env, day_id, "C02", "11:42", False)  # 다음 요청은 정상 (409 아님)
     assert retry.status_code == 200, retry.text
     assert retry.json()["main"]["type"] == "T-06"
 
@@ -868,6 +890,163 @@ def test_T8_S7_꼭_갈_곳을_대안으로_바꾸면_꼭_갈_곳_목록도_대�
     assert accept(env, replaces(view["main"])[0]["proposal_id"]).status_code == 200
     must = env.repo.get_day(day_id).plan.must_visit
     assert "A01" in must and "P02" not in must
+
+
+# ---------- §14 대안은 닫힌 곳 자리로 (B3 고침) ----------
+# 닫힌 곳(P02, 2번)의 같은 순번에 대안을 넣고, 뒤 일정(P03)은 순서·머무는 시간 그대로 시각만 다시 계산 (DP로 다시 짜지 않음).
+# 그렇게 넣어 영업시간·고정 일정·하루 끝을 못 지킬 때만 compose_courses로 다시 짜고 closed.reordered = true.
+# 대안이 들르는 시각 = items 안 그 대안 줄의 start [정함]. [빼고 가기]도 순서 그대로 시각만.
+
+
+def stay_of(entry) -> int:
+    if isinstance(entry, dict):
+        return to_min(entry["end"]) - to_min(entry["start"])
+    return to_min(entry.end) - to_min(entry.start)
+
+
+def test_T8_S14_대안은_닫힌_곳의_같은_순번에_들어가고_뒤_일정은_순서_그대로(env):
+    _, view = closed_view(env)
+    proposals = replaces(view["main"])
+    assert alt_ids(view["main"]) == ["A01", "A02", "A03"]
+    for proposal in proposals:
+        entries = proposal["items"]
+        assert item_ids(entries) == [alt_id(proposal), "P03"], alt_id(proposal)  # 닫힌 곳 자리 = 첫 줄, 뒤는 원래 순서
+        assert [e["seq"] for e in entries] == [2, 3]  # 닫힌 곳(P02)의 seq 2 그대로
+        assert proposal["closed"]["reordered"] is False  # 자리에 넣어 다 지켜지면 다시 짜지 않는다
+
+
+@pytest.mark.parametrize("which", ["대안", "빼고_가기"])
+def test_T8_S14_뒤_일정은_머무는_시간_그대로_시각만_다시_계산(env, which):
+    # 원래 P03 14:30~19:00 (270분). DP로 다시 짜면 머무는 시간이 바뀐다 → 순서·머무는 시간 그대로, 시각만
+    day_id, view = closed_view(env)
+    _, old = chosen(env, day_id)
+    original = {i.place_id: stay_of(i) for i in old.items if i.place_id}
+    proposal = replaces(view["main"])[0] if which == "대안" else skip_of(view["main"])
+    later = [e for e in proposal["items"] if e["place_id"] != alt_id(proposal)] if which == "대안" else proposal["items"]
+    assert item_ids(later) == ["P03"]
+    for entry in later:
+        assert stay_of(entry) == original[entry["place_id"]], entry
+    assert proposal["closed"]["reordered"] is False
+
+
+@pytest.mark.parametrize("which", ["대안", "빼고_가기"])
+def test_T8_S14_다시_계산한_시각은_앞_장소_끝_뒤_이동_시간_이후(env, which):
+    # 첫 줄: 앞 장소(P01) 끝 12:00 (Q7: max(at 11:40, 12:00)) + P01→첫 장소 이동 이후. 그다음 줄: 앞 줄 끝 + 이동 이후 (엔진 이동 식)
+    from engine.planning import travel_min
+
+    _, view = closed_view(env)
+    proposal = replaces(view["main"])[0] if which == "대안" else skip_of(view["main"])
+    prev_end, prev_at = to_min("12:00"), P01
+    for entry in proposal["items"]:
+        here = (entry["lat"], entry["lng"])
+        assert to_min(entry["start"]) >= prev_end + travel_min(distance_km(prev_at, here)), entry
+        assert to_min(entry["end"]) > to_min(entry["start"])
+        prev_end, prev_at = to_min(entry["end"]), here
+    assert to_min(proposal["first_leave_at"]) >= to_min("12:00")
+
+
+def test_T8_S14_자리에_넣으면_고정_일정을_못_지키는_대안은_다시_짜고_reordered(env):
+    day_id = reorder_day(env)
+    card = answered(env, day_id, "C02", "11:40", False)["main"]
+    assert alt_ids(card) == ["R01"]
+    proposal = replaces(card)[0]
+    assert proposal["closed"]["reordered"] is True
+    assert proposal["keeps_fixed"] is True
+    rows = {e["place_id"]: e for e in proposal["items"]}
+    assert (rows["F03"]["start"], rows["F03"]["end"], rows["F03"]["is_fixed"]) == ("12:40", "13:40", True)
+    assert item_ids(proposal["items"]).index("R01") > item_ids(proposal["items"]).index("F03")  # 순서가 바뀌었다
+    assert to_min(rows["R01"]["start"]) >= to_min("13:40")  # 들르는 시각 = 그 줄의 start (고정 일정 뒤)
+    assert is_hhmm(rows["R01"]["start"])
+    assert skip_of(card)["closed"]["reordered"] is False
+
+
+def test_T8_S14_다시_짜도_못_지키는_대안은_여전히_뺀다(env):
+    # tight_day: R01은 자리에 넣어도, 다시 짜도 고정 일정·하루 끝(14:30)을 못 지킨다 → 대안이 아니다 (B3 그대로)
+    day_id = tight_day(env)
+    card = answered(env, day_id, "C02", "11:40", False)["main"]
+    assert "R01" not in alt_ids(card)
+
+
+def test_T8_S14_데모_골목_카페_E는_닫힌_곳의_같은_순번에_들어간다(env):
+    # 데모 시나리오(2번 언덕 카페 B 닫힘 → 시드 전용 골목 카페 E): E가 2번 자리에, 뒤 일정은 원래 순서 그대로
+    _, day_id, entry = demo_scenario(env)
+    _, course = chosen(env, day_id)
+    rest = [i.place_id for i in course.items if i.seq > entry.seq]
+    view = answered(env, day_id, entry.place_id, hhmm(leave_of(entry) - 30), False)
+    proposals = replaces(view["main"])
+    assert proposals
+    for proposal in proposals:
+        assert proposal["closed"]["reordered"] is False
+        assert item_ids(proposal["items"]) == [alt_id(proposal), *rest]
+        row = proposal["items"][0]
+        assert row["seq"] == entry.seq
+    skip = skip_of(view["main"])
+    assert item_ids(skip["items"]) == rest  # [빼고 가기]도 순서 그대로
+    assert skip["closed"]["reordered"] is False
+
+
+# ---------- §14 [빼고 가기]도 계산 안 될 때 ----------
+
+
+def stuck_day(env) -> str:
+    """닫힌 곳(P02) 뒤 고정 일정 F03이 39km 밖 (엔진 식 127분, 심은 코스 이동은 7분이라 고정 출발 12:33).
+    P01 끝 11:50에서 바로 가도 12:40에 못 간다 → 빼고 가기도, 근처 대안(A01~A03)도 못 만든다."""
+    places = {
+        "P01": place("P01", km=1.0, hours=OPEN_LATE, stay=TIGHT),
+        "P02": unverified(),
+        "F03": spot("F03", 40.0, category="experience"),
+        **{a.id: a for a in ALTS},
+    }
+    items = [item(1, "P01", "10:12", "11:50", 12), item(2, "P02", "12:00", "12:30", 10), item(3, "F03", "12:40", "13:40", 7, fixed=True)]
+    return plant(env, items, places, fixed=(fixed_at(places["F03"], "12:40", "13:40"),))
+
+
+def test_T8_S14_빼고_가기도_못_만들면_제안_0개(env):
+    day_id = stuck_day(env)
+    view = answered(env, day_id, "P02", "11:40", False)
+    assert view["main"]["type"] == "T-06"
+    assert view["main"]["proposals"] == []
+    assert trip_repo(env).get_visit_check(day_id, "P02") is not None  # 답은 저장된다 (AC-3)
+
+
+# ---------- §14 고정 일정 장소는 T-05 대상이 아니다 ----------
+
+
+def fixed_next_day(env) -> str:
+    """2번이 고정 일정이고 영업 사실이 미확인 (F02 12:20~14:00, 이동 20 → 출발 12:00, 확인 창이었을 시간 11:30~12:20)."""
+    places = {"P01": spot("P01", 1.0), "F02": unverified("F02", category="experience"), "P03": spot("P03", 3.0)}
+    items = [item(1, "P01", "10:12", "12:00", 12), item(2, "F02", "12:20", "14:00", 20, fixed=True), item(3, "P03", "14:30", "19:00", 30)]
+    return plant(env, items, places, fixed=(fixed_at(places["F02"], "12:20", "14:00"),))
+
+
+@pytest.mark.parametrize("clock", ["11:30", "11:40", "11:50", "12:19"], ids=["출발_30분_전_정각", "출발_20분_전", "출발_10분_전", "도착_1분_전"])
+def test_T8_S14_다음_장소가_고정_일정이면_미확인이어도_T_05가_없다(env, clock):
+    day_id = fixed_next_day(env)
+    view = now(env, day_id, clock)
+    assert "T-05" not in types(cards(view)), clock
+
+
+def test_T8_S14_고정_일정_장소의_visit_check는_409_not_check_target이고_그대로(env):
+    day_id = fixed_next_day(env)
+    before = without_logs(stores(env))
+    error = assert_error(visit_check(env, day_id, "F02", "11:40", False), 409, "STATE_CONFLICT")
+    assert error["detail"]["reason"] == "not_check_target"
+    assert without_logs(stores(env)) == before
+    assert trip_repo(env).get_visit_check(day_id, "F02") is None
+
+
+# ---------- §14 409 reason="not_check_target" (승인) ----------
+
+
+@pytest.mark.parametrize(
+    "pid, clock",
+    [("P01", "11:40"), ("P03", "11:40"), ("P02", "11:29"), ("P02", "12:20")],
+    ids=["지금_장소", "다음_아닌_장소", "출발_31분_전", "도착_정각"],
+)
+def test_T8_S14_확인_대상이_아니면_409_reason은_not_check_target(env, pid, clock):
+    day_id = visit_day(env)
+    error = assert_error(visit_check(env, day_id, pid, clock, False), 409, "STATE_CONFLICT")
+    assert error["detail"]["reason"] == "not_check_target"
 
 
 # ---------- AC-6 사실 값 ----------
