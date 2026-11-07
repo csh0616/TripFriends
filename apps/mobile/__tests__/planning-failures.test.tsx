@@ -740,8 +740,8 @@ describe('§7 줄 5 422 COURSE_INFEASIBLE', () => {
   test('Y32_Q23_이름은_blocking_ID를_지금_day_must_visits에서_찾는다', async () => {
     const server = happyServer();
     const must_visits = [
-      { place_id: 'D20', name: '꼭 갈 박물관' },
-      { place_id: 'D21', name: '둘째 꼭 갈 곳' },
+      { place_id: 'D20', name: '꼭 갈 박물관', stay_min: 60 },
+      { place_id: 'D21', name: '둘째 꼭 갈 곳', stay_min: 60 },
     ];
     server.on(R.answer, json(200, batch({ day: { ...day, must_visits } })));
     await toP2();
@@ -1107,8 +1107,8 @@ describe('§13-3 승인된 결정 고정', () => {
   test('Y69_Q40_422_이름이_여럿이면_쉼표로_잇는다', async () => {
     const server = happyServer();
     const must_visits = [
-      { place_id: 'D20', name: '꼭 갈 박물관' },
-      { place_id: 'D21', name: '둘째 꼭 갈 곳' },
+      { place_id: 'D20', name: '꼭 갈 박물관', stay_min: 60 },
+      { place_id: 'D21', name: '둘째 꼭 갈 곳', stay_min: 60 },
     ];
     server.on(R.answer, json(200, batch({ day: { ...day, must_visits } })));
     await toP2();
