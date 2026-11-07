@@ -432,7 +432,8 @@ const styles = StyleSheet.create({
   },
   pillDot: { width: layout.dot, height: layout.dot, borderRadius: radius['r-full'] },
   pillText: { flexShrink: 1 },
-  bands: { position: 'absolute', left: layout.screenMargin, right: layout.screenMargin, gap: space['space-2'] },
+  // §7 띠·안내는 시트와 떠 있는 줄보다 위, 상단 줄(SOS, zIndex 2)보다는 아래에 그린다
+  bands: { position: 'absolute', left: layout.screenMargin, right: layout.screenMargin, gap: space['space-2'], zIndex: 1, elevation: shadow.sheet.elevation },
   noCourse: {
     backgroundColor: color['bg-2'],
     borderRadius: radius['r-lg'],

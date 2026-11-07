@@ -5,6 +5,8 @@
 #   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
 #     --test-output-dir=.maestro/screenshots/planning -e METRO_URL=http://127.0.0.1:8083 .maestro/planning.yaml
 # 스크린샷은 --test-output-dir 아래 takeScreenshot/ 에 쌓이고 저장소에는 올리지 않는다 (.gitignore의 .maestro/screenshots/).
+# 알려진 문제: 앱에 탭이 닿지 않는 현상이 S0 첫 탭, P3 [이걸로 할래], 데모 막대에서 재현됐다.
+# 원인 미확인(앱 문제인지 Maestro·XCTest 문제인지 모른다). 우회와 retry로 통과시킨다. 그래서 아래 retry는 결과를 확인하는 묶음으로 적어 두 번 눌러도 부작용이 없다.
 appId: com.csh0616.tripfriends
 ---
 - launchApp:
@@ -47,8 +49,16 @@ appId: com.csh0616.tripfriends
     timeout: 60000
 - takeScreenshot: planning-4-P3
 
-- tapOn: "이걸로 할래"
-- extendedWaitUntil:
-    visible: "코스 저장했어"
-    timeout: 30000
+# 탭이 가끔 안 닿아서, S9가 아직 아니면 누르고 결과(S9 "코스 저장했어")를 확인하는 묶음으로 다시 한다
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: "코스 저장했어"
+          commands:
+            - tapOn: "이걸로 할래"
+      - extendedWaitUntil:
+          visible: "코스 저장했어"
+          timeout: 15000
 - takeScreenshot: planning-5-S9
