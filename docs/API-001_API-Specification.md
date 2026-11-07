@@ -51,6 +51,7 @@
 ### 2-3. 여행 중 (FR-10~19)
 > **11-07**: `GET /days/{day_id}/now`의 요청·응답은 **TASK-006 §A-1·§11이 정본** (시간대 없는 `at`, 사건은 TASK-007)
 > **11-09**: `check`(위치는 본문)·`accept`·`dismiss`(경로 `/events/{id}/dismiss`)와 `NowView.event`는 **TASK-007 B-4·B-5·§11이 정본**. `GET /now`는 위치 쿼리를 받지 않는다
+> **11-09**: `POST /places/{place_id}/visit-checks`(본문 `{day_id, at, was_open}`)와 T-05·T-06은 **TASK-008 §A·§B·§11이 정본**
 
 | 메서드·경로 | 요청 | 응답 | FR·AC |
 |---|---|---|---|
