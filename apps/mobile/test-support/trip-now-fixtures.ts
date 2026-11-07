@@ -1,4 +1,4 @@
-// 가짜 NowView. 모양은 TASK-006 §A-1·§11·§12 (Q8 HH:MM, Q15·R6 핀 시각·이동 분, Q21 fixed.facts, R4 fixed.title).
+// 가짜 NowView. 모양은 TASK-006 §A-1·§11·§12 (Q8 HH:MM, Q15·R6 핀 시각·이동 분, Q21 fixed.facts, R4 fixed.title, E4 T-08 map_url).
 import { day, DAY_ID, SPOT } from './planning-fixtures';
 
 type Status = 'confirmed' | 'unverified' | 'unknown';
@@ -41,7 +41,8 @@ export const t07 = (over: object = {}) => ({
   leave_in_min: 15,
   ...over,
 });
-export const t08 = (over: object = {}) => ({ type: 'T-08', go_home_min: 25, lodging: day.lodging, ...over });
+export const HOME_URL = 'https://www.google.com/maps/dir/?api=1&destination=35,135&travelmode=transit';
+export const t08 = (over: object = {}) => ({ type: 'T-08', go_home_min: 25, lodging: day.lodging, map_url: HOME_URL, ...over }); // map_url: §13 E4
 
 export const pins = [
   { seq: 1, place_id: 'D01', name: first.name, ...SPOT.D01, start: first.start, end: first.end, travel_min: 12, state: 'done' },

@@ -18,6 +18,16 @@ export const COLORS: Record<string, string> = {
   alert: '#C2410C',
   'alert-bg': '#FFEDD5',
   danger: '#B42318',
+  // §4-6 지도·핀·앱 아이콘 (v2.4)
+  'map-land': '#EEF0F2',
+  'map-building': '#E6E9ED',
+  'map-park': '#E3EBE0',
+  'map-water': '#DDE6EE',
+  'map-edge': '#E2E5E9',
+  'map-edge-big': '#CDD2D9',
+  'map-label': '#5F6573',
+  'route-done': '#7C828F',
+  'ink-strong': '#1A1A1A',
 };
 
 // §4-3 글꼴 이름 (Q15)
@@ -65,7 +75,17 @@ export const NUMBERS: Record<string, number> = {
   'dur-base': 200,
   'dur-sheet': 320,
   'dur-draw': 420,
+  // §4-6 핀·동선 (v2.4)
+  'pin-later': 28,
+  'pin-done': 32,
+  'pin-now': 32,
+  'pin-next': 36,
+  'route-width': 5,
+  'route-casing': 9,
 };
+
+// §4-6 목록 값: route-dash = 선 길이, 빈 길이
+export const LISTS: Record<string, number[]> = { 'route-dash': [10, 8] };
 
 // §4-3 글자 값
 export const STRINGS: Record<string, string> = {
@@ -90,6 +110,11 @@ export const CONTRAST_PAIRS: [string, string, number][] = [
   ['warn', 'warn-bg', 6.37],
   ['alert', 'alert-bg', 4.52],
   ['surface', 'danger', 6.57], // SOS: 흰 글자 (§2)
+  // §4-6 지도 글자
+  ['map-label', 'map-land', 5.11],
+  ['map-label', 'map-building', 4.8],
+  ['map-label', 'map-park', 4.79],
+  ['map-label', 'map-water', 4.62],
 ];
 
 // §4-4 탈락 조합 (글자, 바탕, 문서의 숫자)
@@ -97,4 +122,9 @@ export const REJECTED_PAIRS: [string, string, number][] = [
   ['#FFFFFF', '#FF5A00', 3.13],
   ['#333333', '#FF5A00', 4.04],
   ['#6B7280', '#F3F4F6', 4.39],
+  // §4-6: 땅 위 주황은 흰 테두리 없이 쓰지 않는다, line 트랙 위 주황 금지, muted는 지도 위 글자로 쓰지 않는다
+  ['#FF5A00', '#EEF0F2', 2.74],
+  ['#FF5A00', '#E5E7EB', 2.53],
+  ['#666C7A', '#E6E9ED', 4.32],
+  ['#666C7A', '#DDE6EE', 4.17],
 ];

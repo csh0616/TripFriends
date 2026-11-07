@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { COLORS, FONTS, NUMBERS, STRINGS, TYPE } from '../test-support/design-table';
+import { COLORS, FONTS, LISTS, NUMBERS, STRINGS, TYPE } from '../test-support/design-table';
 import { REPO_ROOT } from '../test-support/source-files';
 
 const PACKAGE = join(REPO_ROOT, 'packages', 'design-tokens');
@@ -14,6 +14,7 @@ const KNOWN = new Set([
   ...Object.keys(TYPE),
   ...Object.keys(NUMBERS),
   ...Object.keys(STRINGS),
+  ...Object.keys(LISTS), // TASK-006 §13 E2, DESIGN-001 §4-6
 ]);
 
 type Found = Map<string, unknown[]>;
@@ -77,6 +78,10 @@ test.each(Object.entries(NUMBERS))('T07_AC4_숫자_%s는_%d', (name, value) => {
 
 test.each(Object.entries(STRINGS))('T08_AC4_글자_값_%s', (name, value) => {
   expect(one(name)).toBe(value);
+});
+
+test.each(Object.entries(LISTS))('T17_S4_6_목록_값_%s', (name, value) => {
+  expect(one(name)).toEqual(value);
 });
 
 test.each([

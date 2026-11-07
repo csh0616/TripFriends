@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// 여행 중 화면 SC-04 (로직·가드레일). 근거: TASK-006 §12 > §11 > B1~B10, §6, §7, §8 AC-5·AC-6·AC-7, SCREEN-001 §2·§3-2·§6, ADR-014, DESIGN-001 §4.
+// 여행 중 화면 SC-04 (로직·가드레일). 근거: TASK-006 §14 > §13 > §12 > §11 > B1~B10, §6, §7, §8 AC-5·AC-6·AC-7, SCREEN-001 §2·§3-2·§6, ADR-014, DESIGN-001 §4.
 // 지도·시트는 가짜 부품(test-support/maps-mock, bottom-sheet-mock)이다. 이 파일이 통과해도 지도가 실제로 보인다는 뜻이 아니다.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,13 +11,13 @@ import { Linking, StyleSheet } from 'react-native';
 import { contrast } from '@/lib/contrast';
 
 import { sheetControl } from '../test-support/bottom-sheet-mock';
-import { COLORS, STRINGS } from '../test-support/design-table';
+import { COLORS, LISTS, STRINGS } from '../test-support/design-table';
 import { apiError, hang, json, networkDown, notJson } from '../test-support/fake-server';
 import { mapControl } from '../test-support/maps-mock';
 import { pressId, pressText, resetDevice, restart, tap, toS9 } from '../test-support/planning-driver';
 import { hits, MOBILE_ROOT, sourceFiles } from '../test-support/source-files';
 
-import { advance, buildConfig, ENTER, flow, installConfig, nowServer, TEST_KEY, toNow } from '../test-support/trip-now-driver';
+import { advance, buildConfig, ENTER, expectDashedAlong, flow, installConfig, nowServer, TEST_KEY, toNow } from '../test-support/trip-now-driver';
 import { first, MAP_URL, nowItem, nowView, pins, POSITION, route, second, t01, t02, t03, t07, t08, third } from '../test-support/trip-now-fixtures';
 import { day, SPOT } from '../test-support/planning-fixtures';
 
@@ -204,15 +204,17 @@ describe('B3 화면 틀', () => {
 describe('B4 지도에 넘기는 값', () => {
   const coords = (list: number[][]) => list.map(([latitude, longitude]) => ({ latitude, longitude }));
 
-  test('T6_B4_지난_길과_남은_길은_서버_route_그대로', async () => {
+  // §13 E3: 남은 길은 선 하나 + 점선 값, 또는 짧은 조각 여러 개
+  const remainingLines = () => screen.getAllByTestId(/^map-route-remaining/) as unknown as Tree[];
+
+  test('T6_B4_S13_E3_지난_길과_남은_길은_서버_route_그대로', async () => {
     await toNow();
     expect(byId('map-route-done').props.coordinates).toEqual(coords(route.done));
-    expect(byId('map-route-remaining').props.coordinates).toEqual(coords(route.remaining));
+    expectDashedAlong(remainingLines(), coords(route.remaining), LISTS['route-dash']);
   });
 
-  test('T6_B4_남은_길만_점선', async () => {
+  test('T6_B4_S13_E3_지난_길은_실선', async () => {
     await toNow();
-    expect(byId('map-route-remaining').props.lineDashPattern?.length).toBeGreaterThan(0);
     expect(byId('map-route-done').props.lineDashPattern ?? []).toEqual([]);
   });
 
@@ -237,7 +239,7 @@ describe('B4 지도에 넘기는 값', () => {
     control.show(nowView({ route: moved, pins: [{ ...pins[0], lat: 35.3, lng: 135.3 }] }));
     await pressId('demo-toggle');
     await pressId('demo-plus-10');
-    await waitFor(() => expect(byId('map-route-remaining').props.coordinates).toEqual(coords(moved.remaining)));
+    await waitFor(() => expectDashedAlong(remainingLines(), coords(moved.remaining), LISTS['route-dash']));
     expect(byId('map-pin-1').props.coordinate).toEqual({ latitude: 35.3, longitude: 135.3 });
     expect(screen.queryByTestId('map-pin-2')).toBeNull();
   });
@@ -255,6 +257,8 @@ describe('B5 카드 시트', () => {
     await toNow();
     const sheet = byId('card-sheet');
     expect(sheet.props.snapPoints).toHaveLength(3);
+    // §14 정한 값 승인: [0.16, 0.44, 0.88]. 비율을 숫자로 주든 '%' 글자로 주든 같다
+    expect((sheet.props.snapPoints as (string | number)[]).map((p) => (typeof p === 'string' ? Number(p.replace('%', '')) / 100 : p))).toEqual([0.16, 0.44, 0.88]);
     expect(sheet.props.index).toBe(1);
   });
 
@@ -324,12 +328,28 @@ describe('B6 카드 부품', () => {
     expect(screen.queryByTestId('rest-row-1')).toBeNull();
   });
 
-  test('T6_B6_T_07_제목과_출발_시각_남은_분', async () => {
+  // §14 T-07 시각: 시각 글자가 여러 곳에 나오므로 줄을 정확히 찾는다 (승인된 수정)
+  const cardWords = (id: string) => textsUnder(byId(id)).map(textOf).join('');
+
+  test('T6_S14_T_07_제목과_시작_끝_시각', async () => {
     await shows(t07());
-    const card = inCard('card-T-07');
-    expect(card.getByText('서버_예약_제목')).toBeTruthy();
-    expect(card.getByText(/14:40/)).toBeTruthy();
-    expect(card.getByText(/15/)).toBeTruthy();
+    expect(cardWords('card-T-07')).toContain('서버_예약_제목 · 15:00~16:00');
+  });
+
+  test('T6_S14_T_07_까지_출발해야_해', async () => {
+    await shows(t07());
+    expect(inCard('card-T-07').getByText('14:40까지 출발해야 해')).toBeTruthy();
+  });
+
+  test('T6_S14_T_07_남은_분', async () => {
+    await shows(t07());
+    expect(inCard('card-T-07').getByText(/^15(분.*)?$/)).toBeTruthy();
+  });
+
+  test('T6_S11_Q4_T_07_출발_시각이_지나면_지금_출발해', async () => {
+    await shows(t07({ leave_in_min: 0 }));
+    expect(inCard('card-T-07').getByText('지금 출발해')).toBeTruthy();
+    expect(inCard('card-T-07').getByText('14:40까지 출발해야 해')).toBeTruthy();
   });
 
   test('T6_B6_T_08_숙소까지_분', async () => {
@@ -367,7 +387,8 @@ describe('B6 카드 부품', () => {
 
   test('T6_S12_R4_T_07_카드_제목은_fixed_title', async () => {
     await shows(t07());
-    expect(inCard('card-T-07').getByText('서버_예약_제목')).toBeTruthy();
+    expect(cardWords('card-T-07')).toContain('서버_예약_제목');
+    expect(cardWords('card-T-07')).not.toContain('서버_식당_이름');
   });
 
   test('T6_S11_Q21_T_07_고정_일정에_장소가_있으면_상태_글자', async () => {
@@ -377,7 +398,7 @@ describe('B6 카드 부품', () => {
 
   test('T6_S11_Q21_T_07_장소가_없으면_상태_글자_없이_그려진다', async () => {
     await shows(t07({ fixed: { name: '서버_예약_제목', title: '서버_예약_제목', start: '15:00', end: '16:00', facts: [] } }));
-    expect(inCard('card-T-07').getByText('서버_예약_제목')).toBeTruthy();
+    expect(cardWords('card-T-07')).toContain('서버_예약_제목');
     expect(inCard('card-T-07').queryByText(/확인됨|미확인|모름/)).toBeNull();
   });
 

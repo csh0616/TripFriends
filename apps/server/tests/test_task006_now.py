@@ -1,4 +1,4 @@
-"""TASK-006 §A: GET /days/{day_id}/now. 근거: TASK-006 §12 > §11 > A1~A5·§A-1·§A-2·§6·§8 AC-2~4, SCREEN-001 §3-2·§4·§5, GRAPH-001 §6.
+"""TASK-006 §A: GET /days/{day_id}/now. 근거: TASK-006 §14 > §13 > §12 > §11 > A1~A5·§A-1·§A-2·§6·§8 AC-2~4, SCREEN-001 §3-2·§4·§5, GRAPH-001 §6.
 
 "Q숫자"는 §11의 답, "R숫자"는 §12의 답이다.
 """
@@ -32,7 +32,7 @@ CARD_KEYS = {  # §A-1 표, §11 Q8: 평평하게
     "T-02": {"type", "next_item", "leave_at", "leave_in_min", "travel_min", "map_url"},
     "T-03": {"type", "items"},
     "T-07": {"type", "fixed", "leave_by", "leave_in_min"},
-    "T-08": {"type", "go_home_min", "lodging"},
+    "T-08": {"type", "go_home_min", "lodging", "map_url"},  # map_url: §13 E4
 }
 DAY_OVER = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1
 ON_TRACK = "동선대로 가는 중"
@@ -226,6 +226,7 @@ def assert_card_shape(card: dict) -> None:
     elif kind == "T-08":
         assert type(card["go_home_min"]) is int
         assert set(card["lodging"]) == {"lat", "lng"}
+        assert type(card["map_url"]) is str  # §13 E4: 숙소 좌표는 늘 있다 (DayPlan.lodging 필수)
 
 
 def assert_now_shape(view: dict) -> None:
@@ -566,6 +567,31 @@ def test_AC2_T_08의_값(env, plain):
     assert main["lodging"] == {"lat": 35.0, "lng": 135.0}
 
 
+def assert_home_url(main: dict) -> None:
+    url = urlparse(main["map_url"])
+    query = parse_qs(url.query)
+    assert url.scheme == "https"
+    assert "google." in url.netloc
+    assert "/maps/dir" in url.path
+    lat, lng = query["destination"][0].split(",")
+    assert (float(lat), float(lng)) == (main["lodging"]["lat"], main["lodging"]["lng"]) == (35.0, 135.0)
+    assert query["travelmode"] == ["transit"]
+
+
+def test_S13_E4_T_08의_map_url은_숙소_좌표_대중교통(env, plain):
+    assert_home_url(now(env, plain, "19:30")["main"])
+
+
+def test_S13_E4_18시_전에_끝난_날의_T_08도(env):
+    day_id = plant(env, [plan_item(1, "P01", "10:12", "15:00", 12)])
+    assert_home_url(now(env, day_id, "15:00")["main"])
+
+
+def test_S13_E4_빈_코스의_T_08도_숙소는_있다(env):
+    day_id = plant(env, [], places={"P01": place("P01", hours=week_hours())}, go_home=0)
+    assert_home_url(now(env, day_id, "13:00")["main"])
+
+
 def test_AC2_마지막_일정이_18시_뒤에_남아_있으면_아직_T_01(env, plain):
     main = now(env, plain, "18:59")["main"]
     assert (main["type"], main["item"]["seq"], main["ends_in_min"]) == ("T-01", 3, 1)
@@ -712,6 +738,21 @@ def test_S11_Q23_쿼리_400이_없는_날_404보다_먼저(env, params):
 def test_S11_Q23_쿼리_400이_고른_코스_없음_404보다_먼저(env, params):
     day_id = env.plant_day({"P01": place("P01", hours=week_hours())}, day_plan(day=DAY))
     assert_error(env.client.get(f"/days/{day_id}/now", params=params), 400, "INVALID_REQUEST")
+
+
+@pytest.mark.parametrize(
+    "lat, lng",
+    [(90.01, LNG), (-90.01, LNG), (LAT, 180.01), (LAT, -180.01)],
+    ids=["위도_위", "위도_아래", "경도_위", "경도_아래"],
+)
+def test_S14_좌표_범위_밖은_400(env, plain, lat, lng):
+    response = env.client.get(f"/days/{plain}/now", params={"at": "2026-12-02T13:20:00", "lat": lat, "lng": lng})
+    assert_error(response, 400, "INVALID_REQUEST")
+
+
+@pytest.mark.parametrize("lat, lng", [(90.0, 180.0), (-90.0, -180.0)], ids=["위_끝", "아래_끝"])
+def test_S14_좌표_범위_끝은_200(env, plain, lat, lng):
+    assert now(env, plain, "13:20", lat=lat, lng=lng)["position"] == {"lat": lat, "lng": lng}
 
 
 def test_S12_R9_하루_밖_날짜와_코스_없음이_겹치면_404가_먼저(env):
@@ -1187,6 +1228,13 @@ def test_S11_Q14_데모에서_15분_전_경계로_T_07을_볼_수_있다(env):
     assert main["fixed"]["facts"]  # §11 Q21: 장소가 있으면 상태
 
 
+def test_S14_바로_보기의_17시_50분을_열_수_있다(env):
+    day_id = seed_chosen(env)["day_ids"][1]
+    response = demo_now(env, day_id, "2026-12-02T17:50:00")
+    assert response.status_code == 200
+    assert response.json()["main"]["type"] in SUPPORTED
+
+
 def test_S11_Q14_데모에서_예약_뒤_T_08까지_간다(env):
     day_id = seed_chosen(env)["day_ids"][1]
     assert demo_now(env, day_id, "2026-12-02T19:30:00").json()["main"]["type"] == "T-08"
@@ -1271,6 +1319,15 @@ def test_S12_R5_adjust로_바꾼_값이_stay_min에(env):
     _, body, stayed = adjusted_must(env)
     assert stayed != 60  # 시험 자체 확인: typical과 다른 값이어야 구분된다
     assert body["day"]["must_visits"][0]["stay_min"] == stayed
+
+
+def test_S14_고른_뒤_NowView_day에도_바꾼_값(env):
+    sid, body, stayed = adjusted_must(env)
+    chosen = body["options"][0]
+    day_id = body["day"]["day_id"]
+    assert env.select(chosen["option_id"]).status_code == 200
+    view = env.client.get(f"/days/{day_id}/now", params={"at": "2026-12-02T10:00:00"}).json()
+    assert view["day"]["must_visits"][0]["stay_min"] == stayed
 
 
 def test_S12_R5_GET으로_다시_받아도_같다(env):

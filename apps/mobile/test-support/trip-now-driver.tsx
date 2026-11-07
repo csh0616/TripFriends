@@ -116,3 +116,41 @@ export const advance = (ms: number) =>
 export async function flow(ms: number) {
   for (let passed = 0; passed < ms; passed += 100) await advance(Math.min(100, ms - passed));
 }
+
+// ---------- §13 E3: 점선은 lineDashPattern이든 짧은 조각(dashSegments)이든 통과한다 ----------
+
+export type LatLng = { latitude: number; longitude: number };
+export type LineHost = { props: Record<string, any> };
+
+function onPath(point: LatLng, path: LatLng[]): boolean {
+  return path.slice(1).some((end, index) => {
+    const start = path[index];
+    const [ax, ay, bx, by, px, py] = [start.latitude, start.longitude, end.latitude, end.longitude, point.latitude, point.longitude];
+    const cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    const dot = (px - ax) * (bx - ax) + (py - ay) * (by - ay);
+    return Math.abs(cross) < 1e-9 && dot >= -1e-12 && dot <= (bx - ax) ** 2 + (by - ay) ** 2 + 1e-12;
+  });
+}
+
+const near = (a: LatLng, b: LatLng) => Math.abs(a.latitude - b.latitude) < 1e-6 && Math.abs(a.longitude - b.longitude) < 1e-6;
+
+/** 선 하나 + 점선 값, 또는 끊어진 짧은 선 조각 여러 개. 어느 쪽인지 돌려주고, 아니면 던진다 */
+export function expectDashedAlong(hosts: LineHost[], path: LatLng[], dash: number[]): 'pattern' | 'segments' {
+  expect(hosts.length).toBeGreaterThan(0);
+  if (hosts.length === 1) {
+    expect(hosts[0].props.coordinates).toEqual(path);
+    expect(hosts[0].props.lineDashPattern).toEqual(dash);
+    return 'pattern';
+  }
+  const pieces = hosts.map((host) => host.props.coordinates as LatLng[]);
+  for (const host of hosts) expect(host.props.lineDashPattern ?? []).toEqual([]);
+  for (const piece of pieces) {
+    expect(piece.length).toBeGreaterThanOrEqual(2);
+    for (const point of piece) expect(onPath(point, path)).toBe(true);
+  }
+  expect(near(pieces[0][0], path[0])).toBe(true);
+  expect(onPath(pieces[pieces.length - 1][pieces[pieces.length - 1].length - 1], path.slice(-2))).toBe(true);
+  // 조각 사이가 실제로 비어 있어야 점선이다
+  expect(pieces.slice(1).some((piece, index) => !near(piece[0], pieces[index][pieces[index].length - 1]))).toBe(true);
+  return 'segments';
+}
