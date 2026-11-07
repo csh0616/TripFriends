@@ -69,6 +69,15 @@ export const layout = {
   sheetHandleHeight: 4,
   demoThumb: 20, // §14 승인: 데모 시각 막대의 손잡이 지름
   mapEdge: 60, // §14 승인: 카메라 맞춤 좌우 여백 (핀 반쪽 + 이름 말풍선이 잘리지 않게)
+  // TASK-009 / DESIGN-001 §4-7 고르기 방식. tokens.json에는 넣지 않는다(design-tokens 시험이 표에 없는 이름을 막는다), 문서 값 그대로
+  radio: 24, // 칸의 선택 표시
+  actionBar: 68, // 시트 아래 확정 버튼 줄
+  rowAlt: 64, // T-06 대안 칸
+  rowDrop: 52, // T-06 [빼고 가기] 칸
+  thumbSm: 44, // 칸 안 사진 자리
+  selRing: 2, // sel-ring: 고른 칸 안쪽 고리 굵기 (색은 brand, 바탕 sel-bg = brand-soft)
+  actionBarLine: 1, // action-bar 윗선 굵기 (문서에 없는 크기)
+  radioDot: 12, // 고른 radio 안 채움 지름 (문서에 없는 크기)
   // 누르는 영역 보강: 칩 36 -> 44
   chipSlop: (touchMin - chip) / 2,
 } as const;
