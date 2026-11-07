@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 // fakePosition 순수 함수. 근거: TASK-006 B7, §8 AC-5 (일정 안 = 그 장소, 이동 중 = 두 점 사이, 시각 단조).
-// §11 Q15: 핀에 start·end가 생겼다. 출발 전 = 숙소, 일정 사이 = 빈 시간 전체를 분모로 보간, 마지막 뒤 = go_home_min 동안 숙소로, 그 뒤 숙소.
+// §11 Q15·§12 R6: 핀에 start·end·travel_min이 생겼다. 출발 전 = 숙소, 출발 뒤 1번 전 = 숙소 → 1번 보간, 일정 사이 = 빈 시간 전체를 분모로 보간, 마지막 뒤 = go_home_min 동안 숙소로, 그 뒤 숙소.
 import fc from 'fast-check';
 
 type Spot = { lat: number; lng: number };
@@ -196,7 +196,37 @@ describe('§11 Q15', () => {
     );
   });
 
-  test.skip('R6_출발_뒤_1번_시작_전_위치_숙소에서_1번_사이인가_핀에는_이동_분이_없어_앱이_출발_시각을_모른다', () => {
+  // §12 R6: 출발 뒤 1번 도착 전은 숙소 → 1번 보간. 출발 = 1번 시작 − travel_min
+  test('T6_S12_R6_출발_정각은_숙소', () => {
+    expectAt(fakePosition(at(min('10:00')), COURSE), HOME);
+  });
+
+  test('T6_S12_R6_이동_시간의_절반이면_숙소와_1번의_가운데', () => {
     expectAt(fakePosition(at(min('10:06')), COURSE), { lat: (HOME.lat + A.lat) / 2, lng: (HOME.lng + A.lng) / 2 });
+  });
+
+  test('T6_S12_R6_1번_시작_1분_전은_아직_도착_전', () => {
+    expectAt(fakePosition(at(min('10:11')), COURSE), { lat: HOME.lat + ((A.lat - HOME.lat) * 11) / 12, lng: HOME.lng + ((A.lng - HOME.lng) * 11) / 12 });
+  });
+
+  test('T6_S12_R6_1번_시작이_하루_시작보다_한참_뒤면_출발_전까지_숙소', () => {
+    const late: Course = { lodging: HOME, go_home_min: 25, items: [{ ...A, start: '10:40', end: '12:00', travel_min: 12 }] };
+    expectAt(fakePosition(at(min('10:27')), late), HOME);
+    expectAt(fakePosition(at(min('10:34')), late), { lat: (HOME.lat + A.lat) / 2, lng: (HOME.lng + A.lng) / 2 });
+  });
+
+  test('T6_S12_R6_속성_숙소에서_1번까지_이동_시간_비율대로', () => {
+    fc.assert(
+      fc.property(legs, fraction, (parts, pick) => {
+        const course = build(parts);
+        const item = course.items[0];
+        const passed = Math.floor(pick * item.travel_min);
+        const ratio = passed / item.travel_min;
+        expectAt(fakePosition(at(min(item.start) - item.travel_min + passed), course), {
+          lat: HOME.lat + (item.lat - HOME.lat) * ratio,
+          lng: HOME.lng + (item.lng - HOME.lng) * ratio,
+        });
+      }),
+    );
   });
 });

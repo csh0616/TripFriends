@@ -2,7 +2,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { act, screen } from '@testing-library/react-native';
+import { act, screen, waitFor } from '@testing-library/react-native';
 import Constants from 'expo-constants';
 
 import { json, type Reply } from './fake-server';
@@ -57,6 +57,7 @@ export function nowServer(initial: object = nowView()) {
   // 서버처럼 보낸 at을 응답에 그대로 싣는다 (§A-1)
   const echo = (view: object) => (at: string | null) => json(200, { ...view, at });
   let reply: Reply | ((at: string | null) => Reply) = echo(initial);
+  const hasPins = (initial as { pins?: unknown[] }).pins?.length !== 0;
   const queue: (Reply | Promise<Reply>)[] = [];
   server.match(NOW_ROUTE, (sent) => {
     const queued = queue.shift();
@@ -65,6 +66,7 @@ export function nowServer(initial: object = nowView()) {
   });
   return {
     server,
+    hasPins,
     show: (view: object) => {
       reply = echo(view);
     },
@@ -98,6 +100,9 @@ export async function toNow(control: NowControl = nowServer()) {
   await pressText(ENTER);
   await screen.findByTestId('trip-now-screen');
   await screen.findByTestId('now-main');
+  // §12 R7: 첫 응답의 핀으로 위치를 계산해 한 번 더 부른다. 그 요청까지 끝난 뒤를 시작점으로 삼는다
+  if (control.hasPins) await waitFor(() => expect(control.requests().length).toBeGreaterThanOrEqual(2));
+  await act(async () => undefined);
   return { app, control };
 }
 

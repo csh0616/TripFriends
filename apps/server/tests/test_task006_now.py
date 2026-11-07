@@ -1,6 +1,6 @@
-"""TASK-006 §A: GET /days/{day_id}/now. 근거: TASK-006 §11(우선), A1~A5·§A-1·§A-2·§6·§8 AC-2~4, SCREEN-001 §3-2·§4·§5, GRAPH-001 §6.
+"""TASK-006 §A: GET /days/{day_id}/now. 근거: TASK-006 §12 > §11 > A1~A5·§A-1·§A-2·§6·§8 AC-2~4, SCREEN-001 §3-2·§4·§5, GRAPH-001 §6.
 
-"Q숫자"는 §11의 답, "R숫자"는 §11로도 답이 안 나와 다시 올린 질문이다.
+"Q숫자"는 §11의 답, "R숫자"는 §12의 답이다.
 """
 
 import logging
@@ -26,7 +26,7 @@ SUPPORTED = {"T-01", "T-02", "T-03", "T-07", "T-08"}  # A3
 NOW_KEYS = {"day", "at", "status", "status_text", "reason", "main", "subs", "chip", "pins", "route", "position"}
 ITEM_KEYS = {"seq", "place_id", "name", "start", "end", "lat", "lng", "is_fixed", "facts"}  # §A-1 CourseItemView
 FACT_KEYS = {"field", "value", "status", "source_type", "checked_at"}
-PIN_KEYS = {"seq", "place_id", "name", "lat", "lng", "start", "end", "state"}  # §11 Q15: start·end
+PIN_KEYS = {"seq", "place_id", "name", "lat", "lng", "start", "end", "travel_min", "state"}  # §11 Q15: start·end, §12 R6: travel_min
 CARD_KEYS = {  # §A-1 표, §11 Q8: 평평하게
     "T-01": {"type", "item", "ends_in_min"},
     "T-02": {"type", "next_item", "leave_at", "leave_in_min", "travel_min", "map_url"},
@@ -34,6 +34,7 @@ CARD_KEYS = {  # §A-1 표, §11 Q8: 평평하게
     "T-07": {"type", "fixed", "leave_by", "leave_in_min"},
     "T-08": {"type", "go_home_min", "lodging"},
 }
+DAY_OVER = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1
 ON_TRACK = "동선대로 가는 중"
 DELAYED = "늦어지는 중"
 FREE = "다음까지 여유 있음"
@@ -218,7 +219,7 @@ def assert_card_shape(card: dict) -> None:
         for entry in card["items"]:
             assert_item_view(entry)
     elif kind == "T-07":
-        assert set(card["fixed"]) == {"name", "start", "end", "facts"}  # §11 Q21
+        assert set(card["fixed"]) == {"name", "title", "start", "end", "facts"}  # §11 Q21, §12 R4
         assert_facts(card["fixed"]["facts"])
         assert_hhmm(card["leave_by"])
         assert type(card["leave_in_min"]) is int
@@ -243,6 +244,7 @@ def assert_now_shape(view: dict) -> None:
         assert type(pin["lat"]) is float and type(pin["lng"]) is float
         assert_hhmm(pin["start"])
         assert_hhmm(pin["end"])
+        assert type(pin["travel_min"]) is int
     assert set(view["route"]) == {"done", "remaining"}
     for part in view["route"].values():
         assert all(len(point) == 2 for point in part)
@@ -528,7 +530,7 @@ def test_AC2_고정_일정이_순위_2라_다음_이동보다_먼저(env, with_f
 def test_AC2_T_07의_값(env, with_fixed):
     main = now(env, with_fixed, "14:25")["main"]
     fixed = main["fixed"]
-    assert (fixed["name"], fixed["start"], fixed["end"]) == ("가상 F01", "15:00", "16:00")
+    assert (fixed["name"], fixed["title"], fixed["start"], fixed["end"]) == ("가상 F01", "고정 일정", "15:00", "16:00")  # §12 R4
     assert [fact["status"] for fact in fixed["facts"]] == ["confirmed"]  # §11 Q21
     assert main["leave_by"] == "14:40"
     assert main["leave_in_min"] == 15
@@ -590,10 +592,10 @@ def test_S11_Q1_compose_screen은_그대로_18시_전이면_T_01():
     assert compose_screen(snapshot).main == "T-01"
 
 
-@pytest.mark.skip(reason="질문 R1: §11 Q1은 T-08로 바꾸라고만 한다. compose reason은 T-01 문장이라 T-08 문장으로 바꾸는지 문서에 없음")
-def test_R1_18시_전_T_08의_reason(env):
+@pytest.mark.parametrize("clock", ["15:00", "17:59"], ids=["끝_정각", "18시_1분전"])
+def test_S12_R1_Q1로_T_08이_되면_reason도_T_08_문장(env, clock):
     day_id = plant(env, [plan_item(1, "P01", "10:12", "15:00", 12)])
-    assert now(env, day_id, "15:00")["reason"] == REASONS["T-08"]
+    assert now(env, day_id, clock)["reason"] == DAY_OVER
 
 
 def rest_items() -> list[CourseItem]:
@@ -627,9 +629,33 @@ def test_S11_Q10_쉬는_시간이_있어도_출발_뒤_leave_in_min은_0(env, cl
     assert now(env, plant(env, rest_items()), clock)["main"]["leave_in_min"] == 0
 
 
-@pytest.mark.skip(reason="질문 R2: 일정이 끝나고 출발 전(쉬는 시간)도 §11 Q10의 '이동 중'인가. 0인지 남은 분인지 문서에 없음")
-def test_R2_쉬는_시간_안의_leave_in_min(env):
-    assert now(env, plant(env, rest_items()), "12:05")["main"]["leave_in_min"] == 10
+@pytest.mark.parametrize(
+    "clock, left",
+    [("12:00", 15), ("12:05", 10), ("12:14", 1), ("12:15", 0), ("12:16", 0)],
+    ids=["끝_정각", "쉬는_중", "출발_1분전", "출발_정각", "출발_1분뒤"],
+)
+def test_S12_R2_쉬는_시간은_T_02이고_남은_분_출발부터_0(env, clock, left):
+    main = now(env, plant(env, rest_items()), clock)["main"]
+    assert (main["type"], main["leave_at"], main["leave_in_min"]) == ("T-02", "12:15", left)
+
+
+def test_S12_R2_쉬는_시간은_이동_중이_아니라_위치가_경계_점이_아니다(env):
+    route = now(env, plant(env, rest_items()), "12:05", lat=LAT, lng=LNG)["route"]
+    assert route["done"] == [HOME, *stops(1)]
+    assert route["remaining"] == [*stops(1, 2), HOME]
+
+
+def test_S12_R2_출발_시각부터는_위치가_경계_점(env):
+    route = now(env, plant(env, rest_items()), "12:15", lat=LAT, lng=LNG)["route"]
+    assert route["done"] == [HOME, *stops(1), [LAT, LNG]]
+
+
+def test_S12_R2_고정_일정_앞_빈_시간도_출발_전이면_남은_분(env):
+    items = [plan_item(1, "P01", "10:12", "14:00", 12), plan_item(2, "F01", "15:00", "16:00", 20, fixed=True)]
+    places = {"P01": place("P01", km=1.0, hours=week_hours()), "F01": place("F01", km=2.0, hours=week_hours())}
+    day_id = plant(env, items, fixed=[fixed_event("15:00", "16:00", places["F01"])], places=places)
+    main = now(env, day_id, "14:10")["main"]  # 끝 14:00, 출발 14:40: 고정 일정 15분 전보다 앞
+    assert (main["type"], main["leave_in_min"]) == ("T-02", 30)
 
 
 @pytest.mark.parametrize(
@@ -659,8 +685,17 @@ def test_S11_Q7_자정_넘는_하루도_날짜_그대로_비교해_다음_날짜
     assert_error(response, 400, "INVALID_REQUEST")
 
 
-BAD_QUERIES = [{}, {"at": "아무말"}, {"at": "2026-13-40T10:00:00"}, {"at": "2026-12-02T13:20:00", "lat": LAT}]
-BAD_IDS = ["at_없음", "형식_오류", "없는_날짜", "lat만_보냄"]
+BAD_QUERIES = [
+    {},
+    {"at": "아무말"},
+    {"at": "2026-13-40T10:00:00"},
+    {"at": "2026-12-02T13:20:00", "lat": LAT},
+    {"at": "2026-12-02T13:20:00", "lng": LNG},  # §12 R9
+    {"at": "2026-12-02T13:20:00+09:00"},  # §12 R9
+    {"at": "2026-12-02T04:20:00Z"},  # §12 R9
+    {"at": "2026-12-02T13:20:00", "lat": "숫자아님", "lng": LNG},
+]
+BAD_IDS = ["at_없음", "형식_오류", "없는_날짜", "lat만_보냄", "lng만_보냄", "시간대_붙음", "시간대_Z", "lat_형식_오류"]
 
 
 @pytest.mark.parametrize("params", BAD_QUERIES, ids=BAD_IDS)
@@ -677,6 +712,17 @@ def test_S11_Q23_쿼리_400이_없는_날_404보다_먼저(env, params):
 def test_S11_Q23_쿼리_400이_고른_코스_없음_404보다_먼저(env, params):
     day_id = env.plant_day({"P01": place("P01", hours=week_hours())}, day_plan(day=DAY))
     assert_error(env.client.get(f"/days/{day_id}/now", params=params), 400, "INVALID_REQUEST")
+
+
+def test_S12_R9_하루_밖_날짜와_코스_없음이_겹치면_404가_먼저(env):
+    day_id = env.plant_day({"P01": place("P01", hours=week_hours())}, day_plan(day=DAY))
+    response = env.client.get(f"/days/{day_id}/now", params={"at": "2026-12-03T13:20:00"})
+    assert assert_error(response, 404, "NOT_FOUND")["detail"]["resource"] == "course"
+
+
+def test_S12_R9_하루_밖_날짜와_없는_날이_겹쳐도_404(env):
+    response = env.client.get("/days/없는-날/now", params={"at": "2026-12-03T13:20:00"})
+    assert assert_error(response, 404, "NOT_FOUND")["detail"]["resource"] == "day"
 
 
 # ---------- status, status_text, reason ----------
@@ -741,10 +787,26 @@ def test_S5_하루_시작_전_미리보기의_보조(env, plain):
     assert [entry["seq"] for entry in subs[1]["items"]] == [1, 2, 3]
 
 
-def test_S11_Q5_다음_일정이_없으면_T_02_보조만_뺀다(env, plain):
-    subs = now(env, plain, "18:30")["subs"]
+def test_S11_Q5_S12_R11_마지막_일정_안이면_T_02도_빈_T_03도_없다(env, plain):
+    assert now(env, plain, "18:30")["subs"] == []
+
+
+def test_S12_R11_마지막_일정_시작부터_보조가_없고_앞_일정에서는_있다(env, plain):
+    assert now(env, plain, "14:30")["subs"] == []
+    assert types(now(env, plain, "13:20")["subs"]) == ["T-02", "T-03"]
+
+
+def test_S12_R11_T_03의_남은_일정이_있으면_이동_중에도_남는다(env, plain):
+    subs = now(env, plain, "14:10")["subs"]
     assert types(subs) == ["T-03"]
-    assert subs[0]["items"] == []
+    assert [entry["seq"] for entry in subs[0]["items"]] == [3]
+
+
+def test_S12_R11_대체_뒤에도_빈_T_03은_없다(env, plain, monkeypatch):
+    force(monkeypatch, lambda s: {"walked_km": 12.0})
+    view = now(env, plain, "18:30")
+    assert view["main"]["type"] == "T-01"
+    assert view["subs"] == []
 
 
 # ---------- A4: T-02 값 ----------
@@ -786,6 +848,7 @@ def test_A1_핀은_코스_순서대로_이름_좌표와_함께(env, plain):
     assert [(p["seq"], p["place_id"], p["name"]) for p in pins] == [(1, "P01", "가상 P01"), (2, "P02", "가상 P02"), (3, "P03", "가상 P03")]
     assert (pins[1]["lat"], pins[1]["lng"]) == north_of(2.0)
     assert [(p["start"], p["end"]) for p in pins] == [("10:12", "12:00"), ("12:20", "14:00"), ("14:30", "19:00")]  # §11 Q15
+    assert [p["travel_min"] for p in pins] == [12, 20, 30]  # §12 R6
 
 
 HOME = [35.0, 135.0]
@@ -843,16 +906,23 @@ def test_S11_Q11_끝난_뒤_남은_길은_마지막_장소에서_숙소(env, pla
     assert route["remaining"] == [*stops(3), HOME]
 
 
-@pytest.mark.skip(reason="질문 R3: 이동 중인데 위치를 안 보냈을 때 경계 점이 문서에 없음 (앞 장소인가, 서버가 계산하나)")
-def test_R3_이동_중_위치가_없으면_경계_점(env, plain):
+def test_S12_R3_이동_중_위치가_없으면_경계_점은_앞_장소(env, plain):
     route = now(env, plain, "12:10")["route"]
     assert route["done"] == [HOME, *stops(1)]
+    assert route["remaining"] == [*stops(1, 2, 3), HOME]
 
 
-@pytest.mark.skip(reason="질문 R3: 끝난 뒤 숙소로 가는 중 위치를 보내면 §11 Q11의 두 문장 중 어느 쪽인지 문서에 없음")
-def test_R3_끝난_뒤_위치를_보내면_경계_점(env, plain):
-    route = now(env, plain, "19:10", lat=LAT, lng=LNG)["route"]
-    assert route["remaining"] == [*stops(3), HOME]
+def test_S12_R3_1번으로_가는_중_위치가_없으면_경계_점은_숙소(env, plain):
+    route = now(env, plain, "10:05")["route"]
+    assert route["done"] == [HOME]
+    assert route["remaining"] == [HOME, *stops(1, 2, 3), HOME]
+
+
+def test_S12_R3_끝난_뒤_위치를_보내도_남은_길은_그대로(env, plain):
+    view = now(env, plain, "19:10", lat=LAT, lng=LNG)
+    assert view["route"]["done"] == [HOME, *stops(1, 2, 3)]
+    assert view["route"]["remaining"] == [*stops(3), HOME]
+    assert view["position"] == {"lat": LAT, "lng": LNG}
 
 
 # ---------- AC-4: A3 대체 ----------
@@ -962,7 +1032,7 @@ def test_S11_Q6_T_02의_map_url은_null(env, placeless):
 def test_S11_Q6_Q21_T_07의_fixed_facts는_빈_목록(env, placeless):
     main = now(env, placeless, "12:50")["main"]
     assert main["type"] == "T-07"
-    assert main["fixed"] == {"name": "고정 일정", "start": "13:00", "end": "14:00", "facts": []}
+    assert main["fixed"] == {"name": "고정 일정", "title": "고정 일정", "start": "13:00", "end": "14:00", "facts": []}
 
 
 @pytest.mark.parametrize("clock", ["09:00", "12:00", "12:50", "13:30", "14:10", "19:30"])
@@ -1037,8 +1107,8 @@ def test_AC2_속성_쉬는_시간이_있는_무작위_코스에서_표대로(env
     assert view["position"] is None
     assert view["route"]["done"][-1] == view["route"]["remaining"][0]
     following = next((e for e in entries if e[0] > minute), None)
-    if view["main"]["type"] == "T-02" and following and minute >= following[0] - following[2]:
-        assert view["main"]["leave_in_min"] == 0
+    if view["main"]["type"] == "T-02":
+        assert view["main"]["leave_in_min"] == max(0, following[0] - following[2] - minute)  # §11 Q10, §12 R2
 
 
 # ---------- A5: /debug/seed-demo의 chosen ----------
@@ -1147,10 +1217,12 @@ def test_A5_데모_하루를_5분씩_돌려도_늘_지원_카드만_나온다(en
         assert set(types(view["subs"])) <= SUPPORTED, hhmm(minute)
 
 
-@pytest.mark.skip(reason="질문 R4: 저녁 예약은 장소가 있어 TASK-004 Q1대로면 이름 = 식당 이름. T-07 fixed.name이 '저녁 예약'인지 식당 이름인지 문서에 없음")
-def test_R4_데모_T_07의_이름(env):
+def test_S12_R4_데모_T_07의_이름은_식당_제목은_저녁_예약(env):
     day_id = seed_chosen(env)["day_ids"][1]
-    assert demo_now(env, day_id, "2026-12-02T18:29:00").json()["main"]["fixed"]["name"] == "저녁 예약"
+    record = env.repo.get_day(day_id)
+    fixed = demo_now(env, day_id, "2026-12-02T18:29:00").json()["main"]["fixed"]
+    assert fixed["name"] == record.places[record.plan.fixed[0].place_id].name
+    assert fixed["title"] == "저녁 예약"
 
 
 # ---------- §11 Q19: day.must_visits.stay_min ----------
@@ -1180,10 +1252,27 @@ def test_S11_Q19_바꾼_값은_머문_시간이_없는_장소에도_먼저(env):
     assert must_stay(env, {"P01": place("P01", hours=week_hours())}, overrides={"P01": 45}) == 45
 
 
-@pytest.mark.skip(reason="질문 R5: '바꾼 머문 시간'이 DayPlan.stay_overrides뿐인지, 세션에서 ±15로 바꾼 값(adjust)도 day 요약에 반영되는지 문서에 없음")
-def test_R5_adjust로_바꾼_값도_stay_min에(env):
+def adjusted_must(env) -> tuple[str, dict, int]:
     stay = StayRange(min=30, typical=60, max=120)
-    day_id = env.plant_day({"P01": place("P01", hours=week_hours(), stay=stay)}, day_plan(must=("P01",), day=DAY))
+    places = {"P01": place("P01", hours=week_hours(), stay=stay)}
+    for number in range(2, 8):
+        places[f"P{number:02d}"] = place(f"P{number:02d}", km=float(number), hours=week_hours(), stay=stay)
+    day_id = env.plant_day(places, day_plan(must=("P01",), day=DAY))
     sid, course = env.composing(day_id)
-    body = env.adjust(sid, course["options"][0]["option_id"], "P01", 15).json()
-    assert body["day"]["must_visits"][0]["stay_min"] != 60
+    option = course["options"][0]
+    response = env.adjust(sid, option["option_id"], "P01", 15)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    changed = next(o for o in body["options"] if o["label"] == option["label"])
+    return sid, body, next(i["stay_min"] for i in changed["items"] if i["place_id"] == "P01")
+
+
+def test_S12_R5_adjust로_바꾼_값이_stay_min에(env):
+    _, body, stayed = adjusted_must(env)
+    assert stayed != 60  # 시험 자체 확인: typical과 다른 값이어야 구분된다
+    assert body["day"]["must_visits"][0]["stay_min"] == stayed
+
+
+def test_S12_R5_GET으로_다시_받아도_같다(env):
+    sid, _, stayed = adjusted_must(env)
+    assert env.client.get(f"/planning/{sid}").json()["day"]["must_visits"][0]["stay_min"] == stayed

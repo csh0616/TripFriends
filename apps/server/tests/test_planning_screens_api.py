@@ -716,8 +716,12 @@ def test_S41_A2_AC3_성공_응답_15종_모두_day가_저장소_값과_같다_�
     assert expected["date"] == "2026-12-02"
     assert (expected["start"], expected["end"], expected["day_number"]) == ("10:00", "20:00", 2)
     assert len(results) == 15
+    # TASK-006 §12 R5: 세션에서 ±15로 바꾼 머문 시간도 stay_min에 든다. 조정 뒤 응답 3개만 그 값을 쓴다
+    overrides = env.repo.stay_overrides(results[0][1]["session_id"])
+    assert "D01" in overrides
+    after_adjust = {**expected, "must_visits": [{**expected["must_visits"][0], "stay_min": overrides["D01"]}]}
     for name, body in results:
-        assert body["day"] == expected, name
+        assert body["day"] == (after_adjust if name in {"조정", "더_고를래", "다시_코스"} else expected), name
 
 
 def test_S42_A2_자동_시작_응답에도_day(env):

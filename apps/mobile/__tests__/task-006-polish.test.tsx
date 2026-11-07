@@ -89,6 +89,20 @@ describe('D2 비어 있는 시간에서 꼭 갈 곳 머문 시간도 뺀다 (§1
     expect(freeHoursText({ ...DAY, fixed, must_visits: [must('A')] })).toBe('9시간 비어 있어');
   });
 
+  // §12 R11: 머문 시간과 고정 일정이 겹치면 긴 쪽만
+  test.each<[string, number, string]>([
+    ['머문 시간이 더 길면 머문 시간만', 120, '8시간 비어 있어'],
+    ['고정 일정이 더 길면 고정 일정만', 30, '9시간 비어 있어'],
+  ])('T6_D2_S12_R11_%s', (_name, stay, expected) => {
+    const fixed = [{ start: '13:00', end: '14:00', place_id: 'A' }];
+    expect(freeHoursText({ ...DAY, fixed, must_visits: [must('A', stay)] })).toBe(expected);
+  });
+
+  test('T6_D2_S12_R11_겹치는_곳만_긴_쪽이고_다른_꼭_갈_곳은_따로', () => {
+    const fixed = [{ start: '13:00', end: '14:00', place_id: 'A' }];
+    expect(freeHoursText({ ...DAY, fixed, must_visits: [must('A', 120), must('B')] })).toBe('7시간 비어 있어');
+  });
+
   test('T6_D2_TASK005_Q7_다_빼서_반올림_뒤_0_이하면_숨긴다', () => {
     expect(freeHoursText({ start: '10:00', end: '11:00', fixed: [], must_visits: [must('A')] })).toBeNull();
     expect(freeHoursText({ start: '10:00', end: '11:00', fixed: [], must_visits: [must('A'), must('B')] })).toBeNull();
