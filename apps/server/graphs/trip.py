@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from engine.models import CourseOption, Dropped, Infeasible
 from engine.planning import compose_courses
 from planning.repo import DayRecord, OptionRecord, PlanningRepo
-from trip.alternatives import alternative_input, closed_input, closed_reason, go_home_only, reason_text, remaining_travel_min, shape
+from trip.alternatives import alternative_input, closed_input, closed_reason, go_home_only, in_place, next_fixed_title, reason_text, remaining_travel_min, shape
 from trip.detect import DelayFinding, is_stale
 from trip.now import event_view
 from trip.repo import ClosedInfo, EventRecord, ProposalRecord, TripRepo
@@ -160,17 +160,20 @@ def _closed_proposal(run: _Run, event_id: str, finding: ClosedFinding, replaceme
     """닫힌 곳을 replacement로 바꾼(None이면 뺀) 남은 코스 한 안. 못 만들거나 쓸모없으면 None. 예외는 그대로 올라간다 (§6)."""
     req = run.req
     course, day = req.course, req.day
-    spec = closed_input(day, course, finding.place_id, replacement, req.when)
-    if isinstance(spec, Infeasible):
-        return None
-    result = compose_courses(spec.plan, spec.picks, day.places, start=spec.start)
-    if isinstance(result, Infeasible):
-        empty = go_home_only(spec, result) if replacement is None else None
-        if empty is None:
+    reordered = False
+    shaped = in_place(day, course, finding.place_id, replacement, req.when)  # §14·§15: 자리에 그대로. [빼고 가기]는 여기까지 (다시 짜지 않음)
+    if shaped is None:
+        if replacement is None:
             return None
-        result = [empty]
-    option = next((o for o in result if o.label == "relaxed"), result[0])
-    shaped = shape(day, course, option, spec, req.when)
+        spec = closed_input(day, course, finding.place_id, replacement, req.when)
+        if isinstance(spec, Infeasible):
+            return None
+        result = compose_courses(spec.plan, spec.picks, day.places, start=spec.start)
+        if isinstance(result, Infeasible):
+            return None
+        option = next((o for o in result if o.label == "relaxed"), result[0])
+        shaped = shape(day, course, option, spec, req.when)
+        reordered = True
     if replacement is not None and (replacement in shaped.dropped or not shaped.keeps_fixed):
         return None  # B3: 대안이 빠진 안·고정 일정을 못 지키는 안은 대안이 아니다 (§11 Q8)
     was_must = finding.place_id in day.plan.must_visit
@@ -180,8 +183,8 @@ def _closed_proposal(run: _Run, event_id: str, finding: ClosedFinding, replaceme
         dropped = (finding.place_id, *dropped)  # B4: [빼고 가기]는 닫힌 곳이 빠지는 곳
         full = full.model_copy(update={"dropped": [*full.dropped, Dropped(place_id=finding.place_id, reason="closed_at_time")]})
     names = [day.places[pid].name for pid in dropped]
-    base = reason_text(names, spec.fixed_title)
-    index = spec.index + 1
+    base = reason_text(names, next_fixed_title(day, course, finding.place_id))
+    index = shaped.from_index
     change = remaining_travel_min(full, index) - remaining_travel_min(course, index)
     return ProposalRecord(
         proposal_id=str(uuid.uuid4()),
@@ -195,7 +198,7 @@ def _closed_proposal(run: _Run, event_id: str, finding: ClosedFinding, replaceme
         from_index=shaped.from_index,
         created_at=req.when,
         base_delay_min=0,
-        closed=ClosedInfo(finding.place_id, replacement, distance_m, change),
+        closed=ClosedInfo(finding.place_id, replacement, distance_m, change, reordered),
     )
 
 

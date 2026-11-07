@@ -42,6 +42,7 @@ class ClosedInfo:
     alternative: PlaceId | None
     distance_m: int | None
     travel_change_min: int  # 남은 이동 분 합(숙소 복귀 포함), 바뀐 뒤 - 바뀌기 전 (Q4)
+    reordered: bool = False  # §14: 자리에 넣어서는 못 지켜 compose_courses로 다시 짠 안
 
 
 @dataclass(frozen=True)

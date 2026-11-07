@@ -191,8 +191,8 @@ def _snapshot(m: _Moment, delayed: bool = False, closed: bool = False, to_check:
 def check_target(entries: list[_Entry], m: _Moment, weekday: int, checks: Checks) -> _Entry | None:
     """A1·A2·A6: 다음 일정 장소가 영업 확인 대상이고 확인 시간 안이면 그 일정, 아니면 None."""
     nxt = m.following
-    if nxt is None or nxt.place is None:
-        return None
+    if nxt is None or nxt.place is None or nxt.is_fixed:
+        return None  # §14: 고정 일정 장소는 사용자가 예약한 곳 (영업 확인은 예약처 몫)
     status = _opening_fact(nxt.place, weekday).status
     if not needs_check(status, nxt.place.id in checks):
         return None
@@ -469,6 +469,7 @@ def event_view(record: EventRecord, proposals: list[ProposalRecord], day: DayRec
                     alternative=NowPlaceRef(place_id=alternative, name=day.places[alternative].name) if alternative else None,
                     distance_m=p.closed.distance_m,
                     travel_change_min=p.closed.travel_change_min,
+                    reordered=p.closed.reordered,
                 ),
             )
         )

@@ -6,10 +6,11 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from engine.models import CourseOption, DayPlan, Dropped, Infeasible, PlanFixed, PlaceId
+from engine.models import CourseItem, CourseOption, DayPlan, Dropped, Infeasible, PlanFixed, Place, PlaceId
 from engine.planning import distance_km, travel_min  # 코스 계산과 같은 이동 분 식
 from planning.repo import DayRecord
 from trip.detect import DelayCourse, DelayStop
+from trip.retime import Slot, buffer_min, retime, slot_of
 
 
 def _minutes(value: str) -> int:
@@ -176,6 +177,9 @@ def closed_input(day: DayRecord, course: CourseOption, closed_id: PlaceId, repla
         rest_places = rest_places - {closed_id}
     swapped = [replacement if pid == closed_id else pid for pid in plan.must_visit]
     stays = {item.place_id: item.stay_min for item in rest if item.place_id and item.stay_source == "user" and item.place_id != closed_id}
+    closed_item = rest[0]
+    if replacement is not None and closed_item.stay_source == "user":
+        stays[replacement] = closed_item.stay_min  # §16 Q36: 사용자가 바꾼 머무는 시간은 대안이 받는다
     new_plan = DayPlan(
         date=plan.date,
         start=_hhmm(ready),
@@ -196,3 +200,66 @@ def remaining_travel_min(course: CourseOption, from_index: int) -> int:
 def closed_reason(base: str, was_must: bool) -> str:
     """§7·§12 Q23: TASK-007 대본 그대로, 꼭 갈 곳이었으면 덧붙인다 ([빼고 가기] 이유에)."""
     return f"{base} (꼭 갈 곳이었어)" if was_must else base
+
+
+# ---------- 닫힌 곳 자리에 그대로 넣기 (TASK-008 §14~§16) ----------
+
+
+def _slot_stay(closed_item: CourseItem, replacement: Place | None) -> tuple[int, str | None]:
+    """§15 Q32·§16 Q36: 대안의 머무는 시간 = 닫힌 곳 자리 시간. 사용자가 바꾼 값이면 그대로,
+    아니면 대안의 stay.min~max 안으로 (범위 밖이면 가까운 끝값, 범위가 없으면 그대로)."""
+    if closed_item.stay_source == "user" or replacement is None or replacement.stay is None:
+        return closed_item.stay_min, closed_item.stay_source
+    return min(max(closed_item.stay_min, replacement.stay.min), replacement.stay.max), closed_item.stay_source
+
+
+def _fixed_coord(day: DayRecord, item: CourseItem) -> tuple[float, float] | None:
+    if item.place_id is None:
+        return None
+    for event in day.plan.fixed:
+        if event.place_id == item.place_id and event.start == item.start and event.end == item.end and event.lat is not None and event.lng is not None:
+            return (event.lat, event.lng)
+    place = day.places[item.place_id]
+    return (place.lat, place.lng)
+
+
+def in_place(day: DayRecord, course: CourseOption, closed_id: PlaceId, replacement: PlaceId | None, at: datetime) -> Shaped | None:
+    """닫힌 곳 자리에 대안을 넣고(없으면 빼고) 뒤 일정은 순서·머무는 시간 그대로 시각만 다시 잰다 (DP 없음).
+
+    출발 = 앞 장소 (없으면 숙소), 떠나는 시각 = max(지금, 앞 장소 끝) (§11 Q7). 영업시간·고정 일정·하루 끝을 못 지키면 None.
+    """
+    index = next(i for i, item in enumerate(course.items) if item.place_id == closed_id)
+    closed_item, before, after = course.items[index], course.items[:index], course.items[index + 1 :]
+    now_min = at.hour * 60 + at.minute
+    ready = max([now_min, *(_minutes(item.end) for item in before[-1:])])
+    spot = next((day.places[i.place_id] for i in reversed(before) if i.place_id), None)
+    origin = (spot.lat, spot.lng) if spot else day.plan.lodging
+    slots: list[Slot] = []
+    if replacement is not None:
+        stay, source = _slot_stay(closed_item, day.places[replacement])
+        slots.append(Slot(replacement, stay, source, False, "", "", None))
+    slots.extend(slot_of(item, _fixed_coord(day, item) if item.is_fixed else None) for item in after)
+    timed = retime(slots, day.places, day.plan.date.weekday(), origin, ready, buffer_min(course.label), _minutes(day.plan.end), day.plan.lodging, index + 1)
+    if timed is None:
+        return None
+    items, go_home = timed
+    full = CourseOption(
+        label=course.label,
+        items=[*before, *items],
+        dropped=list(course.dropped),
+        go_home_min=go_home,
+        total_travel_min=sum(i.travel_min for i in [*before, *items]) + go_home,
+    )
+    first_leave = _hhmm(_minutes(items[0].start) - items[0].travel_min) if items else _hhmm(ready)
+    return Shaped(full, index, (), True, first_leave)
+
+
+def next_fixed_title(day: DayRecord, course: CourseOption, closed_id: PlaceId) -> str | None:
+    """닫힌 곳 뒤 첫 고정 일정의 제목 (이유 문장용). 없으면 None."""
+    index = next(i for i, item in enumerate(course.items) if item.place_id == closed_id)
+    for item in course.items[index + 1 :]:
+        if item.is_fixed:
+            match = next((f for f in day.plan.fixed if f.place_id == item.place_id and f.start == item.start and f.end == item.end), None)
+            if match is not None:
+                return match.title
+    return None

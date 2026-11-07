@@ -79,6 +79,7 @@ class NowClosedInfo(BaseModel):
     alternative: NowPlaceRef | None  # [빼고 가기]면 null
     distance_m: int | None  # 닫힌 곳에서 직선거리 m, [빼고 가기]면 null
     travel_change_min: int  # 남은 이동 분 합(숙소 복귀 포함), 바뀐 뒤 - 바뀌기 전
+    reordered: bool  # §14: 순서를 바꿔야 들어가는 안이면 true (들르는 시각은 items의 대안 줄 start). [빼고 가기]는 늘 false
 
 
 class NowT06Proposal(NowProposal):

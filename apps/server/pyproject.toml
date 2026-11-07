@@ -32,7 +32,7 @@ addopts = "-m 'not live and not slow'"
 disable_test_id_escaping_and_forfeit_all_rights_to_community_support = true
 
 [tool.mutmut]
-# 돌연변이 대상: compose_screen (TASK-001 §3-4, 목표 80%) + TASK-007 F5: 여행 중 화면 `trip/now.py`(_decide 등)와 감지 `trip/detect.py` + TASK-008: 영업 확인·닫힘 대안 규칙 `trip/visit.py`
-source_paths = ["engine/compose.py", "trip/now.py", "trip/detect.py", "trip/visit.py"]
+# 돌연변이 대상: compose_screen (TASK-001 §3-4, 목표 80%) + TASK-007 F5: 여행 중 화면 `trip/now.py`(_decide 등)와 감지 `trip/detect.py` + TASK-008: 영업 확인·닫힘 대안 규칙 `trip/visit.py` + §14~§16: 순서 그대로 시각 다시 계산 `trip/retime.py`
+source_paths = ["engine/compose.py", "trip/now.py", "trip/detect.py", "trip/visit.py", "trip/retime.py"]
 also_copy = ["catalog", "deciders", "api", "engine", "graphs", "planning", "trip/__init__.py", "trip/schemas.py", "trip/repo.py", "trip/alternatives.py", "trip/service.py", "tests"]
 pytest_add_cli_args_test_selection = ["tests/test_compose.py", "tests/test_task006_now.py", "tests/test_task007_detect.py", "tests/test_task007_trip.py", "tests/test_task008_rules.py", "tests/test_task008_visit.py"]
