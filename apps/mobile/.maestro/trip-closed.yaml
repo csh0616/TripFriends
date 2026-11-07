@@ -1,0 +1,110 @@
+# TASK-008 §D AC-8: 영업 확인(T-05)과 닫힘 대안(T-06). S0 [여행 중 데모 바로 보기] -> 데모 시계를 시나리오 장소 D02 출발 30분 전(11:30)으로
+#   -> T-05 -> [닫혔어] -> T-06(대안 D31 "골목 카페 E") -> [이걸로] -> 바뀐 동선.
+# 전제와 우회는 trip-delay.yaml과 같다 (개발 서버 주소는 -e METRO_URL, 흐름 안 env: 블록 없음, 첫 탭 우회, 탭 retry).
+# 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로. 서버는 새로 띄운 상태, 데모 시드는 매번 새로 만든다):
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --device <UDID> test -e METRO_URL=http://127.0.0.1:8083 \
+#     --test-output-dir=.maestro/screenshots/trip-closed .maestro/trip-closed.yaml
+# 스크린샷은 --test-output-dir 아래에 쌓이고 저장소에는 올리지 않는다.
+# 시각 막대는 하루 시작~끝(데모 시드 둘째 날 10:00~20:00)을 0~100%로 보고 누른 위치를 5분 단위로 맞춘다 (15% = 11:30).
+# 시나리오 장소(D02, 12:00 시작)와 대안(D31 골목 카페 E)은 데모 시드가 고정이라 정해져 있다. 시드가 바뀌면 글자를 다시 확인한다.
+appId: com.csh0616.tripfriends
+---
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 중 데모 바로 보기"
+    timeout: 60000
+# 원인 미확인 우회: 앱이 뜬 뒤 첫 탭이 앱까지 가지 않는다. 가만해진 뒤 아무 일 없는 글자를 한 번 눌러 첫 탭을 먼저 쓴다
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "AI 여행친구"
+
+- tapOn:
+    id: "s0-now-demo"
+- extendedWaitUntil:
+    visible:
+      id: "now-main"
+    timeout: 30000
+- assertVisible:
+    id: "sos-button"
+- assertVisible:
+    id: "input-bar"
+
+# 데모 시계 열기 (패널이 없을 때만 누른다)
+- retry:
+    maxRetries: 4
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              id: "demo-panel"
+          commands:
+            - tapOn:
+                id: "demo-toggle"
+      - extendedWaitUntil:
+          visible:
+            id: "demo-panel"
+          timeout: 3000
+
+# 데모 11:30: 막대 15% (90분 -> 11:30). 시나리오 장소 출발 30분 전이라 T-05가 뜬다
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "demo-bar"
+          point: "15%,50%"
+      - extendedWaitUntil:
+          visible: "11:30"
+          timeout: 3000
+- extendedWaitUntil:
+    visible:
+      id: "card-T-05"
+    timeout: 10000
+- assertVisible: "가기 전에 열었는지 볼래?"
+- takeScreenshot: trip-closed-1-t05
+
+# [닫혔어]: T-06 닫힘 대안. 고르기 전에는 일정이 그대로다
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: "card-T-05"
+          commands:
+            - tapOn:
+                id: "visit-closed"
+      - extendedWaitUntil:
+          visible:
+            id: "card-T-06"
+          timeout: 10000
+- assertNotVisible:
+    id: "card-T-05"
+- assertVisible: "골목 카페 E"
+- takeScreenshot: trip-closed-2-t06
+
+# [이걸로]: 대안 D31 골목 카페 E를 고른다 -> 안내 문장과 바뀐 동선
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: "card-T-06"
+          commands:
+            - tapOn:
+                text: "이걸로"
+                index: 0
+      - extendedWaitUntil:
+          visible: "바꾼 일정으로 안내할게"
+          timeout: 5000
+- assertNotVisible:
+    id: "card-T-06"
+- takeScreenshot: trip-closed-3-accepted
