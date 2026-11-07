@@ -1,8 +1,9 @@
 // TASK-004 §B-3·§12 Q25: 입력창은 화면 맨 아래 고정. 키보드 보내기(returnKeyType=send), 오른쪽 말하기 버튼(R1은 "곧 돼").
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Text, TextInput } from '@/components/app-text';
 import { layout } from '@/planning/layout';
 import { color, control, radius, space, text } from '@/planning/theme';
 
@@ -84,16 +85,16 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   field: {
     flex: 1,
-    height: control.input,
+    minHeight: control.input,
     borderRadius: radius['r-md'],
     backgroundColor: color['bg-2'],
     justifyContent: 'center',
   },
-  input: { ...text('body'), height: control.input, paddingHorizontal: space['space-4'] },
+  input: { ...text('body'), minHeight: control.input, paddingHorizontal: space['space-4'] },
   hint: { ...text('body', 'muted'), position: 'absolute', left: space['space-4'] },
   mic: {
     width: control.input,
-    height: control.input,
+    minHeight: control.input,
     borderRadius: radius['r-full'],
     backgroundColor: color['bg-2'], // 아직 안 되는 버튼: 비활성 규칙 (TASK-005 B10)
     alignItems: 'center',

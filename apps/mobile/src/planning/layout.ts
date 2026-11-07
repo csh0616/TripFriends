@@ -18,7 +18,6 @@ export const layout = {
   screenMargin: tokens.space['space-5'], // 화면 좌우 20
   // 이 앱에서 정한 크기
   pickedCircle: 40, // 떠 있는 줄의 담은 곳 동그라미
-  pickedOverlap: 12, // 동그라미가 겹치는 정도
   pickedMark: 36, // 사진 위 담음 표시 동그라미
   numberCircle: 24, // P3 번호 원
   routePad: 24, // 동선 그림 안쪽 여백
@@ -47,6 +46,24 @@ export const layout = {
   ringFrom: 0.9, // P1 고른 고리가 나타날 때 시작 크기 비율
   successCircle: 72, // S9 체크 원
   dot: 6, // 작은 점
+  // TASK-006 D4: 시스템 글자 크기를 따르는 상한
+  fontScaleMax: 1.3,
+  // TASK-006 SC-04 여행 중 화면. 문서에 없는 크기는 "미정"
+  pin: 28, // 미정(TASK-006): 지도 번호 핀 지름
+  pinRing: 3, // 미정(TASK-006): 지금 핀의 brand 고리 굵기
+  homePin: 28, // 미정(TASK-006): 지도 숙소 원 지름 (테두리는 routeHomeStroke)
+  homeWall: [12, 8], // 미정(TASK-006): 지도 숙소 아이콘 벽 폭·높이 (Svg 없이 View로 그린다)
+  homeRoof: 9, // 미정(TASK-006): 지붕 정사각형 한 변 (45도 돌려서 지붕 모양)
+  homeStroke: 2, // 미정(TASK-006): 숙소 아이콘 선 굵기 (지도 쪽은 View 테두리라 icon-stroke를 못 쓴다)
+  positionDot: 16, // 미정(TASK-006): 내 위치 ink 점 지름
+  positionBorder: 3, // 미정(TASK-006): 내 위치 점의 흰 테두리
+  mapDelta: 0.05, // 미정(TASK-006): 지도 첫 영역과 [내 위치] 확대 정도(도)
+  routeDash: [8, 8], // 미정(TASK-006): 남은 길 점선 (선 길이, 빈 길이)
+  sheetFractions: [0.16, 0.44, 0.88], // 미정(TASK-006): 시트 3단 높이(낮게·중간·높게)가 시트 영역에서 차지하는 비율
+  sheetHandleWidth: 40, // 미정(TASK-006): 시트 손잡이
+  sheetHandleHeight: 4,
+  demoThumb: 20, // 미정(TASK-006): 데모 시각 막대의 손잡이 지름
+  mapEdge: 24, // 미정(TASK-006): 카메라 맞춤 좌우 여백
   // 누르는 영역 보강: 칩 36 -> 44
   chipSlop: (touchMin - chip) / 2,
 } as const;

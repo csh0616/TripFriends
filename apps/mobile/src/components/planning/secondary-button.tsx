@@ -1,6 +1,7 @@
 // 보조 버튼: bg-2 바탕 + ink 글자. small이면 높이 btn-sm.
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { color, control, radius, space, text } from '@/planning/theme';
 
 export function SecondaryButton({
@@ -31,7 +32,7 @@ export function SecondaryButton({
 
 const styles = StyleSheet.create({
   button: {
-    height: control.btn,
+    minHeight: control.btn,
     minWidth: control['touch-min'],
     paddingHorizontal: space['space-5'],
     borderRadius: radius['r-md'],
@@ -39,6 +40,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  small: { height: control['btn-sm'], paddingHorizontal: space['space-4'] },
+  small: { minHeight: control['btn-sm'], paddingHorizontal: space['space-4'] },
   disabled: { backgroundColor: color['bg-2'] },
 });

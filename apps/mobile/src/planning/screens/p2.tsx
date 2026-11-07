@@ -1,16 +1,8 @@
 // P2 후보 고르기 (TASK-004 §B-4, §6, §12 Q5·Q7·Q8·Q29·Q32). CandidateBatch를 그린다. 숫자는 모두 서버 값.
 import { useEffect, useRef } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-  type ScrollViewInstance,
-} from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { FriendBubble } from '@/components/planning/friend-bubble';
 import { DrawnRing } from '@/components/planning/drawn-ring';
 import { CheckIcon, CloseIcon, PlusIcon } from '@/components/planning/icons';
@@ -103,7 +95,7 @@ export function P2Screen({
             <View style={styles.circles}>
               {Array.from({ length: MAX_CIRCLES }, (_, slot) => {
                 const id = picks[slot];
-                const style = [styles.circle, slot > 0 && styles.overlap];
+                const style = styles.circle;
                 return id !== undefined ? (
                   <View key={`p-${slot}`} testID="picked-circle" style={[style, styles.clip]}>
                     <PhotoPlaceholder category={categoryOf(id)} style={StyleSheet.absoluteFill} />
@@ -243,13 +235,13 @@ const styles = StyleSheet.create({
     gap: space['space-3'],
     flexShrink: 1,
   },
-  circles: { flexDirection: 'row' },
+  // TASK-006 D1: 원끼리 겹치지 않고 간격 4
+  circles: { flexDirection: 'row', gap: space['space-1'] },
   circle: {
     width: layout.pickedCircle,
     height: layout.pickedCircle,
     borderRadius: radius['r-full'],
   },
-  overlap: { marginLeft: -layout.pickedOverlap },
   clip: { overflow: 'hidden' },
   emptyCircle: {
     borderStyle: 'dashed',
@@ -261,7 +253,7 @@ const styles = StyleSheet.create({
   // 칩 보이는 높이 36 + 위아래 hitSlop 4 = 44. 스크롤 안쪽 위아래 여백으로 그 4가 잘리지 않게 한다 (§13-2 #3)
   chips: { gap: space['space-2'], paddingVertical: layout.chipSlop },
   chip: {
-    height: control.chip,
+    minHeight: control.chip,
     paddingHorizontal: space['space-4'],
     borderRadius: radius['r-full'],
     backgroundColor: color['bg-2'],

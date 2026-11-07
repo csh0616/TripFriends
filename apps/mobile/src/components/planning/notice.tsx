@@ -1,6 +1,7 @@
 // 말풍선 아래 안내/오류 줄. [다시]가 있으면 버튼을 같이 보여 준다 (TASK-004 §7).
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { color, radius, space, text } from '@/planning/theme';
 
 import { SecondaryButton } from './secondary-button';

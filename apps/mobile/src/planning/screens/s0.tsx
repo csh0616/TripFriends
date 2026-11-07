@@ -1,6 +1,7 @@
 // S0 시작 (TASK-004 §B-2, §12 Q4·Q19·Q34). SOS만 있고 입력창은 없다.
-import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { Notice } from '@/components/planning/notice';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';

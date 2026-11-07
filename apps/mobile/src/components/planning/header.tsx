@@ -1,7 +1,8 @@
 // TASK-004 §B-3: 머리. 높이 52, 왼쪽 뒤로(44 원, 있을 때만), 가운데 제목+부제, 오른쪽 SOS 고정. 안전 영역 아래.
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Text } from '@/components/app-text';
 import { layout } from '@/planning/layout';
 import { color, control, radius, space, text } from '@/planning/theme';
 
@@ -62,7 +63,7 @@ export function Header({
 const styles = StyleSheet.create({
   wrap: { backgroundColor: color.surface },
   row: {
-    height: layout.header,
+    minHeight: layout.header,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: layout.screenMargin,

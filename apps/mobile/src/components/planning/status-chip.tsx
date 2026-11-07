@@ -1,6 +1,7 @@
 // TASK-004 §B-6 G6: 상태는 색 + 글자를 항상 같이 보여 준다 (확인됨/미확인/모름).
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { color, radius, space, text } from '@/planning/theme';
 
 type Status = 'confirmed' | 'unverified' | 'unknown';
