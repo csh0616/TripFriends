@@ -5,7 +5,7 @@ TASK-008 §13 H4·§14·§17, DESIGN-001 §4-7(조사는 앱·서버 대본 공�
     조사 함수 하나 (B1): trip/phrase.py `with_particle(word: str, pair: str) -> str`
         pair는 "이/가" "은/는" "을/를" "으로/로" 중 하나. 돌려주는 값 = word + 고른 조사 (사이 띄어쓰기 없음)
     경계 표: 저장소 맨 위 testdata/particles.json 하나를 앱(apps/mobile/__tests__/particle.test.ts)과 이 파일이 함께 읽는다 (AC-3).
-        "pending"이 붙은 줄(빈 문자열)은 문서에 기대값이 없어 승인 전까지 건너뛴다 (질문 Q1)
+        v2 §9: 빈 문자열 = 받침 없음(Q1), 일본어·기호 끝 = 받침 없음(Q3), 숫자·영문은 읽는 소리로 받침(Q7)
     엔진 공개 이름 (C1): engine/planning.py `buffer_min(label: str) -> int` — relaxed 15, packed 5 (엔진 `_limits()`의 값을 그대로).
         trip/retime.py `buffer_min(label)`은 그 값을 읽는다 (복사하지 않는다)
     시드 (C2): POST /debug/seed-demo 는 부를 때마다 새 trip_id·day_ids (chosen이면 day.day_id도 새것)
@@ -28,23 +28,38 @@ REPO = Path(__file__).parents[3]
 TABLE = json.loads((REPO / "testdata" / "particles.json").read_text(encoding="utf-8"))
 PAIRS = TABLE["pairs"]
 CASES = TABLE["cases"]
-READY = [case for case in CASES if "pending" not in case]
-PENDING = [case for case in CASES if "pending" in case]
+READY = CASES  # §9 Q1로 빈 문자열도 기대값이 정해져 건너뛰는 줄이 없다
+# B2 대본(장소 이름이 들어가는 문장)은 이름이 있는 줄만. 빈 이름의 대본은 문서에 없다
+NAMED = [case for case in CASES if case["word"] != ""]
 
-# 시험용 기준 (문서 B1 그대로): 받침 없음 → 가·는·를·로, ㄹ 받침 → 로, 그 밖 받침 → 이·은·을·으로, 영문·숫자 끝 → 받침 없음
+# 시험용 기준 (B1 + v2 §9): 받침 없음 → 가·는·를·로, ㄹ 받침 → 로, 그 밖 받침 → 이·은·을·으로.
+# 숫자·영문은 읽는 소리로(Q7), 일본어·기호 끝·빈 문자열은 받침 없음(Q1·Q3)
 NO_BATCHIM = {"이/가": "가", "은/는": "는", "을/를": "를", "으로/로": "로"}
 BATCHIM = {"이/가": "이", "은/는": "은", "을/를": "을", "으로/로": "으로"}
 RIEUL = 8  # 종성 번호 ㄹ
+# §9 Q7 읽는 소리의 받침: "ㄹ" / "있음" / 없으면 받침 없음
+DIGIT_SOUND = {"0": "있음", "1": "ㄹ", "3": "있음", "6": "있음", "7": "ㄹ", "8": "ㄹ"}  # 영·일·삼·육·칠·팔
+LETTER_SOUND = {"L": "ㄹ", "M": "있음", "N": "있음", "R": "ㄹ"}  # 엘·엠·엔·알
+UNDECIDED = set("lmnr")  # 소문자 l·m·n·r은 문서에 없다 (질문). 표·속성에 넣지 않는다
+
+
+def sound(word: str) -> str | None:
+    if word == "":
+        return None
+    last = word[-1]
+    assert last not in UNDECIDED, f"문서에 기대값 없음: {word!r}"
+    code = ord(last) - 0xAC00
+    if 0 <= code <= 0xD7A3 - 0xAC00:
+        jong = code % 28
+        return None if jong == 0 else ("ㄹ" if jong == RIEUL else "있음")
+    return DIGIT_SOUND.get(last) or LETTER_SOUND.get(last)
 
 
 def oracle(word: str, pair: str) -> str:
-    code = ord(word[-1]) - 0xAC00
-    if not 0 <= code <= 0xD7A3 - 0xAC00:
+    kind = sound(word)
+    if kind is None:
         return word + NO_BATCHIM[pair]
-    jong = code % 28
-    if jong == 0:
-        return word + NO_BATCHIM[pair]
-    if jong == RIEUL and pair == "으로/로":
+    if kind == "ㄹ" and pair == "으로/로":
         return word + "로"
     return word + BATCHIM[pair]
 
@@ -63,8 +78,15 @@ def test_T9_AC3_표_자체_확인_네_조사와_필요한_경계가_모두_있�
     for case in CASES:
         assert set(case["expected"]) == set(PAIRS), case["word"]
     kinds = " ".join(case["kind"] for case in CASES)
-    for needed in ("받침 없음", "ㄹ 받침", "겹받침", "영문", "숫자", "빈 문자열"):
+    for needed in ("받침 없음", "ㄹ 받침", "겹받침", "영문", "숫자", "빈 문자열", "일본어", "기호"):
         assert needed in kinds, needed
+
+
+def test_T9_AC3_Q7_표에_숫자_끝_0부터_9와_영문_L_M_N_R이_모두_있다():
+    ends = {case["word"][-1] for case in CASES if case["word"]}
+    assert set("0123456789") <= ends
+    assert set("LMNR") <= ends
+    assert ends & set("ABCDEFGHIJKOPQSTUVWXYZ")  # 받침 없는 영문 예도 있다
 
 
 def test_T9_AC3_표_자체_확인_준비된_줄은_문서_규칙과_같다():
@@ -86,17 +108,8 @@ def test_T9_B1_AC3_공유_경계_표(word, pair, expected):
     assert with_particle(word, pair) == expected
 
 
-@pytest.mark.skip(reason="질문 Q1: 빈 문자열의 기대값이 문서에 없다 (추천: 받침 없음으로 보고 조사만)")
-@pytest.mark.parametrize(
-    ("word", "pair", "expected"),
-    [(case["word"], pair, case["expected"][pair]) for case in PENDING for pair in PAIRS],
-)
-def test_T9_B1_AC3_빈_문자열_Q1_승인_대기(word, pair, expected):
-    assert with_particle(word, pair) == expected
-
-
 HANGUL = st.integers(min_value=0xAC00, max_value=0xD7A3).map(chr)
-ALNUM = st.sampled_from("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+ALNUM = st.sampled_from([c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" if c not in UNDECIDED])
 PREFIX = st.text(alphabet=st.sampled_from("가나다 카페골목ABz09"), max_size=8)
 
 
@@ -107,9 +120,9 @@ def test_T9_B1_속성_한글_끝_글자는_받침에_따라(prefix, last, pair):
 
 
 @given(prefix=PREFIX, last=ALNUM, pair=st.sampled_from(["이/가", "은/는", "을/를", "으로/로"]))
-def test_T9_B1_속성_영문_숫자_끝은_받침_없음(prefix, last, pair):
+def test_T9_B1_Q7_속성_영문_숫자_끝은_읽는_소리대로(prefix, last, pair):
     word = prefix + last
-    assert with_particle(word, pair) == word + NO_BATCHIM[pair]
+    assert with_particle(word, pair) == oracle(word, pair)
 
 
 @given(prefix=PREFIX, last=HANGUL, pair=st.sampled_from(["이/가", "은/는", "을/를", "으로/로"]))
@@ -123,7 +136,7 @@ def test_T9_B1_속성_조사는_끝_글자만_본다(prefix, last, pair):
 # "{닫힌 곳} 빼고 가기", 늦어짐 "{이름들} 빼고 {고정 일정}에 여유 있게"는 받침과 무관한 말만 붙어 그대로 둔다.
 
 
-@pytest.mark.parametrize("case", READY, ids=[case["kind"] for case in READY])
+@pytest.mark.parametrize("case", NAMED, ids=[case["kind"] for case in NAMED])
 def test_T9_B2_닫힘_대안_이유는_조사_함수의_으로_로(case):
     from trip.phrase import swap_reason
 
@@ -132,8 +145,8 @@ def test_T9_B2_닫힘_대안_이유는_조사_함수의_으로_로(case):
 
 @pytest.mark.parametrize(
     ("name", "expected"),
-    [("닭", "닭으로 대신 가기"), ("값", "값으로 대신 가기"), ("길", "길로 대신 가기"), ("cafe", "cafe로 대신 가기"), ("카페 1", "카페 1로 대신 가기"), ("언덕 카페 B", "언덕 카페 B로 대신 가기")],
-    ids=["겹받침_ㄺ", "겹받침_ㅄ", "ㄹ받침_한_글자", "영문_소문자", "숫자", "AC4_영문_대문자"],
+    [("닭", "닭으로 대신 가기"), ("값", "값으로 대신 가기"), ("길", "길로 대신 가기"), ("cafe", "cafe로 대신 가기"), ("카페 1", "카페 1로 대신 가기"), ("카페 3", "카페 3으로 대신 가기"), ("카페 M", "카페 M으로 대신 가기"), ("언덕 카페 B", "언덕 카페 B로 대신 가기")],
+    ids=["겹받침_ㄺ", "겹받침_ㅄ", "ㄹ받침_한_글자", "영문_소문자", "숫자_1_ㄹ", "Q7_숫자_3_ㅁ", "Q7_영문_M_ㅁ", "AC4_영문_대문자"],
 )
 def test_T9_B2_API_닫힘_대안_이유도_같은_표대로(env, name, expected):
     _, view = closed_view(env, extra=(named_alt(name),))
@@ -142,7 +155,7 @@ def test_T9_B2_API_닫힘_대안_이유도_같은_표대로(env, name, expected)
     assert proposal["reason"] == expected
 
 
-@pytest.mark.parametrize("case", READY, ids=[case["kind"] for case in READY])
+@pytest.mark.parametrize("case", NAMED, ids=[case["kind"] for case in NAMED])
 @pytest.mark.parametrize("was_must", [False, True], ids=["꼭_갈_곳_아님", "꼭_갈_곳"])
 def test_T9_B2_빼고_가기_이유는_조사_없이_그대로(case, was_must):
     from trip.phrase import skip_reason

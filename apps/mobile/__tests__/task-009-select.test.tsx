@@ -31,6 +31,7 @@ import {
   ACCEPT_ROUTE,
   chosenSeed,
   delayedView,
+  delayEvent,
   DISMISS_ROUTE,
   nowItem,
   nowView,
@@ -373,6 +374,129 @@ describe('A4 T-06 칸', () => {
   });
 });
 
+// ---------- §9 Q5 제안 0개면 [이걸로 할래] 줄 숨김 ----------
+
+describe('§9 Q5 제안 0개', () => {
+  const empty: [string, () => object, string][] = [
+    ['T-04', () => delayedView({ main: t04({ proposals: [] }), event: delayEvent({ proposals: [] }) }), 'card-T-04'],
+    ['T-06', () => closedView({ main: t06({ proposals: [] }) }), 'card-T-06'],
+  ];
+
+  test.each(empty)('T9_Q5_%s_제안이_0개면_action_bar와_이걸로_할래가_없다', async (_name, view, card) => {
+    await toNow(nowServer(view()));
+    await screen.findByTestId(card);
+    expect(screen.queryByTestId('action-bar')).toBeNull();
+    expect(screen.queryByTestId('select-confirm')).toBeNull();
+    expect(screen.queryByText('이걸로 할래')).toBeNull();
+  });
+
+  // 경계: 1개면 줄이 보인다 (0개만 숨김)
+  const one: [string, () => object, string][] = [
+    ['T-04', () => delayedView({ main: t04({ proposals: [proposal()] }), event: delayEvent({ proposals: [proposal()] }) }), 'card-T-04'],
+    ['T-06', () => closedView({ main: t06({ proposals: [skip()] }) }), 'card-T-06'],
+  ];
+
+  test.each(one)('T9_Q5_%s_제안이_1개면_action_bar와_이걸로_할래가_있다', async (_name, view, card) => {
+    await toNow(nowServer(view()));
+    await screen.findByTestId(card);
+    expect(within(byId('action-bar') as never).getByTestId('select-confirm')).toBeTruthy();
+    expect(screen.getAllByText('이걸로 할래')).toHaveLength(1);
+  });
+});
+
+// ---------- §9 Q6 고른 채로 새 제안(check 응답)이 오면 ----------
+
+type Refresh = {
+  kind: Kind;
+  chosenRow: string;
+  chosenId: string;
+  marker: string; // 새 응답이 화면에 반영됐는지 볼 글자
+  kept: () => object; // 고른 id가 그대로 있는 새 응답 (순서는 바뀜)
+  gone: () => object; // 고른 id가 없어진 새 응답
+  goneRows: string[];
+};
+const REFRESH: [string, Refresh][] = [
+  [
+    'T-04',
+    {
+      kind: KINDS[0][1],
+      chosenRow: 'proposal-prop-packed',
+      chosenId: 'prop-packed',
+      marker: '서버_새_이유',
+      kept: () => {
+        const proposals = [proposalPacked({ reason: '서버_새_이유' }), proposal()];
+        return delayedView({ main: t04({ proposals }), event: delayEvent({ proposals }) });
+      },
+      gone: () => {
+        const proposals = [proposal({ reason: '서버_새_이유' })];
+        return delayedView({ main: t04({ proposals }), event: delayEvent({ proposals }) });
+      },
+      goneRows: ['proposal-prop-relaxed'],
+    },
+  ],
+  [
+    'T-06',
+    {
+      kind: KINDS[1][1],
+      chosenRow: 'proposal-alt-2',
+      chosenId: 'alt-2',
+      marker: '서버_대안_새',
+      kept: () => closedView({ main: t06({ proposals: [skip(), replace('alt-2', 'D10', '서버_대안_새')] }) }),
+      gone: () => closedView({ main: t06({ proposals: [replace('alt-3', 'D11', '서버_대안_새'), skip()] }) }),
+      goneRows: ['proposal-alt-3', 'closed-skip'],
+    },
+  ],
+];
+
+/** 고른 채로 데모 [+10분]을 눌러 check를 한 번 부르고 새 응답이 화면에 올 때까지 */
+async function refreshWith(control: NowControl, view: object, marker: string) {
+  const before = control.checks().length;
+  control.show(view);
+  await pressId('demo-toggle');
+  await pressId('demo-plus-10');
+  await waitFor(() => expect(control.checks().length).toBe(before + 1));
+  await waitFor(() => expect((screen.root as unknown as Tree).queryAll((host) => host.type === 'Text').map(textOf).join(' ')).toContain(marker));
+}
+
+describe.each(REFRESH)('§9 Q6 %s 고른 채로 새 제안', (_name, item) => {
+  test('T9_Q6_고른_제안이_새_응답에_그대로_있으면_고른_상태_유지', async () => {
+    const control = await open(item.kind);
+    await pressId(item.chosenRow);
+    await refreshWith(control, item.kept(), item.marker);
+    expect(isChosen(item.chosenRow)).toBe(true);
+    expect(isDisabled('select-confirm')).toBe(false);
+    expect(orangeButtons()).toBe(1);
+  });
+
+  test('T9_Q6_유지된_채로_이걸로_할래를_누르면_그_제안을_accept', async () => {
+    const control = await open(item.kind);
+    await pressId(item.chosenRow);
+    await refreshWith(control, item.kept(), item.marker);
+    await pressId('select-confirm');
+    await waitFor(() => expect(control.server.sent(ACCEPT_ROUTE(item.chosenId))).toHaveLength(1));
+    expect(accepted(control)).toHaveLength(1);
+  });
+
+  test('T9_Q6_고른_제안이_새_응답에서_없어지면_해제하고_다른_칸도_골라지지_않는다', async () => {
+    const control = await open(item.kind);
+    await pressId(item.chosenRow);
+    await refreshWith(control, item.gone(), item.marker);
+    expect(screen.queryByTestId(item.chosenRow)).toBeNull();
+    expect(item.goneRows.map((row) => [row, isChosen(row)])).toEqual(item.goneRows.map((row) => [row, false]));
+    expect(isDisabled('select-confirm')).toBe(true);
+    expect(orangeButtons()).toBe(0);
+  });
+
+  test('T9_Q6_없어져_해제된_뒤_이걸로_할래를_눌러도_아무것도_안_보낸다', async () => {
+    const control = await open(item.kind);
+    await pressId(item.chosenRow);
+    await refreshWith(control, item.gone(), item.marker);
+    await pressId('select-confirm');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(accepted(control)).toEqual([]);
+  });
+});
+
 // ---------- §6 고른 뒤 실패 ----------
 
 describe('§6 고른 뒤 실패', () => {
@@ -433,9 +557,9 @@ describe('§6 고른 뒤 실패', () => {
 
 // ---------- B2 T-06 제목 "{장소}{이/가} 닫혔대" (공유 경계 표) ----------
 
-type Case = { kind: string; word: string; pending?: string; expected: Record<string, string> };
+type Case = { kind: string; word: string; expected: Record<string, string> };
 const TABLE = JSON.parse(readFileSync(join(REPO_ROOT, 'testdata', 'particles.json'), 'utf8')) as { cases: Case[] };
-const READY = TABLE.cases.filter((row) => row.pending === undefined);
+const NAMED = TABLE.cases.filter((row) => row.word !== ''); // 빈 이름의 제목은 문서에 없다
 
 describe('B2 T-06 제목', () => {
   test('T9_B2_AC4_언덕_카페_B가_닫혔대', async () => {
@@ -444,7 +568,7 @@ describe('B2 T-06 제목', () => {
     expect(words('card-T-06')).not.toContain('B이');
   });
 
-  test.each(READY.map((row) => [row.kind, row.word, row.expected['이/가']] as const))('T9_B2_T_06_제목_%s', async (_kind, name, subject) => {
+  test.each(NAMED.map((row) => [row.kind, row.word, row.expected['이/가']] as const))('T9_B2_T_06_제목_%s', async (_kind, name, subject) => {
     await toNow(nowServer(closedView({ main: t06({ closed: { place_id: 'D02', name } }) })));
     expect(words('card-T-06')).toContain(`${subject} 닫혔대`);
   });
