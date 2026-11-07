@@ -1,7 +1,17 @@
 // 가짜 NowView. 모양은 TASK-006 §A-1·§11·§12 (Q8 HH:MM, Q15·R6 핀 시각·이동 분, Q21 fixed.facts, R4 fixed.title, E4 T-08 map_url).
-import { day, DAY_ID, SPOT } from './planning-fixtures';
+import { day, DAY_ID, seed, SPOT } from './planning-fixtures';
 
 type Status = 'confirmed' | 'unverified' | 'unknown';
+
+// §14 Q1 결정: {"chosen": true} 응답만 둘째 날 요약(day)을 더한다. 일반 시드는 planning-fixtures의 seed 그대로
+export const chosenSeed = (over: object = {}) => ({
+  ...seed,
+  day: {
+    ...day,
+    fixed: [{ place_id: 'D05', name: '서버_식당_이름', start: '18:30', end: '19:30' }],
+    ...over,
+  },
+});
 
 export const NOW_ROUTE = `GET /days/${DAY_ID}/now`;
 

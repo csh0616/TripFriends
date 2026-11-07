@@ -9,11 +9,12 @@ import { Linking, StyleSheet, View } from 'react-native';
 import { contrast } from '@/lib/contrast';
 
 import { COLORS, LISTS, NUMBERS } from '../test-support/design-table';
-import { networkDown } from '../test-support/fake-server';
+import { json, networkDown } from '../test-support/fake-server';
 import { happyServer, pressId, pressText, R, resetDevice, restart, startApp } from '../test-support/planning-driver';
+import { seed } from '../test-support/planning-fixtures';
 import { MOBILE_ROOT, REPO_ROOT } from '../test-support/source-files';
 import { buildConfig, expectDashedAlong, installConfig, nowServer, TEST_KEY, toNow, type LatLng } from '../test-support/trip-now-driver';
-import { HOME_URL, nowView, pins, route, t02, t03, t07, t08 } from '../test-support/trip-now-fixtures';
+import { chosenSeed, HOME_URL, nowView, pins, route, t02, t03, t07, t08 } from '../test-support/trip-now-fixtures';
 import { sheetControl } from '../test-support/bottom-sheet-mock';
 import { mapControl } from '../test-support/maps-mock';
 
@@ -460,8 +461,9 @@ describe('§14 여행 중 데모 바로 보기', () => {
     });
   });
 
-  async function pressed() {
+  async function pressed(reply: object = chosenSeed()) {
     const control = nowServer();
+    control.server.on(R.seed, json(201, reply));
     const app = await startApp();
     await pressId('s0-now-demo');
     await screen.findByTestId('now-main');
@@ -483,6 +485,33 @@ describe('§14 여행 중 데모 바로 보기', () => {
     expect(control.requests()[0].at).toBe(AT('17:50'));
     await pressId('demo-toggle');
     expect(byId('demo-time').queryAll((host) => host.type === 'Text').map((host) => host.props.children).join('')).toBe('17:50');
+  });
+
+  // Q1 결정: 시각과 화면은 시드 응답의 day로 만든다. 값을 앱에 박은 구현은 여기서 걸린다
+  test('T6_S14_Q1_at의_날짜는_시드_응답의_day에서_온다', async () => {
+    const { control } = await pressed(chosenSeed({ date: '2027-03-04' }));
+    expect(control.requests()[0].at).toBe('2027-03-04T17:50:00');
+    expect(control.requests()[1].at).toBe('2027-03-04T17:50:00');
+  });
+
+  test('T6_S14_Q1_시각_막대의_끝은_시드_응답의_day에서_온다', async () => {
+    const { control } = await pressed(chosenSeed({ end: '18:00' }));
+    await pressId('demo-toggle');
+    for (let i = 0; i < 3; i += 1) await pressId('demo-plus-10');
+    expect(byId('demo-time').queryAll((host) => host.type === 'Text').map((host) => host.props.children).join('')).toBe('18:00');
+    await waitFor(() => expect(control.requests().at(-1)?.at).toBe(AT('18:00')));
+  });
+
+  test('T6_S14_Q1_다시_켜도_시드_응답의_날짜', async () => {
+    const { control, app } = await pressed(chosenSeed({ date: '2027-03-04' }));
+    await restart(app);
+    await screen.findByTestId('now-main');
+    expect(control.requests().at(-1)?.at).toBe('2027-03-04T17:50:00');
+  });
+
+  test('T6_S14_Q1_일반_시드_값은_그대로_day가_없다', () => {
+    expect(Object.keys(seed).sort()).toEqual(['day_ids', 'trip_id']);
+    expect(Object.keys(chosenSeed()).sort()).toEqual(['day', 'day_ids', 'trip_id']);
   });
 
   test('T6_S14_계획_세션을_시작하지_않는다', async () => {
