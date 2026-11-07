@@ -40,6 +40,8 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 from planning_api_helpers import assert_error, demo_places, week_hours
 from planning_helpers import place
 from trip_helpers import (
@@ -1642,3 +1644,114 @@ def test_T8_B6_NowView_스키마에_T_05와_T_06이_있다(env):
     main = repr(schemas["NowView"]["properties"]["main"])
     assert "T-05" in main or "NowCardT05" in main
     assert "T-06" in main or "NowCardT06" in main
+
+
+# ---------- §17 닫힘 대안 이유 문장 ----------
+# 자리에 넣음(reordered=false): "{대안}{으로/로} 대신 가기" — 이번엔 "으로/로"만 받침 규칙 (TASK-009 H4 전까지)
+# 다시 짬(reordered=true): "순서를 바꿔야 들어가 · {시각}에 들러" ({시각} = items 안 대안 줄 start, §15 Q31)
+# [빼고 가기]: "{닫힌 곳} 빼고 가기", 꼭 갈 곳이면 " · 꼭 갈 곳이었어"
+# 영문 끝 글자는 문서 예시("골목 카페 E로 대신 가기")만 근거로 고정한다.
+
+
+def named_alt(name: str, pid: str = "A01", east: float = 0.3):
+    return alt(pid, east).model_copy(update={"name": name})
+
+
+def particle_oracle(name: str) -> str:
+    """한글 끝 글자의 받침으로 '으로/로'를 고르는 시험용 기준: 받침 없음·ㄹ받침이면 '로', 그 밖의 받침이면 '으로'."""
+    jong = (ord(name[-1]) - 0xAC00) % 28
+    return "로" if jong in (0, 8) else "으로"
+
+
+def one_alt_reason(env, name: str) -> dict:
+    _, view = closed_view(env, extra=(named_alt(name),))
+    (proposal,) = replaces(view["main"])
+    assert proposal["closed"]["reordered"] is False  # 시험 자체 확인: 자리에 넣은 안
+    return proposal
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("언덕 카페", "언덕 카페로 대신 가기"),  # 받침 없음
+        ("골목 식당", "골목 식당으로 대신 가기"),  # 받침 있음 (ㅇ)
+        ("바다 정원", "바다 정원으로 대신 가기"),  # 받침 있음 (ㄴ)
+        ("하늘", "하늘로 대신 가기"),  # ㄹ받침은 '로'
+        ("별빛 마을", "별빛 마을로 대신 가기"),  # ㄹ받침은 '로'
+        ("가", "가로 대신 가기"),  # 한글 첫 글자(받침 없음) 경계
+        ("힣", "힣으로 대신 가기"),  # 한글 끝 글자(ㅎ받침) 경계
+        ("골목 카페 E", "골목 카페 E로 대신 가기"),  # 문서 예시 (§17)
+    ],
+    ids=["받침_없음", "받침_ㅇ", "받침_ㄴ", "ㄹ받침_한_글자", "ㄹ받침_여러_글자", "한글_첫_글자_가", "한글_끝_글자_힣", "영문_E_문서_예시"],
+)
+def test_T8_S17_자리에_넣은_대안의_이유는_대안_이름_으로_로_대신_가기(env, name, expected):
+    assert one_alt_reason(env, name)["reason"] == expected
+
+
+@settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+@given(last=st.integers(min_value=0xAC00, max_value=0xD7A3).map(chr))
+def test_T8_S17_한글_끝_글자_받침에_따라_으로_로(env, last):
+    name = f"카페 {last}"
+    assert one_alt_reason(env, name)["reason"] == f"{name}{particle_oracle(name)} 대신 가기"
+
+
+def test_T8_S17_대안_여러_곳이면_제안마다_자기_대안_이름(env):
+    names = {"A01": "언덕 카페", "A02": "골목 식당", "A03": "하늘"}
+    extra = tuple(named_alt(n, pid, east) for (pid, n), east in zip(names.items(), (0.3, 0.6, 0.9), strict=True))
+    _, view = closed_view(env, extra=extra)
+    found = {alt_id(p): p["reason"] for p in replaces(view["main"])}
+    assert found == {"A01": "언덕 카페로 대신 가기", "A02": "골목 식당으로 대신 가기", "A03": "하늘로 대신 가기"}
+
+
+def test_T8_S17_닫힌_곳이_꼭_갈_곳이어도_대안_이유는_대신_가기만(env):
+    _, view = closed_view(env, extra=(named_alt("언덕 카페"),), must=("P02",))
+    (proposal,) = replaces(view["main"])
+    assert proposal["reason"] == "언덕 카페로 대신 가기"
+
+
+def test_T8_S17_다시_짠_대안의_이유는_순서를_바꿔야_들어가_시각에_들러(env):
+    day_id = reorder_day(env)
+    card = answered(env, day_id, "C02", "11:40", False)["main"]
+    (proposal,) = replaces(card)
+    assert proposal["closed"]["reordered"] is True  # 시험 자체 확인
+    start = next(e["start"] for e in proposal["items"] if e["place_id"] == "R01")
+    assert is_hhmm(start)
+    assert proposal["reason"] == f"순서를 바꿔야 들어가 · {start}에 들러"
+
+
+@pytest.mark.parametrize(
+    ("must", "expected"),
+    [((), "가상 P02 빼고 가기"), (("P02",), "가상 P02 빼고 가기 · 꼭 갈 곳이었어")],
+    ids=["꼭_갈_곳_아님", "꼭_갈_곳"],
+)
+def test_T8_S17_빼고_가기_이유는_닫힌_곳_빼고_가기(env, must, expected):
+    _, view = closed_view(env, must=must)
+    assert skip_of(view["main"])["reason"] == expected
+
+
+def test_T8_S17_대안이_0곳이어도_빼고_가기_이유는_같다(env):
+    _, view = closed_view(env, extra=())
+    assert replaces(view["main"]) == []
+    assert skip_of(view["main"])["reason"] == "가상 P02 빼고 가기"
+
+
+def test_T8_S17_다시_짠_날의_빼고_가기_이유도_같다(env):
+    day_id = reorder_day(env)
+    card = answered(env, day_id, "C02", "11:40", False)["main"]
+    assert skip_of(card)["reason"] == "가상 C02 빼고 가기"
+
+
+@pytest.mark.parametrize("old", ["머무는 시간 줄여서 다 가기", "여유 있게", "(꼭 갈 곳이었어)"])
+def test_T8_S17_닫힘_제안에는_TASK_007_대본이_없다(env, old):
+    for must in ((), ("P02",)):
+        _, view = closed_view(env, must=must)
+        for proposal in view["main"]["proposals"]:
+            assert old not in proposal["reason"], proposal["reason"]
+
+
+def test_T8_S17_데모_골목_카페_E로_대신_가기(env):
+    _, day_id, entry = demo_scenario(env)
+    view = answered(env, day_id, entry.place_id, hhmm(leave_of(entry) - 30), False)
+    found = {p["closed"]["alternative"]["name"]: p["reason"] for p in replaces(view["main"])}
+    assert found.get("골목 카페 E") == "골목 카페 E로 대신 가기"
+    assert skip_of(view["main"])["reason"] == f"{view['main']['closed']['name']} 빼고 가기"
