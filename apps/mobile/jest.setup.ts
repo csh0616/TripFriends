@@ -1,7 +1,20 @@
 /// <reference types="jest" />
 // 테스트 환경에는 네이티브 worklets 모듈이 없어서, 라이브러리가 제공하는 가짜 모듈로 바꾼다
 jest.mock('react-native-worklets', () => require('react-native-worklets/lib/module/mock'));
-jest.mock('react-native-reanimated', () => require('react-native-reanimated/lib/module/mock'));
+// 라이브러리 가짜의 useSharedValue는 그릴 때마다 새 값을 만든다. 진짜처럼 같은 부품 안에서는 같은 값을 유지하게 감싼다
+// (TASK-006 리뷰: 시트 위치(animatedPosition)를 바꾼 뒤 다시 그려도 떠 있는 줄이 그 값을 보게)
+jest.mock('react-native-reanimated', () => {
+  const mock = require('react-native-reanimated/lib/module/mock');
+  const { useRef } = require('react');
+  return {
+    ...mock,
+    useSharedValue: (init: unknown) => {
+      const kept = useRef(null);
+      if (kept.current === null) kept.current = mock.useSharedValue(init);
+      return kept.current;
+    },
+  };
+});
 
 // TASK-004: 아래 런타임 의존성은 frontend가 추가한다. 없어도 테스트가 돌도록 가짜 모듈로 고정한다 (virtual).
 jest.mock(

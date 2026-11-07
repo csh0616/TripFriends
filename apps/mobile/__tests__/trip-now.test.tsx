@@ -4,9 +4,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { act, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import fc from 'fast-check';
-import { Linking, StyleSheet } from 'react-native';
+import BottomSheet from '@gorhom/bottom-sheet';
+import { Linking, StyleSheet, View } from 'react-native';
 
 import { contrast } from '@/lib/contrast';
 
@@ -1317,5 +1318,117 @@ describe('AC-6 가드레일', () => {
     await open(nowView());
     const texts = root().queryAll((host) => (host.type === 'Text' || host.type === 'TextInput') && host.props.svgElement === undefined);
     expect(texts.filter((host) => host.props.maxFontSizeMultiplier !== 1.3).map(textOf)).toEqual([]);
+  });
+});
+
+// ---------- 리뷰에서 나온 것: SOS 가림, 시트 안 접근성 (B3, AC-6, SCREEN-001 §2 "위치 고정", C4) ----------
+
+type Node = Tree & { children: unknown[] };
+
+const chain = (host: Tree): Tree[] => {
+  const list: Tree[] = [];
+  for (let now: Tree | null = host; now; now = now.parent) list.push(now);
+  return list;
+};
+
+/** a가 b보다 위에 그려지는가: 공통 부모 아래 두 갈래의 zIndex를 보고, 같으면 나중에 그린 쪽이 위. Android elevation도 a가 b 이상이어야 한다 */
+function drawnAbove(a: Tree, b: Tree): boolean {
+  const up = chain(b);
+  const common = chain(a).find((host) => up.includes(host)) as Node;
+  const branch = (host: Tree) => chain(host).find((step) => step.parent === common) as Tree;
+  const [ra, rb] = [branch(a), branch(b)];
+  const kids = common.children.filter((child) => typeof child === 'object');
+  const z = (host: Tree) => Number(styleOf(host).zIndex ?? 0);
+  const lift = (host: Tree) => Number(styleOf(host).elevation ?? 0);
+  const order = z(ra) > z(rb) || (z(ra) === z(rb) && kids.indexOf(ra) > kids.indexOf(rb));
+  return order && lift(ra) >= lift(rb);
+}
+
+/** 시트 위에 떠 있는 줄([내 위치]·데모): [내 위치]에서 위로 올라가 처음 만나는 absolute 상자 */
+const floatBox = () => chain(byId('my-location-button')).find((host) => styleOf(host).position === 'absolute') as Tree;
+
+// 영역 높이는 시험 값: 폰 높이 844(시험 도구 METRICS)에서 입력창 몫을 뺀 정도. 높게 단(0.88)이면 시트 윗면 = 746 × 0.12 ≈ 90으로,
+// 상단 줄(안전 영역 47 + 머리 52 = 99) 안으로 들어온다. 이 값 대로면 높게 단에서 실제로 겹치는 상황이 된다
+const AREA = 746;
+const TOP_ROW_BOTTOM = 47 + 52; // 시험 도구의 안전 영역 위쪽 + 머리 높이(TASK-004 §B-3 52). SOS는 이 줄 안에 있다
+
+async function atLevel(index: number, view: object = nowView()) {
+  await toNow(nowServer(view));
+  await pressId('demo-toggle');
+  // 시트를 담은 영역의 크기를 알리고, 사용자가 그 단으로 끈 것처럼 시트 윗면을 옮긴다
+  const area = chain(byId('card-sheet')).find((host) => typeof host.props.onLayout === 'function') as Tree;
+  await act(async () => sheetControl.settle(index, AREA));
+  await fireEvent(area as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: AREA } } });
+}
+
+const LEVELS: [string, number][] = [
+  ['낮게', 0],
+  ['중간', 1],
+  ['높게', 2],
+];
+
+describe('리뷰 SOS 가림', () => {
+  test.each(LEVELS)('T6_B3_AC6_시트가_%s여도_SOS가_시트보다_위에_그려진다', async (_name, index) => {
+    await atLevel(index);
+    expect(drawnAbove(byId('sos-button'), byId('card-sheet'))).toBe(true);
+  });
+
+  test.each(LEVELS)('T6_B3_AC6_시트가_%s여도_SOS가_떠_있는_줄보다_위에_그려진다', async (_name, index) => {
+    await atLevel(index);
+    expect(drawnAbove(byId('sos-button'), floatBox())).toBe(true);
+    expect(drawnAbove(byId('sos-button'), byId('demo-panel'))).toBe(true);
+  });
+
+  test.each(LEVELS)('T6_B3_AC6_시트가_%s여도_떠_있는_줄이_SOS가_있는_상단_줄과_겹치지_않는다', async (_name, index) => {
+    await atLevel(index);
+    // 떠 있는 줄이 숨겨지는 것도 겹치지 않는 것으로 본다 (숨길지는 문서에 없다)
+    if (screen.queryByTestId('my-location-button') === null) return;
+    const style = styleOf(floatBox());
+    // 위 끝 = (top이 있으면 top, 아니면 영역 높이 − bottom − 줄 최소 높이 44)
+    const top = typeof style.top === 'number' ? style.top : AREA - Number(style.bottom) - 44;
+    expect(Number.isFinite(top)).toBe(true);
+    expect(top).toBeGreaterThanOrEqual(TOP_ROW_BOTTOM);
+  });
+
+  test('T6_B3_도구_검사_나중에_그린_형제와_zIndex를_구분한다', async () => {
+    await render(
+      <View testID="root">
+        <View testID="a-box">
+          <View testID="a" />
+        </View>
+        <View testID="b-box">
+          <View testID="b" />
+        </View>
+        <View testID="c-box" style={{ zIndex: 1, elevation: 1 }}>
+          <View testID="c" />
+        </View>
+      </View>,
+    );
+    expect(drawnAbove(byId('b'), byId('a'))).toBe(true);
+    expect(drawnAbove(byId('a'), byId('b'))).toBe(false);
+    expect(drawnAbove(byId('a'), byId('c'))).toBe(false);
+    expect(drawnAbove(byId('c'), byId('b'))).toBe(true);
+  });
+});
+
+describe('리뷰 시트 안 접근성', () => {
+  test('T6_C4_AC6_도구_검사_가짜_시트는_accessible을_안_주면_true', async () => {
+    await render(
+      <BottomSheet snapPoints={['50%']} index={0}>
+        <View />
+      </BottomSheet>,
+    );
+    expect(byId('card-sheet').props.accessible).toBe(true);
+  });
+
+  test('T6_C4_AC6_시트에_accessible_false가_넘어간다', async () => {
+    await toNow();
+    expect(byId('card-sheet').props.accessible).toBe(false);
+  });
+
+  test.each(['now-main', 'now-reason', 'card-T-01', 'card-T-02', 'card-T-03'])('T6_C4_AC6_%s를_하나로_묶는_조상이_없다', async (id) => {
+    await toNow();
+    const grouping = chain(byId(id)).slice(1).filter((host) => host.props.accessible === true);
+    expect(grouping.map((host) => host.props.testID ?? host.type)).toEqual([]);
   });
 });
