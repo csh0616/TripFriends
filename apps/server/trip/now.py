@@ -5,6 +5,7 @@
 """
 
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, time
 from typing import Literal
@@ -20,23 +21,29 @@ from trip.schemas import (
     NowCardT02,
     NowCardT03,
     NowCardT04,
+    NowCardT05,
+    NowCardT06,
     NowCardT07,
     NowCardT08,
     NowCourseItem,
     NowDropped,
+    NowClosedInfo,
     NowEvent,
     NowFixed,
     NowPin,
+    NowPlaceRef,
     NowProposal,
     NowRoute,
     NowT04Fixed,
+    NowT06Proposal,
     NowView,
 )
 from trip.repo import EventRecord, ProposalRecord
+from trip.visit import VisitCheckRecord, in_check_window, map_search_url, needs_check, user_confirmed_fact
 
 log = logging.getLogger(__name__)
 
-SUPPORTED = ("T-01", "T-02", "T-03", "T-04", "T-07", "T-08")  # A3: 이번에 만드는 카드 (T-04: TASK-007)
+SUPPORTED = ("T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07", "T-08")  # A3: 이번에 만드는 카드 (T-04: TASK-007, T-05·T-06: TASK-008)
 STATUS_TEXT = {"on_track": "동선대로 가는 중", "delayed": "늦어지는 중", "free": "다음까지 여유 있음"}
 DAY_OVER_REASON = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1, TASK-007 F2
 DAY_OVER_PILL = "오늘 일정 끝"  # TASK-007 F1
@@ -99,11 +106,19 @@ def _entries(day: DayRecord, course: CourseOption) -> list[_Entry]:
     return entries
 
 
-def _facts(place: Place | None, weekday: int) -> list[Fact]:
-    return [_opening_fact(place, weekday)] if place else []  # 장소가 없으면 [] (Q6)
+Checks = Mapping[str, VisitCheckRecord]  # 그날 사용자 확인 기록 (장소 id -> 기록)
 
 
-def _view(entry: _Entry, weekday: int) -> NowCourseItem:
+def _facts(place: Place | None, weekday: int, checks: Checks | None = None) -> list[Fact]:
+    """장소가 없으면 [] (Q6). 그날 사용자가 확인했으면 그 확인이 이긴다 (TASK-008 A5·§7). 원본 장소 데이터는 그대로."""
+    if place is None:
+        return []
+    fact = _opening_fact(place, weekday)
+    check = (checks or {}).get(place.id)
+    return [user_confirmed_fact(fact, check) if check else fact]
+
+
+def _view(entry: _Entry, weekday: int, checks: Checks | None = None) -> NowCourseItem:
     place = entry.place
     return NowCourseItem(
         seq=entry.seq,
@@ -114,13 +129,13 @@ def _view(entry: _Entry, weekday: int) -> NowCourseItem:
         lat=place.lat if place else None,
         lng=place.lng if place else None,
         is_fixed=entry.is_fixed,
-        facts=_facts(place, weekday),
+        facts=_facts(place, weekday, checks),
     )
 
 
-def _plan_item(entry: _Entry) -> PlanItem:
-    # 영업 확인은 TASK-007(T-05)이라 확인한 것으로 둔다 (Q25)
-    return PlanItem(name=entry.name, start=_time(entry.start_min), end=_time(entry.end_min), travel_min=entry.travel_min, hours_checked=True)
+def _plan_item(entry: _Entry, hours_checked: bool = True) -> PlanItem:
+    # 영업 확인(T-05)이 필요한 경우만 False (TASK-008 A2: TASK-006 Q25 중립값을 이 경우만 해제)
+    return PlanItem(name=entry.name, start=_time(entry.start_min), end=_time(entry.end_min), travel_min=entry.travel_min, hours_checked=hours_checked)
 
 
 @dataclass(frozen=True)
@@ -147,7 +162,7 @@ def _moment(entries: list[_Entry], now_min: int) -> _Moment:
     return _Moment(now_min, current, following, upcoming_fixed, remaining, after_leave, between)
 
 
-def _snapshot(m: _Moment, delayed: bool = False) -> Snapshot:
+def _snapshot(m: _Moment, delayed: bool = False, closed: bool = False, to_check: "_Entry | None" = None) -> Snapshot:
     """A2: 이번에 안 만드는 카드로 가는 신호는 중립값 (+ Q25).
 
     moving: 일정 사이(쉬는 시간 포함)면 True. 쉬는 시간도 메인이 T-02여야 해서(R2) compose의 "이동 중" 입구를 이렇게 쓴다.
@@ -157,9 +172,9 @@ def _snapshot(m: _Moment, delayed: bool = False) -> Snapshot:
     return Snapshot(
         now=_time(m.now_min),
         current_item=_plan_item(m.current) if m.current else None,
-        next_item=_plan_item(m.following) if m.following else None,
+        next_item=_plan_item(m.following, hours_checked=m.following is not to_check) if m.following else None,
         fixed_event=FixedEvent(name=fixed.name, leave_by=_time(fixed.leave_min)) if fixed else None,
-        open_events=[OpenEvent(kind="delay")] if delayed else [],  # B-5: awaiting 사건만 (open_low는 알약만)
+        open_events=([OpenEvent(kind="delay")] if delayed else []) + ([OpenEvent(kind="closed")] if closed else []),  # B-5: awaiting 사건만 (open_low는 알약만)
         meal_eaten=True,
         rain_prob_2h=0,
         walked_km=0,
@@ -167,10 +182,28 @@ def _snapshot(m: _Moment, delayed: bool = False) -> Snapshot:
         chat_pick=None,
         offline=False,
         safety=False,
-        arriving=False,
+        arriving=to_check is not None,
         remaining_items=m.remaining,
         moving=m.between,
     )
+
+
+def check_target(entries: list[_Entry], m: _Moment, weekday: int, checks: Checks) -> _Entry | None:
+    """A1·A2·A6: 다음 일정 장소가 영업 확인 대상이고 확인 시간 안이면 그 일정, 아니면 None."""
+    nxt = m.following
+    if nxt is None or nxt.place is None:
+        return None
+    status = _opening_fact(nxt.place, weekday).status
+    if not needs_check(status, nxt.place.id in checks):
+        return None
+    return nxt if in_check_window(nxt.leave_min, nxt.start_min, m.now_min) else None
+
+
+def visit_check_target(day: DayRecord, course: CourseOption, at: datetime, checks: Checks) -> str | None:
+    """at에 영업 확인을 받을 수 있는 장소 id (없으면 None). visit-check 요청이 "지금 물을 대상인가"를 같은 규칙으로 본다."""
+    entries = _entries(day, course)
+    target = check_target(entries, _moment(entries, at.hour * 60 + at.minute), day.plan.date.weekday(), checks)
+    return target.place.id if target and target.place else None
 
 
 def _map_url(entry: _Entry) -> str | None:
@@ -186,21 +219,30 @@ def _transit_url(lat: float, lng: float) -> str:
 
 
 def _card(
-    kind: str, m: _Moment, entries: list[_Entry], course: CourseOption, day: DayRecord, weekday: int, event: NowEvent | None = None
+    kind: str,
+    m: _Moment,
+    entries: list[_Entry],
+    course: CourseOption,
+    day: DayRecord,
+    weekday: int,
+    event: NowEvent | None = None,
+    checks: Checks | None = None,
+    to_check: _Entry | None = None,
 ) -> NowCard | None:
-    """카드 값 채우기 (A4). 지금 이 카드를 만들 수 없으면 None."""
+    """카드 값 채우기 (A4). 지금 이 카드를 만들 수 없으면 None. event = 이 카드의 사건 (T-04: 늦어짐, T-06: 닫힘)."""
+    checks = checks or {}
     if kind == "T-01":
         entry = m.current or m.following  # 하루 시작 전 미리보기는 1번 (ends_in_min=null)
         if entry is None:
             return None
         ends_in = entry.end_min - m.now_min if m.current else None
-        return NowCardT01(item=_view(entry, weekday), ends_in_min=ends_in)
+        return NowCardT01(item=_view(entry, weekday, checks), ends_in_min=ends_in)
     if kind == "T-02":
         nxt = m.following
         if nxt is None:
             return None
         return NowCardT02(
-            next_item=_view(nxt, weekday),
+            next_item=_view(nxt, weekday, checks),
             leave_at=_hhmm(nxt.leave_min),
             leave_in_min=max(0, nxt.leave_min - m.now_min),  # 이동 중 0 (Q10), 쉬는 시간은 남은 분 (R2)
             travel_min=nxt.travel_min,
@@ -208,7 +250,7 @@ def _card(
         )
     if kind == "T-03":
         later = [e for e in entries if e.start_min > m.now_min]  # 지금 일정 제외
-        return NowCardT03(items=[_view(e, weekday) for e in later])
+        return NowCardT03(items=[_view(e, weekday, checks) for e in later])
     if kind == "T-04":
         if event is None:
             return None
@@ -219,12 +261,33 @@ def _card(
             proposals=event.proposals,
             fixed=NowT04Fixed(title=upcoming.title, start=upcoming.start) if upcoming else None,
         )
+    if kind == "T-05":
+        target = to_check
+        if target is None or target.place is None:
+            return None
+        place = target.place
+        return NowCardT05(
+            place=NowPlaceRef(place_id=place.id, name=place.name),
+            facts=_facts(place, weekday, checks),
+            map_url=map_search_url(place.lat, place.lng),
+        )
+    if kind == "T-06":
+        if event is None or event.type != "closed":
+            return None
+        closed_id = event.closed_place_id
+        if closed_id is None:
+            return None
+        return NowCardT06(
+            event_id=event.event_id,
+            closed=NowPlaceRef(place_id=closed_id, name=day.places[closed_id].name),
+            proposals=[p for p in event.proposals if isinstance(p, NowT06Proposal)],
+        )
     if kind == "T-07":
         fixed = m.upcoming_fixed
         if fixed is None:
             return None
         return NowCardT07(
-            fixed=NowFixed(name=fixed.name, title=fixed.title, start=fixed.start, end=fixed.end, facts=_facts(fixed.place, weekday)),
+            fixed=NowFixed(name=fixed.name, title=fixed.title, start=fixed.start, end=fixed.end, facts=_facts(fixed.place, weekday, checks)),
             leave_by=_hhmm(fixed.leave_min),
             leave_in_min=max(0, fixed.leave_min - m.now_min),  # Q4: 출발 시각이 지나도 시작 전이면 0
         )
@@ -234,12 +297,21 @@ def _card(
     return None
 
 
-def _subs(kinds: list[str], m: _Moment, entries: list[_Entry], course: CourseOption, day: DayRecord, weekday: int) -> list[NowCard]:
+def _subs(
+    kinds: list[str],
+    m: _Moment,
+    entries: list[_Entry],
+    course: CourseOption,
+    day: DayRecord,
+    weekday: int,
+    checks: Checks | None = None,
+    to_check: _Entry | None = None,
+) -> list[NowCard]:
     cards: list[NowCard] = []
     for kind in kinds:
         if kind not in SUPPORTED:
             continue
-        card = _card(kind, m, entries, course, day, weekday)
+        card = _card(kind, m, entries, course, day, weekday, None, checks, to_check)
         if card is None or (isinstance(card, NowCardT03) and not card.items):
             continue  # Q5·R11: 다음 일정이 없어 보조가 없으면 T-02도 빈 T-03도 뺀다
         cards.append(card)
@@ -279,6 +351,19 @@ def _route(entries: list[_Entry], m: _Moment, home: tuple[float, float], positio
     return NowRoute(done=done, remaining=remaining)
 
 
+def _shown_event(event: NowEvent | None, others: Sequence[NowEvent]) -> NowEvent | None:
+    """화면의 `event` 칸. 방금 처리된(resolved) 사건은 그 응답에 싣는다 (TASK-007 B-5).
+    그 밖에는 메인 카드의 사건 우선: 늦어짐 awaiting(T-04, 순위 3) > 닫힘 awaiting(T-06, 순위 4) > 늦어짐 open_low (TASK-008 §7)."""
+    if event is not None and event.state == "resolved":
+        return event
+    pool = [e for e in (event, *others) if e is not None]
+    for kind, state in (("delay", "awaiting"), ("closed", "awaiting"), ("delay", "open_low")):
+        found = next((e for e in pool if e.type == kind and e.state == state), None)
+        if found:
+            return found
+    return event
+
+
 def build_now_view(
     day_id: str,
     day: DayRecord,
@@ -287,26 +372,36 @@ def build_now_view(
     position: tuple[float, float] | None,
     stay_overrides: dict[str, int] | None = None,
     event: NowEvent | None = None,
+    others: Sequence[NowEvent] = (),
+    checks: Checks | None = None,
 ) -> NowView:
-    """at는 시간대 없는 그날의 시각. 날짜 검사는 부르는 쪽 몫."""
+    """at는 시간대 없는 그날의 시각. 날짜 검사는 부르는 쪽 몫.
+
+    event = 부르는 쪽이 정한 화면 사건(방금 처리된 사건 등), others = 그 밖에 열려 있는 사건 (종류마다 하나, TASK-008 §7).
+    checks = 그날 사용자 영업 확인 기록 (TASK-008 A5)."""
+    checks = checks or {}
     summary = day_summary(day_id, day, stay_overrides)
     weekday = day.plan.date.weekday()
     home = (day.plan.lodging[0], day.plan.lodging[1])
     now_min = at.hour * 60 + at.minute
     entries = _entries(day, course)
     m = _moment(entries, now_min)
-    open_low = event is not None and event.state == "open_low"
-    awaiting = event is not None and event.state == "awaiting"
-    screen = compose_screen(_snapshot(m, awaiting))
+    events = [e for e in (event, *others) if e is not None]
+    delay_event = next((e for e in events if e.type == "delay" and e.state in ("open_low", "awaiting")), None)
+    delay_awaiting = next((e for e in events if e.type == "delay" and e.state == "awaiting"), None)
+    closed_awaiting = next((e for e in events if e.type == "closed" and e.state == "awaiting"), None)
+    to_check = check_target(entries, m, weekday, checks)
+    screen = compose_screen(_snapshot(m, delay_awaiting is not None, closed_awaiting is not None, to_check))
 
     main_kind, subs_kinds, reason = _decide(screen, m, entries)
-    main = _card(main_kind, m, entries, course, day, weekday, event)
+    card_event = delay_awaiting if main_kind == "T-04" else closed_awaiting
+    main = _card(main_kind, m, entries, course, day, weekday, card_event, checks, to_check)
     if main is None:  # 만들 수 없는 카드는 T-01로 (A3와 같은 안전장치)
         main_kind, subs_kinds, reason = _replace_with_t01(main_kind, screen)
-        main = _card("T-01", m, entries, course, day, weekday)
+        main = _card("T-01", m, entries, course, day, weekday, None, checks)
     day_over = m.current is None and m.following is None
-    if event is not None and (open_low or awaiting):
-        status, status_text = "delayed", delayed_text(event.delay_min)  # B-5
+    if delay_event is not None:
+        status, status_text = "delayed", delayed_text(delay_event.delay_min)  # B-5
     elif day_over:
         status, status_text = screen.move_status, DAY_OVER_PILL  # F1
     else:
@@ -319,11 +414,11 @@ def build_now_view(
         status_text=status_text,
         reason=reason,
         main=main,
-        subs=_subs(subs_kinds, m, entries, course, day, weekday),
+        subs=_subs(subs_kinds, m, entries, course, day, weekday, checks, to_check),
         pins=_pins(entries, m),
         route=_route(entries, m, home, position),
         position=LatLng(lat=position[0], lng=position[1]) if position else None,
-        event=event,
+        event=_shown_event(event, others),
     )
 
 
@@ -346,21 +441,38 @@ def _decide(screen: Screen, m: _Moment, entries: list[_Entry]) -> tuple[str, lis
     return kind, subs, reason
 
 
-def event_view(record: EventRecord, proposals: list[ProposalRecord], day: DayRecord) -> NowEvent:
-    """저장된 사건·제안 -> 응답. 이름·일정은 코스와 장소 데이터에서만 가져온다 (LLM 없음)."""
+def event_view(record: EventRecord, proposals: list[ProposalRecord], day: DayRecord, checks: Checks | None = None) -> NowEvent:
+    """저장된 사건·제안 -> 응답. 이름·일정은 코스와 장소 데이터에서만 가져온다 (LLM 없음).
+
+    닫힘 사건의 제안은 TASK-007 제안 + closed (TASK-008 §12 Q21). 대안의 사실 칩은 items 안 그 장소 줄의 facts."""
     weekday = day.plan.date.weekday()
-    views = []
+    views: list[NowT06Proposal | NowProposal] = []
     for p in proposals:
         entries = _entries(day, p.course)[p.from_index :]
+        fields = dict(
+            proposal_id=p.proposal_id,
+            label=p.label,
+            reason=p.reason,
+            dropped=[NowDropped(place_id=pid, name=day.places[pid].name) for pid in p.dropped],
+            keeps_fixed=p.keeps_fixed,
+            first_leave_at=p.first_leave_at,
+            items=[_view(e, weekday, checks) for e in entries],
+        )
+        if p.closed is None:
+            views.append(NowProposal(**fields))
+            continue
+        alternative = p.closed.alternative
         views.append(
-            NowProposal(
-                proposal_id=p.proposal_id,
-                label=p.label,
-                reason=p.reason,
-                dropped=[NowDropped(place_id=pid, name=day.places[pid].name) for pid in p.dropped],
-                keeps_fixed=p.keeps_fixed,
-                first_leave_at=p.first_leave_at,
-                items=[_view(e, weekday) for e in entries],
+            NowT06Proposal(
+                **fields,
+                closed=NowClosedInfo(
+                    alternative=NowPlaceRef(place_id=alternative, name=day.places[alternative].name) if alternative else None,
+                    distance_m=p.closed.distance_m,
+                    travel_change_min=p.closed.travel_change_min,
+                ),
             )
         )
-    return NowEvent(event_id=record.event_id, severity=record.severity, delay_min=record.delay_min, state=record.state, proposals=views)
+    view = NowEvent(event_id=record.event_id, type=record.type, severity=record.severity, delay_min=record.delay_min, state=record.state, proposals=views)
+    if record.type == "closed":
+        view._closed_place_id = record.dedupe_key.removeprefix(f"closed:{record.day_id}:")
+    return view

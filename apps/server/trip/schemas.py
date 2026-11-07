@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from planning.schemas import DaySummary, Fact, LatLng
 
@@ -68,13 +68,37 @@ class NowProposal(BaseModel):
     items: list[NowCourseItem]
 
 
+class NowPlaceRef(BaseModel):
+    place_id: str
+    name: str
+
+
+class NowClosedInfo(BaseModel):
+    """닫힘 대안 한 줄 (TASK-008 §12 Q21). 대안의 사실 칩은 제안 items 안 그 장소 줄의 facts."""
+
+    alternative: NowPlaceRef | None  # [빼고 가기]면 null
+    distance_m: int | None  # 닫힌 곳에서 직선거리 m, [빼고 가기]면 null
+    travel_change_min: int  # 남은 이동 분 합(숙소 복귀 포함), 바뀐 뒤 - 바뀌기 전
+
+
+class NowT06Proposal(NowProposal):
+    """TASK-007 제안 + closed (TASK-008 §11 Q4). label은 relaxed (§12 Q22)."""
+
+    closed: NowClosedInfo
+
+
 class NowEvent(BaseModel):
     event_id: str
-    type: Literal["delay"] = "delay"
+    type: Literal["delay", "closed"] = "delay"
     severity: Literal["low", "high"]
-    delay_min: int
+    delay_min: int  # 닫힘 사건은 0
     state: Literal["open_low", "awaiting", "resolved"]
-    proposals: list[NowProposal]
+    proposals: list[NowT06Proposal | NowProposal]
+    _closed_place_id: str | None = PrivateAttr(default=None)  # 닫힘 사건이 가리키는 장소 (응답에는 나가지 않는다)
+
+    @property
+    def closed_place_id(self) -> str | None:
+        return self._closed_place_id
 
 
 class NowT04Fixed(BaseModel):
@@ -88,6 +112,24 @@ class NowCardT04(BaseModel):
     delay_min: int
     proposals: list[NowProposal]
     fixed: NowT04Fixed | None
+
+
+class NowCardT05(BaseModel):
+    """영업 확인 (TASK-008 A4): 영업 여부를 추측하지 않고 사실의 상태·출처·확인 날짜만 싣는다."""
+
+    type: Literal["T-05"] = "T-05"
+    place: NowPlaceRef
+    facts: list[Fact]
+    map_url: str
+
+
+class NowCardT06(BaseModel):
+    """닫힘 대안 (TASK-008 B6)."""
+
+    type: Literal["T-06"] = "T-06"
+    event_id: str
+    closed: NowPlaceRef
+    proposals: list[NowT06Proposal]
 
 
 class NowCardT07(BaseModel):
@@ -104,7 +146,10 @@ class NowCardT08(BaseModel):
     map_url: str
 
 
-NowCard = Annotated[NowCardT01 | NowCardT02 | NowCardT03 | NowCardT04 | NowCardT07 | NowCardT08, Field(discriminator="type")]
+NowCard = Annotated[
+    NowCardT01 | NowCardT02 | NowCardT03 | NowCardT04 | NowCardT05 | NowCardT06 | NowCardT07 | NowCardT08,
+    Field(discriminator="type"),
+]
 
 
 class NowPin(BaseModel):

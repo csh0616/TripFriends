@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from engine.models import CourseOption, PlaceId
+from trip.visit import VisitCheckRecord
 
 EventState = Literal["open_low", "awaiting", "resolved"]
 
@@ -27,6 +28,21 @@ class EventRecord:
     at: datetime  # 가장 최근 증거의 시각
     user_choice: Literal["accepted", "dismissed"] | None = None
 
+    @property
+    def type(self) -> Literal["delay", "closed"]:
+        """사건 종류. dedupe_key의 앞부분 (delay:… / closed:…)."""
+        return "closed" if self.dedupe_key.startswith("closed:") else "delay"
+
+
+@dataclass(frozen=True)
+class ClosedInfo:
+    """닫힘 대안(TASK-008 §12 Q21) 한 줄: 닫힌 곳 대신 갈 대안(없으면 [빼고 가기])과 거리·이동 변화."""
+
+    closed_place_id: PlaceId
+    alternative: PlaceId | None
+    distance_m: int | None
+    travel_change_min: int  # 남은 이동 분 합(숙소 복귀 포함), 바뀐 뒤 - 바뀌기 전 (Q4)
+
 
 @dataclass(frozen=True)
 class ProposalRecord:
@@ -42,6 +58,7 @@ class ProposalRecord:
     created_at: datetime  # 만든 check의 at
     base_delay_min: int  # 만들 때의 delay_min
     superseded: bool = False
+    closed: ClosedInfo | None = None  # 닫힘 사건의 제안이면
 
 
 class TripRepo(ABC):
@@ -55,8 +72,22 @@ class TripRepo(ABC):
     def event_by_key(self, day_id: str, dedupe_key: str) -> EventRecord | None: ...
 
     @abstractmethod
-    def open_event(self, day_id: str) -> EventRecord | None:
-        """그날 아직 처리되지 않은(open_low·awaiting) 사건. 화면에는 하나만 싣는다."""
+    def open_event(self, day_id: str, kind: Literal["delay", "closed"] = "delay") -> EventRecord | None:
+        """그날 아직 처리되지 않은(open_low·awaiting) 그 종류의 사건. 종류마다 하나씩 열려 있을 수 있다 (TASK-008 §7)."""
+
+    @abstractmethod
+    def open_events(self, day_id: str) -> list[EventRecord]:
+        """그날 아직 처리되지 않은 사건 전부 (종류마다 하나)."""
+
+    @abstractmethod
+    def put_visit_check(self, record: VisitCheckRecord) -> None: ...
+
+    @abstractmethod
+    def get_visit_check(self, day_id: str, place_id: str) -> VisitCheckRecord | None: ...
+
+    @abstractmethod
+    def visit_checks(self, day_id: str) -> dict[str, VisitCheckRecord]:
+        """그날 확인 기록 (장소 id -> 기록)."""
 
     @abstractmethod
     def put_proposals(self, event_id: str, records: list[ProposalRecord]) -> None:
@@ -78,6 +109,7 @@ class MemoryTripRepo(TripRepo):
         self._events: dict[str, EventRecord] = {}
         self._proposals: dict[str, ProposalRecord] = {}
         self._order: dict[str, list[str]] = {}  # event_id -> proposal_id들 (만든 순서)
+        self._visit_checks: dict[tuple[str, str], VisitCheckRecord] = {}  # (day_id, place_id) -> 기록
 
     def put_event(self, record: EventRecord) -> None:
         with self._lock:
@@ -91,9 +123,25 @@ class MemoryTripRepo(TripRepo):
         with self._lock:
             return next((e for e in self._events.values() if e.day_id == day_id and e.dedupe_key == dedupe_key), None)
 
-    def open_event(self, day_id: str) -> EventRecord | None:
+    def open_event(self, day_id: str, kind: Literal["delay", "closed"] = "delay") -> EventRecord | None:
         with self._lock:
-            return next((e for e in self._events.values() if e.day_id == day_id and e.state != "resolved"), None)
+            return next((e for e in self._events.values() if e.day_id == day_id and e.state != "resolved" and e.type == kind), None)
+
+    def open_events(self, day_id: str) -> list[EventRecord]:
+        with self._lock:
+            return [e for e in self._events.values() if e.day_id == day_id and e.state != "resolved"]
+
+    def put_visit_check(self, record: VisitCheckRecord) -> None:
+        with self._lock:
+            self._visit_checks[(record.day_id, record.place_id)] = record
+
+    def get_visit_check(self, day_id: str, place_id: str) -> VisitCheckRecord | None:
+        with self._lock:
+            return self._visit_checks.get((day_id, place_id))
+
+    def visit_checks(self, day_id: str) -> dict[str, VisitCheckRecord]:
+        with self._lock:
+            return {pid: rec for (did, pid), rec in self._visit_checks.items() if did == day_id}
 
     def put_proposals(self, event_id: str, records: list[ProposalRecord]) -> None:
         with self._lock:
@@ -114,4 +162,4 @@ class MemoryTripRepo(TripRepo):
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            return copy.deepcopy({"events": self._events, "proposals": self._proposals, "order": self._order})
+            return copy.deepcopy({"events": self._events, "proposals": self._proposals, "order": self._order, "visit_checks": self._visit_checks})

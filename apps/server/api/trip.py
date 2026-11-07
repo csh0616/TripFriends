@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Request
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator, model_validator
 
 from api.now import parse_at
 from api.planning import _doc
@@ -37,6 +37,23 @@ class CheckRequest(BaseModel):
         return self
 
 
+class VisitCheckRequest(BaseModel):
+    """영업 확인 답 (TASK-008 A5). at은 시간대 없는 그날의 시각."""
+
+    day_id: str
+    at: str
+    was_open: StrictBool
+
+    @field_validator("at")
+    @classmethod
+    def _at(cls, value: str) -> str:
+        try:
+            parse_at(value)
+        except PlanningError as error:
+            raise ValueError(error.message) from None
+        return value
+
+
 def service(request: Request) -> TripService:
     return request.app.state.trip_service
 
@@ -56,3 +73,12 @@ def accept(proposal_id: str, request: Request) -> NowView:
 @router.post("/events/{event_id}/dismiss", responses=_doc(404, 409), summary="대안 사양: 일정 그대로")
 def dismiss(event_id: str, request: Request) -> NowView:
     return service(request).dismiss(event_id)
+
+
+@router.post(
+    "/places/{place_id}/visit-checks",
+    responses=_doc(400, 404, 409),
+    summary="영업 확인 답: 열었어/닫혔어 (그날만 사용자 확인으로 저장, 닫혔어면 대안 계산)",
+)
+def visit_check(place_id: str, body: VisitCheckRequest, request: Request) -> NowView:
+    return service(request).visit_check(place_id, body.day_id, parse_at(body.at), body.was_open)

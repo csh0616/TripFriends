@@ -39,6 +39,10 @@ class PlanningRepo(ABC):
     def get_day(self, day_id: str) -> DayRecord | None: ...
 
     @abstractmethod
+    def replace_must_visit(self, day_id: str, old: PlaceId, new: PlaceId) -> None:
+        """그날 꼭 갈 곳 목록에서 old를 new로 바꾼다 (TASK-008 §7: 닫힌 곳을 대안으로 바꿀 때). 다른 필드는 그대로."""
+
+    @abstractmethod
     def save_trip(self, trip_id: str, day_ids: list[str]) -> None: ...
 
     # ---- 세션 ----
@@ -144,6 +148,12 @@ class MemoryPlanningRepo(PlanningRepo):
     def get_day(self, day_id: str) -> DayRecord | None:
         with self._lock:
             return self._days.get(day_id)
+
+    def replace_must_visit(self, day_id: str, old: PlaceId, new: PlaceId) -> None:
+        with self._lock:
+            record = self._days[day_id]
+            must = [new if pid == old else pid for pid in record.plan.must_visit]
+            self._days[day_id] = DayRecord(record.plan.model_copy(update={"must_visit": list(dict.fromkeys(must))}), record.places, record.day_number)
 
     def save_trip(self, trip_id: str, day_ids: list[str]) -> None:
         with self._lock:

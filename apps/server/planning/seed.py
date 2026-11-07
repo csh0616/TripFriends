@@ -5,11 +5,13 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from engine.models import DayPlan, Place, PlanFixed
+from engine.models import CourseOption, DayPlan, Place, PlanFixed
 from planning.repo import PlanningRepo
 from planning.schemas import SeedResult
+from trip.visit import closed_candidates
 
 DEMO_PATH = Path(__file__).parents[1] / "engine" / "fixtures" / "demo_city.json"
+EXTRA_PATH = Path(__file__).parent / "fixtures" / "demo_extra.json"  # 시드 전용 장소 1곳 (TASK-008 §12 Q18). demo_city.json은 바꾸지 않는다
 DEMO_CENTER = (35.0, 135.0)  # 가상 도시 중심점 (TASK-002 §2). 숙소 = 중심점
 DEMO_DATES = [date(2026, 12, 1), date(2026, 12, 2), date(2026, 12, 3)]  # §10 Q26: 고정
 DAY_START, DAY_END = "10:00", "20:00"  # §10 Q26
@@ -71,3 +73,45 @@ def seed_demo(repo: PlanningRepo, *, with_dinner: bool = False) -> SeedResult:
     trip_id = str(uuid.uuid4())
     repo.save_trip(trip_id, day_ids)
     return SeedResult(trip_id=trip_id, day_ids=day_ids)
+
+
+def demo_extra_places() -> dict[str, Place]:
+    rows = json.loads(EXTRA_PATH.read_text(encoding="utf-8"))["places"]
+    return {row["id"]: Place.model_validate(row) for row in rows}
+
+
+SCENARIO_SEQS = range(2, 6)  # TASK-008 §11 Q18: chosen 코스의 2~5번
+
+
+def _scenario_place(places: dict[str, Place], course: CourseOption, weekday: int) -> str | None:
+    """코스 2~5번 중 B2 대안이 1곳 이상 있는 첫 장소 (TASK-008 §11 Q18)."""
+    in_course = {item.place_id for item in course.items if item.place_id}
+    for item in course.items:
+        if item.place_id and item.seq in SCENARIO_SEQS:
+            start = int(item.start[:2]) * 60 + int(item.start[3:])
+            if closed_candidates(places[item.place_id], places, in_course, weekday, start):
+                return item.place_id
+    return None
+
+
+def prepare_demo_scenario(repo: PlanningRepo, day_id: str) -> None:
+    """chosen 시드의 둘째 날에만 (TASK-008 C4·§11 Q18·§12 Q18). 코스를 고른 뒤에 부르므로 코스는 바뀌지 않는다.
+
+    1. 2~5번 중 B2 대안이 있는 첫 장소를 시나리오 장소로 삼는다.
+    2. 30곳으로 그런 장소가 없을 때만 시드 전용 장소 1곳을 이 날에 더한다.
+    3. 시나리오 장소가 원래 확인됨이면 이 날 시드에서만 미확인으로 둔다 (출처 demo). 미확인·모름은 데이터 그대로.
+    """
+    record = repo.get_day(day_id)
+    option_id = repo.chosen_option(day_id)
+    option = repo.get_option(option_id) if option_id else None
+    if record is None or option is None:
+        return
+    places = dict(record.places)
+    weekday = record.plan.date.weekday()
+    scenario = _scenario_place(places, option.course, weekday)
+    if scenario is None:
+        places.update(demo_extra_places())
+        scenario = _scenario_place(places, option.course, weekday)
+    if scenario is not None and places[scenario].hours_status == "confirmed":
+        places[scenario] = places[scenario].model_copy(update={"hours_status": "unverified"})
+    repo.save_day(day_id, record.plan, places, record.day_number)

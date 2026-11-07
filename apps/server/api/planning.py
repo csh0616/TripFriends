@@ -27,7 +27,7 @@ from planning.service import PlanningError, PlanningService
 
 # 본문 오류를 400 공통 형식으로 바꾸는 경로. 그 밖의 엔드포인트는 기존 동작 그대로
 # TASK-004 A4: /debug/compose도 포함 (같은 접두사의 /debug/seed-demo는 본문이 없다)
-PLANNING_PREFIXES = ("/days/", "/planning/", "/course-options/", "/debug/compose")
+PLANNING_PREFIXES = ("/days/", "/planning/", "/course-options/", "/debug/compose", "/places/")
 
 
 def get_service(request: Request) -> PlanningService:

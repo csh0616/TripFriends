@@ -133,3 +133,66 @@ def reason_text(names: list[str], fixed_title: str | None) -> str:
     tail = f"{fixed_title}에 여유 있게" if fixed_title else "남은 일정 여유 있게"
     return f"{', '.join(names)} 빼고 {tail}"
 
+
+
+# ---------- 닫힘 대안 (TASK-008 §B) ----------
+
+
+def closed_input(day: DayRecord, course: CourseOption, closed_id: PlaceId, replacement: PlaceId | None, at: datetime) -> AlternativeInput | Infeasible:
+    """B3: 닫힌 곳을 replacement로 바꾼(없으면 뺀) 남은 코스의 입력.
+
+    남은 일정 = 닫힌 곳 자리부터. 출발 장소 = 앞 장소 (없으면 숙소), 출발 시각 = max(지금, 앞 장소 끝) (§11 Q7).
+    고정 일정은 지키고, 꼭 갈 곳이 닫힌 곳이면 대안으로 바꾼다 (§7).
+    """
+    index = next(i for i, item in enumerate(course.items) if item.place_id == closed_id)
+    rest = course.items[index:]
+    before = course.items[:index]
+    now_min = at.hour * 60 + at.minute
+    plan = day.plan
+    ready = max([now_min, *(_minutes(item.end) for item in before[-1:])])
+    fixed: list[PlanFixed] = []
+    free = list(plan.fixed)
+    for item in rest:
+        if not item.is_fixed or item.place_id == closed_id:
+            continue  # 닫힌 곳이 고정 일정이어도 그 일정은 더 지킬 수 없다
+        match = next((f for f in free if f.place_id == item.place_id and f.start == item.start and f.end == item.end), None)
+        if match is None:
+            continue
+        free.remove(match)
+        fixed.append(match)
+    for event in fixed:
+        if _minutes(event.start) < ready:
+            return Infeasible(reason="fixed_unreachable", blocking=[event.id], suggest_drop=[])
+    if ready >= _minutes(plan.end):
+        return Infeasible(reason="fixed_unreachable", blocking=[], suggest_drop=[])
+    spot = next((day.places[i.place_id] for i in reversed(before) if i.place_id), None)
+    start = (spot.lat, spot.lng) if spot else plan.lodging
+    rest_places = {item.place_id for item in rest if item.place_id}
+    picks = [pid for pid in dict.fromkeys(item.place_id for item in rest if item.place_id and not item.is_fixed) if pid != closed_id]
+    if replacement is not None:
+        picks.insert(0, replacement)
+        rest_places = (rest_places - {closed_id}) | {replacement}
+    else:
+        rest_places = rest_places - {closed_id}
+    swapped = [replacement if pid == closed_id else pid for pid in plan.must_visit]
+    stays = {item.place_id: item.stay_min for item in rest if item.place_id and item.stay_source == "user" and item.place_id != closed_id}
+    new_plan = DayPlan(
+        date=plan.date,
+        start=_hhmm(ready),
+        end=plan.end,
+        lodging=plan.lodging,
+        fixed=fixed,
+        must_visit=list(dict.fromkeys(pid for pid in swapped if pid is not None and pid in rest_places)),
+        stay_overrides=stays,
+    )
+    return AlternativeInput(new_plan, start, picks, index - 1, fixed[0].title if fixed else None, [(f.place_id, f.start, f.end) for f in fixed])
+
+
+def remaining_travel_min(course: CourseOption, from_index: int) -> int:
+    """남은 이동 분 합 = from_index번째 항목부터 오는 이동 + 숙소 복귀 (§11 Q4)."""
+    return sum(item.travel_min for item in course.items[from_index:]) + course.go_home_min
+
+
+def closed_reason(base: str, was_must: bool) -> str:
+    """§7·§12 Q23: TASK-007 대본 그대로, 꼭 갈 곳이었으면 덧붙인다 ([빼고 가기] 이유에)."""
+    return f"{base} (꼭 갈 곳이었어)" if was_must else base
