@@ -10,11 +10,13 @@
 //   T-06 카드 'card-T-06': 서버 값 {type, event_id, closed:{place_id,name}, proposals[]}
 //     제안 = TASK-007 제안 {proposal_id, label, reason, dropped, keeps_fixed, first_leave_at, items}
 //            + closed {alternative:{place_id,name}|null, distance_m, travel_change_min, reordered} (§11 Q4, reordered는 §14)
-//     §14: closed.reordered가 true면 대안 칸에 "순서를 바꿔야 들어가 · {HH:MM}에 들러", 시각 = items 안 그 대안 줄의 start
+//     §14: closed.reordered가 true면 들르는 시각 = items 안 그 대안 줄의 start. TASK-009 B4: 그 안내는 서버 reason만 (앱이 따로 그리지 않음)
 //     §14: 제안이 0개면 "지금은 바꿀 방법을 못 찾았어" + [그대로 둘게]만
 //     대안 칸(alternative 있음) 'proposal-{proposal_id}': 이름 = closed.alternative.name, 거리 = closed.distance_m,
-//       이동 변화 = closed.travel_change_min, 사실 칩 = items 안 그 대안 줄의 facts. [이걸로] 'proposal-accept-{proposal_id}'
-//     [빼고 가기] 'closed-skip' → closed.alternative가 null인 제안의 accept, [그대로 둘게] 'event-dismiss' → dismiss
+//       이동 변화 = closed.travel_change_min, 사실 칩 = items 안 그 대안 줄의 facts
+//     [빼고 가기] 칸 'closed-skip' = closed.alternative가 null인 제안, [그대로 둘게] 'event-dismiss' → dismiss
+//     TASK-009 A (G5 → 고르기 방식, 승인): 대안 칸·[빼고 가기] 칸을 눌러 고르고 시트 아래 [이걸로 할래] 'select-confirm'으로 accept
+//     TASK-009 B3: 출처는 원문이 아니라 demo → "데모 데이터", user → "내가 확인", 그 밖 → "출처 정보"
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import fc from 'fast-check';
 import { Linking, StyleSheet } from 'react-native';
@@ -138,6 +140,12 @@ const t06 = (over: object = {}) => ({
 const closedEvent = { event_id: 'ev-closed', type: 'closed', severity: 'high', delay_min: 0, state: 'awaiting', proposals: [] };
 const closedView = (over: object = {}) => nowView({ main: t06(), subs: [t03()], reason: '서버_T06_이유', event: closedEvent, ...over });
 
+/** TASK-009 A1·A2: 칸(대안 'proposal-{id}' 또는 [빼고 가기] 'closed-skip')을 고른 뒤 [이걸로 할래] */
+const choose = async (rowId: string) => {
+  await pressId(rowId);
+  await pressId('select-confirm');
+};
+
 const GUESSES = /열었을|열려 있을|열 거야|영업 중일|아마/;
 
 // ---------- C1 T-05 카드 ----------
@@ -164,9 +172,11 @@ describe('C1 T-05 카드', () => {
     expect(inCard('card-T-05').getByText(label)).toBeTruthy();
   });
 
-  test('T8_C1_AC2_출처는_서버_값_그대로', async () => {
+  // TASK-009 B3: source_type을 원문으로 쓰지 않는다. 문서에 없는 값은 "출처 정보" (전에는 '서버_출처'를 그대로 보였다)
+  test('T8_C1_AC2_T9_B3_출처는_원문이_아니라_출처_정보', async () => {
     await shows();
-    expect(words('card-T-05')).toContain('서버_출처');
+    expect(words('card-T-05')).toContain('출처 정보');
+    expect(words('card-T-05')).not.toContain('서버_출처');
   });
 
   test('T8_C1_AC2_확인_날짜가_없으면_확인한_적_없음', async () => {
@@ -314,7 +324,7 @@ describe('C3 T-06 카드', () => {
     expect(words('card-T-06')).toContain('근처에 이런 데 있어');
   });
 
-  test('T8_C3_대안_칸은_서버_순서대로_이름_거리_이동_변화_사실_칩_이걸로', async () => {
+  test('T8_C3_T9_A1_대안_칸은_서버_순서대로_이름_거리_이동_변화_사실_칩_칸별_이걸로_없음', async () => {
     await shows();
     const ids = byId('card-T-06')
       .queryAll((host) => typeof host.props.testID === 'string' && /^proposal-alt-\d$/.test(host.props.testID))
@@ -325,7 +335,8 @@ describe('C3 T-06 카드', () => {
     expect(words('proposal-alt-1')).toContain('350m');
     expect(words('proposal-alt-1')).toContain('+4분');
     expect(row.getByText('미확인')).toBeTruthy(); // items 안 대안(D09) 줄의 facts
-    expect(within(byId('proposal-accept-alt-1') as never).getByText('이걸로')).toBeTruthy();
+    expect(row.queryByText('이걸로')).toBeNull(); // TASK-009 A1: 칸을 눌러 고른다
+    expect(screen.queryAllByTestId(/^proposal-accept-/)).toEqual([]);
     expect(inCard('proposal-alt-2').getByText('확인됨')).toBeTruthy();
     expect(words('proposal-alt-2')).toContain('+7분');
   });
@@ -370,8 +381,8 @@ describe('C3 T-06 카드', () => {
     const control = nowServer(closedView({ main: t06({ proposals: [skip({ proposal_id: 'x-9' }), replace()] }) }));
     control.server.on(ACCEPT_ROUTE('x-9'), json(200, nowView({ main: t01(), subs: [t03()] })));
     await toNow(control);
-    expect(screen.queryByTestId('proposal-accept-x-9')).toBeNull(); // 대안 칸으로 그리지 않는다
-    await pressId('closed-skip');
+    expect(screen.queryByTestId('proposal-x-9')).toBeNull(); // 대안 칸으로 그리지 않는다
+    await choose('closed-skip');
     await waitFor(() => expect(control.server.sent(ACCEPT_ROUTE('x-9'))).toHaveLength(1));
     expect(control.server.sent(ACCEPT_ROUTE('alt-1'))).toEqual([]);
   });
@@ -379,7 +390,7 @@ describe('C3 T-06 카드', () => {
   test('T8_C3_B4_대안이_0곳이면_안내와_빼고_가기_그대로_둘게만', async () => {
     await shows({ main: t06({ proposals: [skip()] }) });
     expect(words('card-T-06')).toContain('근처에 열린 비슷한 곳이 없어');
-    expect(screen.queryAllByTestId(/^proposal-accept-/)).toEqual([]);
+    expect(screen.queryAllByTestId(/^proposal-alt-/)).toEqual([]); // TASK-009: 칸별 [이걸로]가 없어져 '대안 칸 없음'으로 본다
     expect(byId('closed-skip')).toBeTruthy();
     expect(byId('event-dismiss')).toBeTruthy();
   });
@@ -408,23 +419,33 @@ describe('C3 T-06 카드', () => {
   const moved = (start: string) =>
     replace({ items: [LATER_ITEM, { ...altItem('D09', '서버_대안_장소', 'unverified'), seq: 3, start, end: '23:59' }] }, { reordered: true });
 
-  test.each(['17:45', '00:00', '23:58'])('T8_S14_다시_짠_대안은_순서를_바꿔야_들어가_%s에_들러', async (start) => {
-    await shows({ main: t06({ proposals: [moved(start), skip()] }) });
-    expect(words('proposal-alt-1')).toContain('순서를 바꿔야 들어가');
-    expect(words('proposal-alt-1')).toContain(`${start}에 들러`);
+  // TASK-009 B4: 앱이 따로 그리던 "순서를 바꿔야 들어가" 줄을 뺀다. 서버 이유 문장(TASK-008 §17)이 정본이라 한 번만 보인다
+  test.each(['17:45', '00:00', '23:58'])('T8_S14_T9_B4_다시_짠_대안의_순서_안내는_서버_이유_한_번만_%s', async (start) => {
+    const reason = `순서를 바꿔야 들어가 · ${start}에 들러`;
+    await shows({ main: t06({ proposals: [{ ...moved(start), reason }, skip()] }) });
+    const shown = words('proposal-alt-1');
+    expect(shown.split('순서를 바꿔야 들어가')).toHaveLength(2);
+    expect(shown.split(`${start}에 들러`)).toHaveLength(2);
+  });
+
+  test('T9_B4_다시_짠_대안이어도_앱은_순서_안내를_지어_넣지_않는다', async () => {
+    await shows({ main: t06({ proposals: [moved('17:45'), skip()] }) }); // reason = '서버_대안_이유'
+    expect(words('proposal-alt-1')).toContain('서버_대안_이유');
+    expect(words('proposal-alt-1')).not.toContain('순서를 바꿔야');
+    expect(words('proposal-alt-1')).not.toContain('에 들러');
   });
 
   test('T8_S14_자리에_들어간_대안에는_순서_안내가_없다', async () => {
     await shows({ main: t06({ proposals: [replace(), { ...moved('17:45'), proposal_id: 'alt-2' }, skip()] }) });
     expect(words('proposal-alt-1')).not.toContain('순서를 바꿔야');
     expect(words('proposal-alt-1')).not.toContain('에 들러');
-    expect(words('proposal-alt-2')).toContain('순서를 바꿔야 들어가');
+    expect(words('proposal-alt-2')).not.toContain('순서를 바꿔야'); // TASK-009 B4: reason이 '서버_대안_이유'면 앱은 덧붙이지 않는다
   });
 
   test('T8_S14_제안이_0개면_못_찾았어와_그대로_둘게만', async () => {
     await shows({ main: t06({ proposals: [] }) });
     expect(words('card-T-06')).toContain('지금은 바꿀 방법을 못 찾았어');
-    expect(screen.queryAllByTestId(/^proposal-accept-/)).toEqual([]);
+    expect(screen.queryAllByTestId(/^proposal-alt-/)).toEqual([]); // TASK-009: 칸별 [이걸로]가 없어져 '대안 칸 없음'으로 본다
     expect(screen.queryByTestId('closed-skip')).toBeNull();
     expect(byId('event-dismiss')).toBeTruthy();
     expect(inCard('card-T-06').getAllByText('그대로 둘게')).toHaveLength(1);
@@ -468,9 +489,9 @@ describe('B5 T-06 고르기', () => {
     return control;
   }
 
-  test('T8_B5_이걸로는_그_대안의_accept를_본문_없이_한_번', async () => {
+  test('T8_B5_T9_A2_대안_칸을_고르고_이걸로_할래는_그_대안의_accept를_본문_없이_한_번', async () => {
     const control = await ready();
-    await pressId('proposal-accept-alt-2');
+    await choose('proposal-alt-2');
     await waitFor(() => expect(control.server.sent(ACCEPT_ROUTE('alt-2'))).toHaveLength(1));
     expectNoBody(control.server.sent(ACCEPT_ROUTE('alt-2'))[0].body);
     expect(control.server.sent(ACCEPT_ROUTE('alt-1'))).toEqual([]);
@@ -478,9 +499,9 @@ describe('B5 T-06 고르기', () => {
     expect(screen.queryByTestId('card-T-06')).toBeNull();
   });
 
-  test('T8_B4_빼고_가기는_skip_제안의_accept', async () => {
+  test('T8_B4_T9_A4_빼고_가기_칸을_고르고_이걸로_할래는_skip_제안의_accept', async () => {
     const control = await ready();
-    await pressId('closed-skip');
+    await choose('closed-skip');
     await waitFor(() => expect(control.server.sent(ACCEPT_ROUTE('skip-1'))).toHaveLength(1));
     expectNoBody(control.server.sent(ACCEPT_ROUTE('skip-1'))[0].body);
   });
@@ -502,35 +523,19 @@ describe('B5 T-06 고르기', () => {
   });
 });
 
-// ---------- G5 [이걸로]는 보조 버튼, 한 카드에 주황 큰 버튼 여러 개 없음 ----------
+// ---------- G5 → TASK-009 A: 칸별 [이걸로] 보조 버튼 시험은 고르기 방식 시험(task-009-select.test.tsx)으로 옮겼다 ----------
 
 describe('G5 주황 규칙', () => {
   const pressableOf = (id: string) => {
     const host = byId(id);
     return chain(host).find((h) => typeof h.props.onClick === 'function') ?? host;
   };
-  const labelColour = (id: string, label: string) => {
-    const text = within(byId(id) as never).getByText(label) as unknown as Tree;
-    return styleOf(text).color;
-  };
   const orangeButtons = (cardId: string) =>
     byId(cardId).queryAll((host) => typeof host.props.onClick === 'function' && same(styleOf(host).backgroundColor, COLORS.brand)).length;
-
-  test.each(['proposal-accept-prop-relaxed', 'proposal-accept-prop-packed'])('T8_G5_T_04의_%s는_bg_2_바탕_ink_글자', async (id) => {
-    await toNow(nowServer(delayedView()));
-    expect(same(styleOf(pressableOf(id)).backgroundColor, COLORS['bg-2'])).toBe(true);
-    expect(same(labelColour(id, '이걸로'), COLORS.ink)).toBe(true);
-  });
 
   test('T8_G5_T_04_카드에_주황_큰_버튼은_하나_이하', async () => {
     await toNow(nowServer(delayedView()));
     expect(orangeButtons('card-T-04')).toBeLessThanOrEqual(1);
-  });
-
-  test.each(['proposal-accept-alt-1', 'proposal-accept-alt-2'])('T8_G5_T_06의_%s는_bg_2_바탕_ink_글자', async (id) => {
-    await toNow(nowServer(closedView()));
-    expect(same(styleOf(pressableOf(id)).backgroundColor, COLORS['bg-2'])).toBe(true);
-    expect(same(labelColour(id, '이걸로'), COLORS.ink)).toBe(true);
   });
 
   test('T8_G5_T_06_카드에_주황_큰_버튼은_하나_이하', async () => {

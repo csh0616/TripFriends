@@ -1212,7 +1212,10 @@ describe('§13-3 승인된 결정 고정', () => {
   test.each([
     ['받침 있는 이름', [{ place_id: 'D20', name: '박물관' }], '박물관은 먼저 넣어 뒀어'],
     ['받침 없는 이름', [{ place_id: 'D20', name: '카페' }], '카페는 먼저 넣어 뒀어'],
-    ['한글이 아닌 이름', [{ place_id: 'D20', name: 'ABC' }], 'ABC, 먼저 넣어 뒀어'],
+    // TASK-009 B1: 영문·숫자로 끝나면 받침 없음 (전에는 조사를 피해 'ABC, 먼저 넣어 뒀어')
+    ['한글이 아닌 이름', [{ place_id: 'D20', name: 'ABC' }], 'ABC는 먼저 넣어 뒀어'],
+    ['숫자로 끝나는 이름', [{ place_id: 'D20', name: '카페 1' }], '카페 1는 먼저 넣어 뒀어'],
+    ['겹받침 이름', [{ place_id: 'D20', name: '닭' }], '닭은 먼저 넣어 뒀어'],
     ['여럿', [{ place_id: 'D20', name: '박물관' }, { place_id: 'D21', name: '카페' }], '박물관, 카페, 먼저 넣어 뒀어'],
   ])('W114_Q40_꼭_갈_곳_줄_%s', async (_name, must_visits, line) => {
     await startedWith({ must_visits });
