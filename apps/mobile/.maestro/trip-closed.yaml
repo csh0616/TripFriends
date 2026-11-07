@@ -88,6 +88,8 @@ appId: com.csh0616.tripfriends
 - assertNotVisible:
     id: "card-T-05"
 - assertVisible: "골목 카페 E"
+# §16: 자리에 들어간 대안이라 reordered=false -> 순서 안내가 없다
+- assertNotVisible: "순서를 바꿔야 들어가"
 - takeScreenshot: trip-closed-2-t06
 
 # [이걸로]: 대안 D31 골목 카페 E를 고른다 -> 안내 문장과 바뀐 동선
@@ -108,3 +110,8 @@ appId: com.csh0616.tripfriends
 - assertNotVisible:
     id: "card-T-06"
 - takeScreenshot: trip-closed-3-accepted
+# §16: 지금 11:30이라 다음 이동(2번 자리)이 골목 카페 E여야 한다
+- assertVisible: "다음 이동"
+- assertVisible: "골목 카페 E"
+- assertNotVisible: "순서를 바꿔야 들어가"
+- takeScreenshot: trip-closed-4-next-e

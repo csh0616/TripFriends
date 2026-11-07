@@ -59,6 +59,9 @@ function AlternativeBox({ proposal, onAccept }: { proposal: NowT06Proposal; onAc
         <FactChip facts={line?.facts ?? []} />
       </View>
       <Text style={text('caption', 'muted')}>{`${distance === null ? '' : `${metresLabel(distance)} · `}이동 ${changeLabel(change)}`}</Text>
+      {proposal.closed.reordered && line ? (
+        <Text style={text('body')}>{`순서를 바꿔야 들어가 · ${line.start}에 들러`}</Text>
+      ) : null}
       <Text style={text('body')}>{proposal.reason}</Text>
       <SecondaryButton small testID={`proposal-accept-${proposal.proposal_id}`} label="이걸로" onPress={onAccept} />
     </View>
@@ -237,8 +240,10 @@ export function NowCardView({
           <Text style={text('title')}>{`${withSubject(card.closed.name)} 닫혔대`}</Text>
           {alternatives.length > 0 ? (
             <Text style={text('body')}>근처에 이런 데 있어</Text>
-          ) : (
+          ) : skip ? (
             <Text style={text('body')}>근처에 열린 비슷한 곳이 없어</Text>
+          ) : (
+            <Text style={text('body')}>지금은 바꿀 방법을 못 찾았어</Text>
           )}
           {alternatives.map((proposal) => (
             <AlternativeBox key={proposal.proposal_id} proposal={proposal} onAccept={() => onAccept?.(proposal.proposal_id)} />
