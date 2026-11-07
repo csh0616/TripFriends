@@ -225,6 +225,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/places/{place_id}/visit-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 영업 확인 답: 열었어/닫혔어 (그날만 사용자 확인으로 저장, 닫혔어면 대안 계산) */
+        post: operations["visit_check_places__place_id__visit_checks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -656,6 +673,38 @@ export interface components {
             proposals: components["schemas"]["NowProposal"][];
             fixed: components["schemas"]["NowT04Fixed"] | null;
         };
+        /**
+         * NowCardT05
+         * @description 영업 확인 (TASK-008 A4): 영업 여부를 추측하지 않고 사실의 상태·출처·확인 날짜만 싣는다.
+         */
+        NowCardT05: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "T-05";
+            place: components["schemas"]["NowPlaceRef"];
+            /** Facts */
+            facts: components["schemas"]["Fact"][];
+            /** Map Url */
+            map_url: string;
+        };
+        /**
+         * NowCardT06
+         * @description 닫힘 대안 (TASK-008 B6).
+         */
+        NowCardT06: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "T-06";
+            /** Event Id */
+            event_id: string;
+            closed: components["schemas"]["NowPlaceRef"];
+            /** Proposals */
+            proposals: components["schemas"]["NowT06Proposal"][];
+        };
         /** NowCardT07 */
         NowCardT07: {
             /**
@@ -681,6 +730,17 @@ export interface components {
             lodging: components["schemas"]["LatLng"];
             /** Map Url */
             map_url: string;
+        };
+        /**
+         * NowClosedInfo
+         * @description 닫힘 대안 한 줄 (TASK-008 §12 Q21). 대안의 사실 칩은 제안 items 안 그 장소 줄의 facts.
+         */
+        NowClosedInfo: {
+            alternative: components["schemas"]["NowPlaceRef"] | null;
+            /** Distance M */
+            distance_m: number | null;
+            /** Travel Change Min */
+            travel_change_min: number;
         };
         /**
          * NowCourseItem
@@ -720,9 +780,9 @@ export interface components {
             /**
              * Type
              * @default delay
-             * @constant
+             * @enum {string}
              */
-            type: "delay";
+            type: "delay" | "closed";
             /**
              * Severity
              * @enum {string}
@@ -736,7 +796,7 @@ export interface components {
              */
             state: "open_low" | "awaiting" | "resolved";
             /** Proposals */
-            proposals: components["schemas"]["NowProposal"][];
+            proposals: (components["schemas"]["NowT06Proposal"] | components["schemas"]["NowProposal"])[];
         };
         /**
          * NowFixed
@@ -777,6 +837,13 @@ export interface components {
              * @enum {string}
              */
             state: "done" | "now" | "next" | "later";
+        };
+        /** NowPlaceRef */
+        NowPlaceRef: {
+            /** Place Id */
+            place_id: string;
+            /** Name */
+            name: string;
         };
         /**
          * NowProposal
@@ -821,6 +888,30 @@ export interface components {
             /** Start */
             start: string;
         };
+        /**
+         * NowT06Proposal
+         * @description TASK-007 제안 + closed (TASK-008 §11 Q4). label은 relaxed (§12 Q22).
+         */
+        NowT06Proposal: {
+            /** Proposal Id */
+            proposal_id: string;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "relaxed" | "packed";
+            /** Reason */
+            reason: string;
+            /** Dropped */
+            dropped: components["schemas"]["NowDropped"][];
+            /** Keeps Fixed */
+            keeps_fixed: boolean;
+            /** First Leave At */
+            first_leave_at: string;
+            /** Items */
+            items: components["schemas"]["NowCourseItem"][];
+            closed: components["schemas"]["NowClosedInfo"];
+        };
         /** NowView */
         NowView: {
             day: components["schemas"]["DaySummary"];
@@ -836,9 +927,9 @@ export interface components {
             /** Reason */
             reason: string;
             /** Main */
-            main: components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT04"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"];
+            main: components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT04"] | components["schemas"]["NowCardT05"] | components["schemas"]["NowCardT06"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"];
             /** Subs */
-            subs: (components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT04"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"])[];
+            subs: (components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT04"] | components["schemas"]["NowCardT05"] | components["schemas"]["NowCardT06"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"])[];
             /** Chip */
             chip?: null;
             /** Pins */
@@ -1122,6 +1213,18 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * VisitCheckRequest
+         * @description 영업 확인 답 (TASK-008 A5). at은 시간대 없는 그날의 시각.
+         */
+        VisitCheckRequest: {
+            /** Day Id */
+            day_id: string;
+            /** At */
+            at: string;
+            /** Was Open */
+            was_open: boolean;
         };
     };
     responses: never;
@@ -1755,6 +1858,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    visit_check_places__place_id__visit_checks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                place_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisitCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NowView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };
