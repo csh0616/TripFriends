@@ -1011,7 +1011,8 @@ def test_AC9_위치가_로그에_없다_접근_로그_포함(env, caplog):
 
 
 def test_AC9_check는_위치를_주소에_싣지_않는다(env, caplog):
-    with caplog.at_level(logging.DEBUG, logger="httpx"):
+    # §12: 테스트 클라이언트가 httpx2를 쓰면 요청 로그는 "httpx2" 로거에 남는다. 둘 다 잡는다 (기대값 그대로)
+    with caplog.at_level(logging.DEBUG, logger="httpx"), caplog.at_level(logging.DEBUG, logger="httpx2"):
         checked(env, plain_day(env), "12:20", AC9)
     requests = [r.getMessage() for r in caplog.records if "/check" in r.getMessage()]
     assert requests and not [message for message in requests if "lat" in message or has_position(message)]
