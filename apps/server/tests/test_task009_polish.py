@@ -24,8 +24,13 @@ from planning_api_helpers import assert_error
 from test_task008_visit import answered, cards, closed_view, demo_scenario, hhmm, leave_of, named_alt, replaces, seed_chosen
 from trip_helpers import now
 
-REPO = Path(__file__).parents[3]
-TABLE = json.loads((REPO / "testdata" / "particles.json").read_text(encoding="utf-8"))
+# mutmut은 테스트를 apps/server/mutants/ 안에 복사해 돌리므로 고정 깊이 대신 위로 올라가며 정본(저장소 맨 위 testdata/)을 찾는다
+TABLE_PATH = next(
+    d / "testdata" / "particles.json"
+    for d in Path(__file__).resolve().parents
+    if (d / "testdata" / "particles.json").is_file()
+)
+TABLE = json.loads(TABLE_PATH.read_text(encoding="utf-8"))
 PAIRS = TABLE["pairs"]
 CASES = TABLE["cases"]
 READY = CASES  # §9 Q1로 빈 문자열도 기대값이 정해져 건너뛰는 줄이 없다
