@@ -69,7 +69,7 @@ export const layout = {
   sheetHandleWidth: 40, // §14 승인: 시트 손잡이
   sheetHandleHeight: 4,
   demoThumb: 20, // §14 승인: 데모 시각 막대의 손잡이 지름
-  mapEdge: 24, // §14 승인: 카메라 맞춤 좌우 여백
+  mapEdge: 60, // §14 승인: 카메라 맞춤 좌우 여백 (핀 반쪽 + 이름 말풍선이 잘리지 않게)
   // 누르는 영역 보강: 칩 36 -> 44
   chipSlop: (touchMin - chip) / 2,
 } as const;

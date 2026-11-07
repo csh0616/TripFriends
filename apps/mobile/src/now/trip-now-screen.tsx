@@ -213,7 +213,11 @@ export function TripNowScreen({
     fitted.current = true;
     mapRef.current?.fit(
       [...view.pins.map((pin) => ({ latitude: pin.lat, longitude: pin.lng })), { latitude: day.lodging.lat, longitude: day.lodging.lng }],
-      { top: insets.top + layout.header + space['space-4'], bottom: sheetMid },
+      {
+        // 위: 알약·프로필·SOS 줄 + 다음 핀의 이름 말풍선 + 핀 반쪽이 가려지지 않게. 아래: 시트 윗면 + 핀 반쪽
+        top: insets.top + layout.header + layout.pinBubble + control['touch-min'] + space['space-2'],
+        bottom: sheetMid + control['touch-min'] / 2 + space['space-2'],
+      },
     );
   }, [mapReady, view, day.lodging, insets.top, sheetMid]);
 

@@ -2,7 +2,7 @@
 // 노출하는 것: 핀·선·숙소·내 위치·카메라 맞추기·옮기기. 준비 신호가 8초 안에 없으면 onFail (§11 Q17).
 // 핀 안은 Svg가 아니라 View와 Text로만 그린다: 지도 Marker는 안의 그림을 사진으로 떠 가는데 중첩 Svg는 네이티브에서 안 그려진 적이 있다 (TASK-005).
 import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewProps } from 'react-native-maps';
 
 import mapStyleFile from '../../../assets/map/google-map-style.json';
@@ -36,7 +36,10 @@ const CENTER = { x: 0.5, y: 0.5 } as const;
 
 // DESIGN-001 §4-6 핀 4상태: 지난 = route-done 채움, 지금 = ink 채움, 다음 = brand 고리 + 이름 말풍선, 나중 = 흰 채움 + ink 테두리.
 // 색 + 모양·크기로 구분한다. 핀 안은 Svg 없이 View와 Text뿐이다.
-const PIN_Z = { later: 1, done: 2, next: 3, now: 4 } as const;
+// 겹침 순서(zIndex): 내 위치 점 < 핀 < 숙소. 내 위치가 숙소와 같은 자리여도 집 아이콘이 가려지지 않는다
+const Z_POSITION = 1;
+const PIN_Z = { later: 2, done: 3, next: 4, now: 5 } as const;
+const Z_HOME = 6;
 
 function PinFace({ pin }: { pin: NowPin }) {
   switch (pin.state) {
@@ -100,7 +103,7 @@ function NumberPin({ pin }: { pin: NowPin }) {
 function HomePin({ coordinate }: { coordinate: LatLng }) {
   const tracking = useTrackingBriefly('home');
   return (
-    <Marker testID="map-home" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={0}>
+    <Marker testID="map-home" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_HOME}>
       <View style={styles.home}>
         {/* 집 모양: 45도 돌린 네모의 윗변·왼변이 지붕, 아래 네모가 벽 (변환은 View 하나에만) */}
         <View style={styles.homeRoof} />
@@ -113,7 +116,7 @@ function HomePin({ coordinate }: { coordinate: LatLng }) {
 function MyPosition({ coordinate }: { coordinate: LatLng }) {
   const tracking = useTrackingBriefly('position');
   return (
-    <Marker testID="map-my-position" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={3}>
+    <Marker testID="map-my-position" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_POSITION}>
       <View style={styles.position} />
     </Marker>
   );
@@ -124,7 +127,7 @@ function MyPosition({ coordinate }: { coordinate: LatLng }) {
 // 짧은 선 조각을 띄엄띄엄 이어 점선처럼 보이게 한다. 이 선택은 이 파일 안에 가둔다.
 const DASH_MODE: 'pattern' | 'segments' = 'pattern';
 const DASH = tokens.map['route-dash']; // [선 길이, 빈 길이]
-const SEGMENT_METERS_PER_UNIT = 3; // 미정(TASK-006): 'segments' 방식에서 토큰 한 칸이 몇 m인지. 시뮬레이터에서 정한다
+const SEGMENT_METERS_PER_UNIT = 3; // 'segments' 방식의 기본 단위(m). 지금은 metersPerPoint로 환산한 값을 넘기므로 단위 1을 쓴다
 const METERS_PER_DEGREE = (Math.PI / 180) * 6371000;
 
 /** 경로를 따라 [선, 빈칸, 선, 빈칸...]으로 잘라 선 조각들의 좌표 목록을 만든다 */
@@ -166,8 +169,12 @@ export function dashSegments(path: LatLng[], dash: readonly number[] = DASH, uni
   return pieces;
 }
 
-function RemainingRoute({ path }: { path: LatLng[] }) {
-  const pieces = DASH_MODE === 'segments' ? dashSegments(path) : null;
+// 점선 단위: iOS Google 지도의 lineDashPattern은 "미터"라서 토큰 [10, 8](화면 점 기준)을 그대로 쓰면 도시 줌에서 빗금이 된다.
+// 지도 위 화면 점 하나가 몇 m인지(metersPerPoint)로 곱해 화면 점 기준 점선으로 환산한다. 줌이 바뀌면 다시 구한다.
+// 값을 아직 모르면(첫 영역 전, 테스트) 1이라 토큰 그대로다.
+function RemainingRoute({ path, metersPerPoint }: { path: LatLng[]; metersPerPoint: number }) {
+  const pattern = DASH.map((value) => Math.max(1, Math.round(value * metersPerPoint)));
+  const pieces = DASH_MODE === 'segments' ? dashSegments(path, pattern, 1) : null;
   return (
     <>
       {/* 흰 테두리: 주황은 땅 위에서 흰 테두리 없이 쓰지 않는다 (DESIGN-001 §4-6) */}
@@ -197,7 +204,7 @@ function RemainingRoute({ path }: { path: LatLng[] }) {
           coordinates={path}
           strokeColor={color.brand}
           strokeWidth={tokens.map['route-width']}
-          lineDashPattern={[...DASH]}
+          lineDashPattern={pattern}
           lineCap="butt"
           zIndex={2}
         />
@@ -230,6 +237,8 @@ export function MapAdapter({
   onFail: () => void;
 }) {
   const map = useRef<MapView>(null);
+  const { width: mapWidth } = useWindowDimensions();
+  const [metersPerPoint, setMetersPerPoint] = useState(1);
   const ready = useRef(false);
 
   useImperativeHandle(ref, () => ({
@@ -271,6 +280,12 @@ export function MapAdapter({
       style={StyleSheet.absoluteFill}
       initialRegion={{ ...center, latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
       toolbarEnabled={false}
+      onRegionChangeComplete={(region) => {
+        // 화면 가로 한 점이 몇 m인지: 경도 폭(도) -> m, 위도에 따라 줄어든다
+        const meters = region.longitudeDelta * METERS_PER_DEGREE * Math.cos((region.latitude * Math.PI) / 180);
+        const next = meters / mapWidth;
+        setMetersPerPoint((now) => (Number.isFinite(next) && next > 0 && Math.abs(next - now) / now > 0.1 ? next : now));
+      }}
       onMapReady={signalReady}
       onMapLoaded={signalReady}
     >
@@ -284,7 +299,7 @@ export function MapAdapter({
           zIndex={0}
         />
       ) : null}
-      {routeRemaining.length >= 2 ? <RemainingRoute path={routeRemaining} /> : null}
+      {routeRemaining.length >= 2 ? <RemainingRoute path={routeRemaining} metersPerPoint={metersPerPoint} /> : null}
       <HomePin coordinate={home} />
       {pins.map((pin) => (
         <NumberPin key={pin.seq} pin={pin} />
