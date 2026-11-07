@@ -435,6 +435,19 @@ describe('C3 T-06 카드', () => {
     expect(words('card-T-06')).not.toContain('지금은 바꿀 방법을 못 찾았어');
   });
 
+  // §15 Q34: 제안 0개일 때는 "지금은 바꿀 방법을 못 찾았어"만 ("근처에 열린 비슷한 곳이 없어"는 빼고 가기만 있을 때)
+  test('T8_S15_Q34_제안이_0개면_근처에_없다는_안내는_안_보인다', async () => {
+    await shows({ main: t06({ proposals: [] }) });
+    expect(words('card-T-06')).toContain('지금은 바꿀 방법을 못 찾았어');
+    expect(words('card-T-06')).not.toContain('근처에 열린 비슷한 곳이 없어');
+  });
+
+  test('T8_S15_Q34_빼고_가기만_있으면_근처에_없다는_안내만', async () => {
+    await shows({ main: t06({ proposals: [skip()] }) });
+    expect(words('card-T-06')).toContain('근처에 열린 비슷한 곳이 없어');
+    expect(words('card-T-06')).not.toContain('지금은 바꿀 방법을 못 찾았어');
+  });
+
   test('T8_C3_짝은_서버_순서_그대로_T_06_T_03', async () => {
     await shows();
     const ids = (screen.root as unknown as Tree)

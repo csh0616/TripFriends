@@ -40,7 +40,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
-from planning_api_helpers import assert_error, demo_places
+from planning_api_helpers import assert_error, demo_places, week_hours
 from planning_helpers import place
 from trip_helpers import (
     NOW_KEYS,
@@ -1047,6 +1047,205 @@ def test_T8_S14_확인_대상이_아니면_409_reason은_not_check_target(env, p
     day_id = visit_day(env)
     error = assert_error(visit_check(env, day_id, pid, clock, False), 409, "STATE_CONFLICT")
     assert error["detail"]["reason"] == "not_check_target"
+
+
+# ---------- §15 Q32 대안의 머무는 시간 ----------
+# 대안의 머무는 시간 = 닫힌 곳 자리의 머무는 시간(사용자가 바꾼 값이면 그 값). 대안 장소에 stay.min~max가 있으면 그 안으로,
+# 범위 밖이면 가까운 끝값. 그래도 못 지키면 §14대로 다시 짜고 reordered.
+# visit_day의 닫힌 곳 자리 = P02 12:20~14:00 (100분). 대안 A01 = P02에서 동쪽 0.3km (영업 늦게까지).
+
+SLOT = 100
+RELAXED_BUFFER = 15  # §15 Q33: 다시 잴 때 쉬는 시간은 코스를 짤 때와 같은 규칙 (엔진 relaxed 15분, 앞 항목이 방문일 때만). 제안 label = relaxed (§12 Q22)
+
+
+def alt_row(proposal: dict) -> dict:
+    rows = [e for e in proposal["items"] if e["place_id"] == alt_id(proposal)]
+    assert len(rows) == 1
+    return rows[0]
+
+
+@pytest.mark.parametrize(
+    "stay, expected",
+    [
+        (StayRange(min=30, typical=60, max=120), SLOT),
+        (StayRange(min=100, typical=110, max=120), 100),
+        (StayRange(min=101, typical=110, max=150), 101),
+        (StayRange(min=120, typical=150, max=180), 120),
+        (StayRange(min=30, typical=60, max=100), 100),
+        (StayRange(min=30, typical=60, max=99), 99),
+        (StayRange(min=30, typical=45, max=60), 60),
+        (None, SLOT),
+    ],
+    ids=["범위_안_그대로", "min_정각", "min보다_1분_짧으면_min", "min보다_짧으면_min", "max_정각", "max보다_1분_길면_max", "max보다_길면_max", "범위_없으면_그대로"],
+)
+def test_T8_S15_Q32_대안의_머무는_시간은_닫힌_곳_자리_시간을_범위_안으로(env, stay, expected):
+    _, view = closed_view(env, extra=(alt("A01", 0.3, stay=stay),))
+    proposal = replaces(view["main"])[0]
+    assert alt_id(proposal) == "A01"
+    assert proposal["closed"]["reordered"] is False  # 하루 끝 21:00까지 넉넉해 자리에 들어간다
+    assert stay_of(alt_row(proposal)) == expected
+
+
+def user_stay_day(env, user_stay: int, extra=()) -> str:
+    """visit_day와 같고, 닫힌 곳 P02의 머무는 시간을 사용자가 user_stay분으로 바꾼 하루 (stay_overrides + stay_source "user")."""
+    from planning_helpers import day_plan
+    from trip_helpers import DAY
+
+    from engine.models import CourseOption
+    from planning.repo import OptionRecord
+
+    places = {"P01": spot("P01", 1.0), "P02": unverified(), "P03": spot("P03", 3.0), **{p.id: p for p in extra}}
+    user_item = item(2, "P02", "12:20", hhmm(to_min("12:20") + user_stay), 20).model_copy(update={"stay_source": "user"})
+    items = [item(1, "P01", "10:12", "12:00", 12), user_item, item(3, "P03", "14:30", "19:00", 30)]
+    plan = day_plan(start="10:00", end="21:00", overrides={"P02": user_stay}, day=DAY)
+    day_id = env.plant_day(places, plan, day_number=2)
+    option = CourseOption(label="relaxed", items=items, dropped=[], go_home_min=25, total_travel_min=sum(i.travel_min for i in items))
+    env.repo.save_options([OptionRecord(f"opt-{day_id}", "planted-session", [], option)])
+    env.repo.choose_option(day_id, f"opt-{day_id}")
+    return day_id
+
+
+@pytest.mark.parametrize("user_stay", [45, 30, 120], ids=["45분", "범위_min_정각", "범위_max_정각"])
+def test_T8_S15_Q32_사용자가_바꾼_머무는_시간이면_그_값(env, user_stay):
+    # A01 범위 30~120 (typical 60) 안의 사용자 값 → 그대로. 장소의 typical(60)이나 닫힌 곳 장소의 범위가 아니다
+    day_id = user_stay_day(env, user_stay, extra=(alt("A01", 0.3, stay=StayRange(min=30, typical=60, max=120)),))
+    proposal = replaces(answered(env, day_id, "P02", "11:40", False)["main"])[0]
+    assert proposal["closed"]["reordered"] is False
+    assert stay_of(alt_row(proposal)) == user_stay
+
+
+def clamp_day(env, alt_stay: StayRange) -> str:
+    """Q32 '그래도 못 지키면': 닫힌 곳 C02 자리 30분, 뒤 고정 일정 F03 13:10~14:10, 하루 끝 21:00.
+    대안 N01(C02에서 북 0.05km). P01(11:50 끝) → N01 5분 → (쉬는 시간 0 또는 15) → 머무름 → N01 → F03 7분.
+    머무름 30분이면 늦어도 12:47 도착(지킴). 90분(범위 min으로 맞춘 값)이면 빨라도 13:32 도착(못 지킴) → 다시 짜면 F03 뒤 (reordered)."""
+    places = {
+        "P01": place("P01", km=1.0, hours=OPEN_LATE, stay=TIGHT),
+        "C02": place("C02", km=1.3, hours=OPEN_LATE, status="unverified", stay=TIGHT),
+        "F03": place("F03", category="experience", km=1.0, east_km=0.3, hours=OPEN_LATE, stay=TIGHT),
+        "N01": place("N01", km=1.35, hours=OPEN_LATE, stay=alt_stay),
+    }
+    items = [item(1, "P01", "10:12", "11:50", 12), item(2, "C02", "12:00", "12:30", 10), item(3, "F03", "13:10", "14:10", 7, fixed=True)]
+    return plant(env, items, places, fixed=(fixed_at(places["F03"], "13:10", "14:10"),), end="21:00")
+
+
+def test_T8_S15_Q32_범위로_맞춘_머무는_시간으로_자리에서_고정_일정을_지키면_reordered_아님(env):
+    day_id = clamp_day(env, TIGHT)
+    proposal = replaces(answered(env, day_id, "C02", "11:40", False)["main"])[0]
+    assert alt_id(proposal) == "N01"
+    assert proposal["closed"]["reordered"] is False
+    assert item_ids(proposal["items"]) == ["N01", "F03"]
+    assert stay_of(alt_row(proposal)) == 30
+
+
+def test_T8_S15_Q32_범위로_맞춘_머무는_시간_때문에_고정_일정을_못_지키면_다시_짜고_reordered(env):
+    # 자리 30분 < N01 min 90 → 90분. 자리에 넣으면 F03 13:10을 못 지킨다 → 다시 짜고 reordered, N01은 F03 뒤
+    day_id = clamp_day(env, StayRange(min=90, typical=90, max=90))
+    card = answered(env, day_id, "C02", "11:40", False)["main"]
+    assert alt_ids(card) == ["N01"]
+    proposal = replaces(card)[0]
+    assert proposal["closed"]["reordered"] is True
+    assert proposal["keeps_fixed"] is True
+    rows = {e["place_id"]: e for e in proposal["items"]}
+    assert (rows["F03"]["start"], rows["F03"]["end"]) == ("13:10", "14:10")
+    assert item_ids(proposal["items"]).index("N01") > item_ids(proposal["items"]).index("F03")
+
+
+def test_T8_S15_Q33_자리에_넣은_대안_뒤_일정은_앞_끝_이동_쉬는_시간_뒤에_바로(env):
+    # Q33: 방문 뒤 방문이면 쉬는 시간(relaxed 15분). P03은 영업 늦게까지라 기다림 없음 → 대안 끝 + 이동 + 15분에 시작
+    from engine.planning import travel_min
+
+    _, view = closed_view(env)
+    for proposal in replaces(view["main"]):
+        first, then = proposal["items"]
+        km = distance_km((first["lat"], first["lng"]), (then["lat"], then["lng"]))
+        assert to_min(then["start"]) == to_min(first["end"]) + travel_min(km) + RELAXED_BUFFER, alt_id(proposal)
+
+
+def test_T8_S15_Q32_데모_골목_카페_E는_자리_시간으로_2번에_들어가고_저녁_예약을_지킨다(env):
+    # 데모: 2번 언덕 카페 B 자리 = 그 줄의 머무는 시간, E는 시드 전용 장소(demo_extra.json). 자리 시간을 E 범위로 맞춘 값으로 2번 자리에
+    _, day_id, entry = demo_scenario(env)
+    record = env.repo.get_day(day_id)
+    (extra_id,) = set(record.places) - set(demo_places())
+    stay = record.places[extra_id].stay
+    expected = entry.stay_min if stay is None else min(max(entry.stay_min, stay.min), stay.max)
+    view = answered(env, day_id, entry.place_id, hhmm(leave_of(entry) - 30), False)
+    proposal = next(p for p in replaces(view["main"]) if alt_id(p) == extra_id)
+    assert proposal["closed"]["reordered"] is False
+    assert proposal["keeps_fixed"] is True
+    row = alt_row(proposal)
+    assert row["seq"] == entry.seq
+    assert stay_of(row) == expected
+    fixed_rows = [(e["start"], e["end"]) for e in proposal["items"] if e["is_fixed"]]
+    assert fixed_rows == [(f.start, f.end) for f in record.plan.fixed]  # 저녁 예약 18:30~19:30 그대로
+
+
+# ---------- §15 [빼고 가기]는 다시 짜지 않는다 ----------
+# 순서 그대로 시각만 당긴다. 당겨서 여는 시각 전에 도착하면 여는 시각까지 기다린다 (순서 유지).
+# 1번을 고정 일정(F01, 12:00 끝)으로 두어 첫 이동 앞 쉬는 시간이 없게 한다 (Q33: 고정 일정 뒤에는 이동 시간만).
+
+
+def skip_wait_day(env, open_at: str) -> str:
+    """1번 고정 F01(북 1.0) 10:12~12:00, 2번 P02(미확인) 12:20~14:00, 3번 P03(북 3.0) 14:30~19:00 (open_at에 연다),
+    4번 P04(북 4.0) 19:30~20:00. 근처 대안 없음 (P01이 없고 P03·P04는 코스 안)."""
+    places = {
+        "F01": spot("F01", 1.0, category="experience"),
+        "P02": unverified(),
+        "P03": place("P03", km=3.0, hours=week_hours(open_at, "22:00"), stay=STAY),
+        "P04": spot("P04", 4.0),
+    }
+    items = [
+        item(1, "F01", "10:12", "12:00", 12, fixed=True),
+        item(2, "P02", "12:20", "14:00", 20),
+        item(3, "P03", "14:30", "19:00", 30),
+        item(4, "P04", "19:30", "20:00", 14),
+    ]
+    return plant(env, items, places, fixed=(fixed_at(places["F01"], "10:12", "12:00"),), end="21:00")
+
+
+def skip_arrival() -> int:
+    """F01 끝 12:00(Q7: max(at 11:40, 12:00))에 떠나 P03에 닿는 시각 (엔진 이동 식, 고정 일정 뒤라 쉬는 시간 없음)."""
+    from engine.planning import travel_min
+    from trip_helpers import at_place
+
+    return to_min("12:00") + travel_min(distance_km(at_place(1.0), at_place(3.0)))
+
+
+@pytest.mark.parametrize(
+    "open_offset, start_offset",
+    [(1, 1), (0, 0), (-1, 0), (60, 60)],
+    ids=["여는_시각_1분_전_도착이면_여는_시각", "여는_시각_정각_도착", "연_뒤_도착이면_도착_시각", "한참_기다려도_순서_그대로"],
+)
+def test_T8_S15_빼고_가기는_순서_그대로_당기고_여는_시각_전이면_기다린다(env, open_offset, start_offset):
+    arrive = skip_arrival()
+    day_id = skip_wait_day(env, hhmm(arrive + open_offset))
+    card = answered(env, day_id, "P02", "11:40", False)["main"]
+    assert replaces(card) == []  # 시험 자체 확인
+    skip = skip_of(card)
+    assert skip["closed"]["reordered"] is False
+    assert item_ids(skip["items"]) == ["P03", "P04"]  # 순서 그대로 (기다려도 P04를 앞으로 당기지 않는다)
+    p03, p04 = skip["items"]
+    assert to_min(p03["start"]) == arrive + start_offset
+    assert to_min(p03["start"]) < to_min("14:30")  # 당겼다
+    assert (stay_of(p03), stay_of(p04)) == (270, 30)  # 머무는 시간 그대로 (§14)
+
+
+def test_T8_S15_Q33_빼고_가기도_방문_뒤_방문은_쉬는_시간을_둔다(env):
+    from engine.planning import travel_min
+    from trip_helpers import at_place
+
+    day_id = skip_wait_day(env, "08:00")
+    p03, p04 = skip_of(answered(env, day_id, "P02", "11:40", False)["main"])["items"]
+    assert to_min(p04["start"]) == to_min(p03["end"]) + travel_min(distance_km(at_place(3.0), at_place(4.0))) + RELAXED_BUFFER
+
+
+def test_T8_S15_빼고_가기는_compose_courses를_부르지_않는다(env, monkeypatch):
+    # [빼고 가기]는 다시 짜지 않는다. 대안이 없는 하루에서 compose_courses가 불리면 실패로 센다
+    calls = []
+    monkeypatch.setattr("graphs.trip.compose_courses", lambda *a, **k: calls.append(1) or raise_forced())
+    day_id = skip_wait_day(env, "08:00")
+    card = answered(env, day_id, "P02", "11:40", False)["main"]
+    assert [p["closed"]["alternative"] for p in card["proposals"]] == [None]
+    assert calls == []
 
 
 # ---------- AC-6 사실 값 ----------
