@@ -112,7 +112,7 @@ appId: com.csh0616.tripfriends
     timeout: 10000
 - takeScreenshot: trip-delay-3-t04
 
-# [이걸로]: 첫 제안. 고르기 전에는 일정이 그대로였고, 고른 뒤 안내 문장과 바뀐 동선
+# 칸 고르기 + [이걸로 할래] (TASK-009 A1·A2): 첫 제안 칸을 고르면 확정 버튼이 켜진다. 고르기 전에는 일정이 그대로
 - retry:
     maxRetries: 3
     commands:
@@ -122,8 +122,16 @@ appId: com.csh0616.tripfriends
               id: "card-T-04"
           commands:
             - tapOn:
-                text: "이걸로"
+                id: "proposal-.*"
                 index: 0
+            - extendedWaitUntil:
+                visible:
+                  id: "select-confirm"
+                  enabled: true
+                timeout: 3000
+            - takeScreenshot: trip-delay-3b-chosen
+            - tapOn:
+                id: "select-confirm"
       - extendedWaitUntil:
           visible: "바꾼 일정으로 안내할게"
           timeout: 5000

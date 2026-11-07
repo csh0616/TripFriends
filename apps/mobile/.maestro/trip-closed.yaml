@@ -68,6 +68,8 @@ appId: com.csh0616.tripfriends
       id: "card-T-05"
     timeout: 10000
 - assertVisible: "가기 전에 열었는지 볼래?"
+# TASK-009 B3 (AC-4): 출처는 원문(demo)이 아니라 "데모 데이터"
+- assertVisible: ".*데모 데이터.*"
 - takeScreenshot: trip-closed-1-t05
 
 # [닫혔어]: T-06 닫힘 대안. 고르기 전에는 일정이 그대로다
@@ -87,12 +89,14 @@ appId: com.csh0616.tripfriends
           timeout: 10000
 - assertNotVisible:
     id: "card-T-05"
-- assertVisible: "골목 카페 E"
+# TASK-009 B2 (AC-4): 조사는 받침에 따라 ("언덕 카페 B가 닫혔대")
+- assertVisible: "언덕 카페 B가 닫혔대"
+- assertVisible: ".*골목 카페 E.*" # 칸은 하나의 radio라 이름·거리·이유가 한 글자로 묶여 읽힌다
 # §16: 자리에 들어간 대안이라 reordered=false -> 순서 안내가 없다
 - assertNotVisible: "순서를 바꿔야 들어가"
 - takeScreenshot: trip-closed-2-t06
 
-# [이걸로]: 대안 D31 골목 카페 E를 고른다 -> 안내 문장과 바뀐 동선
+# 칸 고르기 + [이걸로 할래] (TASK-009 A1·A2): 대안 칸 "골목 카페 E"를 고르면 칸이 고른 상태가 되고 확정 버튼이 켜진다
 - retry:
     maxRetries: 3
     commands:
@@ -101,9 +105,15 @@ appId: com.csh0616.tripfriends
             visible:
               id: "card-T-06"
           commands:
+            - tapOn: ".*골목 카페 E.*"
+            - extendedWaitUntil:
+                visible:
+                  id: "select-confirm"
+                  enabled: true
+                timeout: 3000
+            - takeScreenshot: trip-closed-2b-chosen
             - tapOn:
-                text: "이걸로"
-                index: 0
+                id: "select-confirm"
       - extendedWaitUntil:
           visible: "바꾼 일정으로 안내할게"
           timeout: 5000
