@@ -34,7 +34,9 @@
       ],
       "testMatch": [
         "<rootDir>/__tests__/planning-lib.test.ts",
-        "<rootDir>/__tests__/fake-position.test.ts"
+        "<rootDir>/__tests__/fake-position.test.ts",
+        "<rootDir>/__tests__/trip-now.test.tsx",
+        "<rootDir>/__tests__/trip-delay.test.tsx"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",
