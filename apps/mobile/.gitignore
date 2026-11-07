@@ -46,3 +46,6 @@ example
 .stryker-tmp/
 mutants/
 reports/
+
+# Maestro 화면 확인 스크린샷 (TASK-006 C3): 저장소에 올리지 않고 reviewer가 PR에 첨부
+.maestro/screenshots/

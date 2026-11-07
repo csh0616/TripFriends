@@ -1,0 +1,103 @@
+# TASK-006 C2: 여행 중 화면 SC-04, 데모 시계로 시각을 옮기며 스크린샷.
+# 아직 한 번도 실행하지 않았다 (이 Mac에 Maestro·CocoaPods·Java가 없다). reviewer가 시뮬레이터에서 돌려 확인한다.
+# 전제: planning.yaml과 같다. 이 흐름은 계획 흐름으로 코스를 먼저 고른 뒤 S9에서 SC-04로 들어간다.
+# 실행: cd apps/mobile && maestro test .maestro/trip-now.yaml
+# 시각 막대는 하루 시작~끝(데모 시드 둘째 날 10:00~20:00)을 0~100%로 보고 누른 위치를 5분 단위로 맞춘다.
+# 아래 퍼센트는 데모 시드 코스를 가정한 근사값이다. 코스가 다르면 reviewer가 맞춘다. (미정: 이동 중 시각, 고정 일정 직전 시각)
+# 고정 일정("저녁 예약" 18:30)은 POST /debug/seed-demo의 chosen=true 시드에만 있다. 앱의 [데모 여행 시작]은 그 옵션을 쓰지 않아서,
+# 이 흐름으로는 "고정 일정 직전"에 T-07이 안 나올 수 있다 (보고서의 질문).
+# 스크린샷은 .maestro/screenshots/ 에 쌓이고 저장소에는 올리지 않는다 (.gitignore).
+appId: com.csh0616.tripfriends
+env:
+  METRO_URL: http://localhost:8081
+---
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "데모 여행 시작"
+    timeout: 60000
+
+# 코스 고르기 (planning.yaml과 같은 길)
+- tapOn: "데모 여행 시작"
+- extendedWaitUntil:
+    visible:
+      id: "choice-walk_alley"
+    timeout: 30000
+- tapOn: "아무거나 찾아 줘"
+- extendedWaitUntil:
+    visible:
+      id: "compose-button"
+    timeout: 60000
+- tapOn:
+    id: "compose-button"
+- extendedWaitUntil:
+    visible: "코스 짜 봤어"
+    timeout: 60000
+- tapOn: "이걸로 할래"
+- extendedWaitUntil:
+    visible: "코스 저장했어"
+    timeout: 30000
+
+# SC-04 (그날 시작 시각 10:00)
+- tapOn: "여행 중 화면 보기(데모)"
+- extendedWaitUntil:
+    visible:
+      id: "now-main"
+    timeout: 30000
+- assertVisible:
+    id: "sos-button"
+- assertVisible:
+    id: "input-bar"
+- takeScreenshot: .maestro/screenshots/trip-now-1-1000
+
+# 데모 시계 열기
+- tapOn:
+    id: "demo-toggle"
+- assertVisible:
+    id: "demo-panel"
+
+# 13:20 (+10분 x 20)
+- repeat:
+    times: 20
+    commands:
+      - tapOn:
+          id: "demo-plus-10"
+- extendedWaitUntil:
+    visible:
+      id: "now-main"
+    timeout: 10000
+- takeScreenshot: .maestro/screenshots/trip-now-2-1320
+
+# 이동 중 (일정 사이): 막대 약 22% = 12:10 근처
+- tapOn:
+    id: "demo-bar"
+    point: "22%,50%"
+- extendedWaitUntil:
+    visible:
+      id: "now-main"
+    timeout: 10000
+- takeScreenshot: .maestro/screenshots/trip-now-3-moving
+
+# 고정 일정 직전: 막대 약 79% = 17:55 근처
+- tapOn:
+    id: "demo-bar"
+    point: "79%,50%"
+- extendedWaitUntil:
+    visible:
+      id: "now-main"
+    timeout: 10000
+- takeScreenshot: .maestro/screenshots/trip-now-4-before-fixed
+
+# 일정이 끝난 뒤: 막대 맨 끝 20:00
+- tapOn:
+    id: "demo-bar"
+    point: "99%,50%"
+- extendedWaitUntil:
+    visible:
+      id: "now-main"
+    timeout: 10000
+- takeScreenshot: .maestro/screenshots/trip-now-5-after

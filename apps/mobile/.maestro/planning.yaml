@@ -1,0 +1,47 @@
+# TASK-006 C2: 계획 흐름 S0 -> P1 -> P2 -> P3 -> S9, 화면마다 스크린샷.
+# 아직 한 번도 실행하지 않았다 (이 Mac에 Maestro·CocoaPods·Java가 없다). reviewer가 시뮬레이터에서 돌려 확인한다.
+# 전제: 서버 실행 중 + 개발 빌드가 시뮬레이터에 설치됨 + Metro(pnpm --filter mobile start) 실행 중.
+# 실행: cd apps/mobile && maestro test .maestro/planning.yaml
+# 스크린샷은 .maestro/screenshots/ 에 쌓이고 저장소에는 올리지 않는다 (.gitignore).
+appId: com.csh0616.tripfriends
+env:
+  METRO_URL: http://localhost:8081
+---
+- launchApp:
+    clearState: true
+# 개발 빌드는 처음에 개발 서버 주소를 물어본다: 링크로 바로 연결한다
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "데모 여행 시작"
+    timeout: 60000
+- takeScreenshot: .maestro/screenshots/planning-1-S0
+
+- tapOn: "데모 여행 시작"
+- extendedWaitUntil:
+    visible:
+      id: "choice-walk_alley"
+    timeout: 30000
+- takeScreenshot: .maestro/screenshots/planning-2-P1
+
+- tapOn: "아무거나 찾아 줘"
+- extendedWaitUntil:
+    visible:
+      id: "compose-button"
+    timeout: 60000
+- takeScreenshot: .maestro/screenshots/planning-3-P2
+
+- tapOn:
+    id: "compose-button"
+- extendedWaitUntil:
+    visible: "코스 짜 봤어"
+    timeout: 60000
+- takeScreenshot: .maestro/screenshots/planning-4-P3
+
+- tapOn: "이걸로 할래"
+- extendedWaitUntil:
+    visible: "코스 저장했어"
+    timeout: 30000
+- takeScreenshot: .maestro/screenshots/planning-5-S9
