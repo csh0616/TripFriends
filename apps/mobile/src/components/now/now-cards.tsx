@@ -3,10 +3,10 @@
 import { Linking, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
-import { PrimaryButton } from '@/components/planning/primary-button';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { StatusChip } from '@/components/planning/status-chip';
-import type { NowCard, NowCourseItem, NowProposal } from '@/lib/now-api';
+import { minutesOfAt, toMinutes } from '@/lib/demo-clock';
+import type { NowCard, NowCourseItem, NowFact, NowProposal, NowT06Proposal } from '@/lib/now-api';
 import { todayHoursText } from '@/lib/today-hours-text';
 import { layout } from '@/planning/layout';
 import { color, radius, space, text } from '@/planning/theme';
@@ -14,6 +14,55 @@ import { color, radius, space, text } from '@/planning/theme';
 function FactChip({ facts }: { facts: NowCourseItem['facts'] }) {
   if (facts.length === 0) return null;
   return <StatusChip status={todayHoursText(facts).chip} />;
+}
+
+/** "{장소}이/가": 받침이 있으면 이, 없으면 가 (한글이 아닌 끝 글자는 이) */
+const withSubject = (name: string): string => {
+  const code = name.charCodeAt(name.length - 1);
+  const hangul = code >= 0xac00 && code <= 0xd7a3;
+  return `${name}${hangul && (code - 0xac00) % 28 === 0 ? '가' : '이'}`;
+};
+
+/** 직선거리 m를 "350m" / "1.0km"로 (10m 단위 반올림, 995m부터 km) */
+const metresLabel = (metres: number): string => {
+  const rounded = Math.round(metres / 10) * 10;
+  return rounded < 1000 ? `${rounded}m` : `${(metres / 1000).toFixed(1)}km`;
+};
+
+/** 이동 변화 분: 부호를 붙여 그대로 ("+4분", "−3분", 마이너스는 U+2212) */
+const changeLabel = (minutes: number): string => (minutes < 0 ? `\u2212${-minutes}분` : `+${minutes}분`);
+
+/** T-05: 사실마다 상태 칩 + 출처 + 확인 날짜. 서버 값만 쓴다 (영업 여부를 지어내지 않는다) */
+function FactLine({ fact }: { fact: NowFact }) {
+  const shown = todayHoursText([fact]);
+  return (
+    <View style={styles.titleRow}>
+      <StatusChip status={fact.status} />
+      <Text style={text('body')}>{shown.text}</Text>
+      <Text style={text('caption', 'muted')}>
+        {`${fact.source_type} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`}
+      </Text>
+    </View>
+  );
+}
+
+/** T-06 대안 칸. 사실 칩은 제안 items 안 그 대안 줄의 facts에서 읽는다 (§12 Q21) */
+function AlternativeBox({ proposal, onAccept }: { proposal: NowT06Proposal; onAccept: () => void }) {
+  const alternative = proposal.closed.alternative;
+  if (alternative === null) return null;
+  const line = proposal.items.find((item) => item.place_id === alternative.place_id);
+  const { distance_m: distance, travel_change_min: change } = proposal.closed;
+  return (
+    <View testID={`proposal-${proposal.proposal_id}`} style={styles.proposal}>
+      <View style={styles.titleRow}>
+        <Text style={[text('heading'), styles.grow]}>{alternative.name}</Text>
+        <FactChip facts={line?.facts ?? []} />
+      </View>
+      <Text style={text('caption', 'muted')}>{`${distance === null ? '' : `${metresLabel(distance)} · `}이동 ${changeLabel(change)}`}</Text>
+      <Text style={text('body')}>{proposal.reason}</Text>
+      <SecondaryButton small testID={`proposal-accept-${proposal.proposal_id}`} label="이걸로" onPress={onAccept} />
+    </View>
+  );
 }
 
 function Shell({ id, main, children }: { id: string; main: boolean; children: React.ReactNode }) {
@@ -48,7 +97,8 @@ function ProposalBox({ proposal, onAccept }: { proposal: NowProposal; onAccept: 
         </View>
       ) : null}
       <Text style={text('caption', 'muted')}>{`${proposal.first_leave_at}에 출발`}</Text>
-      <PrimaryButton testID={`proposal-accept-${proposal.proposal_id}`} label="이걸로" onPress={onAccept} />
+      {/* G5: 한 카드에 주황 큰 버튼이 여러 개 생기지 않게 [이걸로]는 보조 버튼 */}
+      <SecondaryButton small testID={`proposal-accept-${proposal.proposal_id}`} label="이걸로" onPress={onAccept} />
     </View>
   );
 }
@@ -59,6 +109,8 @@ export function NowCardView({
   onOpenFailed,
   onAccept,
   onDismiss,
+  onVisit,
+  lateAt = null,
 }: {
   card: NowCard;
   main: boolean;
@@ -66,6 +118,10 @@ export function NowCardView({
   /** T-04 [이걸로] / [그대로 갈래]: 고르기 전에는 아무것도 바뀌지 않는다 (FR-13) */
   onAccept?: (proposalId: string) => void;
   onDismiss?: (eventId: string) => void;
+  /** T-05 [열었어]/[닫혔어]: 답을 서버에 사실로 보낸다 */
+  onVisit?: (placeId: string, wasOpen: boolean) => void;
+  /** 늦은 상태(delayed)일 때만 지금 시각. G4: 출발 시각이 지났으면 몇 분 지났는지 */
+  lateAt?: string | null;
 }) {
   switch (card.type) {
     case 'T-01':
@@ -86,6 +142,8 @@ export function NowCardView({
       );
     case 'T-02': {
       const url = card.map_url;
+      const nowMin = lateAt === null ? null : minutesOfAt(lateAt);
+      const late = nowMin === null ? 0 : nowMin - toMinutes(card.leave_at);
       const open = () => {
         if (url === null) return;
         Linking.openURL(url).catch(onOpenFailed);
@@ -98,7 +156,11 @@ export function NowCardView({
             <FactChip facts={card.next_item.facts} />
           </View>
           <Text style={text('body')}>
-            {card.leave_in_min > 0 ? `${card.leave_at}에 출발 · ${card.leave_in_min}분 뒤` : `${card.leave_at}에 출발, 지금 나서자`}
+            {card.leave_in_min > 0
+              ? `${card.leave_at}에 출발 · ${card.leave_in_min}분 뒤`
+              : late > 0
+                ? `출발 시각이 ${late}분 지났어`
+                : `${card.leave_at}에 출발, 지금 나서자`}
           </Text>
           <Text style={text('caption', 'muted')}>{`이동 ${card.travel_min}분`}</Text>
           {url !== null ? <SecondaryButton small testID="directions-button" label="길 안내" onPress={open} /> : null}
@@ -137,6 +199,60 @@ export function NowCardView({
           <SecondaryButton testID="event-dismiss" label="그대로 갈래" onPress={() => onDismiss?.(card.event_id)} />
         </Shell>
       );
+    case 'T-05': {
+      const url = card.map_url;
+      return (
+        <Shell id="card-T-05" main={main}>
+          <Text style={text('label', 'muted')}>영업 확인</Text>
+          <Text style={text('title')}>{card.place.name}</Text>
+          <Text style={text('body')}>가기 전에 열었는지 볼래?</Text>
+          {card.facts.map((fact) => (
+            <FactLine key={fact.field} fact={fact} />
+          ))}
+          <SecondaryButton
+            small
+            testID="visit-map-link"
+            label="구글 지도에서 보기"
+            onPress={() => {
+              Linking.openURL(url).catch(onOpenFailed);
+            }}
+          />
+          <View style={styles.pair}>
+            <View style={styles.grow}>
+              <SecondaryButton testID="visit-open" label="열었어" onPress={() => onVisit?.(card.place.place_id, true)} />
+            </View>
+            <View style={styles.grow}>
+              <SecondaryButton testID="visit-closed" label="닫혔어" onPress={() => onVisit?.(card.place.place_id, false)} />
+            </View>
+          </View>
+        </Shell>
+      );
+    }
+    case 'T-06': {
+      const alternatives = card.proposals.filter((proposal) => proposal.closed.alternative !== null);
+      const skip = card.proposals.find((proposal) => proposal.closed.alternative === null);
+      return (
+        <Shell id="card-T-06" main={main}>
+          <Text style={text('label', 'muted')}>닫힘 대안</Text>
+          <Text style={text('title')}>{`${withSubject(card.closed.name)} 닫혔대`}</Text>
+          {alternatives.length > 0 ? (
+            <Text style={text('body')}>근처에 이런 데 있어</Text>
+          ) : (
+            <Text style={text('body')}>근처에 열린 비슷한 곳이 없어</Text>
+          )}
+          {alternatives.map((proposal) => (
+            <AlternativeBox key={proposal.proposal_id} proposal={proposal} onAccept={() => onAccept?.(proposal.proposal_id)} />
+          ))}
+          {skip ? (
+            <View style={styles.proposal}>
+              <Text style={text('body')}>{skip.reason}</Text>
+              <SecondaryButton testID="closed-skip" label="빼고 가기" onPress={() => onAccept?.(skip.proposal_id)} />
+            </View>
+          ) : null}
+          <SecondaryButton testID="event-dismiss" label="그대로 둘게" onPress={() => onDismiss?.(card.event_id)} />
+        </Shell>
+      );
+    }
     case 'T-07':
       return (
         <Shell id="card-T-07" main={main}>
@@ -175,6 +291,7 @@ const styles = StyleSheet.create({
   grow: { flexShrink: 1, flexGrow: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], flexWrap: 'wrap' },
   proposal: { backgroundColor: color.surface, borderRadius: radius['r-md'], padding: space['space-3'], gap: space['space-2'] },
+  pair: { flexDirection: 'row', gap: space['space-2'] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['space-2'] },
   dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },
   big: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },

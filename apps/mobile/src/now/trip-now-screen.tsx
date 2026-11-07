@@ -21,7 +21,7 @@ import { SosButton } from '@/components/planning/sos-button';
 import { SosSheet } from '@/components/planning/sos-sheet';
 import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBOUNCE_MS, toMinutes } from '@/lib/demo-clock';
 import { delayedPosition } from '@/lib/fake-position';
-import { acceptRequest, checkRequest, dismissRequest, nowRequest, type NowCard, type NowParams, type NowView } from '@/lib/now-api';
+import { acceptRequest, checkRequest, dismissRequest, nowRequest, visitCheckRequest, type NowCard, type NowParams, type NowView } from '@/lib/now-api';
 import { send, type DaySummary, type Request, type Result } from '@/lib/planning-api';
 import { layout } from '@/planning/layout';
 import { color, control, radius, shadow, space, text } from '@/planning/theme';
@@ -292,6 +292,10 @@ export function TripNowScreen({
 
   const accept = (proposalId: string) => void decide(acceptRequest(proposalId), true);
   const dismiss = (eventId: string) => void decide(dismissRequest(eventId), false);
+  // T-05 [열었어]/[닫혔어]: 다시 보내지 않는다. 끊기거나 409면 GET /now로 지금 상태를 받는다 (§6)
+  const visit = (placeId: string, wasOpen: boolean) =>
+    void decide(visitCheckRequest(placeId, { day_id: record.day_id, at: currentAt.current, was_open: wasOpen }), false);
+  const lateAt = view?.status === 'delayed' ? view.at : null;
 
   const showToast = () => {
     setToast(OPEN_FAILED);
@@ -460,13 +464,13 @@ export function TripNowScreen({
             {view ? (
               <>
                 <View testID="now-main" style={styles.mainBox}>
-                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} onAccept={accept} onDismiss={dismiss} /> : null}
+                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} onAccept={accept} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} /> : null}
                   <View testID="now-reason">
                     <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
                   </View>
                 </View>
                 {subCards.map((card, index) => (
-                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} onAccept={accept} onDismiss={dismiss} />
+                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} onAccept={accept} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} />
                 ))}
               </>
             ) : problem === null ? (
