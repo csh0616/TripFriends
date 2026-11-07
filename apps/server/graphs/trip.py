@@ -28,14 +28,16 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel
 
-from engine.models import CourseOption, Infeasible
+from engine.models import CourseOption, Dropped, Infeasible
 from engine.planning import compose_courses
 from planning.repo import DayRecord, OptionRecord, PlanningRepo
-from trip.alternatives import alternative_input, go_home_only, reason_text, shape
+from trip.phrase import reorder_reason, skip_reason, swap_reason
+from trip.alternatives import alternative_input, closed_input, go_home_only, in_place, reason_text, remaining_travel_min, shape
 from trip.detect import DelayFinding, is_stale
 from trip.now import event_view
-from trip.repo import EventRecord, ProposalRecord, TripRepo
+from trip.repo import ClosedInfo, EventRecord, ProposalRecord, TripRepo
 from trip.schemas import NowEvent, NowView
+from trip.visit import ClosedFinding, VisitCheckRecord, closed_candidates
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +74,7 @@ class Request:
     when: datetime
     build_view: ViewBuilder
     finding: DelayFinding | None = None
+    closed: ClosedFinding | None = None  # [닫혔어] 한 건 (TASK-008 B1), 또는 닫힘 제안 새로 계산 (refresh)
     proposal_id: str | None = None
     closes: str | None = None  # 새 사건이 시작되면서 닫을 옛 사건 (§11 Q12)
     last_check_at: datetime | None = None  # 이번 check 직전의 마지막 check 시각
@@ -135,16 +138,126 @@ def _make_proposals(run: _Run, event_id: str, finding: DelayFinding) -> list[Pro
     return records
 
 
+def _minutes(value: str) -> int:
+    return int(value[:2]) * 60 + int(value[3:])
+
+
+def _checks(run: _Run) -> dict[str, VisitCheckRecord]:
+    """그날 사용자 확인 기록. 이번 요청이 곧 저장할 답도 응답에는 미리 반영한다 (응답 먼저, 저장은 나중에)."""
+    found = run.trip.visit_checks(run.req.day_id)
+    if run.req.closed is not None:
+        found[run.req.closed.place_id] = run.req.closed.check
+    return found
+
+
 def _view(run: _Run, record: EventRecord, proposals: list[ProposalRecord], course: CourseOption | None = None) -> NowView:
-    return run.req.build_view(event_view(record, proposals, run.req.day), course)
+    return run.req.build_view(event_view(record, proposals, run.req.day, _checks(run)), course)
+
+
+# ---------- 닫힘 대안 계산 (TASK-008 B2~B4) ----------
+
+
+def _closed_proposal(run: _Run, event_id: str, finding: ClosedFinding, replacement: str | None, distance_m: int | None) -> ProposalRecord | None:
+    """닫힌 곳을 replacement로 바꾼(None이면 뺀) 남은 코스 한 안. 못 만들거나 쓸모없으면 None. 예외는 그대로 올라간다 (§6)."""
+    req = run.req
+    course, day = req.course, req.day
+    reordered = False
+    shaped = in_place(day, course, finding.place_id, replacement, req.when)  # §14·§15: 자리에 그대로. [빼고 가기]는 여기까지 (다시 짜지 않음)
+    if shaped is None:
+        if replacement is None:
+            return None
+        spec = closed_input(day, course, finding.place_id, replacement, req.when)
+        if isinstance(spec, Infeasible):
+            return None
+        result = compose_courses(spec.plan, spec.picks, day.places, start=spec.start)
+        if isinstance(result, Infeasible):
+            return None
+        option = next((o for o in result if o.label == "relaxed"), result[0])
+        shaped = shape(day, course, option, spec, req.when)
+        reordered = True
+    if replacement is not None and (replacement in shaped.dropped or not shaped.keeps_fixed):
+        return None  # B3: 대안이 빠진 안·고정 일정을 못 지키는 안은 대안이 아니다 (§11 Q8)
+    was_must = finding.place_id in day.plan.must_visit
+    dropped = shaped.dropped
+    full = shaped.course
+    if replacement is None:
+        dropped = (finding.place_id, *dropped)  # B4: [빼고 가기]는 닫힌 곳이 빠지는 곳
+        full = full.model_copy(update={"dropped": [*full.dropped, Dropped(place_id=finding.place_id, reason="closed_at_time")]})
+    if replacement is None:
+        reason = skip_reason(day.places[finding.place_id].name, was_must)
+    elif reordered:
+        reason = reorder_reason(next(i.start for i in full.items if i.place_id == replacement))
+    else:
+        reason = swap_reason(day.places[replacement].name)
+    index = shaped.from_index
+    change = remaining_travel_min(full, index) - remaining_travel_min(course, index)
+    return ProposalRecord(
+        proposal_id=str(uuid.uuid4()),
+        event_id=event_id,
+        label="relaxed",  # §12 Q22
+        reason=reason,
+        dropped=dropped,
+        keeps_fixed=shaped.keeps_fixed,
+        first_leave_at=shaped.first_leave_at,
+        course=full,
+        from_index=shaped.from_index,
+        created_at=req.when,
+        base_delay_min=0,
+        closed=ClosedInfo(finding.place_id, replacement, distance_m, change, reordered),
+    )
+
+
+def _make_closed_proposals(run: _Run, event_id: str, finding: ClosedFinding) -> list[ProposalRecord]:
+    """B2~B4: 대안 최대 3곳(가까운 순) + [빼고 가기] 하나(맨 끝)."""
+    req = run.req
+    day, course = req.day, req.course
+    entry = next(item for item in course.items if item.place_id == finding.place_id)
+    in_course = {item.place_id for item in course.items if item.place_id}
+    closed_today = {pid for pid, check in _checks(run).items() if not check.was_open}
+    found = closed_candidates(day.places[finding.place_id], day.places, in_course | closed_today, day.plan.date.weekday(), _minutes(entry.start))  # Q29
+    made = [_closed_proposal(run, event_id, finding, c.place_id, c.distance_m) for c in found]
+    skip = _closed_proposal(run, event_id, finding, None, None)
+    return [*(p for p in made if p is not None), *([skip] if skip else [])]
 
 
 # ---------- 전이표 한 줄 한 줄 ----------
 # 반환: 새 stage (None = 그대로). 순서: 계산 -> 응답 -> 저장.
 
 
+def _row_start_closed(run: _Run, state: TripState) -> Stage:
+    """(없음) × visit-check [닫혔어] (B1): 높음 사건 -> 대안 계산 -> awaiting. 확인 답은 사건·제안과 함께 저장한다."""
+    finding = run.req.closed
+    assert finding is not None
+    proposals = _make_closed_proposals(run, state.event_id, finding)
+    record = EventRecord(state.event_id, state.day_id, finding.dedupe_key, finding.k, "high", 0, "awaiting", run.req.when)
+    response = _view(run, record, proposals)
+    old = run.trip.get_event(run.req.closes) if run.req.closes else None
+    if old:  # 같은 종류의 옛 닫힘 사건은 하나만 남긴다 (TASK-007 §11 Q12)
+        run.trip.put_event(replace(old, state="resolved"))
+    run.trip.put_visit_check(finding.check)
+    run.trip.put_event(record)
+    run.trip.put_proposals(record.event_id, proposals)
+    run.finish(response)
+    return "awaiting"
+
+
+def _row_refresh_closed(run: _Run, state: TripState, _event: dict[str, Any]) -> Stage:
+    """awaiting × refresh: 오래된 닫힘 제안을 같은 사건 안에서 한 번 새로 계산한다 (B-4와 같음, 새로 알리지 않음)."""
+    finding = run.req.closed
+    assert finding is not None
+    record = run.trip.get_event(state.event_id)
+    assert record is not None
+    fresh = _make_closed_proposals(run, state.event_id, finding)
+    response = _view(run, record, fresh)
+    run.trip.put_proposals(state.event_id, fresh)
+    run.finish(response)
+    return "awaiting"
+
+
 def _row_start(run: _Run, state: TripState) -> Stage:
     """(없음) × check: 낮음이면 open_low, 높음이면 대안 계산 후 awaiting."""
+    if run.req.closed is not None:
+        return _row_start_closed(run, state)
     finding = run.req.finding
     assert finding is not None
     high = finding.severity == "high"
@@ -220,6 +333,9 @@ def _row_accept(run: _Run, state: TripState, _event: dict[str, Any]) -> Stage:
     response = _view(run, done, run.trip.current_proposals(state.event_id), proposal.course)
     run.planning.save_options([new_option])
     run.planning.choose_option(state.day_id, new_option.option_id)
+    info = proposal.closed
+    if info is not None and info.alternative is not None and info.closed_place_id in run.req.day.plan.must_visit:
+        run.planning.replace_must_visit(state.day_id, info.closed_place_id, info.alternative)  # §7: 꼭 갈 곳도 대안으로
     run.trip.put_event(done)
     run.finish(response)
     return "resolved"
@@ -255,6 +371,7 @@ _Row = Callable[[_Run, TripState, dict[str, Any]], Stage]
 TRANSITIONS: dict[tuple[str, str], _Row] = {
     ("open_low", "check"): _row_check_low,
     ("awaiting", "check"): _row_check_awaiting,
+    ("awaiting", "refresh"): _row_refresh_closed,
     ("awaiting", "accept"): _row_accept,
     ("awaiting", "dismiss"): _row_dismiss,
     ("resolved", "check"): _row_resolved_check,
@@ -273,7 +390,7 @@ def can_handle(stage: str, kind: str) -> bool:
 _Next = Literal["open_low", "awaiting", "resolved", "__end__"]
 
 
-def new_state(event_id: str, day_id: str, finding: DelayFinding) -> dict[str, Any]:
+def new_state(event_id: str, day_id: str, finding: DelayFinding | ClosedFinding) -> dict[str, Any]:
     return TripState(event_id=event_id, day_id=day_id, dedupe_key=finding.dedupe_key, k=finding.k).model_dump()
 
 

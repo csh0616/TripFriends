@@ -845,6 +845,75 @@
         }
       }
     },
+    "/places/{place_id}/visit-checks": {
+      "post": {
+        "summary": "영업 확인 답: 열었어/닫혔어 (그날만 사용자 확인으로 저장, 닫혔어면 대안 계산)",
+        "operationId": "visit_check_places__place_id__visit_checks_post",
+        "parameters": [
+          {
+            "name": "place_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Place Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisitCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NowView"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -1974,6 +2043,70 @@
         ],
         "title": "NowCardT04"
       },
+      "NowCardT05": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "T-05",
+            "title": "Type",
+            "default": "T-05"
+          },
+          "place": {
+            "$ref": "#/components/schemas/NowPlaceRef"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            },
+            "type": "array",
+            "title": "Facts"
+          },
+          "map_url": {
+            "type": "string",
+            "title": "Map Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place",
+          "facts",
+          "map_url"
+        ],
+        "title": "NowCardT05",
+        "description": "영업 확인 (TASK-008 A4): 영업 여부를 추측하지 않고 사실의 상태·출처·확인 날짜만 싣는다."
+      },
+      "NowCardT06": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "T-06",
+            "title": "Type",
+            "default": "T-06"
+          },
+          "event_id": {
+            "type": "string",
+            "title": "Event Id"
+          },
+          "closed": {
+            "$ref": "#/components/schemas/NowPlaceRef"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/NowT06Proposal"
+            },
+            "type": "array",
+            "title": "Proposals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_id",
+          "closed",
+          "proposals"
+        ],
+        "title": "NowCardT06",
+        "description": "닫힘 대안 (TASK-008 B6)."
+      },
       "NowCardT07": {
         "properties": {
           "type": {
@@ -2029,6 +2162,48 @@
           "map_url"
         ],
         "title": "NowCardT08"
+      },
+      "NowClosedInfo": {
+        "properties": {
+          "alternative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NowPlaceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "distance_m": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance M"
+          },
+          "travel_change_min": {
+            "type": "integer",
+            "title": "Travel Change Min"
+          },
+          "reordered": {
+            "type": "boolean",
+            "title": "Reordered"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alternative",
+          "distance_m",
+          "travel_change_min",
+          "reordered"
+        ],
+        "title": "NowClosedInfo",
+        "description": "닫힘 대안 한 줄 (TASK-008 §12 Q21). 대안의 사실 칩은 제안 items 안 그 장소 줄의 facts."
       },
       "NowCourseItem": {
         "properties": {
@@ -2134,7 +2309,10 @@
           },
           "type": {
             "type": "string",
-            "const": "delay",
+            "enum": [
+              "delay",
+              "closed"
+            ],
             "title": "Type",
             "default": "delay"
           },
@@ -2161,7 +2339,14 @@
           },
           "proposals": {
             "items": {
-              "$ref": "#/components/schemas/NowProposal"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/NowT06Proposal"
+                },
+                {
+                  "$ref": "#/components/schemas/NowProposal"
+                }
+              ]
             },
             "type": "array",
             "title": "Proposals"
@@ -2272,6 +2457,24 @@
           "state"
         ],
         "title": "NowPin"
+      },
+      "NowPlaceRef": {
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place_id",
+          "name"
+        ],
+        "title": "NowPlaceRef"
       },
       "NowProposal": {
         "properties": {
@@ -2389,6 +2592,64 @@
         ],
         "title": "NowT04Fixed"
       },
+      "NowT06Proposal": {
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "title": "Proposal Id"
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "relaxed",
+              "packed"
+            ],
+            "title": "Label"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "dropped": {
+            "items": {
+              "$ref": "#/components/schemas/NowDropped"
+            },
+            "type": "array",
+            "title": "Dropped"
+          },
+          "keeps_fixed": {
+            "type": "boolean",
+            "title": "Keeps Fixed"
+          },
+          "first_leave_at": {
+            "type": "string",
+            "title": "First Leave At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NowCourseItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "closed": {
+            "$ref": "#/components/schemas/NowClosedInfo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "label",
+          "reason",
+          "dropped",
+          "keeps_fixed",
+          "first_leave_at",
+          "items",
+          "closed"
+        ],
+        "title": "NowT06Proposal",
+        "description": "TASK-007 제안 + closed (TASK-008 §11 Q4). label은 relaxed (§12 Q22)."
+      },
       "NowView": {
         "properties": {
           "day": {
@@ -2430,6 +2691,12 @@
                 "$ref": "#/components/schemas/NowCardT04"
               },
               {
+                "$ref": "#/components/schemas/NowCardT05"
+              },
+              {
+                "$ref": "#/components/schemas/NowCardT06"
+              },
+              {
                 "$ref": "#/components/schemas/NowCardT07"
               },
               {
@@ -2444,6 +2711,8 @@
                 "T-02": "#/components/schemas/NowCardT02",
                 "T-03": "#/components/schemas/NowCardT03",
                 "T-04": "#/components/schemas/NowCardT04",
+                "T-05": "#/components/schemas/NowCardT05",
+                "T-06": "#/components/schemas/NowCardT06",
                 "T-07": "#/components/schemas/NowCardT07",
                 "T-08": "#/components/schemas/NowCardT08"
               }
@@ -2465,6 +2734,12 @@
                   "$ref": "#/components/schemas/NowCardT04"
                 },
                 {
+                  "$ref": "#/components/schemas/NowCardT05"
+                },
+                {
+                  "$ref": "#/components/schemas/NowCardT06"
+                },
+                {
                   "$ref": "#/components/schemas/NowCardT07"
                 },
                 {
@@ -2478,6 +2753,8 @@
                   "T-02": "#/components/schemas/NowCardT02",
                   "T-03": "#/components/schemas/NowCardT03",
                   "T-04": "#/components/schemas/NowCardT04",
+                  "T-05": "#/components/schemas/NowCardT05",
+                  "T-06": "#/components/schemas/NowCardT06",
                   "T-07": "#/components/schemas/NowCardT07",
                   "T-08": "#/components/schemas/NowCardT08"
                 }
@@ -3110,6 +3387,30 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VisitCheckRequest": {
+        "properties": {
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "was_open": {
+            "type": "boolean",
+            "title": "Was Open"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_id",
+          "at",
+          "was_open"
+        ],
+        "title": "VisitCheckRequest",
+        "description": "영업 확인 답 (TASK-008 A5). at은 시간대 없는 그날의 시각."
       }
     }
   }

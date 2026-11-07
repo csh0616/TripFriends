@@ -33,7 +33,7 @@ from planning.schemas import (
     SelectResult,
 )
 from planning import presenter
-from planning.seed import seed_demo
+from planning.seed import prepare_demo_scenario, seed_demo
 
 # §10 Q24, §10-10 R3
 STATUS = {"NOT_FOUND": 404, "INVALID_REQUEST": 400, "STATE_CONFLICT": 409, "COURSE_INFEASIBLE": 422, "INTERNAL_ERROR": 500}
@@ -116,6 +116,7 @@ class PlanningService:
                 course = self.start(result.day_ids[1], "auto")
                 option = next(o for o in course.options if o.label == "relaxed")  # type: ignore[union-attr]
                 self.select(option.option_id)
+                prepare_demo_scenario(self.repo, result.day_ids[1])  # TASK-008 C4: 영업 확인 시나리오 장소
                 record = self.repo.get_day(result.day_ids[1])
                 chosen_option = self.repo.get_option(self.repo.chosen_option(result.day_ids[1]))
                 assert record is not None and chosen_option is not None

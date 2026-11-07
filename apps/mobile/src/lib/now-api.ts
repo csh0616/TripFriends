@@ -12,6 +12,9 @@ export type NowPin = Schemas['NowPin'];
 export type NowEvent = NonNullable<NowView['event']>;
 export type NowProposal = Schemas['NowProposal'];
 export type CheckBody = Schemas['CheckRequest'];
+export type NowT06Proposal = Schemas['NowT06Proposal'];
+export type NowFact = Schemas['Fact'];
+export type VisitCheckBody = Schemas['VisitCheckRequest'];
 
 export type NowParams = { at: string; lat?: number; lng?: number };
 
@@ -30,3 +33,10 @@ export const checkRequest = (dayId: string, params: NowParams): Request => {
 
 export const acceptRequest = (proposalId: string): Request => ({ method: 'POST', path: `/proposals/${encodeURIComponent(proposalId)}/accept` });
 export const dismissRequest = (eventId: string): Request => ({ method: 'POST', path: `/events/${encodeURIComponent(eventId)}/dismiss` });
+
+/** TASK-008 A5: 가기 전에 열었는지 답. at은 데모 시계의 지금, 답은 서버가 사실로 저장한다 */
+export const visitCheckRequest = (placeId: string, body: VisitCheckBody): Request => ({
+  method: 'POST',
+  path: `/places/${encodeURIComponent(placeId)}/visit-checks`,
+  body,
+});

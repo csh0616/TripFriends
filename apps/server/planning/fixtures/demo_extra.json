@@ -1,0 +1,60 @@
+{
+  "places": [
+    {
+      "id": "D31",
+      "name": "골목 카페 E",
+      "category": "cafe",
+      "lat": 35.003,
+      "lng": 134.987,
+      "crowd_level": 2,
+      "price_level": 2,
+      "mood_tags": [
+        "조용",
+        "감성"
+      ],
+      "hours": [
+        {
+          "weekday": 0,
+          "open": "08:00",
+          "close": "19:00"
+        },
+        {
+          "weekday": 1,
+          "open": "08:00",
+          "close": "19:00"
+        },
+        {
+          "weekday": 2,
+          "open": "08:00",
+          "close": "19:00"
+        },
+        {
+          "weekday": 3,
+          "open": "08:00",
+          "close": "19:00"
+        },
+        {
+          "weekday": 4,
+          "open": "08:00",
+          "close": "19:00"
+        },
+        {
+          "weekday": 5,
+          "open": "08:00",
+          "close": "19:00"
+        },
+        {
+          "weekday": 6,
+          "open": "08:00",
+          "close": "19:00"
+        }
+      ],
+      "hours_status": "confirmed",
+      "stay": {
+        "min": 30,
+        "typical": 60,
+        "max": 90
+      }
+    }
+  ]
+}
