@@ -1240,8 +1240,41 @@ def test_S11_Q14_데모에서_예약_뒤_T_08까지_간다(env):
     assert demo_now(env, day_id, "2026-12-02T19:30:00").json()["main"]["type"] == "T-08"
 
 
-def test_A5_응답_모양은_그대로(env):
-    assert set(seed_chosen(env)) == {"trip_id", "day_ids"}
+def test_A5_Q1_chosen_응답에는_day가_더해진다(env):
+    assert set(seed_chosen(env)) == {"trip_id", "day_ids", "day"}
+
+
+@pytest.mark.parametrize("use_false", [False, True], ids=["본문_없음", "chosen_false"])
+def test_A5_Q1_chosen이_아니면_응답_모양은_그대로(env, use_false):
+    seeded = seed_chosen(env, chosen=False) if use_false else env.seed()
+    assert set(seeded) == {"trip_id", "day_ids"}
+
+
+def test_A5_Q1_day는_둘째_날_요약(env):
+    seeded = seed_chosen(env)
+    day = seeded["day"]
+    DaySummary.model_validate(day)
+    assert day["day_id"] == seeded["day_ids"][1]
+    assert day["day_number"] == 2
+    assert day["date"] == "2026-12-02"
+    assert (day["start"], day["end"]) == ("10:00", "20:00")
+    assert day["lodging"] == {"lat": 35.0, "lng": 135.0}
+
+
+def test_A5_Q1_day의_고정_일정은_저녁_예약(env):
+    seeded = seed_chosen(env)
+    record = env.repo.get_day(seeded["day_ids"][1])
+    reservation = record.plan.fixed[0]
+    assert reservation.title == "저녁 예약"
+    # DaySummary에는 title이 없고 name = 장소 이름이다 (TASK-004 Q1, §12 R4)
+    assert seeded["day"]["fixed"] == [
+        {"place_id": reservation.place_id, "name": record.places[reservation.place_id].name, "start": "18:30", "end": "19:30"}
+    ]
+
+
+def test_A5_Q1_day는_NowView의_day와_같다(env):
+    seeded = seed_chosen(env)
+    assert demo_now(env, seeded["day_ids"][1], "2026-12-02T17:50:00").json()["day"] == seeded["day"]
 
 
 def test_A5_옵션을_안_주면_예전과_같다(env):

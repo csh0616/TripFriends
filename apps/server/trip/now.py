@@ -166,7 +166,12 @@ def _map_url(entry: _Entry) -> str | None:
     """구글 지도 길찾기 URL (대중교통). 장소가 없으면 None (Q6). 경로 API는 부르지 않는다 (§9)."""
     if entry.place is None:
         return None
-    return f"https://www.google.com/maps/dir/?api=1&destination={entry.place.lat},{entry.place.lng}&travelmode=transit"
+    return _transit_url(entry.place.lat, entry.place.lng)
+
+
+def _transit_url(lat: float, lng: float) -> str:
+    """도착지 좌표 -> 구글 지도 대중교통 길찾기 URL (T-02·T-08 공용)."""
+    return f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}&travelmode=transit"
 
 
 def _card(kind: str, m: _Moment, entries: list[_Entry], course: CourseOption, day: DayRecord, weekday: int) -> NowCard | None:
@@ -202,7 +207,7 @@ def _card(kind: str, m: _Moment, entries: list[_Entry], course: CourseOption, da
         )
     if kind == "T-08":
         lat, lng = day.plan.lodging
-        return NowCardT08(go_home_min=course.go_home_min, lodging=LatLng(lat=lat, lng=lng))
+        return NowCardT08(go_home_min=course.go_home_min, lodging=LatLng(lat=lat, lng=lng), map_url=_transit_url(lat, lng))
     return None
 
 

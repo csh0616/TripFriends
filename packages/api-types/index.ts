@@ -601,6 +601,8 @@ export interface components {
             /** Go Home Min */
             go_home_min: number;
             lodging: components["schemas"]["LatLng"];
+            /** Map Url */
+            map_url: string;
         };
         /**
          * NowCourseItem

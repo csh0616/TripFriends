@@ -62,6 +62,7 @@ class NowCardT08(BaseModel):
     type: Literal["T-08"] = "T-08"
     go_home_min: int
     lodging: LatLng
+    map_url: str
 
 
 NowCard = Annotated[NowCardT01 | NowCardT02 | NowCardT03 | NowCardT07 | NowCardT08, Field(discriminator="type")]

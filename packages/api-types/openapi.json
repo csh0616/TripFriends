@@ -1784,12 +1784,17 @@
           },
           "lodging": {
             "$ref": "#/components/schemas/LatLng"
+          },
+          "map_url": {
+            "type": "string",
+            "title": "Map Url"
           }
         },
         "type": "object",
         "required": [
           "go_home_min",
-          "lodging"
+          "lodging",
+          "map_url"
         ],
         "title": "NowCardT08"
       },
