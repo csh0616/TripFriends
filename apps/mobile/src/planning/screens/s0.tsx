@@ -1,9 +1,11 @@
 // S0 시작 (TASK-004 §B-2, §12 Q4·Q19·Q34). SOS만 있고 입력창은 없다.
-import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { Notice } from '@/components/planning/notice';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
+import { SecondaryButton } from '@/components/planning/secondary-button';
 
 import { layout } from '../layout';
 import { color, space, text } from '../theme';
@@ -13,10 +15,13 @@ export function S0Screen({
   busy,
   notice,
   onStart,
+  onStartNow,
 }: {
   busy: boolean;
   notice: NoticeData | null;
   onStart: () => void;
+  /** 개발 빌드에서만 넘어온다 (TASK-006 §14) */
+  onStartNow?: () => void;
 }) {
   return (
     <ScreenFrame>
@@ -33,6 +38,9 @@ export function S0Screen({
       </View>
       <View style={styles.action}>
         <PrimaryButton label="데모 여행 시작" disabled={busy} onPress={() => !busy && onStart()} />
+        {onStartNow ? (
+          <SecondaryButton testID="s0-now-demo" label="여행 중 데모 바로 보기" disabled={busy} onPress={() => !busy && onStartNow()} />
+        ) : null}
         {busy ? <ActivityIndicator color={color.muted} /> : null}
         {notice ? <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} retryDisabled={busy} /> : null}
       </View>

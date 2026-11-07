@@ -819,7 +819,8 @@ describe('§13-3 #5 주황 4% (폰 크기 390x844, 계산할 수 있는 면적�
     Dimensions.set({ window, screen: window });
   });
 
-  const isPrimary = (host: Tree) => styleOf(host).backgroundColor === COLORS.brand && styleOf(host).height === 52;
+  // TASK-006 D4·§11-4: 주 버튼은 고정 높이 대신 최소 높이가 된다. 둘 다 잰다
+  const isPrimary = (host: Tree) => styleOf(host).backgroundColor === COLORS.brand && (styleOf(host).height ?? styleOf(host).minHeight) === 52;
   const isBrand = (value: unknown) => String(value).toUpperCase() === COLORS.brand;
 
   /** 주 버튼을 뺀 주황 면적. box: 크기를 스타일에 안 적은 고리의 상자 */

@@ -21,6 +21,7 @@ export class FakeServer {
   unexpected: string[] = [];
   private routes = new Map<string, Reply>();
   private queued = new Map<string, (Reply | Deferred)[]>();
+  private matchers: { prefix: string; reply: (sent: Sent) => Reply | Promise<Reply> }[] = [];
   private spy: jest.SpiedFunction<typeof fetch>;
 
   constructor() {
@@ -49,6 +50,12 @@ export class FakeServer {
     return resolve;
   }
 
+  /** TASK-006: 쿼리가 붙는 경로. "메서드 경로" 앞부분이 같으면 이 함수가 응답을 정한다 (정확한 경로가 먼저) */
+  match(prefix: string, reply: (sent: Sent) => Reply | Promise<Reply>) {
+    this.matchers.push({ prefix, reply });
+    return this;
+  }
+
   sent(route: string): Sent[] {
     return this.requests.filter((r) => `${r.method} ${r.path}` === route);
   }
@@ -69,7 +76,11 @@ export class FakeServer {
     const body = typeof init?.body === 'string' && init.body ? JSON.parse(init.body) : undefined;
     this.requests.push({ method, path, body });
     const route = `${method} ${path}`;
-    const next = this.queue(route).shift() ?? this.routes.get(route);
+    const matcher = this.matchers.find(({ prefix }) => route === prefix || route.startsWith(`${prefix}?`));
+    const next: Reply | Deferred | undefined =
+      this.queue(route).shift() ??
+      this.routes.get(route) ??
+      (matcher ? { promise: Promise.resolve(matcher.reply(this.last())), resolve: () => undefined } : undefined);
     if (next === undefined) {
       this.unexpected.push(route);
       throw new TypeError(`가짜 서버에 없는 경로: ${route}`);

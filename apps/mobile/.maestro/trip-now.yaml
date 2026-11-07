@@ -1,0 +1,176 @@
+# TASK-006 C2: 여행 중 화면 SC-04, 데모 시계로 시각을 옮기며 스크린샷.
+# 전제: planning.yaml과 같다. 이 흐름은 S0의 [여행 중 데모 바로 보기]로 시작한다 (계획 흐름을 거치지 않는다).
+# 개발 서버 주소는 -e로 받는다 (흐름 안의 env: 블록은 -e보다 우선해서 쓰지 않는다).
+# 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로):
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/trip-now -e METRO_URL=http://127.0.0.1:8083 .maestro/trip-now.yaml
+# 스크린샷은 --test-output-dir 아래 takeScreenshot/ 에 쌓이고 저장소에는 올리지 않는다 (.gitignore의 .maestro/screenshots/).
+# 시각 막대는 하루 시작~끝(데모 시드 둘째 날 10:00~20:00)을 0~100%로 보고 누른 위치를 5분 단위로 맞춘다.
+# 데모 시드 코스는 고정이라 아래 시각의 카드가 정해져 있다. 코스가 바뀌면 시각을 다시 확인한다.
+# 알려진 문제: 앱에 탭이 닿지 않는 현상이 S0 첫 탭, P3 [이걸로 할래], 데모 막대에서 재현됐다.
+# 원인 미확인(앱 문제인지 Maestro·XCTest 문제인지 모른다). 우회와 retry로 통과시킨다. 그래서 아래 retry는 결과를 확인하는 묶음으로 적어 두 번 눌러도 부작용이 없다.
+appId: com.csh0616.tripfriends
+---
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 중 데모 바로 보기"
+    timeout: 60000
+# 원인 미확인 우회: 앱이 뜬 뒤 첫 탭이 앱까지 가지 않는다(오래 기다려도 같음). 화면이 가만해진 뒤 아무 일 없는 글자를 한 번 눌러 첫 탭을 먼저 쓴다
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "AI 여행친구"
+
+# S0의 [여행 중 데모 바로 보기] (개발 빌드에만 있다, TASK-006 §14):
+# POST /debug/seed-demo {"chosen": true} -> 둘째 날 SC-04, 그날 17:50부터. 둘째 날에는 고정 일정 "저녁 예약" 18:30~19:30이 있다.
+- tapOn:
+    id: "s0-now-demo"
+- extendedWaitUntil:
+    visible:
+      id: "now-main"
+    timeout: 30000
+- assertVisible:
+    id: "sos-button"
+- assertVisible:
+    id: "input-bar"
+- takeScreenshot: trip-now-1-1750
+
+# 데모 시계 열기
+# 탭이 가끔 앱에 안 닿아서(원인 미확인) 다시 해도 안전한 모양으로 적는다: 패널이 없을 때만 누른다
+- retry:
+    maxRetries: 4
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              id: "demo-panel"
+          commands:
+            - tapOn:
+                id: "demo-toggle"
+      - extendedWaitUntil:
+          visible:
+            id: "demo-panel"
+          timeout: 3000
+
+# 시각을 바꾼 뒤에는 (1) 바뀐 시각 글자(demo-time 옆에 같은 글자가 접근성 글자로 나온다)가 보이는 것을 기다리고 (2) 300ms 디바운스 + 응답을 기다린 뒤 찍는다.
+# Maestro에 sleep이 없어서, 없는 글자를 optional로 기다리는 줄을 "잠깐 기다림"으로 쓴다.
+
+# 고정 일정 직전: +10분 -> 18:00 (저녁 예약 18:30의 출발 15분 이하라 T-07)
+- tapOn:
+    id: "demo-plus-10"
+- extendedWaitUntil:
+    visible: "18:00"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "고정 일정이 곧이야"
+    timeout: 10000
+- takeScreenshot: trip-now-2-before-fixed
+
+# 하루 시작 10:00: 막대 맨 앞 (0%)
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "demo-bar"
+          point: "0%,50%"
+      - extendedWaitUntil:
+          visible: "10:00"
+          timeout: 3000
+- extendedWaitUntil:
+    notVisible: "고정 일정이 곧이야"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "없는 글자 (잠깐 기다림)"
+    timeout: 1500
+    optional: true
+- takeScreenshot: trip-now-3-1000
+
+# 13:20: 막대 30% = 13:00 + [+10분] 두 번
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "demo-bar"
+          point: "30%,50%"
+      - extendedWaitUntil:
+          visible: "13:00"
+          timeout: 3000
+- tapOn:
+    id: "demo-plus-10"
+- tapOn:
+    id: "demo-plus-10"
+- extendedWaitUntil:
+    visible: "13:20"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "없는 글자 (잠깐 기다림)"
+    timeout: 1500
+    optional: true
+- takeScreenshot: trip-now-4-1320
+
+# 이동 중(다음 일정으로 가는 길): 막대 40% = 14:00, 카드 T-02 "지금 나서자"
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "demo-bar"
+          point: "40%,50%"
+      - extendedWaitUntil:
+          visible: "14:00"
+          timeout: 3000
+- extendedWaitUntil:
+    visible: ".*지금 나서자.*"
+    timeout: 10000
+- takeScreenshot: trip-now-5-moving
+
+# 일정이 끝난 뒤: 막대 99% = 19:55 + [+10분] = 20:00(하루 끝에서 멈춤), 카드 T-08
+# (막대 맨 끝 100%는 막대 밖을 눌러 먹지 않는다)
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "demo-bar"
+          point: "99%,50%"
+      - extendedWaitUntil:
+          visible: "19:55"
+          timeout: 3000
+- tapOn:
+    id: "demo-plus-10"
+- extendedWaitUntil:
+    visible: "20:00"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "숙소로 길 안내"
+    timeout: 10000
+- takeScreenshot: trip-now-6-after
+
+# 카드 시트 높게: 시트를 위로 끌어도 SOS는 눌리는 자리에 그대로 있다
+- swipe:
+    start: "50%,60%"
+    end: "50%,10%"
+- extendedWaitUntil:
+    visible: "없는 글자 (잠깐 기다림)"
+    timeout: 1000
+    optional: true
+- assertVisible:
+    id: "sos-button"
+- takeScreenshot: trip-now-7-sheet-high
+
+# 카드 시트 낮게
+- swipe:
+    start: "50%,20%"
+    end: "50%,95%"
+- extendedWaitUntil:
+    visible: "없는 글자 (잠깐 기다림)"
+    timeout: 1000
+    optional: true
+- assertVisible:
+    id: "sos-button"
+- takeScreenshot: trip-now-8-sheet-low

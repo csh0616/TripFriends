@@ -23,7 +23,7 @@ export const day = {
   start: '10:00',
   end: '20:00',
   lodging: LODGING,
-  must_visits: [{ place_id: 'D20', name: '꼭 갈 박물관' }],
+  must_visits: [{ place_id: 'D20', name: '꼭 갈 박물관', stay_min: 60 }], // stay_min: TASK-006 §11 Q19
   fixed: [] as { place_id: string | null; name: string; start: string; end: string }[],
 };
 

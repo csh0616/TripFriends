@@ -1,6 +1,7 @@
 // TASK-004 §B-3, §B-6 G7: 주 버튼 = brand 바탕 + on-brand 글자 (흰 글자 금지).
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { color, control, radius, space, text } from '@/planning/theme';
 
 export function PrimaryButton({
@@ -29,7 +30,7 @@ export function PrimaryButton({
 
 const styles = StyleSheet.create({
   button: {
-    height: control.btn,
+    minHeight: control.btn,
     minWidth: control['touch-min'],
     paddingHorizontal: space['space-5'],
     borderRadius: radius['r-md'],

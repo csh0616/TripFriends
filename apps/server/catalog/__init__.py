@@ -48,7 +48,7 @@ class CourseItem(BaseModel):
 
 class NowProps(BaseModel):
     item: CourseItem
-    ends_in_min: int
+    ends_in_min: int | None  # 하루 시작 전 미리보기는 null (TASK-006 §11 Q8)
 
 
 class NextMoveProps(BaseModel):

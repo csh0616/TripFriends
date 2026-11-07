@@ -1,17 +1,16 @@
 // P3 코스안 (TASK-004 §B-4, §12 Q5·Q8·Q14·Q39·Q41, §13 Q33). CourseResult를 그린다. 숫자·시각은 서버 값 그대로.
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Svg, { Circle, Polyline, Text as SvgText } from 'react-native-svg';
+import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { Notice } from '@/components/planning/notice';
+import { RouteDiagram } from '@/components/planning/route-diagram';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { StatusChip } from '@/components/planning/status-chip';
-import { homeIconLines } from '@/lib/home-icon';
 import { formatStay } from '@/lib/format-stay';
 import type { CourseItem, CourseResult } from '@/lib/planning-api';
-import { projectRoute } from '@/lib/project-route';
 
 import { dayName } from '../format';
 import { layout } from '../layout';
@@ -216,12 +215,12 @@ function Row({
         </View>
         <View style={styles.rowText}>
           {/* 미정(TASK-005): 줄 이름은 heading */}
-          <Text numberOfLines={1} style={text('heading')}>
+          <Text numberOfLines={2} style={text('heading')}>
             {item.name}
           </Text>
           <View testID={`course-row-sub-${item.seq}`} style={styles.sub}>
             <Text
-              numberOfLines={1}
+              numberOfLines={2} // TASK-006 D3: 좁은 화면에서 두 줄까지
               // 미정(TASK-005): 보조 줄은 caption
               style={[text('caption', 'muted'), styles.subText]}
             >{`${kind}이동 ${item.travel_min}분`}</Text>
@@ -259,89 +258,6 @@ function Row({
   );
 }
 
-/**
- * 동선 도식 (지도 SDK 없음). 숙소 + 코스 항목 좌표(A8)를 상자에 맞춰 그린다.
- * 좌표 없는 줄(장소 없는 고정 일정)은 그림에서 빼고 목록에는 둔다. 번호는 목록과 같은 seq.
- */
-function RouteDiagram({
-  width,
-  home,
-  stops,
-}: {
-  width: number;
-  home: { lat: number; lng: number };
-  stops: { seq: number; lat: number; lng: number }[];
-}) {
-  const height = layout.routeDiagram;
-  const points = projectRoute([home, ...stops], width, height, layout.routePad);
-  const homeLines = homeIconLines(points[0].x, points[0].y, layout.routeHomeIcon);
-  const line = points.map((p) => `${p.x},${p.y}`).join(' ');
-
-  return (
-    <View testID="route-diagram" style={[styles.diagram, { width, height }]}>
-      <Svg width={width} height={height}>
-        {stops.length > 0 ? (
-          <Polyline
-            testID="route-line"
-            points={line}
-            fill="none"
-            stroke={color.brand}
-            strokeWidth={layout.routeLine}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ) : null}
-        <Circle
-          testID="route-home"
-          cx={points[0].x}
-          cy={points[0].y}
-          r={layout.routeHome}
-          fill={color.surface}
-          stroke={color.ink}
-          strokeWidth={layout.routeHomeStroke}
-        />
-        {/* 집 아이콘: 변환 없이 좌표를 직접 계산한 Polyline 2개 (중첩 Svg는 안 그려졌다) */}
-        {homeLines.map((points, i) => (
-          <Polyline
-            key={`home-${i}`}
-            testID={`route-home-icon-${i}`}
-            points={points}
-            fill="none"
-            stroke={color.ink}
-            strokeWidth={control['icon-stroke']}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
-        {stops.map((stop, i) => (
-          <Circle
-            key={`n-${stop.seq}`}
-            testID={`route-stop-${stop.seq}`}
-            cx={points[i + 1].x}
-            cy={points[i + 1].y}
-            r={layout.routeNode}
-            fill={color.ink}
-          />
-        ))}
-        {stops.map((stop, i) => (
-          <SvgText
-            key={`t-${stop.seq}`}
-            x={points[i + 1].x}
-            y={points[i + 1].y + layout.dot - 1}
-            fill={color.surface}
-            textAnchor="middle"
-            fontFamily={text('num-md').fontFamily}
-            fontSize={text('num-md').fontSize}
-          >
-            {/* 미정(§13): 번호는 좌표 없는 줄을 빼도 seq 그대로 (목록 번호와 같게) */}
-            {String(stop.seq)}
-          </SvgText>
-        ))}
-      </Svg>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   grow: { flex: 1 },
   toggle: {
@@ -352,17 +268,12 @@ const styles = StyleSheet.create({
   },
   toggleButton: {
     flex: 1,
-    height: control['touch-min'],
+    minHeight: control['touch-min'],
     borderRadius: radius['r-full'],
     alignItems: 'center',
     justifyContent: 'center',
   },
   toggleOn: { backgroundColor: color.surface, ...shadow.raise }, // 판 위에 살짝 뜬 칸 (sh-raise)
-  diagram: {
-    borderRadius: radius['r-lg'],
-    backgroundColor: color['bg-2'],
-    overflow: 'hidden',
-  },
   list: {},
   row: {
     minHeight: layout.courseRow,
@@ -371,7 +282,7 @@ const styles = StyleSheet.create({
   },
   rowOpen: { backgroundColor: color['bg-2'] },
   rowMain: {
-    height: layout.courseRow,
+    minHeight: layout.courseRow,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space['space-2'],

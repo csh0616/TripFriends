@@ -107,6 +107,7 @@ class LatLng(BaseModel):
 class DayMustVisit(BaseModel):
     place_id: PlaceId
     name: str
+    stay_min: int  # TASK-006 Q19·R5: 바꾼 머문 시간 > typical > 60
 
 
 class DayFixed(BaseModel):
@@ -232,9 +233,21 @@ class PlanningDone(BaseModel):
     stage: Literal["done"]
 
 
+class SeedRequest(_Request):
+    """TASK-006 A5·Q14: JSON 본문. 본문이 없으면 예전 시드 그대로."""
+
+    chosen: bool = False
+
+
 class SeedResult(BaseModel):
     trip_id: str
     day_ids: list[str]
+
+
+class SeedChosenResult(SeedResult):
+    """`{"chosen": true}` 응답 (TASK-006 A5·Q1). 일반 시드 응답에는 day 키가 없다 (null도 아님)."""
+
+    day: "DaySummary"
 
 
 class ErrorBody(BaseModel):

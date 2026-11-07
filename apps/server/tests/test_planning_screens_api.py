@@ -153,12 +153,19 @@ def assert_day_shape(day: dict) -> None:
     assert set(day["lodging"]) == {"lat", "lng"}
     assert type(day["lodging"]["lat"]) is float and type(day["lodging"]["lng"]) is float
     for must in day["must_visits"]:
-        assert set(must) == {"place_id", "name"}
+        assert set(must) == {"place_id", "name", "stay_min"}  # TASK-006 §11 Q19
     for fixed in day["fixed"]:
         assert set(fixed) == {"place_id", "name", "start", "end"}
 
 
 SHAPES = {"asking": assert_new_session_shape, "browsing": assert_new_batch_shape, "composing": assert_new_course_shape}
+
+
+def must_stay(place, overrides: dict[str, int] | None = None) -> int:
+    """TASK-006 §11 Q19: 바꾼 머문 시간 > typical > 60."""
+    if overrides and place.id in overrides:
+        return overrides[place.id]
+    return place.stay.typical if place.stay else 60
 
 
 def expected_day(env, day_id: str) -> dict:
@@ -172,7 +179,10 @@ def expected_day(env, day_id: str) -> dict:
         "start": plan.start,
         "end": plan.end,
         "lodging": {"lat": plan.lodging[0], "lng": plan.lodging[1]},
-        "must_visits": [{"place_id": pid, "name": record.places[pid].name} for pid in plan.must_visit],
+        "must_visits": [
+            {"place_id": pid, "name": record.places[pid].name, "stay_min": must_stay(record.places[pid], plan.stay_overrides)}
+            for pid in plan.must_visit
+        ],
         "fixed": [
             {
                 "place_id": f.place_id,
@@ -701,12 +711,17 @@ def test_S41_A2_AC3_성공_응답_15종_모두_day가_저장소_값과_같다_�
     day_id = env.seed()["day_ids"][1]
     results = success_responses(env, day_id)
     expected = expected_day(env, day_id)
-    assert expected["must_visits"] == [{"place_id": "D01", "name": env.repo.get_day(day_id).places["D01"].name}]
+    d01 = env.repo.get_day(day_id).places["D01"]
+    assert expected["must_visits"] == [{"place_id": "D01", "name": d01.name, "stay_min": must_stay(d01)}]
     assert expected["date"] == "2026-12-02"
     assert (expected["start"], expected["end"], expected["day_number"]) == ("10:00", "20:00", 2)
     assert len(results) == 15
+    # TASK-006 §12 R5: 세션에서 ±15로 바꾼 머문 시간도 stay_min에 든다. 조정 뒤 응답 3개만 그 값을 쓴다
+    overrides = env.repo.stay_overrides(results[0][1]["session_id"])
+    assert "D01" in overrides
+    after_adjust = {**expected, "must_visits": [{**expected["must_visits"][0], "stay_min": overrides["D01"]}]}
     for name, body in results:
-        assert body["day"] == expected, name
+        assert body["day"] == (after_adjust if name in {"조정", "더_고를래", "다시_코스"} else expected), name
 
 
 def test_S42_A2_자동_시작_응답에도_day(env):
@@ -746,7 +761,10 @@ def test_S45_A2_꼭_갈_곳_고정_일정이_없으면_빈_목록(env, arrive):
 def test_S46_A2_꼭_갈_곳이_있으면_순서대로_이름까지(env, arrive):
     places = city(30)
     sid, response = arrive(env, places, day_plan(must=("P21", "P20")))
-    expected = [{"place_id": "P21", "name": "가상 P21"}, {"place_id": "P20", "name": "가상 P20"}]
+    expected = [
+        {"place_id": "P21", "name": "가상 P21", "stay_min": must_stay(places["P21"])},
+        {"place_id": "P20", "name": "가상 P20", "stay_min": must_stay(places["P20"])},
+    ]
     for body in (response, get_ok(env, sid)):
         assert body["day"]["must_visits"] == expected
         assert body["day"]["fixed"] == []
@@ -978,7 +996,7 @@ def test_S67_A5_세_모델의_day가_요약_8개_필드(name):
     assert set(day["properties"]) == DAY_KEYS
     assert set(resolve(spec, day["properties"]["lodging"])["properties"]) == {"lat", "lng"}
     must = resolve(spec, day["properties"]["must_visits"]["items"])
-    assert set(must["properties"]) == {"place_id", "name"}
+    assert set(must["properties"]) == {"place_id", "name", "stay_min"}
     fixed = resolve(spec, day["properties"]["fixed"]["items"])
     assert set(fixed["properties"]) == {"place_id", "name", "start", "end"}
 

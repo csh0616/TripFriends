@@ -157,6 +157,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/days/{day_id}/now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 저장하지 않음) */
+        get: operations["get_now_days__day_id__now_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -220,6 +237,7 @@ export interface paths {
         /**
          * Debug Seed Demo
          * @description 개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.
+         *     `{"chosen": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다.
          */
         post: operations["debug_seed_demo_debug_seed_demo_post"];
         delete?: never;
@@ -396,6 +414,8 @@ export interface components {
             place_id: string;
             /** Name */
             name: string;
+            /** Stay Min */
+            stay_min: number;
         };
         /**
          * DaySummary
@@ -519,6 +539,172 @@ export interface components {
             direction_id?: ("quieter" | "closer" | "cheaper" | "different" | "photo" | "indoor" | "food" | "night") | null;
             /** Text */
             text?: string | null;
+        };
+        /** NowCardT01 */
+        NowCardT01: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "T-01";
+            item: components["schemas"]["NowCourseItem"];
+            /** Ends In Min */
+            ends_in_min: number | null;
+        };
+        /** NowCardT02 */
+        NowCardT02: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "T-02";
+            next_item: components["schemas"]["NowCourseItem"];
+            /** Leave At */
+            leave_at: string;
+            /** Leave In Min */
+            leave_in_min: number;
+            /** Travel Min */
+            travel_min: number;
+            /** Map Url */
+            map_url: string | null;
+        };
+        /** NowCardT03 */
+        NowCardT03: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "T-03";
+            /** Items */
+            items: components["schemas"]["NowCourseItem"][];
+        };
+        /** NowCardT07 */
+        NowCardT07: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "T-07";
+            fixed: components["schemas"]["NowFixed"];
+            /** Leave By */
+            leave_by: string;
+            /** Leave In Min */
+            leave_in_min: number;
+        };
+        /** NowCardT08 */
+        NowCardT08: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "T-08";
+            /** Go Home Min */
+            go_home_min: number;
+            lodging: components["schemas"]["LatLng"];
+            /** Map Url */
+            map_url: string;
+        };
+        /**
+         * NowCourseItem
+         * @description 여행 중 화면의 일정 한 개. 기존 CourseItemView(계획 화면)와 별개 (Q8).
+         */
+        NowCourseItem: {
+            /** Seq */
+            seq: number;
+            /** Place Id */
+            place_id: string | null;
+            /** Name */
+            name: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Is Fixed */
+            is_fixed: boolean;
+            /** Facts */
+            facts: components["schemas"]["Fact"][];
+        };
+        /**
+         * NowFixed
+         * @description T-07의 고정 일정. name = 장소 이름(없으면 title), title = 저장된 제목 (R4).
+         */
+        NowFixed: {
+            /** Name */
+            name: string;
+            /** Title */
+            title: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /** Facts */
+            facts: components["schemas"]["Fact"][];
+        };
+        /** NowPin */
+        NowPin: {
+            /** Seq */
+            seq: number;
+            /** Place Id */
+            place_id: string;
+            /** Name */
+            name: string;
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /** Travel Min */
+            travel_min: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "done" | "now" | "next" | "later";
+        };
+        /** NowRoute */
+        NowRoute: {
+            /** Done */
+            done: [
+                number,
+                number
+            ][];
+            /** Remaining */
+            remaining: [
+                number,
+                number
+            ][];
+        };
+        /** NowView */
+        NowView: {
+            day: components["schemas"]["DaySummary"];
+            /** At */
+            at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "on_track" | "delayed" | "free";
+            /** Status Text */
+            status_text: string;
+            /** Reason */
+            reason: string;
+            /** Main */
+            main: components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"];
+            /** Subs */
+            subs: (components["schemas"]["NowCardT01"] | components["schemas"]["NowCardT02"] | components["schemas"]["NowCardT03"] | components["schemas"]["NowCardT07"] | components["schemas"]["NowCardT08"])[];
+            /** Chip */
+            chip?: null;
+            /** Pins */
+            pins: components["schemas"]["NowPin"][];
+            route: components["schemas"]["NowRoute"];
+            position: components["schemas"]["LatLng"] | null;
         };
         /**
          * OpenEvent
@@ -668,6 +854,28 @@ export interface components {
             move_status: "on_track" | "delayed" | "free";
             /** Reason */
             reason: string;
+        };
+        /**
+         * SeedChosenResult
+         * @description `{"chosen": true}` 응답 (TASK-006 A5·Q1). 일반 시드 응답에는 day 키가 없다 (null도 아님).
+         */
+        SeedChosenResult: {
+            /** Trip Id */
+            trip_id: string;
+            /** Day Ids */
+            day_ids: string[];
+            day: components["schemas"]["DaySummary"];
+        };
+        /**
+         * SeedRequest
+         * @description TASK-006 A5·Q14: JSON 본문. 본문이 없으면 예전 시드 그대로.
+         */
+        SeedRequest: {
+            /**
+             * Chosen
+             * @default false
+             */
+            chosen: boolean;
         };
         /** SeedResult */
         SeedResult: {
@@ -1226,6 +1434,50 @@ export interface operations {
             };
         };
     };
+    get_now_days__day_id__now_get: {
+        parameters: {
+            query?: {
+                at?: string | null;
+                lat?: number | null;
+                lng?: number | null;
+            };
+            header?: never;
+            path: {
+                day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NowView"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -1306,7 +1558,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SeedRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             201: {
@@ -1314,7 +1570,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SeedResult"];
+                    "application/json": components["schemas"]["SeedResult"] | components["schemas"]["SeedChosenResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

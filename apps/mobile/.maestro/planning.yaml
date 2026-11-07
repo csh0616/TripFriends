@@ -1,0 +1,64 @@
+# TASK-006 C2: 계획 흐름 S0 -> P1 -> P2 -> P3 -> S9, 화면마다 스크린샷.
+# 전제: 서버 실행 중 + 개발 빌드가 시뮬레이터에 설치됨 + Metro 실행 중. 개발 서버 주소는 흐름에 박지 않고 -e로 받는다
+# (흐름 안의 env: 블록은 -e보다 우선해서 쓰지 않는다. Maestro 2.12.1에서 확인).
+# 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로):
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/planning -e METRO_URL=http://127.0.0.1:8083 .maestro/planning.yaml
+# 스크린샷은 --test-output-dir 아래 takeScreenshot/ 에 쌓이고 저장소에는 올리지 않는다 (.gitignore의 .maestro/screenshots/).
+# 알려진 문제: 앱에 탭이 닿지 않는 현상이 S0 첫 탭, P3 [이걸로 할래], 데모 막대에서 재현됐다.
+# 원인 미확인(앱 문제인지 Maestro·XCTest 문제인지 모른다). 우회와 retry로 통과시킨다. 그래서 아래 retry는 결과를 확인하는 묶음으로 적어 두 번 눌러도 부작용이 없다.
+appId: com.csh0616.tripfriends
+---
+- launchApp:
+    clearState: true
+# 개발 빌드는 처음에 개발 서버 주소를 물어본다: 링크로 바로 연결한다 (disableOnboarding=1: 처음 안내 시트 없음)
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "데모 여행 시작"
+    timeout: 60000
+# 원인 미확인 우회: 앱이 뜬 뒤 첫 탭이 앱까지 가지 않는다(오래 기다려도 같음). 화면이 가만해진 뒤 아무 일 없는 글자를 한 번 눌러 첫 탭을 먼저 쓴다
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "AI 여행친구"
+- takeScreenshot: planning-1-S0
+
+- tapOn: "데모 여행 시작"
+- extendedWaitUntil:
+    visible:
+      id: "choice-walk_alley"
+    timeout: 30000
+- takeScreenshot: planning-2-P1
+
+- tapOn: "아무거나 찾아 줘"
+- extendedWaitUntil:
+    visible:
+      id: "compose-button"
+    timeout: 60000
+- takeScreenshot: planning-3-P2
+
+- tapOn:
+    id: "compose-button"
+- extendedWaitUntil:
+    visible: "코스 짜 봤어"
+    timeout: 60000
+- takeScreenshot: planning-4-P3
+
+# 탭이 가끔 안 닿아서, S9가 아직 아니면 누르고 결과(S9 "코스 저장했어")를 확인하는 묶음으로 다시 한다
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            notVisible: "코스 저장했어"
+          commands:
+            - tapOn: "이걸로 할래"
+      - extendedWaitUntil:
+          visible: "코스 저장했어"
+          timeout: 15000
+- takeScreenshot: planning-5-S9

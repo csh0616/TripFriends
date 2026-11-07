@@ -157,6 +157,7 @@ def _row_answer(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plann
     response = presenter.batch_response(
         new, run.repo.reactions(state.session_id), batch.direction_relaxed, day,
         first=True, clarify=False, exhausted=batch.exhausted,
+        overrides=run.repo.stay_overrides(state.session_id),
     )
     if text is not None:  # 저장
         _log_parse(run, text, direction)
@@ -186,6 +187,7 @@ def _row_next(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plannin
             response = presenter.batch_response(
                 new, run.repo.reactions(state.session_id), run.repo.batch_relaxed(state.session_id), day,
                 first=False, clarify=True, exhausted=False,
+                overrides=run.repo.stay_overrides(state.session_id),
             )
             _log_parse(run, text, direction)  # 저장
             return _finish(run, response, new)
@@ -195,7 +197,8 @@ def _row_next(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plannin
     batch = next_batch(candidates(day), reactions, direction, state.shown, day.plan.lodging, day_start(day))
     new = _batch_state(state, batch, direction)
     response = presenter.batch_response(
-        new, reactions, batch.direction_relaxed, day, first=False, clarify=False, exhausted=batch.exhausted
+        new, reactions, batch.direction_relaxed, day, first=False, clarify=False, exhausted=batch.exhausted,
+        overrides=run.repo.stay_overrides(state.session_id),
     )
     if text is not None:  # 저장
         _log_parse(run, text, direction)
@@ -216,7 +219,7 @@ def _row_compose(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Pla
         return None
     records = new_option_records(state.session_id, picks, result)
     new = _course_state(state, records)
-    response = presenter.course_response(new, records, day)
+    response = presenter.course_response(new, records, day, run.repo.stay_overrides(state.session_id))
     # 저장. TASK-003 §10-11 R12: 저장 도중의 예외(부분 저장)는 R1 메모리 저장소의 알려진 한계 (Supabase TASK에서 트랜잭션으로)
     run.repo.skip_unreacted(state.session_id, state.batch)
     run.repo.save_options(records)
@@ -239,7 +242,7 @@ def _row_adjust(run: _Run, state: PlanningState, event: dict[str, Any]) -> Plann
         return None
     records = new_option_records(state.session_id, option.picks, result)
     new = _course_state(state, records)
-    response = presenter.course_response(new, records, day)
+    response = presenter.course_response(new, records, day, {**overrides, place_id: minutes})  # R5: 저장 전이라 새 값을 직접 넘긴다
     # 저장. 부분 저장은 R1 메모리 저장소의 알려진 한계 (§10-11 R12)
     run.repo.set_stay_override(state.session_id, place_id, minutes)
     run.repo.save_options(records)
@@ -253,7 +256,8 @@ def _row_back(run: _Run, state: PlanningState, _event: dict[str, Any]) -> Planni
     batch = next_batch(candidates(day), reactions, None, state.shown, day.plan.lodging, day_start(day))
     new = _batch_state(state, batch, None)
     response = presenter.batch_response(
-        new, reactions, batch.direction_relaxed, day, first=False, clarify=False, exhausted=batch.exhausted
+        new, reactions, batch.direction_relaxed, day, first=False, clarify=False, exhausted=batch.exhausted,
+        overrides=run.repo.stay_overrides(state.session_id),
     )
     run.repo.save_batch_relaxed(state.session_id, batch.direction_relaxed)  # 저장
     run.repo.save_batch_first(state.session_id, False)

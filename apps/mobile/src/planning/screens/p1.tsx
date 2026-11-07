@@ -1,7 +1,8 @@
 // P1 첫 질문 (TASK-004 §B-4, §12 Q4·Q6·Q9·Q32). PlanningSession을 그린다.
 import { useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, View } from 'react-native';
 
+import { Text } from '@/components/app-text';
 import { FriendBubble } from '@/components/planning/friend-bubble';
 import { CheckIcon } from '@/components/planning/icons';
 import { Notice } from '@/components/planning/notice';
