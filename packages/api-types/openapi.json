@@ -603,6 +603,107 @@
         }
       }
     },
+    "/days/{day_id}/now": {
+      "get": {
+        "summary": "여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 저장하지 않음)",
+        "operationId": "get_now_days__day_id__now_get",
+        "parameters": [
+          {
+            "name": "day_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Day Id"
+            }
+          },
+          {
+            "name": "at",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "At"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 90,
+                  "minimum": -90
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lat"
+            }
+          },
+          {
+            "name": "lng",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 180,
+                  "minimum": -180
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lng"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NowView"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -684,8 +785,25 @@
     "/debug/seed-demo": {
       "post": {
         "summary": "Debug Seed Demo",
-        "description": "개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.",
+        "description": "개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.\n`{\"chosen\": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다.",
         "operationId": "debug_seed_demo_debug_seed_demo_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SeedRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "Successful Response",
@@ -693,6 +811,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SeedResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1190,12 +1318,17 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "stay_min": {
+            "type": "integer",
+            "title": "Stay Min"
           }
         },
         "type": "object",
         "required": [
           "place_id",
-          "name"
+          "name",
+          "stay_min"
         ],
         "title": "DayMustVisit"
       },
@@ -1512,6 +1645,501 @@
         "type": "object",
         "title": "NextRequest"
       },
+      "NowCardT01": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "T-01",
+            "title": "Type",
+            "default": "T-01"
+          },
+          "item": {
+            "$ref": "#/components/schemas/NowCourseItem"
+          },
+          "ends_in_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends In Min"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item",
+          "ends_in_min"
+        ],
+        "title": "NowCardT01"
+      },
+      "NowCardT02": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "T-02",
+            "title": "Type",
+            "default": "T-02"
+          },
+          "next_item": {
+            "$ref": "#/components/schemas/NowCourseItem"
+          },
+          "leave_at": {
+            "type": "string",
+            "title": "Leave At"
+          },
+          "leave_in_min": {
+            "type": "integer",
+            "title": "Leave In Min"
+          },
+          "travel_min": {
+            "type": "integer",
+            "title": "Travel Min"
+          },
+          "map_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Map Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "next_item",
+          "leave_at",
+          "leave_in_min",
+          "travel_min",
+          "map_url"
+        ],
+        "title": "NowCardT02"
+      },
+      "NowCardT03": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "T-03",
+            "title": "Type",
+            "default": "T-03"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NowCourseItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "NowCardT03"
+      },
+      "NowCardT07": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "T-07",
+            "title": "Type",
+            "default": "T-07"
+          },
+          "fixed": {
+            "$ref": "#/components/schemas/NowFixed"
+          },
+          "leave_by": {
+            "type": "string",
+            "title": "Leave By"
+          },
+          "leave_in_min": {
+            "type": "integer",
+            "title": "Leave In Min"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fixed",
+          "leave_by",
+          "leave_in_min"
+        ],
+        "title": "NowCardT07"
+      },
+      "NowCardT08": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "T-08",
+            "title": "Type",
+            "default": "T-08"
+          },
+          "go_home_min": {
+            "type": "integer",
+            "title": "Go Home Min"
+          },
+          "lodging": {
+            "$ref": "#/components/schemas/LatLng"
+          }
+        },
+        "type": "object",
+        "required": [
+          "go_home_min",
+          "lodging"
+        ],
+        "title": "NowCardT08"
+      },
+      "NowCourseItem": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          },
+          "is_fixed": {
+            "type": "boolean",
+            "title": "Is Fixed"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            },
+            "type": "array",
+            "title": "Facts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "place_id",
+          "name",
+          "start",
+          "end",
+          "lat",
+          "lng",
+          "is_fixed",
+          "facts"
+        ],
+        "title": "NowCourseItem",
+        "description": "여행 중 화면의 일정 한 개. 기존 CourseItemView(계획 화면)와 별개 (Q8)."
+      },
+      "NowFixed": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            },
+            "type": "array",
+            "title": "Facts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "start",
+          "end",
+          "facts"
+        ],
+        "title": "NowFixed",
+        "description": "T-07의 고정 일정. name = 장소 이름(없으면 title), title = 저장된 제목 (R4)."
+      },
+      "NowPin": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "title": "Lng"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "travel_min": {
+            "type": "integer",
+            "title": "Travel Min"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "done",
+              "now",
+              "next",
+              "later"
+            ],
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "place_id",
+          "name",
+          "lat",
+          "lng",
+          "start",
+          "end",
+          "travel_min",
+          "state"
+        ],
+        "title": "NowPin"
+      },
+      "NowRoute": {
+        "properties": {
+          "done": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Done"
+          },
+          "remaining": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Remaining"
+          }
+        },
+        "type": "object",
+        "required": [
+          "done",
+          "remaining"
+        ],
+        "title": "NowRoute"
+      },
+      "NowView": {
+        "properties": {
+          "day": {
+            "$ref": "#/components/schemas/DaySummary"
+          },
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "on_track",
+              "delayed",
+              "free"
+            ],
+            "title": "Status"
+          },
+          "status_text": {
+            "type": "string",
+            "title": "Status Text"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "main": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NowCardT01"
+              },
+              {
+                "$ref": "#/components/schemas/NowCardT02"
+              },
+              {
+                "$ref": "#/components/schemas/NowCardT03"
+              },
+              {
+                "$ref": "#/components/schemas/NowCardT07"
+              },
+              {
+                "$ref": "#/components/schemas/NowCardT08"
+              }
+            ],
+            "title": "Main",
+            "discriminator": {
+              "propertyName": "type",
+              "mapping": {
+                "T-01": "#/components/schemas/NowCardT01",
+                "T-02": "#/components/schemas/NowCardT02",
+                "T-03": "#/components/schemas/NowCardT03",
+                "T-07": "#/components/schemas/NowCardT07",
+                "T-08": "#/components/schemas/NowCardT08"
+              }
+            }
+          },
+          "subs": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/NowCardT01"
+                },
+                {
+                  "$ref": "#/components/schemas/NowCardT02"
+                },
+                {
+                  "$ref": "#/components/schemas/NowCardT03"
+                },
+                {
+                  "$ref": "#/components/schemas/NowCardT07"
+                },
+                {
+                  "$ref": "#/components/schemas/NowCardT08"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "type",
+                "mapping": {
+                  "T-01": "#/components/schemas/NowCardT01",
+                  "T-02": "#/components/schemas/NowCardT02",
+                  "T-03": "#/components/schemas/NowCardT03",
+                  "T-07": "#/components/schemas/NowCardT07",
+                  "T-08": "#/components/schemas/NowCardT08"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Subs"
+          },
+          "chip": {
+            "type": "null",
+            "title": "Chip"
+          },
+          "pins": {
+            "items": {
+              "$ref": "#/components/schemas/NowPin"
+            },
+            "type": "array",
+            "title": "Pins"
+          },
+          "route": {
+            "$ref": "#/components/schemas/NowRoute"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatLng"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "at",
+          "status",
+          "status_text",
+          "reason",
+          "main",
+          "subs",
+          "pins",
+          "route",
+          "position"
+        ],
+        "title": "NowView"
+      },
       "OpenEvent": {
         "properties": {
           "kind": {
@@ -1824,6 +2452,19 @@
         ],
         "title": "Screen",
         "description": "compose_screen 출력."
+      },
+      "SeedRequest": {
+        "properties": {
+          "chosen": {
+            "type": "boolean",
+            "title": "Chosen",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SeedRequest",
+        "description": "TASK-006 A5·Q14: JSON 본문. 본문이 없으면 예전 시드 그대로."
       },
       "SeedResult": {
         "properties": {
