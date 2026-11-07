@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from engine.models import CourseOption, Infeasible
 from engine.planning import compose_courses
 from planning.repo import DayRecord, OptionRecord, PlanningRepo
-from trip.alternatives import alternative_input, reason_text, shape
+from trip.alternatives import alternative_input, go_home_only, reason_text, shape
 from trip.detect import DelayFinding, is_stale
 from trip.now import event_view
 from trip.repo import EventRecord, ProposalRecord, TripRepo
@@ -107,9 +107,12 @@ def _make_proposals(run: _Run, event_id: str, finding: DelayFinding) -> list[Pro
     spec = alternative_input(req.day, req.course, finding.k, req.when)
     if isinstance(spec, Infeasible):
         return []
-    result = compose_courses(spec.plan, spec.picks, req.day.places)
+    result = compose_courses(spec.plan, spec.picks, req.day.places, start=spec.start)
     if isinstance(result, Infeasible):
-        return []
+        empty = go_home_only(spec, result)
+        if empty is None:
+            return []
+        result = [empty]
     records = []
     for option in result:
         shaped = shape(req.day, req.course, option, spec, req.when)

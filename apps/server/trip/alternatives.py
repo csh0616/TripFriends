@@ -6,8 +6,8 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from engine.models import CourseOption, DayPlan, Infeasible, PlanFixed, PlaceId
-from engine.planning import _distance_km, _travel_min  # 코스 계산과 같은 이동 분 식
+from engine.models import CourseOption, DayPlan, Dropped, Infeasible, PlanFixed, PlaceId
+from engine.planning import distance_km, travel_min  # 코스 계산과 같은 이동 분 식
 from planning.repo import DayRecord
 from trip.detect import DelayCourse, DelayStop
 
@@ -32,7 +32,8 @@ def delay_course(day_id: str, day: DayRecord, course: CourseOption) -> DelayCour
 
 @dataclass(frozen=True)
 class AlternativeInput:
-    plan: DayPlan  # 남은 일정만의 하루 (시작 = 지금, 출발 장소 = k번 장소)
+    plan: DayPlan  # 남은 일정만의 하루 (시작 = 지금, 숙소 = 진짜 숙소)
+    start: tuple[float, float]  # 출발 장소 = k번 장소 좌표
     picks: list[PlaceId]
     index: int  # 코스 안에서 k번 항목의 자리
     fixed_title: str | None  # 다음 고정 일정 제목
@@ -71,12 +72,28 @@ def alternative_input(day: DayRecord, course: CourseOption, k: int, at: datetime
         date=plan.date,
         start=_hhmm(now_min),
         end=plan.end,
-        lodging=(here.lat, here.lng),
+        lodging=plan.lodging,  # 하루 끝 복귀는 진짜 숙소. 출발 장소(k번)는 compose_courses의 start로
         fixed=fixed,
         must_visit=[pid for pid in plan.must_visit if pid in rest_places],
         stay_overrides=stays,
     )
-    return AlternativeInput(new_plan, picks, index, fixed[0].title if fixed else None, [(f.place_id, f.start, f.end) for f in fixed])
+    return AlternativeInput(new_plan, (here.lat, here.lng), picks, index, fixed[0].title if fixed else None, [(f.place_id, f.start, f.end) for f in fixed])
+
+
+def go_home_only(spec: AlternativeInput, result: Infeasible) -> CourseOption | None:
+    """넣을 장소 0곳 (§12 정한 것): 고정 일정·꼭 갈 곳이 없는데 k번에서 진짜 숙소까지도 하루 끝을 넘으면
+    엔진은 fixed_unreachable(blocking 없음)을 준다. 이때는 남은 장소를 모두 빼고 숙소로 가는 빈 코스 하나로 답한다.
+    그 밖의 Infeasible은 None (제안 없음)."""
+    if result.reason != "fixed_unreachable" or result.blocking or spec.plan.fixed or spec.plan.must_visit:
+        return None
+    home = travel_min(distance_km(spec.start, spec.plan.lodging))
+    return CourseOption(
+        label="relaxed",
+        items=[],
+        dropped=[Dropped(place_id=pid, reason="no_time") for pid in spec.picks],
+        go_home_min=home,
+        total_travel_min=home,
+    )
 
 
 @dataclass(frozen=True)
@@ -94,7 +111,7 @@ def shape(day: DayRecord, course: CourseOption, option: CourseOption, spec: Alte
     items = [item.model_copy(update={"seq": len(prefix) + number}) for number, item in enumerate(option.items, start=1)]
     last = next((i for i in reversed([*prefix, *items]) if i.place_id), None)
     spot = day.places[last.place_id] if last and last.place_id else None
-    go_home = _travel_min(_distance_km((spot.lat, spot.lng), day.plan.lodging)) if spot else course.go_home_min
+    go_home = travel_min(distance_km((spot.lat, spot.lng), day.plan.lodging)) if spot else course.go_home_min
     dropped_ids = [d.place_id for d in option.dropped]
     known = {d.place_id for d in course.dropped}
     full = CourseOption(

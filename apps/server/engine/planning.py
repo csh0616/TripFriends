@@ -92,7 +92,7 @@ def _id_key(pid: PlaceId) -> tuple[int, str]:
     return (int(digits.group()) if digits else -1, pid)
 
 
-def _distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
+def distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     lat1, lng1, lat2, lng2 = map(math.radians, (a[0], a[1], b[0], b[1]))
     h = math.sin((lat2 - lat1) / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2
     return 2 * _limits().earth_km * math.asin(math.sqrt(h))
@@ -117,11 +117,15 @@ def _check_ids(plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place]
             raise ValueError(f"없는 장소 id: {pid}")
 
 
-def _travel_min(km: float) -> int:
+def travel_min(km: float) -> int:
     lim = _limits()
     if km <= lim.walk_max_km:
         return math.ceil(km / lim.walk_kmh * 60)
     return lim.transit_base_min + math.ceil(km / lim.transit_kmh * 60)
+
+
+_distance_km = distance_km  # 밑줄 이름은 엔진 안·기존 호출용 (동작 같음)
+_travel_min = travel_min
 
 
 # ---------- B. 후보 점수 ----------
@@ -198,7 +202,7 @@ def _matches(
     if direction == "quieter":
         return p.crowd_level <= lim.quiet_crowd
     if direction == "closer":
-        return _distance_km(anchor, (p.lat, p.lng)) <= lim.near_km
+        return distance_km(anchor, (p.lat, p.lng)) <= lim.near_km
     if direction == "cheaper":
         return p.price_level <= lim.cheap_price
     if direction == "different":
@@ -347,7 +351,7 @@ def pick_directions(
     rule1: list[Direction] = []
     if sum(p.crowd_level for p in batch) / count >= lim.crowd_avg:
         rule1.append("quieter")
-    if sum(_distance_km(anchor, (p.lat, p.lng)) for p in batch) / count > lim.far_avg_km:
+    if sum(distance_km(anchor, (p.lat, p.lng)) for p in batch) / count > lim.far_avg_km:
         rule1.append("closer")
     if sum(p.price_level for p in batch) / count >= lim.price_avg:
         rule1.append("cheaper")
@@ -415,13 +419,14 @@ class _Fixed(NamedTuple):
 class _Day:
     """하루 틀. 입력 검사(ValueError)와 영업 구간."""
 
-    def __init__(self, plan: DayPlan, places: dict[PlaceId, Place]):
+    def __init__(self, plan: DayPlan, places: dict[PlaceId, Place], start: tuple[float, float] | None = None):
         lim = _limits()
         self.places = places
         self.start = _to_min(plan.start)
         self.end = _to_min(plan.end)
         self.weekday = plan.date.weekday()
-        self.lodging = plan.lodging
+        self.lodging = plan.lodging  # 하루 끝 복귀 (진짜 숙소)
+        self.origin = start if start is not None else plan.lodging  # TASK-007 §12: 첫 이동의 출발점
         # TASK-002 §9 Q45 ③: 시작 >= 끝이거나 29:59를 넘는 시각은 ValueError
         # TASK-002 §10-5 Q53: DayPlan의 start·end에서 분이 60 이상인 시각("10:75")은 ValueError
         # TASK-003 §0·§10 Q29: 고정 일정(PlanFixed)·영업시간(Opening)의 형식과 분 60 이상은 모델이 거부한다 (engine/models.py).
@@ -504,7 +509,7 @@ class _Model:
         places = day.places
         coords: list[tuple[float, float] | None] = [(places[pid].lat, places[pid].lng) for pid in ids]
         # TASK-002 §7 Q14: 하루는 숙소에서 출발. 장소 없는 고정 일정은 좌표가 없어 직전 위치 그대로 (이동 0분, 아래 tf)
-        coords.append(day.lodging)
+        coords.append(day.origin)
         coords.extend(ev.coord for ev in fixed)
         P = self.P
         self.dist = [[0.0] * n for _ in range(P)]
@@ -516,13 +521,13 @@ class _Model:
             if here is None:
                 continue
             for i in range(n):
-                km = _distance_km(here, coords[i])
+                km = distance_km(here, coords[i])
                 self.dist[p][i] = km
-                self.tv[p][i] = _travel_min(km)
+                self.tv[p][i] = travel_min(km)
             for f in range(self.F):
                 there = coords[n + 1 + f]
-                self.tf[p][f] = _travel_min(_distance_km(here, there)) if there else 0
-            self.home[p] = _travel_min(_distance_km(here, day.lodging))
+                self.tf[p][f] = travel_min(distance_km(here, there)) if there else 0
+            self.home[p] = travel_min(distance_km(here, day.lodging))
         self.fixed_pos = [n + 1 + f if fixed[f].coord else None for f in range(self.F)]
         # 후보 i를 f번째 고정 일정 앞에 넣을 때 끝나야 하는 시각 (f == F면 숙소 복귀 기준)
         self.deadline = [
@@ -750,14 +755,14 @@ def _mask(ids: list[PlaceId], chosen: set[PlaceId]) -> int:
 
 def _chain_check(day: _Day) -> Infeasible | None:
     """TASK-002 §8 Q30·§9 Q45: 고정 일정만으로 하루가 이어지는가."""
-    t, pos = day.start, day.lodging
+    t, pos = day.start, day.origin
     for ev in day.fixed:
         target = ev.coord or pos
-        if t + _travel_min(_distance_km(pos, target)) > ev.start:
+        if t + travel_min(distance_km(pos, target)) > ev.start:
             return Infeasible(reason="fixed_unreachable", blocking=[ev.id], suggest_drop=[])
         t, pos = ev.end, target
-    if t + _travel_min(_distance_km(pos, day.lodging)) > day.end:
-        return Infeasible(reason="fixed_unreachable", blocking=[day.fixed[-1].id], suggest_drop=[])
+    if t + travel_min(distance_km(pos, day.lodging)) > day.end:
+        return Infeasible(reason="fixed_unreachable", blocking=[day.fixed[-1].id] if day.fixed else [], suggest_drop=[])
     return None
 
 
@@ -822,10 +827,11 @@ def _build_option(
 
 
 def compose_courses(
-    plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place]
+    plan: DayPlan, picks: list[PlaceId], places: dict[PlaceId, Place], start: tuple[float, float] | None = None
 ) -> list[CourseOption] | Infeasible:
+    """start: 첫 이동·첫 고정 일정까지의 출발점 (기본 = plan.lodging). 하루 끝 복귀는 항상 plan.lodging (TASK-007 §12)."""
     lim = _limits()
-    day = _Day(plan, places)
+    day = _Day(plan, places, start)
     _check_ids(plan, picks, places)
     too_many = _too_many(plan, picks)  # TASK-005 §9 Q11: ValueError 다음, 나머지 실패보다 앞
     if too_many:
