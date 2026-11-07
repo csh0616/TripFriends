@@ -11,7 +11,7 @@ API 본문은 TASK-008 A5(`{day_id, at, was_open}`)가 정본 (§11 Q1, API-001 
         map_url = https://www.google.com/maps/search/?api=1&query={lat},{lng} (구글 지도 장소 검색, 좌표)
     T-06 카드 (B6): {type:"T-06", event_id, closed:{place_id,name}, proposals:[T06Proposal]}
     T06Proposal (§11 Q4 = TASK-007 제안 + closed):
-        TASK-007 B-5 키 그대로 {proposal_id, label:"relaxed"|"packed", reason:str, dropped:[{place_id,name}],
+        TASK-007 B-5 키 그대로 {proposal_id, label:"relaxed"(§12 Q22), reason:str, dropped:[{place_id,name}],
                                 keeps_fixed:bool, first_leave_at:"HH:MM", items:[NowCourseItem]}
         + closed [정함 안쪽 키]: {alternative:{place_id,name}|null, distance_m:int|null, travel_change_min:int}
             alternative = 닫힌 곳 대신 갈 대안 (C3 이름), distance_m = 닫힌 곳에서 직선거리 m (C3 거리),
@@ -483,6 +483,22 @@ def test_T8_A5_Q9_미확인이어도_다음_일정이_아니면_409(env):
     assert without_logs(stores(env)) == before
 
 
+# §12 Q26: 다음 장소(P02, 미확인)라도 확인 시간(출발 12:00 − 30 ≤ at < 시작 12:20, A2) 밖이면 409, 저장소 그대로
+@pytest.mark.parametrize("clock", ["11:29", "12:20"], ids=["출발_31분_전", "도착_정각"])
+def test_T8_A5_Q26_확인_시간_밖의_visit_check는_409이고_그대로(env, clock):
+    day_id = visit_day(env)
+    before = without_logs(stores(env))
+    assert_error(visit_check(env, day_id, "P02", clock, False), 409, "STATE_CONFLICT")
+    assert without_logs(stores(env)) == before
+    assert trip_repo(env).get_visit_check(day_id, "P02") is None
+
+
+@pytest.mark.parametrize("clock", ["11:30", "12:19"], ids=["출발_30분_전_정각", "도착_1분_전"])
+def test_T8_A5_Q26_확인_시간_안의_visit_check는_200(env, clock):
+    day_id = visit_day(env)
+    assert visit_check(env, day_id, "P02", clock, True).status_code == 200
+
+
 def test_T8_A5_하루_밖_날짜는_400(env):
     day_id = visit_day(env)
     response = env.client.post("/places/P02/visit-checks", json={"day_id": day_id, "at": "2026-12-03T11:40:00", "was_open": True})
@@ -542,7 +558,7 @@ def test_T8_B6_Q4_T_06_카드와_제안_모양은_TASK007_제안_더하기_close
     for proposal in card["proposals"]:
         assert set(proposal) == T06_PROPOSAL_KEYS
         assert type(proposal["proposal_id"]) is str and proposal["proposal_id"]
-        assert proposal["label"] in {"relaxed", "packed"}
+        assert proposal["label"] == "relaxed"  # §12 Q22
         assert type(proposal["reason"]) is str and proposal["reason"]
         assert type(proposal["keeps_fixed"]) is bool
         assert is_hhmm(proposal["first_leave_at"])
@@ -650,6 +666,12 @@ def test_T8_B3_Q4_이동_변화_분은_남은_이동_합_숙소_복귀_포함_�
     before = remaining_travel(old, 1)  # 닫힌 곳(2번)으로 가는 이동부터: 20 + 30 + 숙소 25
     after = remaining_travel(new, 1)  # 지난 1번은 그대로 (B-3), 그 뒤 = 제안 일정
     assert proposal["closed"]["travel_change_min"] == after - before
+
+
+def test_T8_B3_Q24_대안을_고른_제안의_dropped에_닫힌_곳은_없다(env):
+    _, view = closed_view(env)
+    for proposal in replaces(view["main"]):
+        assert "P02" not in dropped_ids(proposal)
 
 
 def test_T8_B4_빼고_가기_칸의_값(env):
@@ -934,7 +956,7 @@ def test_T8_C4_Q18_데모_시나리오_장소가_있다(env):
 
 
 def test_T8_C4_Q18_demo_city_30곳으로_안_되면_시드_전용_장소_1곳만_더한다(env):
-    seeded, _, record, course = demo_day(env)
+    seeded, day_id, record, course = demo_day(env)
     original = demo_places()
     weekday = record.plan.date.weekday()
     base = {pid: record.places[pid] for pid in original}
@@ -944,6 +966,17 @@ def test_T8_C4_Q18_demo_city_30곳으로_안_되면_시드_전용_장소_1곳만
         assert len(extra) == 1  # demo_extra.json 1곳
     else:
         assert extra == set()  # 30곳으로 되면 더하지 않는다
+    if extra:
+        # §12 Q18 결과: 그 1곳은 시나리오 장소의 B2 대안(같은 종류, 1.5km 안, 예정 도착 = 닫힌 곳 예정 시작(Q29)에 영업)이고 출처 demo
+        (extra_id,) = extra
+        entry = scenario_entry(record.places, course, weekday)
+        assert entry is not None
+        assert extra_id in b2_alternatives(record.places, course, entry, weekday)
+        view = answered(env, day_id, entry.place_id, hhmm(leave_of(entry) - 30), False)
+        assert view["main"]["type"] == "T-06"
+        assert extra_id in alt_ids(view["main"])
+        rows = [r for p in replaces(view["main"]) for r in p["items"] if r["place_id"] == extra_id]
+        assert rows and all(f["source_type"] == "demo" for r in rows for f in r["facts"])
     for index in (0, 2):  # 다른 날에는 더하지 않는다
         assert set(env.repo.get_day(seeded["day_ids"][index]).places) == set(original)
 

@@ -355,6 +355,15 @@ describe('C3 T-06 카드', () => {
     expect(words('proposal-alt-1')).toContain(label);
   });
 
+  // §12 Q27: 부호를 붙여 그대로. 마이너스 글자는 문서 표기 "−"(U+2212)
+  test.each([
+    [0, '+0분'],
+    [-3, '−3분'],
+  ])('T8_C3_Q27_이동_변화_%s분은_%s', async (minutes, label) => {
+    await shows({ main: t06({ proposals: [replace({}, { travel_change_min: minutes }), skip()] }) });
+    expect(words('proposal-alt-1')).toContain(label);
+  });
+
   test('T8_C3_Q4_빼고_가기는_목록_자리가_아니라_alternative_null인_제안', async () => {
     const control = nowServer(closedView({ main: t06({ proposals: [skip({ proposal_id: 'x-9' }), replace()] }) }));
     control.server.on(ACCEPT_ROUTE('x-9'), json(200, nowView({ main: t01(), subs: [t03()] })));
