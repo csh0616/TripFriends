@@ -13,11 +13,12 @@ from pydantic import BaseModel
 
 from catalog import get_catalog
 from deciders import JevDecider, RuleDecider
+from api.now import router as now_router
 from api.planning import drop_default_422, http_error_response, is_planning_path, planning_error_handler, planning_validation_handler, router as planning_router
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
 from planning.repo import MemoryPlanningRepo
-from planning.schemas import ErrorResponse, SeedResult
+from planning.schemas import ErrorResponse, SeedRequest, SeedResult
 from planning.service import PlanningError, PlanningService
 
 log = logging.getLogger(__name__)
@@ -89,6 +90,7 @@ async def unexpected_error_handler(request: Request, exc: Exception):
 
 
 app.include_router(planning_router)
+app.include_router(now_router)
 
 _default_openapi = app.openapi
 
@@ -141,6 +143,7 @@ if os.environ.get("APP_ENV", "development") != "production":
 
 
     @app.post("/debug/seed-demo", status_code=201)
-    def debug_seed_demo(request: Request) -> SeedResult:
-        """개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404."""
-        return request.app.state.planning_service.seed()
+    def debug_seed_demo(request: Request, body: SeedRequest | None = None) -> SeedResult:
+        """개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.
+        `{"chosen": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다."""
+        return request.app.state.planning_service.seed(chosen=bool(body and body.chosen))
