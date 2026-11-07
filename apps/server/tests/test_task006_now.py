@@ -1012,6 +1012,31 @@ def test_AC4_지원_밖_카드가_나오면_T_01로_바꾸고_짝_표대로_칩�
     assert view["reason"] == REASONS["T-01"]  # §11 Q24
 
 
+DAY_OVER_FORCED = [
+    ("X-01", lambda s: {"safety": True}),
+    ("T-11", lambda s: {"chat_pick": "T-11"}),
+    ("T-13", lambda s: {"chat_pick": "T-13"}),
+]  # T-09는 하루가 끝난 뒤 compose가 내지 않아 뺐다 (시험 자체 확인에서 걸림)
+
+
+@pytest.mark.parametrize("card, change", DAY_OVER_FORCED, ids=[c for c, _ in DAY_OVER_FORCED])
+@pytest.mark.parametrize("clock", ["19:00", "19:30"], ids=["끝_정각", "끝_뒤"])
+def test_AC4_Q1_하루가_끝난_뒤_지원_밖_카드도_T_01을_거쳐_T_08(env, plain, monkeypatch, card, change, clock):
+    """A3로 T-01이 된 뒤에도 Q1(마지막 일정이 끝나면 T-08)과 R1(reason은 T-08 문장)이 그대로 적용된다."""
+
+    def forced(snapshot):
+        screen = compose_screen(snapshot.model_copy(update=change(snapshot)))
+        assert screen.main == card  # 시험 자체 확인: 강제가 실제로 그 카드를 낸다
+        return screen
+
+    monkeypatch.setattr("trip.now.compose_screen", forced)
+    view = now(env, plain, clock)
+    assert view["main"]["type"] == "T-08"
+    assert view["subs"] == []
+    assert view["chip"] is None
+    assert view["reason"] == DAY_OVER
+
+
 def test_AC4_대체하면_로그를_남긴다(env, plain, monkeypatch, caplog):
     force(monkeypatch, lambda s: {"walked_km": 12.0})
     with caplog.at_level(logging.DEBUG):
