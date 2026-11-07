@@ -61,7 +61,7 @@ appId: com.csh0616.tripfriends
     commands:
       - tapOn:
           id: "demo-bar"
-          point: "30.8%,50%"
+          point: "31%,50%"
       - extendedWaitUntil:
           visible: "13:05"
           timeout: 3000
