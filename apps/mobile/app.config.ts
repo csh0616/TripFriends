@@ -1,7 +1,8 @@
 // TASK-006 B1·ADR-014: app.json 위에 개발 빌드 설정을 얹는다.
 // 지도 키는 .env.local의 GOOGLE_MAPS_IOS_API_KEY를 빌드 때 읽는다 (Expo CLI가 환경에 넣어 준다. EXPO_PUBLIC_ 아님).
-// 키는 react-native-maps 자체 config plugin의 iosGoogleMapsApiKey 옵션으로만 들어가고(Info.plist GMSApiKey + AppDelegate + Podfile의 Google subspec),
-// JS 코드에는 "있다/없다"(extra.googleMapsKeyPresent)만 간다. ios.config.googleMapsApiKey는 쓰지 않는다:
+// 키는 react-native-maps 자체 config plugin의 iosGoogleMapsApiKey 옵션으로 들어간다(Info.plist GMSApiKey + AppDelegate + Podfile의 Google subspec).
+// 이 옵션은 plugins 배열에 담기므로 앱 설정(Constants.expoConfig.plugins)과 개발 서버 manifest에도 키가 보인다. 앱 코드는 extra.googleMapsKeyPresent(있다/없다)만 읽는다.
+// ADR-014: 앱 안에 들어가는 공개 키라 괜찮지만 저장소에는 올리지 않고, Google Cloud에서 번들 ID로 제한한다. ios.config.googleMapsApiKey는 쓰지 않는다:
 // Expo 내장 mod가 옛 포드(react-native-google-maps)를 Podfile에 넣어 pod install이 실패한다.
 // 키가 없어도 빌드는 되고, 지도 자리에 안내가 나온다 (TASK-006 §7).
 import type { ConfigContext, ExpoConfig } from 'expo/config';

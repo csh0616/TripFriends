@@ -46,7 +46,10 @@ const PILL = {
   free: { fg: 'ink', bg: 'bg-2' },
 } as const;
 
-/** 지도 키가 빌드에 들어갔는지. 값 자체는 앱에 없다: app.config가 있다/없다만 넘긴다 */
+/**
+ * 지도 키가 빌드에 들어갔는지. 이 화면은 extra.googleMapsKeyPresent(있다/없다)만 읽는다.
+ * 다만 키 값 자체도 앱 설정(Constants.expoConfig.plugins의 react-native-maps 옵션)에 들어 있어서 JS에서 읽을 수는 있다 (ADR-014: 앱 안에 들어가는 공개 키).
+ */
 const hasMapKey = (): boolean => Constants.expoConfig?.extra?.googleMapsKeyPresent === true;
 
 const isNowView = (data: unknown): data is NowView => {
@@ -235,9 +238,15 @@ export function TripNowScreen({
   const snapPoints = useMemo(() => layout.sheetFractions.map((fraction) => `${Math.round(fraction * 100)}%`), []);
   const sheetTop = useSharedValue(0);
   const gap = space['space-3'];
-  const floatStyle = useAnimatedStyle(() => ({
-    bottom: sheetTop.value > 0 ? areaHeight - sheetTop.value + gap : gap,
-  }));
+  // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)
+  const topLimit = insets.top + layout.header;
+  const floatMin = control['touch-min'];
+  const floatStyle = useAnimatedStyle(() => {
+    const follow = sheetTop.value > 0 ? areaHeight - sheetTop.value + gap : gap;
+    const bottom = Math.min(follow, Math.max(gap, areaHeight - topLimit - floatMin));
+    // 데모 패널이 열려 있어도 상단 줄 아래로만 자란다(넘치는 위쪽은 잘림)
+    return { bottom, maxHeight: Math.max(floatMin, areaHeight - topLimit - bottom) };
+  });
 
   const mainCard = view && visible(view.main) ? view.main : null;
   const subCards = view ? view.subs.filter(visible).slice(0, MAX_CARDS - (mainCard ? 1 : 0)) : [];
@@ -359,6 +368,8 @@ export function TripNowScreen({
 
         <BottomSheet
           index={1}
+          // 기본값(true)이면 시트 안 카드가 하나로 묶여 보조 기술·자동 확인에 낱개로 안 보인다
+          accessible={false}
           snapPoints={snapPoints}
           animatedPosition={sheetTop}
           enableDynamicSizing={false}
@@ -397,7 +408,8 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.surface },
   area: { flex: 1, backgroundColor: color['bg-2'] },
   fallback: { ...StyleSheet.absoluteFill, backgroundColor: color['bg-2'], alignItems: 'center', gap: space['space-4'] },
-  top: { position: 'absolute', top: 0, left: 0, right: 0 },
+  // 상단 줄(SOS)은 시트·떠 있는 줄보다 항상 위에 그린다: zIndex, Android는 elevation도 시트(sh-sheet)와 같거나 높게
+  top: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, elevation: shadow.sheet.elevation },
   topRow: {
     minHeight: layout.header,
     flexDirection: 'row',
@@ -429,7 +441,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   toast: { backgroundColor: color.surface, borderRadius: radius['r-lg'], padding: space['space-4'], ...shadow.float },
-  float: { position: 'absolute', left: layout.screenMargin, right: layout.screenMargin, gap: space['space-3'] },
+  float: { position: 'absolute', left: layout.screenMargin, right: layout.screenMargin, gap: space['space-3'], justifyContent: 'flex-end', overflow: 'hidden' },
   floatRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   locate: {
     width: control['touch-min'],

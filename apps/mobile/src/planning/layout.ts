@@ -64,7 +64,6 @@ export const layout = {
   positionDot: 16, // §14 승인: 내 위치 ink 점 지름
   positionBorder: 3, // §14 승인: 내 위치 점의 흰 테두리
   mapDelta: 0.05, // §14 승인: 지도 첫 영역과 [내 위치] 확대 정도(도)
-  routeDash: [8, 8], // §14 승인: 남은 길 점선 (선 길이, 빈 길이)
   sheetFractions: [0.16, 0.44, 0.88], // §14 승인: 시트 3단 높이(낮게·중간·높게)가 시트 영역에서 차지하는 비율
   sheetHandleWidth: 40, // §14 승인: 시트 손잡이
   sheetHandleHeight: 4,
