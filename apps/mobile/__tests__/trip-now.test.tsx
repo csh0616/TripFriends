@@ -737,7 +737,8 @@ describe('B9 진입과 다시 켜기', () => {
     await screen.findByTestId('trip-now-screen');
     await screen.findByTestId('now-main');
     expect(control.requests().length).toBeGreaterThan(before);
-    expect(control.requests().at(-1)?.path.startsWith('/days/day-2/now')).toBe(true);
+    // TASK-007 C1: 재실행 복구는 GET /now (그 뒤 위치를 실은 check가 이어질 수 있어 마지막 요청이 아니라 "다시 켠 뒤 요청 중"에서 찾는다)
+    expect(control.requests().slice(before).some((request) => request.kind === 'now' && request.path.startsWith('/days/day-2/now'))).toBe(true);
   });
 
   test('T6_B9_SC_04에_안_갔으면_다시_켜도_S9', async () => {
@@ -1376,8 +1377,9 @@ describe('리뷰 SOS 가림', () => {
 
   test.each(LEVELS)('T6_B3_AC6_시트가_%s여도_SOS가_떠_있는_줄보다_위에_그려진다', async (_name, index) => {
     await atLevel(index);
-    expect(drawnAbove(byId('sos-button'), floatBox())).toBe(true);
-    expect(drawnAbove(byId('sos-button'), byId('demo-panel'))).toBe(true);
+    // TASK-007 F3: 시트가 높으면 떠 있는 줄([내 위치]·[데모])을 숨긴다. 숨겨졌으면 가릴 것이 없다
+    if (screen.queryByTestId('my-location-button') !== null) expect(drawnAbove(byId('sos-button'), floatBox())).toBe(true);
+    if (screen.queryByTestId('demo-panel') !== null) expect(drawnAbove(byId('sos-button'), byId('demo-panel'))).toBe(true);
   });
 
   test.each(LEVELS)('T6_B3_AC6_시트가_%s여도_떠_있는_줄이_SOS가_있는_상단_줄과_겹치지_않는다', async (_name, index) => {
@@ -1446,9 +1448,12 @@ async function failedAtLevel(kind: Failing, index: number): Promise<string[]> {
   await toNow(control);
   await pressId('demo-toggle');
   const area = chain(byId('card-sheet')).find((host) => typeof host.props.onLayout === 'function') as Tree;
-  await act(async () => sheetControl.settle(index, AREA));
-  await fireEvent(area as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: AREA } } });
+  const toLevel = async () => {
+    await act(async () => sheetControl.settle(index, AREA));
+    await fireEvent(area as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: AREA } } });
+  };
   if (kind === 'toast') {
+    await toLevel();
     await pressId('directions-button');
     await screen.findByText('구글 지도를 열 수 없어');
     return ['now-toast'];
@@ -1456,8 +1461,10 @@ async function failedAtLevel(kind: Failing, index: number): Promise<string[]> {
   control.once(
     kind === 'offline' ? networkDown : kind === 'oops' ? apiError(500, 'INTERNAL_ERROR') : apiError(404, 'NOT_FOUND', { resource: 'course' }),
   );
+  // TASK-007 F3: 시트가 높으면 데모 버튼이 숨으므로 실패를 먼저 일으킨 뒤 시트를 그 단으로 옮긴다 (띠는 남아 있다)
   await pressId('demo-plus-10');
   await screen.findByTestId('now-band');
+  await toLevel();
   return kind === 'no_course' ? ['now-band', 'replan-button'] : ['now-band', 'retry-button'];
 }
 
@@ -1479,8 +1486,9 @@ describe('리뷰 재점검 §7 띠 가림', () => {
   test.each(FAILING_AT_LEVEL)('T6_S7_S14_%s_띠가_떠_있는_줄보다_위에_그려진다', async (_name, kind, index) => {
     const ids = await failedAtLevel(kind, index);
     for (const id of ids) {
-      expect([id, drawnAbove(byId(id), floatBox())]).toEqual([id, true]);
-      expect([id, drawnAbove(byId(id), byId('demo-panel'))]).toEqual([id, true]);
+      // TASK-007 F3: 시트가 높으면 떠 있는 줄을 숨긴다. 숨겨졌으면 가릴 것이 없다
+      if (screen.queryByTestId('my-location-button') !== null) expect([id, drawnAbove(byId(id), floatBox())]).toEqual([id, true]);
+      if (screen.queryByTestId('demo-panel') !== null) expect([id, drawnAbove(byId(id), byId('demo-panel'))]).toEqual([id, true]);
     }
   });
 });
