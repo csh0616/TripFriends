@@ -1078,7 +1078,8 @@ describe('§7 줄 3 404 course', () => {
     expect(screen.getByText('계획 다시 하기')).toBeTruthy();
   });
 
-  test.each(['day', 'route'])('T6_AC7_S11_Q22_course가_아닌_404_%s는_500_줄처럼', async (resource) => {
+  // 404 day는 승현 결정으로 S0 (task-006-exit.test.tsx X4). 여기서는 route만 남긴다
+  test.each(['route'])('T6_AC7_S11_Q22_course가_아닌_404_%s는_500_줄처럼', async (resource) => {
     const control = nowServer();
     await toNow(control);
     control.once(apiError(404, 'NOT_FOUND', { resource }));
