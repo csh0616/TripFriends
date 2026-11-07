@@ -5,7 +5,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from engine.models import DayPlan, Place
+from engine.models import DayPlan, Place, PlanFixed
 from planning.repo import PlanningRepo
 from planning.schemas import SeedResult
 
@@ -20,21 +20,48 @@ def demo_places() -> dict[str, Place]:
     return {row["id"]: Place.model_validate(row) for row in rows}
 
 
-def seed_demo(repo: PlanningRepo) -> SeedResult:
-    """demo_city 3일. 둘째 날 꼭 갈 곳 1곳 = 그날 여는 곳 중 id가 가장 작은 곳 (§10 Q26)."""
+DINNER_TITLE, DINNER_START, DINNER_END = "저녁 예약", "18:30", "19:30"  # TASK-006 §11 Q14
+
+
+def _dinner(places: dict[str, Place], day: date) -> PlanFixed:
+    """TASK-006 §11 Q14: 데모 식당 = 그 시간 내내 여는 food 장소 중 id가 가장 작은 곳 (문서에 고르는 규칙이 없어 정함)."""
+    weekday = day.weekday()
+
+    def open_all(p: Place) -> bool:
+        return any(o.weekday == weekday and o.open <= DINNER_START and o.close >= DINNER_END for o in p.hours or [])
+
+    restaurant = min((p for p in places.values() if p.category == "food" and open_all(p)), key=lambda p: p.id)
+    return PlanFixed(
+        id="F1",
+        title=DINNER_TITLE,
+        start=DINNER_START,
+        end=DINNER_END,
+        place_id=restaurant.id,
+        lat=restaurant.lat,
+        lng=restaurant.lng,
+    )
+
+
+def seed_demo(repo: PlanningRepo, *, with_dinner: bool = False) -> SeedResult:
+    """demo_city 3일. 둘째 날 꼭 갈 곳 1곳 = 그날 여는 곳 중 id가 가장 작은 곳 (§10 Q26).
+
+    with_dinner(TASK-006 A5): 둘째 날에만 고정 일정 "저녁 예약" 1개를 넣는다."""
     places = demo_places()
     day_ids: list[str] = []
     for number, day in enumerate(DEMO_DATES, start=1):
         must: list[str] = []
+        fixed: list[PlanFixed] = []
         if number == 2:
             weekday = day.weekday()
+            if with_dinner:
+                fixed = [_dinner(places, day)]
             must = [min(p.id for p in places.values() if any(o.weekday == weekday for o in p.hours or []))]
         plan = DayPlan(
             date=day,
             start=DAY_START,
             end=DAY_END,
             lodging=DEMO_CENTER,
-            fixed=[],
+            fixed=fixed,
             must_visit=must,
             stay_overrides={},
         )

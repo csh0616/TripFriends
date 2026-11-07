@@ -68,9 +68,23 @@ def question(day_number: int) -> Question:
     )
 
 
-def day_summary(day_id: str, day: DayRecord) -> DaySummary:
-    """TASK-004 A2: 저장소의 하루 데이터 그대로. 고정 일정 name = 장소 이름, 장소가 없으면 저장된 title (§12-1 Q1)."""
+DEFAULT_MUST_STAY_MIN = 60  # TASK-006 Q19: 바꾼 값도 typical도 없을 때
+
+
+def must_stay_min(place: EnginePlace, overrides: dict[PlaceId, int]) -> int:
+    """TASK-006 §11 Q19: 바꾼 머문 시간 > typical > 60."""
+    if place.id in overrides:
+        return overrides[place.id]
+    return place.stay.typical if place.stay else DEFAULT_MUST_STAY_MIN
+
+
+def day_summary(day_id: str, day: DayRecord, overrides: dict[PlaceId, int] | None = None) -> DaySummary:
+    """TASK-004 A2: 저장소의 하루 데이터 그대로. 고정 일정 name = 장소 이름, 장소가 없으면 저장된 title (§12-1 Q1).
+
+    overrides = 세션에서 ±15로 바꾼 머문 시간 (TASK-006 R5). 하루 데이터의 stay_overrides 위에 얹는다.
+    """
     plan = day.plan
+    stays = {**plan.stay_overrides, **(overrides or {})}
     return DaySummary(
         day_id=day_id,
         day_number=day.day_number,
@@ -78,7 +92,7 @@ def day_summary(day_id: str, day: DayRecord) -> DaySummary:
         start=plan.start,
         end=plan.end,
         lodging=LatLng(lat=plan.lodging[0], lng=plan.lodging[1]),
-        must_visits=[DayMustVisit(place_id=pid, name=day.places[pid].name) for pid in plan.must_visit],
+        must_visits=[DayMustVisit(place_id=pid, name=day.places[pid].name, stay_min=must_stay_min(day.places[pid], stays)) for pid in plan.must_visit],
         fixed=[
             DayFixed(
                 place_id=f.place_id,
@@ -91,13 +105,13 @@ def day_summary(day_id: str, day: DayRecord) -> DaySummary:
     )
 
 
-def session_response(state: PlanningState, day: DayRecord) -> PlanningSession:
+def session_response(state: PlanningState, day: DayRecord, overrides: dict[PlaceId, int] | None = None) -> PlanningSession:
     """TASK-003 §6 PlanningSession (첫 질문). 시작 응답과 GET(asking)이 함께 쓴다."""
     return PlanningSession(
         session_id=state.session_id,
         stage="asking",
         question=question(day.day_number),
-        day=day_summary(state.day_id, day),
+        day=day_summary(state.day_id, day, overrides),
     )
 
 
@@ -145,6 +159,7 @@ def batch_response(
     first: bool,
     clarify: bool,
     exhausted: bool,
+    overrides: dict[PlaceId, int] | None = None,
 ) -> CandidateBatch:
     """§6 CandidateBatch. 되묻기도 같은 모양이고 값은 **넘겨 받은 새 상태·반응**으로 계산한다 (§10 Q30).
 
@@ -198,12 +213,19 @@ def batch_response(
         picks_count=len(reactions.liked),
         exhausted=exhausted,
         direction_relaxed=relaxed,
-        day=day_summary(state.day_id, day),
+        day=day_summary(state.day_id, day, overrides),
         picks=list(reactions.liked),  # TASK-004 §12-1 A6: 담은 순서. 인자로 받은 반응이라 저장 전 시점이 유지된다
     )
 
 
-def batch_now(state: PlanningState, reactions: Reactions, relaxed: bool, first: bool, day: DayRecord) -> CandidateBatch:
+def batch_now(
+    state: PlanningState,
+    reactions: Reactions,
+    relaxed: bool,
+    first: bool,
+    day: DayRecord,
+    overrides: dict[PlaceId, int] | None = None,
+) -> CandidateBatch:
     """TASK-004 A1: 지금 묶음을 **지금 상태로 다시 계산**한 응답 (GET). 아무것도 저장하지 않는다.
 
     TASK-004 §12-1 Q2·Q3: exhausted는 지금 안 보여 준 곳이 5곳 미만인지 다시 계산(소진이면 소진 문장),
@@ -213,7 +235,7 @@ def batch_now(state: PlanningState, reactions: Reactions, relaxed: bool, first: 
     cand = candidates(day)
     exhausted = next_batch(cand, reactions, None, state.shown, day.plan.lodging, day_start(day)).exhausted
     return batch_response(
-        state, reactions, relaxed, day, first=first, clarify=state.clarify_count == 1, exhausted=exhausted
+        state, reactions, relaxed, day, first=first, clarify=state.clarify_count == 1, exhausted=exhausted, overrides=overrides
     )
 
 
@@ -226,7 +248,9 @@ def picks_response(reactions: Reactions) -> Picks:
     return Picks(picks=liked, picks_count=len(liked))
 
 
-def course_response(state: PlanningState, records: list[OptionRecord], day: DayRecord) -> CourseResult:
+def course_response(
+    state: PlanningState, records: list[OptionRecord], day: DayRecord, overrides: dict[PlaceId, int] | None = None
+) -> CourseResult:
     """TASK-003 §6 CourseResult + TASK-004 A2(day)·A3(name).
 
     항목 name: 장소가 있으면 장소 이름(고정 일정 포함, §12-1 Q1). 장소가 없는 고정 일정은 저장된 title.
@@ -257,4 +281,4 @@ def course_response(state: PlanningState, records: list[OptionRecord], day: DayR
                 total_travel_min=record.course.total_travel_min,
             )
         )
-    return CourseResult(session_id=state.session_id, stage=state.stage, options=options, day=day_summary(state.day_id, day))
+    return CourseResult(session_id=state.session_id, stage=state.stage, options=options, day=day_summary(state.day_id, day, overrides))

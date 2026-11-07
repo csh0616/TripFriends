@@ -107,9 +107,15 @@ class PlanningService:
 
     # ---- 엔드포인트 ----
 
-    def seed(self) -> SeedResult:
+    def seed(self, chosen: bool = False) -> SeedResult:
+        """chosen(TASK-006 A5·Q14): 둘째 날을 자동으로 계획하고 relaxed 안을 고른 상태로 둔다 (저녁 예약 포함)."""
         with self._lock:
-            return seed_demo(self.repo)
+            result = seed_demo(self.repo, with_dinner=chosen)
+            if chosen:
+                course = self.start(result.day_ids[1], "auto")
+                option = next(o for o in course.options if o.label == "relaxed")  # type: ignore[union-attr]
+                self.select(option.option_id)
+            return result
 
     def start(self, day_id: str, mode: str) -> PlanningSession | CourseResult:
         with self._lock:
@@ -141,7 +147,7 @@ class PlanningService:
                 return presenter.done_response(state, option_id)
             assert day is not None  # 세션은 있는 날에만 만든다
             if state.stage == "asking":
-                return presenter.session_response(state, day)
+                return presenter.session_response(state, day, self.repo.stay_overrides(session_id))
             if state.stage == "browsing":
                 return presenter.batch_now(
                     state,
@@ -149,10 +155,11 @@ class PlanningService:
                     self.repo.batch_relaxed(session_id),
                     self.repo.batch_first(session_id),
                     day,
+                    self.repo.stay_overrides(session_id),
                 )
             records = [self.repo.get_option(option_id) for option_id in state.option_ids]
             assert all(record is not None for record in records)
-            return presenter.course_response(state, records, day)  # type: ignore[arg-type]
+            return presenter.course_response(state, records, day, self.repo.stay_overrides(session_id))  # type: ignore[arg-type]
 
     def answer(self, session_id: str, body: AnswerRequest) -> CandidateBatch | CourseResult:
         with self._lock:
