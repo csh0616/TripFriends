@@ -88,10 +88,13 @@ export function TripNowScreen({
   record,
   onAtChange,
   onNoCourse,
+  onExit,
 }: {
   record: NowRecord;
   onAtChange: (at: string) => void;
   onNoCourse: () => void;
+  /** 저장값을 지우고 S0로 (프로필 [처음부터 다시], /now 404 day) */
+  onExit: () => void;
 }) {
   const { day } = record;
   const insets = useSafeAreaInsets();
@@ -106,6 +109,7 @@ export function TripNowScreen({
   const [mapFailed, setMapFailed] = useState(() => !hasMapKey());
   const [mapReady, setMapReady] = useState(false);
   const [sosOpen, setSosOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [areaHeight, setAreaHeight] = useState(0);
 
@@ -158,6 +162,10 @@ export function TripNowScreen({
       if (!alive.current || mine !== seq.current) return;
       if (!result.ok) {
         const failure = result.failure;
+        if (failure.kind === 'not_found' && failure.resource === 'day') {
+          onExit(); // 이 날이 서버에 없다: 저장값을 지우고 S0, 안내 없음
+          return;
+        }
         if (failure.kind === 'network') setProblem('offline');
         else if (failure.kind === 'not_found' && failure.resource === 'course') setProblem('no_course');
         else setProblem('oops'); // 500, 400, course가 아닌 404, 409 (§11 Q22)
@@ -181,6 +189,7 @@ export function TripNowScreen({
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [record.day_id, positionFor],
   );
 
@@ -287,7 +296,14 @@ export function TripNowScreen({
         <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top }]}>
           <View style={styles.topRow} pointerEvents="box-none">
             <View style={styles.side}>
-              <FriendAvatar testID="profile-avatar" />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="프로필"
+                onPress={() => setProfileOpen(true)}
+                style={styles.avatarHit}
+              >
+                <FriendAvatar testID="profile-avatar" />
+              </Pressable>
             </View>
             {view && pill ? (
               <View testID="status-pill" style={[styles.pill, { backgroundColor: color[pill.bg] }]}>
@@ -399,6 +415,15 @@ export function TripNowScreen({
 
       {/* 입력창은 시트 아래 고정. R1은 비활성 안내 */}
       <InputBar onSend={() => undefined} disabled disabledHint={INPUT_HINT} />
+      {profileOpen ? (
+        <View style={styles.profileOverlay}>
+          <Pressable testID="profile-scrim" accessibilityLabel="닫기" style={StyleSheet.absoluteFill} onPress={() => setProfileOpen(false)} />
+          <View testID="profile-sheet" style={styles.profileSheet}>
+            <SecondaryButton testID="profile-restart" label="처음부터 다시" onPress={onExit} />
+            <SecondaryButton testID="profile-close" label="닫기" onPress={() => setProfileOpen(false)} />
+          </View>
+        </View>
+      ) : null}
       {sosOpen ? <SosSheet onClose={() => setSosOpen(false)} /> : null}
     </View>
   );
@@ -417,6 +442,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: layout.screenMargin,
     gap: space['space-2'],
+  },
+  avatarHit: { width: control['touch-min'], height: control['touch-min'], alignItems: 'center', justifyContent: 'center' },
+  profileOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', backgroundColor: color.scrim },
+  profileSheet: {
+    backgroundColor: color.surface,
+    borderTopLeftRadius: radius['r-sheet'],
+    borderTopRightRadius: radius['r-sheet'],
+    padding: layout.screenMargin,
+    paddingBottom: space['space-8'],
+    gap: space['space-3'],
+    ...shadow.sheet,
   },
   side: { minWidth: control.sos, justifyContent: 'center' },
   right: { alignItems: 'flex-end' },

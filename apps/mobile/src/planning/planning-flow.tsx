@@ -453,7 +453,7 @@ function Session({
     if (!ready) return <Loading />;
 
     if (nowRecord) {
-      return <TripNowScreen key={nowRecord.day_id} record={nowRecord} onAtChange={saveAt} onNoCourse={() => void clearStoredAndReset(null)} />;
+      return <TripNowScreen key={nowRecord.day_id} record={nowRecord} onAtChange={saveAt} onNoCourse={() => void clearStoredAndReset(null)} onExit={() => void clearStoredAndReset(null)} />;
     }
 
     if (state.response === null) {
