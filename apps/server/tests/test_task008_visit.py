@@ -1248,6 +1248,139 @@ def test_T8_S15_빼고_가기는_compose_courses를_부르지_않는다(env, mon
     assert calls == []
 
 
+# ---------- §16 Q35~Q38 ----------
+# Q35: 다시 계산할 때 지금 장소에서 출발하는 첫 이동에는 쉬는 시간이 없다 (출발점은 하루 시작처럼). 둘째 이동부터 원래 규칙.
+# Q36: 사용자가 바꾼 머무는 시간은 대안 범위 밖이어도 그 값. Q37: 쉬는 시간 길이는 원래 고른 코스의 방식(relaxed/packed).
+# Q38: 자리에 넣은 대안의 시작 = 갈 수 있는 가장 이른 시각 (여는 시각 전이면 여는 시각).
+# visit_day: 지금 장소 P01(북 1.0, 방문) 끝 12:00, at 11:40 → 떠나는 시각 12:00 (Q7). 닫힌 곳 P02 예정 시작 12:20.
+
+
+LEAVE = to_min("12:00")
+
+
+def buffers() -> dict[str, int]:
+    """엔진의 코스 방식별 쉬는 시간 (engine.planning 기존 상수)."""
+    from engine.planning import _limits
+
+    lim = _limits()
+    return {"relaxed": lim.relaxed_buffer_min, "packed": lim.packed_buffer_min}
+
+
+def as_label(env, day_id: str, label: str) -> None:
+    """심은 하루의 고른 코스를 같은 일정 그대로 label 방식으로 바꿔 고른다."""
+    from planning.repo import OptionRecord
+
+    _, course = chosen(env, day_id)
+    option_id = f"opt-{day_id}-{label}"
+    env.repo.save_options([OptionRecord(option_id, "planted-session", [], course.model_copy(update={"label": label}))])
+    env.repo.choose_option(day_id, option_id)
+
+
+def first_travel(entry: dict) -> int:
+    """P01(북 1.0)에서 그 줄 장소까지 엔진 이동 분."""
+    from engine.planning import travel_min
+    from trip_helpers import at_place
+
+    return travel_min(distance_km(at_place(1.0), (entry["lat"], entry["lng"])))
+
+
+@pytest.mark.parametrize("label", ["relaxed", "packed"])
+def test_T8_S16_Q35_대안_첫_줄은_떠나는_시각_더하기_이동_쉬는_시간_없음(env, label):
+    # 앞 장소 P01은 방문이라 원래 규칙이면 쉬는 시간이 붙지만, 지금 장소에서 나가는 첫 이동은 0분
+    day_id = visit_day(env, extra=ALTS)
+    as_label(env, day_id, label)
+    card = answered(env, day_id, "P02", "11:40", False)["main"]
+    assert alt_ids(card) == ["A01", "A02", "A03"]
+    for proposal in replaces(card):
+        first = proposal["items"][0]
+        assert first["place_id"] == alt_id(proposal)
+        assert to_min(first["start"]) == LEAVE + first_travel(first), alt_id(proposal)  # A01~A03은 08:00에 열어 기다림 없음
+
+
+@pytest.mark.parametrize("label", ["relaxed", "packed"])
+def test_T8_S16_Q35_빼고_가기_첫_줄도_떠나는_시각_더하기_이동_쉬는_시간_없음(env, label):
+    day_id = visit_day(env, extra=ALTS)
+    as_label(env, day_id, label)
+    skip = skip_of(answered(env, day_id, "P02", "11:40", False)["main"])
+    (p03,) = skip["items"]
+    assert p03["place_id"] == "P03"
+    assert to_min(p03["start"]) == LEAVE + first_travel(p03)  # P03 08:00에 열어 기다림 없음
+
+
+@pytest.mark.parametrize("label", ["relaxed", "packed"])
+def test_T8_S16_Q35_Q37_대안_둘째_이동은_고른_코스_방식의_쉬는_시간(env, label):
+    from engine.planning import travel_min
+
+    day_id = visit_day(env, extra=ALTS)
+    as_label(env, day_id, label)
+    for proposal in replaces(answered(env, day_id, "P02", "11:40", False)["main"]):
+        first, then = proposal["items"]
+        km = distance_km((first["lat"], first["lng"]), (then["lat"], then["lng"]))
+        assert to_min(then["start"]) == to_min(first["end"]) + travel_min(km) + buffers()[label], (label, alt_id(proposal))
+
+
+@pytest.mark.parametrize("label", ["relaxed", "packed"])
+def test_T8_S16_Q35_Q37_빼고_가기_둘째_이동은_고른_코스_방식의_쉬는_시간(env, label):
+    from engine.planning import travel_min
+    from trip_helpers import at_place
+
+    day_id = skip_wait_day(env, "08:00")
+    as_label(env, day_id, label)
+    p03, p04 = skip_of(answered(env, day_id, "P02", "11:40", False)["main"])["items"]
+    assert to_min(p04["start"]) == to_min(p03["end"]) + travel_min(distance_km(at_place(3.0), at_place(4.0))) + buffers()[label]
+
+
+@pytest.mark.parametrize("user_stay", [29, 20, 121, 150], ids=["범위_min보다_1분_짧음", "범위보다_짧음", "범위_max보다_1분_김", "범위보다_김"])
+def test_T8_S16_Q36_사용자가_바꾼_머무는_시간은_대안_범위_밖이어도_그_값(env, user_stay):
+    # A01 범위 30~120. 사용자 값이 우선 (Q32의 범위 맞추기를 하지 않는다)
+    day_id = user_stay_day(env, user_stay, extra=(alt("A01", 0.3, stay=StayRange(min=30, typical=60, max=120)),))
+    proposal = replaces(answered(env, day_id, "P02", "11:40", False)["main"])[0]
+    assert alt_id(proposal) == "A01"
+    assert proposal["closed"]["reordered"] is False  # 하루 끝 21:00까지 넉넉하다
+    assert stay_of(alt_row(proposal)) == user_stay
+
+
+def a01_arrival() -> int:
+    """P01 끝 12:00에 떠나 A01(P02 동쪽 0.3km)에 닿는 시각 (쉬는 시간 없음, Q35)."""
+    from engine.planning import travel_min
+    from trip_helpers import at_place
+
+    return LEAVE + travel_min(distance_km(at_place(1.0), at_place(2.0, 0.3)))
+
+
+@pytest.mark.parametrize(
+    "open_offset, start_offset",
+    [(1, 1), (0, 0), (-1, 0), ("12:20", "12:20")],
+    ids=["여는_시각_1분_전_도착이면_여는_시각", "여는_시각_정각_도착", "연_뒤_도착이면_도착_시각", "닫힌_곳_예정_시작에_열면_그때"],
+)
+def test_T8_S16_Q38_자리에_넣은_대안의_시작은_갈_수_있는_가장_이른_시각(env, open_offset, start_offset):
+    # B2 후보 조건(닫힌 곳 예정 시작 12:20에 영업 중, Q29)은 모두 지킨다
+    arrive = a01_arrival()
+    open_at = to_min(open_offset) if isinstance(open_offset, str) else arrive + open_offset
+    expected = to_min(start_offset) if isinstance(start_offset, str) else arrive + start_offset
+    assert open_at <= to_min("12:20")  # 시험 자체 확인
+    a01 = alt("A01", 0.3, hours=week_hours(hhmm(open_at), "22:00"))
+    _, view = closed_view(env, extra=(a01,))
+    proposal = replaces(view["main"])[0]
+    assert alt_id(proposal) == "A01"
+    assert proposal["closed"]["reordered"] is False
+    assert to_min(alt_row(proposal)["start"]) == expected
+
+
+def test_T8_S16_데모_골목_카페_E는_2번_자리_reordered_false_저녁_예약_18_30_그대로(env):
+    from planning.seed import DINNER_END, DINNER_START
+
+    _, day_id, entry = demo_scenario(env)
+    assert entry.seq == 2  # §16 기록: E가 2번 자리
+    record = env.repo.get_day(day_id)
+    (extra_id,) = set(record.places) - set(demo_places())
+    view = answered(env, day_id, entry.place_id, hhmm(leave_of(entry) - 30), False)
+    proposal = next(p for p in replaces(view["main"]) if alt_id(p) == extra_id)
+    assert proposal["closed"]["reordered"] is False
+    assert alt_row(proposal)["seq"] == 2
+    assert [(e["start"], e["end"]) for e in proposal["items"] if e["is_fixed"]] == [(DINNER_START, DINNER_END)]
+
+
 # ---------- AC-6 사실 값 ----------
 
 
