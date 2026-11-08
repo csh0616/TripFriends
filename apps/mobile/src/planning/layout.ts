@@ -78,23 +78,23 @@ export const layout = {
   selRing: Number(/(\d+(?:\.\d+)?)px/.exec(tokens.select['sel-ring'])?.[1]), // sel-ring: 고른 칸 안쪽 고리 굵기 (색은 brand, 바탕 sel-bg)
   actionBarLine: 1, // action-bar 윗선 굵기 (문서에 없는 크기)
   radioDot: 12, // 고른 radio 안 채움 지름 (문서에 없는 크기)
-  // TASK-010 DESIGN-001 §4-10 여행 만들기 부품. 토큰 표(design-table)에 아직 없어 문서 값 그대로 여기에 둔다
-  sheetCal: 626, // 달력 시트 높이 상한 (짧은 화면은 min(626, 화면 높이 - 48))
+  // TASK-010 DESIGN-001 §4-10 여행 만들기 부품. 값은 tokens.json(trip)에서 읽는다 (TASK-010 §13 질문 3)
+  sheetCal: tokens.trip['sheet-cal'], // 달력 시트 높이 상한 (짧은 화면은 min(626, 화면 높이 - 48))
   sheetCalMargin: 48,
-  calCellW: 50, // 날 칸 누르는 영역
-  calCellH: 44,
-  calDisc: 38, // 가는 날·오는 날 원
-  calRing: 2,
-  calOff: 40, // 고를 수 없는 날
-  calBand: 38, // 범위 띠
-  calTodayDot: 4,
-  calHead: 28, // 요일 줄
-  calNav: 36, // 달 넘기기 (누르는 영역은 touch-min)
-  calSlot: 60, // 안내 자리
+  calCellW: tokens.trip['cal-cell'][0], // 날 칸 누르는 영역
+  calCellH: tokens.trip['cal-cell'][1],
+  calDisc: tokens.trip['cal-disc'][0], // 가는 날·오는 날 원
+  calRing: tokens.trip['cal-disc'][1],
+  calOff: tokens.trip['cal-off'][0], // 고를 수 없는 날
+  calBand: tokens.trip['cal-band'], // 범위 띠
+  calTodayDot: tokens.trip['cal-today-dot'],
+  calHead: tokens.trip['cal-head'], // 요일 줄
+  calNav: tokens.trip['cal-nav'][0], // 달 넘기기 (누르는 영역은 cal-nav[1])
+  calSlot: tokens.trip['cal-slot'], // 안내 자리
   calHandle: 20, // 시트 핸들 자리
   calTitle: 44,
-  coverTile: [120, 144], // 도시 카드 폭·높이
-  coverBanner: [350, 88], // 여행 머리 표지
+  coverTile: tokens.trip['cover-tile'], // 도시 카드 폭·높이
+  coverBanner: tokens.trip['cover-banner'], // 여행 머리 표지
   coverGlyphTile: 64,
   coverGlyphBanner: 56,
   coverGlyphLarge: 120,
@@ -113,24 +113,24 @@ export const layout = {
   glyphLine: 1.75, // 장소 그림 선 (icon-stroke와 같음)
   field: tokens.select.field, // 날짜·시각·제목 입력 칸 높이
   tabDay: tokens.select['tab-day'][0], // 날 탭 보이는 높이 (누르는 영역 tab-day[1])
-  addDot: 36, // 담기 표시 원
+  addDot: tokens.trip['add-dot'], // 담기 표시 원
   listRow: 64, // 검색 결과 줄
-  listMax: 324, // 보이는 결과 5줄
+  listMax: tokens.trip['list-max'], // 보이는 결과 5줄
   listHairInset: 66, // 결과 줄 사이 선의 왼쪽
-  lodgeThumb: 44,
+  lodgeThumb: tokens.trip['lodge-thumb'],
   lodgeIcon: 24,
-  emptyDot: 44, // 결과 없음 원
+  emptyDot: tokens.trip['lodge-thumb'], // 결과 없음 원
   otherDayPill: 28,
   googleLogoWidth: 98, // GoogleMaps_Logo_Gray 원본 98x18 (높이 18, 비율 유지)
   googleLogoHeight: 18,
-  googleSlot: 19, // g-slot / g-text 겉 높이
-  googleFooter: 34, // g-footer
+  googleSlot: tokens.trip['g-slot'][1], // g-slot / g-text 겉 높이 (그림 19)
+  googleFooter: tokens.trip['g-footer'], // g-footer
   googleFooterTop: 10,
   googleFooterBottom: 5,
   sheetForm: tokens.select['sheet-form'], // 고정 일정 입력 시트
   rowPast: 68, // 날 줄 높이: 지난 날
   rowPlanned: 84, // 계획 완료
-  inputFocus: 2, // input-focus 안쪽 굵기
+  inputFocus: Number(/(\d+(?:\.\d+)?)px/.exec(tokens.trip['input-focus'])?.[1]), // input-focus 안쪽 굵기
   fieldErrorLine: 2,
   // 누르는 영역 보강: 칩 36 -> 44
   chipSlop: (touchMin - chip) / 2,

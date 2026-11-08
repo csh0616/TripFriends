@@ -5,6 +5,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from '@/components/app-text';
 import { AlertIcon, CheckIcon, PlusIcon, SearchIcon } from '@/components/planning/icons';
 import { layout } from '@/planning/layout';
+import tokens from 'design-tokens';
+
 import { color, control, radius, space, text } from '@/planning/theme';
 
 /** 틀린 칸 아래 오류 문장: 색 + 아이콘 + 문장 (field-error) */
@@ -47,7 +49,7 @@ export function SearchInput({
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.input, focused && styles.inputFocus]}>
-      <SearchIcon color={color.muted} size={control.icon - 4} />
+      <SearchIcon color={color.muted} size={tokens.trip['input-icon']} />
       <TextInput
         testID={testID}
         value={value}

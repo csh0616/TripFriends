@@ -13,6 +13,7 @@ import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { StatusChip } from '@/components/planning/status-chip';
 import { distanceLabel } from '@/lib/distance-label';
+import { sourceLabel } from '@/lib/source-label';
 import { requests, type CandidateBatch } from '@/lib/planning-api';
 import { todayHoursText } from '@/lib/today-hours-text';
 
@@ -204,6 +205,10 @@ export function P2Screen({
                     lng: place.lng,
                   })}
                 </Text>
+                {/* TASK-010 §13 O4: 우리가 정한 값(curated)은 출처 "Tripfriends" (Google 자리 없음) */}
+                {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'curated') ? (
+                  <Text style={text('src', 'muted')}>{sourceLabel('curated')}</Text>
+                ) : null}
                 {/* TASK-010 §11 G2: 지도 없이 Google 값을 보여 주는 카드에는 Google Maps 로고 자리 */}
                 {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'google') ? <GoogleMark testID="g-slot" /> : null}
               </View>

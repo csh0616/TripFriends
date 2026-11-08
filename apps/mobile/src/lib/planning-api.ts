@@ -121,7 +121,7 @@ type StartBody = Schemas['StartRequest'];
 export const requests = {
   seed: (): Request => ({ method: 'POST', path: '/debug/seed-demo' }),
   // TASK-006 §14: 둘째 날을 코스 선택까지 해 둔 시드. 응답의 day로 바로 여행 중 화면을 연다
-  seedChosen: (): Request => ({ method: 'POST', path: '/debug/seed-demo', body: { chosen: true } satisfies Schemas['SeedRequest'] }),
+  seedChosen: (): Request => ({ method: 'POST', path: '/debug/seed-demo', body: { chosen: true } satisfies Partial<Schemas['SeedRequest']> }),
   start: (dayId: string): Request => ({
     method: 'POST',
     path: `/days/${dayId}/planning`,

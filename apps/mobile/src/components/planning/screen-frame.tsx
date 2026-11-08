@@ -37,10 +37,10 @@ export function ScreenFrame({
 }) {
   const [sosOpen, setSosOpen] = useState(false);
   const leave = useContext(LeaveContext);
-  const ownBack = onBack !== undefined;
+  // 실제 여행의 계획 대화는 어느 단계(코스안 포함)에서든 머리 뒤로가 "‹ 날짜" (TASK-010 §12·§13 답 2). 단계 사이 뒤로는 화면의 단추가 맡는다
   return (
     <View style={styles.root}>
-      <Header title={title} subtitle={subtitle} onBack={onBack ?? leave ?? undefined} backLabel={!ownBack && leave ? '‹ 날짜' : undefined} backDisabled={backDisabled} onSos={() => setSosOpen(true)} />
+      <Header title={title} subtitle={subtitle} onBack={leave ?? onBack} backLabel={leave ? '‹ 날짜' : undefined} backDisabled={backDisabled} onSos={() => setSosOpen(true)} />
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.body}

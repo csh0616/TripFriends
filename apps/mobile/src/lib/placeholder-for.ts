@@ -12,9 +12,6 @@ const TABLE: Readonly<Record<string, [string, string]>> = {
   night: ['#403F79', '#191345'],
 };
 
-// §4-10 src-google: "Google Maps" 글자 색 (Google 규칙, 대비 4.5 이상). 토큰 표에 아직 없어서 같은 이유로 이 파일에 둔다
-export const GOOGLE_TEXT_COLOUR = '#5E5E5E';
-
 // 모르는 종류가 와도 화면이 깨지지 않게 landmark 색을 쓴다 (cat-fallback)
 export function placeholderFor(category: string): [string, string] {
   const colours = Object.prototype.hasOwnProperty.call(TABLE, category) ? TABLE[category] : LANDMARK;
