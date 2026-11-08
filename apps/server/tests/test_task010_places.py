@@ -2,7 +2,7 @@
 
 테스트는 실제 Google·Serper를 부르지 않는다 (AC-1, conftest의 네트워크 차단). 공급자는 손으로 만든 가짜뿐:
     testdata/cities/osaka-fake.json      가짜 공급자 응답 (place_id는 모두 FAKE-, 링크는 example.invalid)
-    testdata/cities/osaka-seed-fake.yaml 가짜 seed (§S 모양, 17줄: 지역 3곳·카테고리 8종 + 일부러 넣은 실패 4줄)
+    testdata/cities/osaka-seed-fake.yaml 가짜 seed (§S 모양, 21줄: 지역 4곳(§12)·카테고리 8종 + 일부러 넣은 실패 줄)
 
 계약 (이 테스트가 정한 이름, 승인 대기):
     places/provider.py  PlacesProvider(ABC): resolve(query, area) -> place_id | ResolveError(reason="not_found"|"ambiguous")
@@ -37,6 +37,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 
 from engine.models import Place
 
@@ -47,7 +48,8 @@ FAKE = json.loads(FAKE_JSON.read_text(encoding="utf-8"))
 
 NOW = datetime(2026, 11, 10, 3, 0, tzinfo=UTC)
 CATEGORIES = {"cafe", "food", "walk", "museum", "landmark", "shop", "experience", "night"}
-AREAS = {"namba", "shinsaibashi", "umeda"}
+# TASK-010 §12: 지역은 데이터다. 몇 곳인지 가정하지 않고 seed의 areas 목록에서 읽는다 (가짜 seed는 4곳)
+AREAS = {area["id"] for area in yaml.safe_load(FAKE_SEED.read_text(encoding="utf-8"))["areas"]}
 SEED_KEYS = {"id", "name_ko", "aliases", "query", "area", "category", "stay", "crowd_level", "price_level", "mood_tags"}
 # Google에서 온 값 (ADR-015 §3-1: 캐시만, git 밖)
 GOOGLE_KEYS = {"location", "lat", "lng", "opening_hours", "hours", "website", "maps_url", "business_status", "fetched_at"}
@@ -185,11 +187,12 @@ def test_T10_AC2_가짜_공급자_데이터는_모두_지어낸_값이다():
     assert all(SNIPPET_MARK in hit["text"] for hits in FAKE["serper"].values() for hit in hits)
 
 
-def test_T10_S_가짜_seed는_지역_3곳_카테고리_8종을_모두_담는다():
+def test_T10_S_가짜_seed는_areas_목록의_지역과_카테고리_8종을_모두_담는다():
     data = seed()
     assert (data["city_code"], data["timezone"]) == ("osaka", "Asia/Tokyo")
     assert set(data["center"]) == {"name_ko", "query"}
-    assert set(data["areas"]) == AREAS and all(set(a) == {"name_ko", "query"} for a in data["areas"].values())
+    assert [a["id"] for a in data["areas"]] == ["namba", "shinsaibashi", "umeda", "osakajo"]  # §12: 넷째 지역 osakajo
+    assert all(set(a) == {"id", "name_ko", "query"} for a in data["areas"])
     rows = data["places"]
     assert {row["area"] for row in rows} == AREAS
     assert {row["category"] for row in rows} == CATEGORIES
@@ -326,7 +329,7 @@ def test_T10_A2_AC2_팩에_Google_값이_하나도_없다():
         assert str(detail["location"]["lat"]) not in text
 
 
-def test_T10_A2_팩에_8종_3지역이_남는다():
+def test_T10_A2_팩에_8종과_모든_지역이_남는다():
     pack = build().pack
     assert {row["category"] for row in pack["places"]} == CATEGORIES
     assert {row["area"] for row in pack["places"]} == AREAS

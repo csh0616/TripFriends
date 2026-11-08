@@ -1,6 +1,6 @@
 # TASK-010 §S 모양을 따른 **테스트용 가짜 seed** (test-writer가 손으로 만듦).
 # 정본 docs/data/osaka-seed.yaml(PM 작성)이 아니다. 이름·별칭·지역·카테고리·머무는 시간·혼잡·가격·분위기는 지어낸 값이다.
-# 지역 3곳(namba·shinsaibashi·umeda), 카테고리 8종을 모두 포함한다.
+# 지역 4곳(namba·shinsaibashi·umeda·osakajo, §12), 카테고리 8종을 모두 포함한다.
 # 공급자 응답(가짜)은 testdata/cities/osaka-fake.json 에 있다. 아래 query가 그 파일의 resolve 표 키다.
 # 맨 위 city_code·timezone·center는 이 테스트가 정한 모양 (질문: 정본 seed에도 있는지). center = 숙소가 없을 때 시작점(§9 Q10 난바역).
 # center도 장소처럼 query로 resolve -> place_id만 팩에, 좌표는 캐시에 (AC-2: 팩에 좌표 없음).
@@ -13,16 +13,18 @@
 #   osaka-fake-comedy     : Google 영업시간 없음 + Serper 값 엇갈림 -> unknown (§A3)
 #   osaka-fake-far-umeda  : area=umeda인데 찾은 곳이 지역 중심에서 약 4km -> ambiguous로 빼고 보고 (PM 답 Q2: 3km 밖)
 #   osaka-fake-edge-in    : 지역 중심에서 2.9km -> 팩에 넣음 / osaka-fake-edge-out: 3.1km -> ambiguous
-# areas(지역 중심)는 이 테스트가 정한 모양 (질문: 정본 seed에 있는지). center처럼 이름 + query, 좌표는 캐시에만.
+# areas(지역 중심)는 정본과 같은 목록 모양. center처럼 이름 + query, 좌표는 캐시에만. osakajo는 §12로 더한 넷째 지역 (지역 3곳을 가정하지 않게)
+version: 1
 city_code: osaka
 timezone: Asia/Tokyo
 center:
   name_ko: 난바역
   query: 難波駅 Osaka
-areas:
-  namba: {name_ko: 난바역, query: 難波駅 Osaka}
-  shinsaibashi: {name_ko: 신사이바시역, query: 心斎橋駅 Osaka}
-  umeda: {name_ko: 우메다역, query: 梅田駅 Osaka}
+areas:   # 정본(docs/data/osaka-seed.yaml)과 같은 목록 모양 {id, name_ko, query}. 지역은 데이터 (TASK-010 §12: 4곳)
+  - {id: namba, name_ko: 난바역, query: 難波駅 Osaka}
+  - {id: shinsaibashi, name_ko: 신사이바시역, query: 心斎橋駅 Osaka}
+  - {id: umeda, name_ko: 우메다역, query: 梅田駅 Osaka}
+  - {id: osakajo, name_ko: 오사카성, query: 森ノ宮駅 Osaka}
 places:
   - id: osaka-fake-dotonbori
     name_ko: 도톤보리
@@ -224,3 +226,13 @@ places:
     crowd_level: 2
     price_level: 2
     mood_tags: [조용]
+  - id: osaka-fake-castle
+    name_ko: 오사카성 천수각
+    aliases: [오사카 성, 天守閣]
+    query: 大阪城 天守閣 Osaka
+    area: osakajo
+    category: landmark
+    stay: {min: 60, typical: 75, max: 120}
+    crowd_level: 5
+    price_level: 2
+    mood_tags: [역사, 대표]

@@ -15,7 +15,7 @@ import json
 import httpx
 import pytest
 
-from test_task010_places import EXCLUDED, FAKE_SEED, FakeClock, Recording, build, fake_places, seed_rows
+from test_task010_places import AREAS, EXCLUDED, FAKE_SEED, FakeClock, Recording, build, fake_places, seed_rows
 from test_task010_trips import osaka  # noqa: F401 (픽스처)
 
 
@@ -24,7 +24,7 @@ from test_task010_trips import osaka  # noqa: F401 (픽스처)
 
 def test_T10_Q2_팩에_지역_중심은_이름과_place_id만_좌표는_캐시에():
     result = build()
-    assert set(result.pack["areas"]) == {"namba", "shinsaibashi", "umeda"}
+    assert set(result.pack["areas"]) == AREAS  # §12: seed areas 목록 그대로 (4곳)
     for area in result.pack["areas"].values():
         assert set(area) == {"name_ko", "place_id"}
         assert "location" in result.cache[area["place_id"]]
@@ -79,7 +79,7 @@ def replies(*steps):
 FOUND = {"places": [{"id": "FAKE-google-one"}]}
 
 
-@pytest.mark.parametrize("status", [401, 403, 429], ids=["401", "403", "429"])
+@pytest.mark.parametrize("status", [401, 403], ids=["401", "403"])  # 429는 §12 Q2: 다시 시도 (test_task010_v14.py)
 def test_T10_Q2_인증_요금_오류는_ProviderAuthError_다시_시도하지_않는다(status):
     from places.provider import ProviderAuthError
 
