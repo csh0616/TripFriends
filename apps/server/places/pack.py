@@ -24,15 +24,31 @@ def _serper_openings(serper: dict[str, Any]) -> list[dict[str, Any]] | None:
     return [{"weekday": day, "open": low, "close": high} for day in range(7) if day not in off for low, high in spans]
 
 
-def _hours(entry: dict[str, Any] | None, live: dict[str, Any] | None = None) -> dict[str, Any]:
-    """{openings, status, source_type, source_url, checked_at}. 대체 순서 (§11 H4):
-    그 자리에서 받은 Google 값(confirmed) -> 메모리 값(unverified) -> Serper 값(unverified) -> 모름."""
+def _curated_openings(row: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """우리가 정한 영업시간 (§13). open_space = 늘 열림(7일 00:00~24:00), curated_hours = 그 시간대를 7일 모두. 없으면 None."""
+    if row.get("open_space"):
+        return [{"weekday": day, "open": "00:00", "close": "24:00"} for day in range(7)]
+    spans = row.get("curated_hours")
+    if spans:
+        return [{"weekday": day, "open": span["open"], "close": span["close"]} for span in spans for day in range(7)]
+    return None
+
+
+def _hours(row: dict[str, Any], entry: dict[str, Any] | None, live: dict[str, Any] | None = None) -> dict[str, Any]:
+    """{openings, status, source_type, source_url, checked_at}. 고르는 순서 (§13 O3):
+    그 자리에서 받은 Google 값(confirmed) -> 우리가 정한 값 curated(confirmed) -> 메모리 값(unverified) -> Serper 값(unverified) -> 모름.
+    임시 휴업(그 자리에서 받은 값)은 늘 열림이어도 모름이 먼저다 (A4)."""
     unknown = {"openings": None, "status": "unknown", "source_type": "google", "source_url": None, "checked_at": None}
     if live is not None and live.get("business_status") == CLOSED_TEMPORARILY:
         return unknown
-    if live is not None and live.get("opening_hours"):
-        status = "confirmed" if live["fresh"] else "unverified"
-        return {"openings": live["opening_hours"], "status": status, "source_type": "google", "source_url": None, "checked_at": live["checked_at"]}
+    google = live is not None and live.get("opening_hours")
+    if google and live["fresh"]:  # type: ignore[index]
+        return {"openings": live["opening_hours"], "status": "confirmed", "source_type": "google", "source_url": None, "checked_at": live["checked_at"]}  # type: ignore[index]
+    curated = _curated_openings(row)
+    if curated:
+        return {"openings": curated, "status": "confirmed", "source_type": "curated", "source_url": None, "checked_at": None}
+    if google:
+        return {"openings": live["opening_hours"], "status": "unverified", "source_type": "google", "source_url": None, "checked_at": live["checked_at"]}  # type: ignore[index]
     serper = (entry or {}).get("serper")
     openings = _serper_openings(serper) if serper else None
     if openings:
@@ -60,7 +76,7 @@ def _hours_text(openings: list[dict[str, Any]] | None) -> str | None:
 
 def facts_for(row: dict[str, Any], entry: dict[str, Any] | None, live: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """[{field, value, status, source_type, source_url, checked_at}]. live = places/live.py가 돌려준 Google 영업시간 (메모리 값, 없으면 None)."""
-    hours = _hours(entry, live)
+    hours = _hours(row, entry, live)
     facts: list[dict[str, Any]] = [
         {"field": "stay_min", "value": json.dumps(row["stay"]), "status": "confirmed", "source_type": "curated", "source_url": None, "checked_at": None},
         {
@@ -98,7 +114,7 @@ def engine_places(pack: dict[str, Any], cache: dict[str, Any], live: dict[str, A
         entry = cache.get(row["place_id"])
         if not entry or not entry.get("location"):
             continue
-        hours = _hours(entry, (live or {}).get(row["place_id"]))
+        hours = _hours(row, entry, (live or {}).get(row["place_id"]))
         found[row["id"]] = Place(
             id=row["id"],
             name=row["name_ko"],
@@ -117,4 +133,4 @@ def engine_places(pack: dict[str, Any], cache: dict[str, Any], live: dict[str, A
 
 def source_types(pack: dict[str, Any], cache: dict[str, Any], live: dict[str, Any] | None = None) -> dict[str, str]:
     """우리 id -> 영업시간 fact의 출처 (계획 화면의 출처 표시용)."""
-    return {row["id"]: _hours(cache.get(row["place_id"]), (live or {}).get(row["place_id"]))["source_type"] for row in pack["places"]}
+    return {row["id"]: _hours(row, cache.get(row["place_id"]), (live or {}).get(row["place_id"]))["source_type"] for row in pack["places"]}

@@ -3,7 +3,7 @@
 import datetime as dt
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from engine.models import Category, CourseItem, Direction, Dropped, HoursStatus, PlaceId
 
@@ -237,6 +237,9 @@ class SeedRequest(_Request):
     """TASK-006 A5·Q14: JSON 본문. 본문이 없으면 예전 시드 그대로."""
 
     chosen: bool = False
+    # TASK-010 §13 질문 답 1: 데모 여행의 첫 N일을 지난 날로 보이기 위한 개발용 선택값. 서버는 데모 날의 상태(state)를 갖고 있지 않아
+    # 지금은 값만 받는다 (응답 모양은 그대로). 앱이 지난 날을 화면에 보이려면 날마다 날짜·상태를 줄 곳이 더 필요하다 (보고 참조)
+    past_days: int = Field(default=0, ge=0, le=2)
 
 
 class SeedResult(BaseModel):

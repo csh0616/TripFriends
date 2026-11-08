@@ -1342,6 +1342,11 @@ export interface components {
              * @default false
              */
             chosen: boolean;
+            /**
+             * Past Days
+             * @default 0
+             */
+            past_days: number;
         };
         /** SeedResult */
         SeedResult: {

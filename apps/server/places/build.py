@@ -138,7 +138,8 @@ def build_pack(
             continue
         entry: dict[str, Any] = {"location": details["location"], "fetched_at": fetched_at}  # Google 영업시간·사이트·지도 링크는 디스크에 두지 않는다
         has_google_hours = bool(details["opening_hours"])
-        if not has_google_hours and details["business_status"] != "CLOSED_TEMPORARILY":
+        own_hours = bool(row.get("open_space") or row.get("curated_hours"))  # 우리가 정한 시간이 Serper보다 먼저 쓰이므로 부르지 않는다 (호출 절약)
+        if not has_google_hours and not own_hours and details["business_status"] != "CLOSED_TEMPORARILY":
             found = _supplement(row, serper, calls)
             if found:
                 entry["serper"] = found

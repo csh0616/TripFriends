@@ -3926,6 +3926,13 @@
             "type": "boolean",
             "title": "Chosen",
             "default": false
+          },
+          "past_days": {
+            "type": "integer",
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Past Days",
+            "default": 0
           }
         },
         "additionalProperties": false,
