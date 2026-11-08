@@ -358,7 +358,8 @@ def test_T10_H1_디스크_캐시에는_좌표_fetched_at_Serper_사실_값만():
 
 def test_T10_A2_캐시는_팩의_place_id마다_좌표와_fetched_at():
     result = build()
-    assert set(result.cache) == {row["place_id"] for row in result.pack["places"]} | {result.pack["center"]["place_id"]}
+    areas = {area["place_id"] for area in result.pack["areas"].values()}  # PM 답 Q2: 지역 중심 좌표도 캐시에만
+    assert set(result.cache) == {row["place_id"] for row in result.pack["places"]} | {result.pack["center"]["place_id"]} | areas
     for place_id, entry in result.cache.items():
         assert datetime.fromisoformat(entry["fetched_at"]) == NOW, place_id
     assert result.cache["FAKE-osaka-kuromon"]["location"] == FAKE["details"]["FAKE-osaka-kuromon"]["location"]
