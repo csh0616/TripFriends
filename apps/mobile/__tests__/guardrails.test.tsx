@@ -118,6 +118,26 @@ describe('G1', () => {
     expect(hits(files, LAYOUT_LITERAL)).toEqual([]);
   });
 
+  // TASK-010 §E1·§12 답 6: 고르기·입력 토큰(DESIGN-001 §4-7)은 tokens.json에서 읽는다. layout.ts에도 숫자로 적지 않는다
+  test.each([
+    ['radio', 'radio'],
+    ['actionBar', 'action-bar'],
+    ['rowAlt', 'row-alt'],
+    ['rowDrop', 'row-drop'],
+    ['thumbSm', 'thumb-sm'],
+    ['field', 'field'],
+    ['tabDay', 'tab-day'],
+    ['sheetForm', 'sheet-form'],
+  ])('G33a_E1_고르기_토큰_%s(%s)는_layout_ts에_숫자로_적지_않는다', (key) => {
+    expect(readFileSync(join(SRC, LAYOUT_FILE), 'utf8')).not.toMatch(new RegExp(`\\b${key}\\s*:\\s*\\d`));
+  });
+
+  test('G33b_E1_고르기_색은_화면_소스에_hex로_없다_토큰에서_읽는다', () => {
+    // sel-bg·field-error-bg·field-error는 다른 색의 별명이라 값이 같다. 화면 소스(placeholderFor 예외 파일 밖)에 그 값을 직접 쓰지 않는다
+    const files = sourceFiles().filter((f) => f.path !== PLACEHOLDER_FILE);
+    expect(hits(files, /#(FFF1E8|FFEDD5|C2410C)\b/i)).toEqual([]);
+  });
+
   test.each([
     ['타일 108', /\b108\b/],
     ['사진 316', /\b316\b/],

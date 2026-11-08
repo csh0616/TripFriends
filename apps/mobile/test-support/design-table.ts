@@ -28,6 +28,10 @@ export const COLORS: Record<string, string> = {
   'map-label': '#5F6573',
   'route-done': '#7C828F',
   'ink-strong': '#1A1A1A',
+  // §4-7 고르기·입력 (11-09, TASK-010 §E1): sel-bg = brand-soft, field-error-bg/field-error = alert-bg/alert (별명)
+  'sel-bg': '#FFF1E8',
+  'field-error-bg': '#FFEDD5',
+  'field-error': '#C2410C',
 };
 
 // §4-3 글꼴 이름 (Q15)
@@ -82,10 +86,22 @@ export const NUMBERS: Record<string, number> = {
   'pin-next': 36,
   'route-width': 5,
   'route-casing': 9,
+  // §4-7 고르기·입력 (11-09, TASK-010 §E1)
+  radio: 24,
+  'action-bar': 68,
+  'row-alt': 64,
+  'row-drop': 52,
+  'thumb-sm': 44,
+  field: 64,
+  'notice-limit': 16, // 넘침 안내 상자 모서리
+  'sheet-form': 500,
 };
 
 // §4-6 목록 값: route-dash = 선 길이, 빈 길이
-export const LISTS: Record<string, number[]> = { 'route-dash': [10, 8] };
+export const LISTS: Record<string, number[]> = {
+  'route-dash': [10, 8],
+  'tab-day': [36, 44], // §4-7: [보이는 높이, 누르는 높이]
+};
 
 // §4-3 글자 값
 export const STRINGS: Record<string, string> = {
@@ -94,6 +110,7 @@ export const STRINGS: Record<string, string> = {
   'sh-sheet': '0 -10px 32px rgba(26,26,26,.16)',
   'sh-raise': '0 1px 2px rgba(26,26,26,.08), 0 2px 8px rgba(26,26,26,.08)', // v2.3, TASK-005 §9 Q14
   'ease-out': 'cubic-bezier(.2,.8,.2,1)',
+  'sel-ring': 'inset 0 0 0 2px #FF5A00', // §4-7: 안쪽 2px brand (§4-3 선 표기 'inset 0 0 0 1px'와 같은 모양)
   scrim: 'rgba(26,26,26,0.40)', // §4-1 v2.2, TASK-004 §13-3 #2
 };
 
