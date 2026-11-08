@@ -42,7 +42,7 @@ const CASES: [string, string, string, string][] = [
   ['day-t1', 'past', 'pill-past', '지난 날'],
 ];
 
-function show() {
+async function show() {
   return render(
     <SafeAreaProvider initialMetrics={METRICS}>
       <TripDays trip={FOUR as never} onOpen={() => {}} onTripChange={() => {}} onNewTrip={() => {}} />
@@ -54,32 +54,32 @@ const flat = (node: { props: { style?: unknown } }) => (StyleSheet.flatten(node.
 const upper = (value: unknown) => (typeof value === 'string' ? value.toUpperCase() : value);
 
 describe('§14 답 2 날 상태 알약 색 (DESIGN-001 §4-9)', () => {
-  test.each(CASES)('T10_S14_2_%s(%s)_알약_바탕은_%s의_bg', (dayId, _state, token) => {
-    show();
+  test.each(CASES)('T10_S14_2_%s(%s)_알약_바탕은_%s의_bg', async (dayId, _state, token) => {
+    await show();
     expect(upper(flat(screen.getByTestId(`day-pill-${dayId}`)).backgroundColor)).toBe(PILLS[token].bg);
   });
 
-  test.each(CASES)('T10_S14_2_%s(%s)_알약_글자_색은_%s의_fg', (dayId, _state, token, label) => {
-    show();
+  test.each(CASES)('T10_S14_2_%s(%s)_알약_글자_색은_%s의_fg', async (dayId, _state, token, label) => {
+    await show();
     const pill = screen.getByTestId(`day-pill-${dayId}`);
     expect(upper(flat(within(pill).getByText(label)).color)).toBe(PILLS[token].fg);
   });
 
-  test.each(CASES.filter(([, , token]) => PILLS[token].border))('T10_S14_2_%s(%s)_알약_테두리는_1px_%s의_border', (dayId, _state, token) => {
-    show();
+  test.each(CASES.filter(([, , token]) => PILLS[token].border))('T10_S14_2_%s(%s)_알약_테두리는_1px_%s의_border', async (dayId, _state, token) => {
+    await show();
     const style = flat(screen.getByTestId(`day-pill-${dayId}`));
     expect(style.borderWidth).toBe(1);
     expect(upper(style.borderColor)).toBe(PILLS[token].border);
   });
 
-  test('T10_S14_2_오늘_알약은_테두리가_없다', () => {
-    show();
+  test('T10_S14_2_오늘_알약은_테두리가_없다', async () => {
+    await show();
     const style = flat(screen.getByTestId('day-pill-day-t2'));
     expect(style.borderWidth ?? 0).toBe(0);
   });
 
-  test('T10_S14_2_계획_전_알약에만_점선_동그라미_색은_dot', () => {
-    show();
+  test('T10_S14_2_계획_전_알약에만_점선_동그라미_색은_dot', async () => {
+    await show();
     const dot = screen.getByTestId('day-pill-dot-day-t4');
     expect(within(screen.getByTestId('day-pill-day-t4')).getByTestId('day-pill-dot-day-t4')).toBe(dot);
     const props = dot.props as { color?: unknown; stroke?: unknown };
@@ -88,8 +88,8 @@ describe('§14 답 2 날 상태 알약 색 (DESIGN-001 §4-9)', () => {
     for (const other of ['day-t3', 'day-t2', 'day-t1']) expect(screen.queryByTestId(`day-pill-dot-${other}`)).toBeNull();
   });
 
-  test('T10_S14_2_알약_네_가지가_서로_다른_바탕이다', () => {
-    show();
+  test('T10_S14_2_알약_네_가지가_서로_다른_바탕이다', async () => {
+    await show();
     const backs = CASES.map(([dayId]) => upper(flat(screen.getByTestId(`day-pill-${dayId}`)).backgroundColor));
     expect(new Set(backs).size).toBe(4);
   });
