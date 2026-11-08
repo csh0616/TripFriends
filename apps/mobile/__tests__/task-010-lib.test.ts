@@ -10,6 +10,7 @@
 //     createBlocker(form): string | null           날짜가 없으면 이유 한 줄(빈 글 아님), 있으면 null
 //     tripDates(start, end): string[]              시작~끝 날짜 (끝 포함). 날 탭(tab-day)에 쓴다
 //     canAddMustVisit(form, date): boolean         그날 5곳 미만일 때만
+//     mustVisitDayNumber(form, placeId): number | null  그 장소가 담긴 날이 몇 일째인지 (1부터). 다른 날에 담긴 곳은 addMustVisit가 그대로 둔다 (§11 D1)
 //     addMustVisit(form, date, placeId): TripForm  5곳이면 그대로 (새 객체, 원본은 안 바꿈)
 //     createTripBody(form)                         POST /trips 본문 (§B1). 숙소가 없으면 lodging_place_id를 싣지 않는다
 //     placeQueryReady(q) / lodgingQueryReady(q)    꼭 갈 곳은 한 글자부터(§B4), 숙소는 두 글자부터(§B5)
@@ -45,7 +46,7 @@ const ids = (n: number) => Array.from({ length: n }, (_, i) => `osaka-fake-${i}`
 describe('C6 출처 이름', () => {
   const sourceLabel = (type: string): string => require('@/lib/source-label').sourceLabel(type);
   test.each([
-    ['google', 'Google 지도'],
+    ['google', 'Google Maps'], // §11 G1: 번역 금지 (ADR-015 v1.1 §3-5)
     ['serper', '검색 결과 · 미확인'],
     ['user', '내가 확인'],
     ['curated', 'Tripfriends'],
@@ -129,6 +130,15 @@ describe('C2 여행 만들기 폼', () => {
     expect(four.mustVisits[day]).toHaveLength(4); // 원본은 그대로
   });
 
+  test('T10_D1_다른_날에_담긴_곳은_담을_수_없고_몇_일째인지_안다', () => {
+    const f = form({ startDate: '2026-12-10', endDate: '2026-12-12', mustVisits: { '2026-12-10': [], '2026-12-11': ['osaka-fake-kuromon'], '2026-12-12': [] } });
+    expect(lib().mustVisitDayNumber(f, 'osaka-fake-kuromon')).toBe(2); // 1부터 센다: "2일째에 담김"
+    expect(lib().mustVisitDayNumber(f, 'osaka-fake-sky')).toBeNull();
+    const same = lib().addMustVisit(f, '2026-12-12', 'osaka-fake-kuromon') as TripForm;
+    expect(same.mustVisits['2026-12-12']).toEqual([]);
+    expect(lib().createTripBody(same).must_visits).toEqual([{ date: '2026-12-11', place_id: 'osaka-fake-kuromon' }]);
+  });
+
   test('T10_C2_꼭_갈_곳은_날마다_센다', () => {
     const f = form({ startDate: '2026-12-10', endDate: '2026-12-11', mustVisits: { '2026-12-10': ids(5) } });
     expect(lib().canAddMustVisit(f, '2026-12-10')).toBe(false);
@@ -156,7 +166,11 @@ describe('C2 여행 만들기 폼', () => {
     const dates = ['2026-12-10', '2026-12-11', '2026-12-12'];
     fc.assert(
       fc.property(fc.array(fc.array(fc.constantFrom(...ids(8)), { maxLength: 5 }), { minLength: 3, maxLength: 3 }), (lists) => {
-        const mustVisits = Object.fromEntries(dates.map((d, i) => [d, [...new Set(lists[i])]]));
+        // §11 D1: 같은 장소는 한 날에만 (앞 날에 있으면 뒤 날에서 뺀다)
+        const seen = new Set<string>();
+        const mustVisits = Object.fromEntries(
+          dates.map((d, i) => [d, [...new Set(lists[i])].filter((id) => !seen.has(id) && (seen.add(id), true))]),
+        );
         const body = lib().createTripBody(form({ startDate: dates[0], endDate: dates[2], mustVisits }));
         expect(body.must_visits).toEqual(dates.flatMap((d) => mustVisits[d].map((place_id: string) => ({ date: d, place_id }))));
       }),
@@ -302,5 +316,14 @@ describe('Q17 달력 시트', () => {
   test('T10_Q17_B1_두_번째로_7일을_넘는_날은_끝이_되지_않는다', () => {
     const first = cal().pickDate({ start: null, end: null }, '2026-12-10');
     expect(cal().pickDate(first, '2026-12-17').end).not.toBe('2026-12-17');
+  });
+});
+
+// ---------- §11 G3 Roboto는 JS 글꼴 불러오기로 ----------
+
+describe('G3 Roboto', () => {
+  test('T10_G3_글꼴_묶음에_Roboto_400이_있다', () => {
+    const { fontAssets } = require('@/planning/fonts');
+    expect(Object.keys(fontAssets)).toContain('Roboto_400Regular');
   });
 });

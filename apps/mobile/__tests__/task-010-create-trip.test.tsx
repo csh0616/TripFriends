@@ -16,6 +16,9 @@
 //     주 버튼 `create-trip-submit`(못 누르면 accessibilityState.disabled) · 못 누르는 이유 한 줄 `create-trip-reason` · 틀린 칸 오류 `field-error`
 //   날 줄을 누르면: planning -> POST /days/{id}/planning · today -> GET /days/{id}/now (고른 코스가 없으면 계획 대화부터, §9 Q6)
 //     · past·planned -> 계획 대화도 /now도 부르지 않는다. 고른 코스 = trip_days[].chosen_option_id
+//   §11 G2: 지도 없이 Google 값을 보여 주는 곳 = SC-01 검색 결과 목록 아래 `g-footer`, 계획 후보 카드 안 `g-slot`.
+//     공식 로고 파일 전에는 글자 'Google Maps'로 대신 (G1)
+//   §11 D1: 다른 날에 담긴 곳은 검색 줄에 '{n}일째에 담김', 누를 수 없음 (검색 줄 testID `must-result-{place_id}`)
 //   400 VALIDATION_ERROR detail.field -> 그 칸에 `field-error` (§9 Q13). 칸 묶음 testID = `field-{칸}-box` (예: start_date -> `field-start-date-box`)
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -422,6 +425,36 @@ describe('C2 여행 만들기', () => {
     await type('lodging-search', q);
     await settleAll();
     expect(sentTo(server, 'GET /places/lodging-search')).toEqual([]);
+  });
+
+  test('T10_G2_검색_결과에_Google_Maps_자리', async () => {
+    server.match('GET /places/search', () => json(200, [kuromon]));
+    await toForm();
+    await fillDates('2026-12-03', '2026-12-04');
+    await tap(await screen.findByTestId('tab-day-2026-12-03'));
+    await type('must-search', '구로');
+    await screen.findByText('구로몬 시장');
+    const footer = await screen.findByTestId('g-footer');
+    expect(within(footer).getByText('Google Maps')).toBeTruthy();
+  });
+
+  test('T10_D1_다른_날에_담긴_곳은_n일째에_담김_누를_수_없다', async () => {
+    server.match('GET /places/search', () => json(200, [kuromon]));
+    server.on(CREATE, json(201, trip(['planning', 'planning'])));
+    await toForm();
+    await fillDates('2026-12-03', '2026-12-04');
+    await tap(await screen.findByTestId('tab-day-2026-12-03'));
+    await type('must-search', '구로');
+    await tap(await screen.findByText('구로몬 시장'));
+    await tap(await screen.findByTestId('tab-day-2026-12-04'));
+    await type('must-search', '구로몬');
+    const row = await screen.findByTestId('must-result-osaka-fake-kuromon');
+    expect(within(row).getByText(/1일째에 담김/)).toBeTruthy();
+    expect(isDisabled('must-result-osaka-fake-kuromon')).toBe(true);
+    await tap(row);
+    await tap(screen.getByTestId('create-trip-submit'));
+    await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
+    expect((server.sent(CREATE)[0].body as { must_visits: unknown[] }).must_visits).toEqual([{ date: '2026-12-03', place_id: 'osaka-fake-kuromon' }]);
   });
 
   test('T10_C2_A3_하루_5곳을_고르면_그날은_더_고를_수_없다', async () => {

@@ -75,7 +75,7 @@ export function place(
   };
 }
 
-const PLACES: Place[] = [
+export const PLACES: Place[] = [
   place('D01', 650, '10:00-18:00', 'confirmed'),
   place('D02', 1200, '11:00-14:00,17:00-22:00', 'unverified'),
   place('D03', 300, null, 'unknown'),

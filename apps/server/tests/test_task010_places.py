@@ -23,8 +23,10 @@
     places/__main__.py  main(["build", "osaka", "--seed", 경로, "--pack-dir", 폴더, "--cache-dir", 폴더]) -> 종료 코드 (§9 Q21)
     places/cache.py     is_stale(entry, "location"|"opening_hours", now) · refresh(cache, place_ids, provider, *, now, clock, sleep)
                         -> (새 캐시, {calls: {google}, failed: [place_id], stopped})
-    places/pack.py      facts_for(row, entry) -> [{field, value, status, source_type, source_url, checked_at}]
-                        engine_places(pack, cache) -> {우리 id: engine.models.Place}
+    places/pack.py      facts_for(row, entry, live=None) -> [{field, value, status, source_type, source_url, checked_at}]
+                        engine_places(pack, cache, live=None) -> {우리 id: engine.models.Place}
+                        live = places/live.py LiveHours.fetch()가 돌려준 값 (Google 영업시간은 메모리에만, §11 H2). 없으면 None
+    §11 H1: 디스크 캐시 항목의 키는 location·fetched_at·serper(뽑은 사실 값)만. Google 영업시간·사이트·이름·주소 0
 """
 
 import json
@@ -327,7 +329,31 @@ def test_T10_A2_팩에_8종_3지역이_남는다():
     assert {row["area"] for row in pack["places"]} == AREAS
 
 
-def test_T10_A2_캐시는_팩의_place_id마다_Google_값과_fetched_at():
+DISK_KEYS = {"location", "fetched_at", "serper"}  # §11 H1
+
+
+def live_of(place_id: str, now: datetime = NOW) -> dict | None:
+    """그 자리에서 부른 Google 영업시간 (메모리, §11 H2)."""
+    from places.live import LiveHours
+
+    return LiveHours(fake_places()).fetch([place_id], now=now, cap=80)[place_id]
+
+
+def test_T10_H1_디스크_캐시에는_좌표_fetched_at_Serper_사실_값만():
+    result = build()
+    for place_id, entry in result.cache.items():
+        assert set(entry) <= DISK_KEYS, (place_id, set(entry) - DISK_KEYS)
+        assert "location" in entry and "fetched_at" in entry
+    text = json.dumps(result.cache, ensure_ascii=False)
+    for detail in FAKE["details"].values():
+        for value in (detail["website"], detail["maps_url"]):
+            if value:
+                assert value not in text  # Google 사이트·지도 링크 0
+    for hours_word in ("opening_hours", "regularOpeningHours", "business_status", "name", "address"):
+        assert f'"{hours_word}"' not in text
+
+
+def test_T10_A2_캐시는_팩의_place_id마다_좌표와_fetched_at():
     result = build()
     assert set(result.cache) == {row["place_id"] for row in result.pack["places"]} | {result.pack["center"]["place_id"]}
     for place_id, entry in result.cache.items():
@@ -387,12 +413,32 @@ def test_T10_A3_못_뽑거나_엇갈리면_모름(our_id):
     assert hours_fact(row, result.cache[row["place_id"]])["status"] == "unknown"
 
 
-def test_T10_A3_Q4_Google_영업시간은_google_확인됨_확인_시각은_받은_시각():
+def test_T10_H7_Q4_그_자리에서_받은_Google_영업시간은_google_확인됨_확인_시각은_받은_시각():
+    from places.pack import facts_for
+
     result = build()
     row = row_of(result.pack, "osaka-fake-kuromon")
-    fact = hours_fact(row, result.cache[row["place_id"]])
-    assert (fact["source_type"], fact["status"]) == ("google", "confirmed")  # §9 Q4: 이번에 받은 Google 값 = 확인됨
-    assert datetime.fromisoformat(fact["checked_at"]) == NOW  # checked_at = fetched_at
+    later = NOW + timedelta(days=3)
+    fact = next(f for f in facts_for(row, result.cache[row["place_id"]], live_of(row["place_id"], later)) if f["field"] == "opening_hours")
+    assert (fact["source_type"], fact["status"]) == ("google", "confirmed")
+    assert datetime.fromisoformat(fact["checked_at"]) == later
+
+
+def test_T10_H4_Google_값이_없으면_캐시만으로는_영업시간_모름():
+    result = build()
+    row = row_of(result.pack, "osaka-fake-kuromon")  # Google에 영업시간이 있는 곳이라 Serper 값도 없다
+    assert hours_fact(row, result.cache[row["place_id"]])["status"] == "unknown"
+
+
+def test_T10_H5_지도_링크는_place_id로_우리가_만든다():
+    from places.pack import facts_for
+
+    result = build()
+    row = row_of(result.pack, "osaka-fake-kuromon")
+    links = [f for f in facts_for(row, result.cache[row["place_id"]]) if f["field"] == "maps_url"]
+    assert len(links) == 1
+    assert row["place_id"] in links[0]["value"]
+    assert links[0]["value"] != FAKE["details"]["FAKE-osaka-kuromon"]["maps_url"]  # Google이 준 링크가 아니다
 
 
 def test_T10_A3_AC3_검색_결과_문장은_팩_캐시_보고_로그_어디에도_없다(caplog):
@@ -493,9 +539,12 @@ def test_T10_A3_Q8_뽑은_구간은_엔진_영업시간으로_읽힌다():
 
 
 def test_T10_A4_임시_휴업은_팩에_넣고_영업시간_모름():
+    from places.pack import facts_for
+
     result = build()
     row = row_of(result.pack, "osaka-fake-gallery")
-    assert hours_fact(row, result.cache[row["place_id"]])["status"] == "unknown"
+    facts = facts_for(row, result.cache[row["place_id"]], live_of(row["place_id"]))  # 휴업 여부도 그 자리에서 받은 값
+    assert next(f for f in facts if f["field"] == "opening_hours")["status"] == "unknown"
 
 
 # ---------- A5 캐시 수명 ----------
@@ -514,19 +563,16 @@ def entry_at(age: timedelta) -> dict:
         ("location", timedelta(days=30) - timedelta(seconds=1), False),
         ("location", timedelta(days=30) + timedelta(seconds=1), True),
         ("location", timedelta(days=1), False),
-        ("opening_hours", timedelta(hours=24) - timedelta(seconds=1), False),
-        ("opening_hours", timedelta(hours=24) + timedelta(seconds=1), True),
-        ("opening_hours", timedelta(hours=1), False),
     ],
-    ids=["좌표_30일_1초_전", "좌표_30일_1초_뒤", "좌표_1일", "영업시간_24시간_1초_전", "영업시간_24시간_1초_뒤", "영업시간_1시간"],
+    ids=["좌표_30일_1초_전", "좌표_30일_1초_뒤", "좌표_1일"],
 )
-def test_T10_A5_캐시_수명_좌표_30일_영업시간_24시간(field, age, stale):
+def test_T10_A5_캐시_수명_좌표_30일(field, age, stale):
     from places.cache import is_stale
 
     assert is_stale(entry_at(age), field, NOW) is stale
 
 
-@pytest.mark.parametrize("field, age", [("location", timedelta(days=30)), ("opening_hours", timedelta(hours=24))], ids=["좌표_정각_30일", "영업시간_정각_24시간"])
+@pytest.mark.parametrize("field, age", [("location", timedelta(days=30))], ids=["좌표_정각_30일"])
 def test_T10_A5_Q7_캐시_수명_정각이면_오래된_것(field, age):
     from places.cache import is_stale
 
@@ -545,8 +591,8 @@ def test_T10_A5_다시_부르기는_요청한_후보_중_오래된_것만():
     clock = FakeClock()
     provider = Recording(fake_places(), clock)
     cache = dict(result.cache)
-    cache["FAKE-osaka-kuromon"] = {**cache["FAKE-osaka-kuromon"], "fetched_at": (NOW - timedelta(hours=25)).isoformat()}
-    cache["FAKE-osaka-sky"] = {**cache["FAKE-osaka-sky"], "fetched_at": (NOW - timedelta(hours=25)).isoformat()}  # 오래됐지만 요청 밖
+    cache["FAKE-osaka-kuromon"] = {**cache["FAKE-osaka-kuromon"], "fetched_at": (NOW - timedelta(days=31)).isoformat()}
+    cache["FAKE-osaka-sky"] = {**cache["FAKE-osaka-sky"], "fetched_at": (NOW - timedelta(days=31)).isoformat()}  # 오래됐지만 요청 밖
     _, report = refresh(cache, ["FAKE-osaka-kuromon", "FAKE-osaka-ramen"], provider, NOW, clock)
     assert provider.names("details") == [("FAKE-osaka-kuromon",)]
     assert report["calls"]["google"] == 1
@@ -555,8 +601,16 @@ def test_T10_A5_다시_부르기는_요청한_후보_중_오래된_것만():
 def test_T10_A5_새것이면_다시_부르지_않는다():
     result = build()
     provider = Recording(fake_places(), FakeClock())
-    refresh(result.cache, list(result.cache), provider, NOW + timedelta(hours=1))
+    refresh(result.cache, list(result.cache), provider, NOW + timedelta(days=29))  # 좌표 30일 안 (영업시간은 디스크에 없다, §11 H1)
     assert provider.calls == []
+
+
+def test_T10_H1_다시_부르기_뒤에도_디스크_캐시에는_좌표와_Serper_값만():
+    result = build()
+    cache, _ = refresh(result.cache, list(result.cache), fake_places(), NOW + timedelta(days=31))
+    for place_id, entry in cache.items():
+        assert set(entry) <= DISK_KEYS, (place_id, set(entry) - DISK_KEYS)
+    assert cache["FAKE-osaka-alley-cafe"]["serper"] == result.cache["FAKE-osaka-alley-cafe"]["serper"]  # Serper 사실 값은 그대로
 
 
 class Broken:
@@ -570,15 +624,10 @@ class Broken:
         raise RuntimeError("공급자 실패 (테스트)")
 
 
-def test_T10_A5_다시_부르기_실패면_이전_값을_쓰되_미확인으로_내린다():
+def test_T10_A5_좌표_다시_부르기_실패면_이전_좌표를_쓰고_보고():
     result = build()
     row = row_of(result.pack, "osaka-fake-kuromon")
-    before = hours_fact(row, result.cache[row["place_id"]])
-    later = NOW + timedelta(hours=25)
-    cache, report = refresh(result.cache, [row["place_id"]], Broken(), later)
-    after = hours_fact(row, cache[row["place_id"]])
-    assert after["value"] == before["value"]
-    assert after["status"] == "unverified"
+    cache, report = refresh(result.cache, [row["place_id"]], Broken(), NOW + timedelta(days=31))
     assert cache[row["place_id"]]["location"] == result.cache[row["place_id"]]["location"]
     assert report["failed"] == [row["place_id"]]
 
@@ -654,18 +703,6 @@ def test_T10_A2_Q9_뺀_이유는_넷_안에서():
     assert {row["reason"] for row in build().report["excluded"]} <= REASONS
 
 
-@pytest.mark.parametrize(("count", "stopped"), [(30, False), (31, True)], ids=["다시_30회_딱", "다시_31회_필요"])
-def test_T10_A7_다시_부르기_Google_30회_넘으면_멈추고_보고(count, stopped):
-    result = build(rows=synthetic_rows(count), places=Synthetic(), serper=SyntheticSerper())
-    result.cache.pop(result.pack["center"]["place_id"], None)  # 후보 장소만 센다
-    clock = FakeClock()
-    provider = Recording(Synthetic(), clock)
-    ids = [row["place_id"] for row in result.pack["places"]]
-    _, report = refresh(result.cache, ids, provider, NOW + timedelta(days=31), clock)
-    assert len(provider.calls) <= 30
-    assert report["stopped"] is stopped
-
-
 def test_T10_A7_요청_간격_0_1초_이상():
     clock = FakeClock()
     places, serper = Recording(fake_places(), clock), Recording(fake_serper(), clock)
@@ -692,11 +729,12 @@ def test_T10_A8_엔진_장소는_demo_city와_같은_모양():
         Place.model_validate(json.loads(place.model_dump_json()))  # 같은 파일 모양으로 왕복
 
 
-def test_T10_A8_엔진_장소_값은_seed와_캐시에서():
+def test_T10_A8_H2_엔진_장소_값은_seed_캐시_그_자리에서_받은_영업시간에서():
     from places.pack import engine_places
 
     result = build()
-    place = engine_places(result.pack, result.cache)["osaka-fake-kuromon"]
+    pid = "FAKE-osaka-kuromon"
+    place = engine_places(result.pack, result.cache, {pid: live_of(pid)})["osaka-fake-kuromon"]
     seed = next(row for row in seed_rows() if row["id"] == "osaka-fake-kuromon")
     detail = FAKE["details"]["FAKE-osaka-kuromon"]
     assert (place.name, place.category, place.crowd_level, place.price_level, place.mood_tags) == (
@@ -716,7 +754,8 @@ def test_T10_A8_엔진_장소의_영업시간_상태(our_id, status):
     from places.pack import engine_places
 
     result = build()
-    assert engine_places(result.pack, result.cache)[our_id].hours_status == status
+    pid = row_of(result.pack, our_id)["place_id"]
+    assert engine_places(result.pack, result.cache, {pid: live_of(pid)})[our_id].hours_status == status
 
 
 # ---------- B7 출처 ----------
@@ -777,3 +816,4 @@ def test_T10_A2_Q21_명령을_가짜_공급자로_한_번_돌리면_팩과_캐�
     assert {row["id"] for row in pack["places"]} == {row["id"] for row in seed_rows()} - set(EXCLUDED)
     assert not keys_anywhere(pack) & GOOGLE_KEYS
     assert all("fetched_at" in entry for entry in cache.values())
+    assert all(set(entry) <= DISK_KEYS for entry in cache.values())  # §11 H1: 명령이 쓴 파일도

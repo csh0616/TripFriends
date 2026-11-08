@@ -51,3 +51,8 @@ export function lodgingQueryReady(_q: string): boolean {
 export function fixedEventError(_status: number, _code: string | null): string | null {
   throw new Error('not implemented');
 }
+
+/** §11 D1: 그 장소가 담긴 날이 몇 일째인지 (1부터), 없으면 null. 껍데기 */
+export function mustVisitDayNumber(_form: TripForm, _placeId: string): number | null {
+  throw new Error('not implemented');
+}

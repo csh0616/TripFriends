@@ -188,8 +188,21 @@ def test_T10_B1_AC4_하루_꼭_갈_곳_5곳까지(osaka, count, ok):
 
 
 def test_T10_B1_꼭_갈_곳은_날마다_세서_두_날_5곳씩은_된다(osaka):
-    must = [(0, pid) for pid in SIX[:5]] + [(1, pid) for pid in SIX[1:6]]
+    must = [(0, pid) for pid in SIX[:5]] + [(1, pid) for pid in sorted(PACK_IDS)[6:11]]  # §11 D1: 날끼리 겹치지 않게
     assert osaka.post_trip(trip_body(days=2, must=must)).status_code == 201
+
+
+@pytest.mark.parametrize(
+    "must",
+    [[(0, "osaka-fake-kuromon"), (1, "osaka-fake-kuromon")], [(0, "osaka-fake-kuromon"), (2, "osaka-fake-kuromon"), (1, "osaka-fake-sky")]],
+    ids=["이틀에_같은_곳", "첫날과_셋째_날에_같은_곳"],
+)
+def test_T10_D1_같은_장소를_다른_날에_또_넣으면_400(osaka, must):
+    assert_400(osaka.post_trip(trip_body(days=3, must=must)), "must_visits")
+
+
+def test_T10_D1_다른_날_다른_장소는_된다(osaka):
+    assert osaka.post_trip(trip_body(days=3, must=[(0, "osaka-fake-kuromon"), (1, "osaka-fake-sky"), (2, "osaka-fake-ramen")])).status_code == 201
 
 
 @pytest.mark.parametrize(
@@ -563,9 +576,13 @@ def test_T10_Q5_가짜_모드로_켜도_경고_한_줄(monkeypatch, caplog):
 
 
 def test_T10_Q5_가짜_공급자의_영업시간_출처는_google(osaka):
-    place = search(osaka, "구로몬").json()[0]
-    hours = [f for f in place["facts"] if f["field"] == "opening_hours"]
-    assert hours and hours[0]["source_type"] == "google"
+    # §11 H3: Google 영업시간은 부르는 때(계획 세션 시작 등)에만 온다. 계획 후보에서 본다
+    trip = osaka.make_trip(days=1, offset=10)
+    session = osaka.client.post(f"/days/{trip['trip_days'][0]['day_id']}/planning", json={"mode": "conversation"}).json()
+    first = session["question"]["choices"][0]["id"]
+    batch = osaka.client.post(f"/planning/{session['session_id']}/answer", json={"choice_ids": [first]}).json()
+    sources = {f["source_type"] for c in batch["candidates"] for f in c["place"]["facts"] if f["field"] == "opening_hours"}
+    assert "google" in sources
 
 
 def test_T10_Q11_가짜_모드는_팩을_메모리에서_만들고_파일을_쓰지_않는다(monkeypatch):
