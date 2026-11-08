@@ -9,23 +9,15 @@ from dataclasses import dataclass
 from typing import NamedTuple
 
 from engine.models import CourseItem, Place
-from engine.planning import distance_km, travel_min
+from engine.planning import buffer_min, distance_km, travel_min
 
 
 class _Rules(NamedTuple):
-    relaxed_buffer_min: int  # 엔진 `relaxed_buffer_min`과 같은 값
-    packed_buffer_min: int
     open_all_day: int  # 영업시간 모름이면 하루 전체 (엔진 `intervals`와 같음)
 
 
 def _rules() -> _Rules:
-    return _Rules(relaxed_buffer_min=15, packed_buffer_min=5, open_all_day=10**6)
-
-
-def buffer_min(label: str) -> int:
-    """§16 Q37: 원래 고른 코스의 방식 (relaxed/packed)."""
-    rules = _rules()
-    return rules.relaxed_buffer_min if label == "relaxed" else rules.packed_buffer_min
+    return _Rules(open_all_day=10**6)
 
 
 def _minutes(value: str) -> int:

@@ -59,6 +59,12 @@ const PILL = {
  */
 const hasMapKey = (): boolean => Constants.expoConfig?.extra?.googleMapsKeyPresent === true;
 
+/** 사건 카드(T-04·T-06)의 제안 id들. 제안이 없으면 빈 목록 */
+const proposalIdsOf = (cards: NowCard[]): string[] => {
+  const card = cards.find((one) => one.type === 'T-04' || one.type === 'T-06');
+  return card && (card.type === 'T-04' || card.type === 'T-06') ? card.proposals.map((proposal) => proposal.proposal_id) : [];
+};
+
 const isNowView = (data: unknown): data is NowView => {
   const view = data as Partial<NowView> | null;
   return (
@@ -122,6 +128,7 @@ export function TripNowScreen({
   const [delay, setDelay] = useState(0); // C2: 위치만 이만큼 앞 시각 자리
   const [note, setNote] = useState<string | null>(null);
   const [sheetIndex, setSheetIndex] = useState(1);
+  const [chosen, setChosen] = useState<string | null>(null); // TASK-009 A1: 고른 제안 id. 화면에만 있고 서버에는 보내지 않는다
 
   const alive = useRef(true);
   const signals = useRef(new Set<AbortController>());
@@ -188,6 +195,9 @@ export function TripNowScreen({
     const data = result.data;
     for (const card of [data.main, ...data.subs]) if (card.type === 'T-08') homeMin.current = card.go_home_min;
     viewRef.current = data;
+    // §9 Q6: 새 제안에 고른 id가 그대로 있으면 유지, 없어졌으면 해제
+    const ids = proposalIdsOf([data.main, ...data.subs]);
+    setChosen((now) => (now !== null && ids.includes(now) ? now : null));
     setView(data);
     setNote(shownNote);
     setProblem(null);
@@ -227,6 +237,7 @@ export function TripNowScreen({
     const mine = seq.current;
     const result = await send(request, signals.current);
     busy.current = false;
+    setChosen(null); // §6: 확정이 성공하든 stale이든 끊기든 고른 상태는 지운다
     if (!alive.current || mine !== seq.current) return;
     if (result.ok) {
       show(result, accepted ? ACCEPTED_NOTE : null);
@@ -290,7 +301,10 @@ export function TripNowScreen({
     if (last.current) void fetchNow(last.current);
   };
 
-  const accept = (proposalId: string) => void decide(acceptRequest(proposalId), true);
+  const choose = (proposalId: string) => setChosen((now) => (now === proposalId ? null : proposalId));
+  const confirm = () => {
+    if (chosen !== null) void decide(acceptRequest(chosen), true);
+  };
   const dismiss = (eventId: string) => void decide(dismissRequest(eventId), false);
   // T-05 [열었어]/[닫혔어]: 다시 보내지 않는다. 끊기거나 409면 GET /now로 지금 상태를 받는다 (§6)
   const visit = (placeId: string, wasOpen: boolean) =>
@@ -320,6 +334,7 @@ export function TripNowScreen({
   const mainCard = view && visible(view.main) ? view.main : null;
   const subCards = view ? view.subs.filter(visible).slice(0, MAX_CARDS - (mainCard ? 1 : 0)) : [];
 
+  const choiceCount = proposalIdsOf([...(mainCard ? [mainCard] : []), ...subCards]).length; // Q5: 제안 0개면 확정 줄을 숨긴다
   const position = view?.position ?? null;
   const pill = view ? PILL[view.status] ?? PILL.on_track : null;
   const bandTop = insets.top + layout.header + space['space-2'];
@@ -464,13 +479,13 @@ export function TripNowScreen({
             {view ? (
               <>
                 <View testID="now-main" style={styles.mainBox}>
-                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} onAccept={accept} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} /> : null}
+                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} /> : null}
                   <View testID="now-reason">
                     <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
                   </View>
                 </View>
                 {subCards.map((card, index) => (
-                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} onAccept={accept} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} />
+                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} />
                 ))}
               </>
             ) : problem === null ? (
@@ -480,6 +495,21 @@ export function TripNowScreen({
         </BottomSheet>
       </View>
 
+      {/* A2: 시트 아래 확정 줄. 고르기 전에는 비활성(bg-2 + muted)이라 화면에 주황 버튼이 없다 */}
+      {choiceCount > 0 ? (
+        <View testID="action-bar" style={styles.actionBar}>
+          <Pressable
+            testID="select-confirm"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: chosen === null }}
+            disabled={chosen === null}
+            onPress={confirm}
+            style={[styles.confirm, chosen === null && styles.confirmOff]}
+          >
+            <Text style={text('heading', chosen === null ? 'muted' : 'on-brand')}>이걸로 할래</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {/* 입력창은 시트 아래 고정. R1은 비활성 안내 */}
       <InputBar onSend={() => undefined} disabled disabledHint={INPUT_HINT} />
       {profileOpen ? (
@@ -560,5 +590,15 @@ const styles = StyleSheet.create({
   sheetBackground: { backgroundColor: color.surface, borderTopLeftRadius: radius['r-sheet'], borderTopRightRadius: radius['r-sheet'] },
   handle: { width: layout.sheetHandleWidth, height: layout.sheetHandleHeight, backgroundColor: color.line },
   sheetContent: { paddingHorizontal: layout.screenMargin, paddingBottom: space['space-6'], gap: space['space-4'] },
+  actionBar: {
+    height: layout.actionBar,
+    justifyContent: 'center',
+    paddingHorizontal: layout.screenMargin,
+    backgroundColor: color.surface,
+    borderTopWidth: layout.actionBarLine,
+    borderTopColor: color.line,
+  },
+  confirm: { minHeight: control.btn, borderRadius: radius['r-md'], backgroundColor: color.brand, alignItems: 'center', justifyContent: 'center' },
+  confirmOff: { backgroundColor: color['bg-2'] },
   mainBox: { gap: space['space-3'] },
 });

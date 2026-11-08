@@ -13,6 +13,7 @@
 - `apps/mobile` — React Native · Expo · TypeScript. 화면만
 - `packages/api-types` — 서버 OpenAPI에서 자동 생성한 TS 타입 (손으로 고치지 않음)
 - `apps/web` — **건드리지 않는다** (R2 이후 관측 대시보드용)
+- `testdata/` — 앱·서버가 함께 읽는 테스트 데이터 (예: 조사 경계 표 `particles.json`, TASK-009 §9)
 
 ## 문서 지도 (필요할 때 찾아 읽기)
 | 알고 싶은 것 | 문서 |

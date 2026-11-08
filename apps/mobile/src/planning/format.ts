@@ -1,4 +1,5 @@
 // 화면 글자를 만드는 작은 함수들 (판단·계산이 아니라 표시용 글자). 날짜·시각은 서버가 준 값을 그대로 옮긴다.
+import { withParticle } from '@/lib/particle';
 import type { DaySummary } from '@/lib/planning-api';
 
 const ORDINAL = ['첫째', '둘째', '셋째', '넷째', '다섯째'];
@@ -21,18 +22,10 @@ export function timeToMinutes(time: string): number {
   return hours * 60 + minutes;
 }
 
-/** Q40 한글 마지막 글자에 받침이 있으면 "은", 없으면 "는". 한글이 아니면 null (조사를 피한다) */
-export function topicParticle(name: string): '은' | '는' | null {
-  const code = name.trim().charCodeAt(name.trim().length - 1);
-  if (!(code >= 0xac00 && code <= 0xd7a3)) return null;
-  return (code - 0xac00) % 28 === 0 ? '는' : '은';
-}
-
-/** TASK-004 Q6·Q40: 꼭 갈 곳 줄. 하나면 "{이름}은 먼저 넣어 뒀어", 여럿이면 조사를 피해 쉼표로 */
+/** TASK-004 Q6·Q40: 꼭 갈 곳 줄. 하나면 "{이름}{은/는} 먼저 넣어 뒀어", 여럿이면 조사를 피해 쉼표로 */
 export function mustVisitLine(names: string[]): string {
   if (names.length === 1) {
-    const particle = topicParticle(names[0]);
-    return particle ? `${names[0]}${particle} 먼저 넣어 뒀어` : `${names[0]}, 먼저 넣어 뒀어`;
+    return `${withParticle(names[0], '은/는')} 먼저 넣어 뒀어`; // TASK-009 B2: 영문·숫자도 읽는 소리로 조사를 붙인다
   }
   return `${names.join(', ')}, 먼저 넣어 뒀어`;
 }

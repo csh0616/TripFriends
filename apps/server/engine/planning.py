@@ -77,6 +77,12 @@ def _limits() -> Limits:
 # ---------- 공통 도우미 ----------
 
 
+def buffer_min(label: str) -> int:
+    """코스 방식(relaxed/packed)의 방문 사이 쉬는 시간. 공개 이름 (TASK-009 C1): 시각 다시 계산이 같은 값을 읽는다."""
+    lim = _limits()
+    return lim.relaxed_buffer_min if label == "relaxed" else lim.packed_buffer_min
+
+
 def _to_min(value: str) -> int:
     hour, minute = value.split(":")
     return int(hour) * 60 + int(minute)

@@ -12,7 +12,9 @@
     "src/lib/placeholder-for.ts",
     "src/lib/contrast.ts",
     "src/lib/fake-position.ts",
-    "src/lib/demo-clock.ts"
+    "src/lib/demo-clock.ts",
+    "src/lib/particle.ts",
+    "src/lib/source-label.ts"
   ],
   "reporters": [
     "clear-text",
@@ -37,7 +39,9 @@
         "<rootDir>/__tests__/fake-position.test.ts",
         "<rootDir>/__tests__/delayed-position.test.ts",
         "<rootDir>/__tests__/trip-now.test.tsx",
-        "<rootDir>/__tests__/trip-delay.test.tsx"
+        "<rootDir>/__tests__/trip-delay.test.tsx",
+        "<rootDir>/__tests__/particle.test.ts",
+        "<rootDir>/__tests__/task-009-select.test.tsx"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",

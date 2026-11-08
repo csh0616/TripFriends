@@ -5,7 +5,8 @@
 // 계약 (이 테스트가 정한 이름, 보고서 ④):
 //   시각이 바뀔 때: POST /days/{day_id}/check 본문 {at, lat, lng}. 재실행·첫 요청: GET /days/{day_id}/now?at= (위치 쿼리 없음)
 //   데모 패널: 'demo-delay-10'(글자 '+10분 늦게'), 'demo-delay-reset'(글자 '지연 초기화')
-//   T-04 카드: 'card-T-04'. 제안 칸 'proposal-{proposal_id}', 그 안 [이걸로] 'proposal-accept-{proposal_id}', 맨 아래 [그대로 갈래] 'event-dismiss'
+//   T-04 카드: 'card-T-04'. 제안 칸 'proposal-{proposal_id}', 맨 아래 [그대로 갈래] 'event-dismiss'
+//   TASK-009 A (G5 → 고르기 방식, 승인): 제안 칸을 눌러 고르고 시트 아래 주 버튼 [이걸로 할래] 'select-confirm'으로 확정 (task-009-select.test.tsx)
 //   accept: POST /proposals/{proposal_id}/accept (본문 없음), dismiss: POST /events/{event_id}/dismiss (본문 없음)
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -92,6 +93,11 @@ afterEach(() => {
 
 const pressPlus = async (times: number) => {
   for (let i = 0; i < times; i += 1) await pressId('demo-plus-10');
+};
+/** TASK-009 A1·A2: 제안 칸을 고른 뒤 [이걸로 할래] (G5의 칸별 [이걸로]를 대신한다) */
+const choose = async (proposalId: string) => {
+  await pressId(`proposal-${proposalId}`);
+  await pressId('select-confirm');
 };
 const pressDelay = async (times: number) => {
   for (let i = 0; i < times; i += 1) await pressId('demo-delay-10');
@@ -384,14 +390,14 @@ describe('C3 T-04 카드', () => {
     expect(inCard('card-T-04').queryByText(/지킬게/)).toBeNull();
   });
 
-  test('T7_C3_제안마다_한_칸_이유_빠지는_곳_첫_출발_시각_이걸로', async () => {
+  test('T7_C3_T9_A1_제안마다_한_칸_이유_빠지는_곳_첫_출발_시각_칸별_이걸로_없음', async () => {
     await shows();
     const relaxed = inCard('proposal-prop-relaxed');
     expect(relaxed.getByText('서버_이유_여유')).toBeTruthy();
     expect(relaxed.getByText('서버_빠지는_곳')).toBeTruthy();
     expect(words('proposal-prop-relaxed')).toContain('13:40');
-    expect(relaxed.getByTestId('proposal-accept-prop-relaxed')).toBeTruthy();
-    expect(relaxed.getByText('이걸로')).toBeTruthy();
+    expect(relaxed.queryByText('이걸로')).toBeNull(); // TASK-009 A1: 칸별 [이걸로] 대신 칸을 눌러 고른다
+    expect(screen.queryAllByTestId(/^proposal-accept-/)).toEqual([]);
     const packed = inCard('proposal-prop-packed');
     expect(packed.getByText('서버_이유_빠듯')).toBeTruthy();
     expect(words('proposal-prop-packed')).toContain('13:35');
@@ -417,7 +423,7 @@ describe('C3 T-04 카드', () => {
     expect(inCard('card-T-04').getAllByText('그대로 갈래')).toHaveLength(1);
   });
 
-  test.each(['proposal-accept-prop-relaxed', 'proposal-accept-prop-packed', 'event-dismiss'])('T7_C3_NFR13_%s_누르는_높이_44_이상', async (id) => {
+  test.each(['proposal-prop-relaxed', 'proposal-prop-packed', 'event-dismiss', 'select-confirm'])('T7_C3_T9_NFR13_%s_누르는_높이_44_이상', async (id) => {
     await shows();
     expect(reachHeight(pressable(id))).toBeGreaterThanOrEqual(NUMBERS['touch-min']);
   });
@@ -466,9 +472,9 @@ describe('C4 이걸로·그대로 갈래', () => {
     return control;
   }
 
-  test('T7_C4_이걸로를_누르면_그_제안의_accept를_본문_없이_한_번', async () => {
+  test('T7_C4_T9_A2_고르고_이걸로_할래를_누르면_그_제안의_accept를_본문_없이_한_번', async () => {
     const control = await ready();
-    await pressId('proposal-accept-prop-packed');
+    await choose('prop-packed');
     await waitFor(() => expect(control.server.sent(ACCEPT_ROUTE('prop-packed'))).toHaveLength(1));
     expectNoBody(control.server.sent(ACCEPT_ROUTE('prop-packed'))[0].body);
     expect(control.server.sent(ACCEPT_ROUTE('prop-relaxed'))).toEqual([]);
@@ -476,7 +482,7 @@ describe('C4 이걸로·그대로 갈래', () => {
 
   test('T7_C4_accept_응답으로_카드와_지도를_바꾼다', async () => {
     await ready();
-    await pressId('proposal-accept-prop-relaxed');
+    await choose('prop-relaxed');
     await screen.findByTestId('card-T-01');
     expect(screen.queryByTestId('card-T-04')).toBeNull();
     await waitFor(() => expect(byId('map-pin-2').props.coordinate).toEqual({ latitude: PROPOSAL_SPOT.lat, longitude: PROPOSAL_SPOT.lng }));
@@ -485,7 +491,7 @@ describe('C4 이걸로·그대로 갈래', () => {
 
   test('T7_C4_S11_Q15_accept_직후_이유_한_줄은_앱이_바꾼_일정으로_안내할게', async () => {
     await ready();
-    await pressId('proposal-accept-prop-relaxed');
+    await choose('prop-relaxed');
     await screen.findByTestId('card-T-01');
     expect(inCard('now-reason').getByText('바꾼 일정으로 안내할게')).toBeTruthy();
     expect(inCard('now-reason').queryByText('서버_바뀐_이유')).toBeNull(); // 응답 reason 대신 앱 문장
@@ -503,7 +509,7 @@ describe('C4 이걸로·그대로 갈래', () => {
 
   test('T7_C4_accept_뒤에도_시각이_바뀌면_check가_이어진다', async () => {
     const control = await ready();
-    await pressId('proposal-accept-prop-relaxed');
+    await choose('prop-relaxed');
     await screen.findByTestId('card-T-01');
     await pressId('demo-toggle');
     await pressId('demo-plus-10');
@@ -579,7 +585,7 @@ describe('§6 accept 실패', () => {
     const control = await pending(networkDown);
     const before = control.gets().length;
     control.show(nowView({ main: t01(), event: delayEvent({ state: 'resolved', proposals: [] }) }));
-    await pressId('proposal-accept-prop-relaxed');
+    await choose('prop-relaxed');
     await waitFor(() => expect(control.gets().length).toBe(before + 1));
     expect(control.gets().at(-1)?.at).toBe(AT('10:00'));
     await screen.findByTestId('card-T-01');
@@ -590,7 +596,7 @@ describe('§6 accept 실패', () => {
     const control = await pending(hang);
     const before = control.gets().length;
     jest.useFakeTimers();
-    await pressId('proposal-accept-prop-relaxed');
+    await choose('prop-relaxed');
     await advance(9999);
     expect(control.gets()).toHaveLength(before);
     await advance(1 + 300);
@@ -604,7 +610,7 @@ describe('§6 accept 실패', () => {
     const before = control.checks().length;
     const fresh = t04({ proposals: [proposal({ proposal_id: 'prop-new', reason: '서버_새_이유' })] });
     control.show(delayedView({ main: fresh }));
-    await pressId('proposal-accept-prop-relaxed');
+    await choose('prop-relaxed');
     await waitFor(() => expect(control.checks().length).toBe(before + 1));
     const again = control.checks().at(-1);
     expect(again?.at).toBe(lastCheck?.at);
@@ -618,7 +624,7 @@ describe('§6 accept 실패', () => {
     const control = await pending(apiError(409, 'STATE_CONFLICT'));
     const [gets, checks] = [control.gets().length, control.checks().length];
     control.show(nowView({ main: t01() }));
-    await pressId('proposal-accept-prop-relaxed');
+    await choose('prop-relaxed');
     await waitFor(() => expect(control.gets().length).toBe(gets + 1));
     await screen.findByTestId('card-T-01');
     expect(control.checks()).toHaveLength(checks);

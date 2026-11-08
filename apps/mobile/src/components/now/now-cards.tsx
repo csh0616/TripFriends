@@ -1,11 +1,14 @@
 // TASK-006 B6: 여행 중 화면의 카드 부품 T-01·T-02·T-03·T-07·T-08. 서버가 준 값을 그리기만 한다 (카드를 고르지 않는다).
 // 장소가 들어간 카드는 확인 상태 칩(색 + 글자)이 항상 붙는다 (SCREEN-001 §3-2). 장소가 없는 줄(facts가 빈 목록)은 칩이 없다 (§11 Q6).
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { StatusChip } from '@/components/planning/status-chip';
 import { minutesOfAt, toMinutes } from '@/lib/demo-clock';
+import { withParticle } from '@/lib/particle';
+import { sourceLabel } from '@/lib/source-label';
 import type { NowCard, NowCourseItem, NowFact, NowProposal, NowT06Proposal } from '@/lib/now-api';
 import { todayHoursText } from '@/lib/today-hours-text';
 import { layout } from '@/planning/layout';
@@ -15,13 +18,6 @@ function FactChip({ facts }: { facts: NowCourseItem['facts'] }) {
   if (facts.length === 0) return null;
   return <StatusChip status={todayHoursText(facts).chip} />;
 }
-
-/** "{장소}이/가": 받침이 있으면 이, 없으면 가 (한글이 아닌 끝 글자는 이) */
-const withSubject = (name: string): string => {
-  const code = name.charCodeAt(name.length - 1);
-  const hangul = code >= 0xac00 && code <= 0xd7a3;
-  return `${name}${hangul && (code - 0xac00) % 28 === 0 ? '가' : '이'}`;
-};
 
 /** 직선거리 m를 "350m" / "1.0km"로 (10m 단위 반올림, 995m부터 km) */
 const metresLabel = (metres: number): string => {
@@ -40,31 +36,59 @@ function FactLine({ fact }: { fact: NowFact }) {
       <StatusChip status={fact.status} />
       <Text style={text('body')}>{shown.text}</Text>
       <Text style={text('caption', 'muted')}>
-        {`${fact.source_type} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`}
+        {`${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`}
       </Text>
     </View>
   );
 }
 
-/** T-06 대안 칸. 사실 칩은 제안 items 안 그 대안 줄의 facts에서 읽는다 (§12 Q21) */
-function AlternativeBox({ proposal, onAccept }: { proposal: NowT06Proposal; onAccept: () => void }) {
+/** 고르는 칸 (TASK-009 A1): 눌러서 고르고 다시 누르면 해제. 서버에는 아무것도 보내지 않는다. 고른 칸 = sel-bg + sel-ring + radio 채움 */
+function ChoiceRow({
+  id,
+  chosen,
+  onChoose,
+  minHeight,
+  children,
+}: {
+  id: string;
+  chosen: boolean;
+  onChoose: () => void;
+  minHeight: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      testID={id}
+      accessibilityRole="radio"
+      accessibilityState={{ checked: chosen }}
+      onPress={onChoose}
+      style={[styles.choice, { minHeight }, chosen && styles.chosen]}
+    >
+      <View style={[styles.radio, chosen && styles.radioOn]}>{chosen ? <View style={styles.radioDot} /> : null}</View>
+      <View style={[styles.grow, styles.choiceBody]}>{children}</View>
+    </Pressable>
+  );
+}
+
+/** T-06 대안 칸. 사실 칩은 제안 items 안 그 대안 줄의 facts에서 읽는다 (§12 Q21). 순서 안내는 서버 reason만 (TASK-009 B4) */
+function AlternativeBox({ proposal, chosen, onChoose }: { proposal: NowT06Proposal; chosen: boolean; onChoose: () => void }) {
   const alternative = proposal.closed.alternative;
   if (alternative === null) return null;
   const line = proposal.items.find((item) => item.place_id === alternative.place_id);
   const { distance_m: distance, travel_change_min: change } = proposal.closed;
   return (
-    <View testID={`proposal-${proposal.proposal_id}`} style={styles.proposal}>
+    <ChoiceRow id={`proposal-${proposal.proposal_id}`} chosen={chosen} onChoose={onChoose} minHeight={layout.rowAlt}>
       <View style={styles.titleRow}>
+        {/* 사진 자리: 기존 자리표시 방식 그대로 (장소 그림은 이번 범위 밖) */}
+        <View testID={`proposal-thumb-${proposal.proposal_id}`} style={styles.thumb}>
+          <PhotoPlaceholder category="landmark" style={StyleSheet.absoluteFill} />
+        </View>
         <Text style={[text('heading'), styles.grow]}>{alternative.name}</Text>
         <FactChip facts={line?.facts ?? []} />
       </View>
       <Text style={text('caption', 'muted')}>{`${distance === null ? '' : `${metresLabel(distance)} · `}이동 ${changeLabel(change)}`}</Text>
-      {proposal.closed.reordered && line ? (
-        <Text style={text('body')}>{`순서를 바꿔야 들어가 · ${line.start}에 들러`}</Text>
-      ) : null}
       <Text style={text('body')}>{proposal.reason}</Text>
-      <SecondaryButton small testID={`proposal-accept-${proposal.proposal_id}`} label="이걸로" onPress={onAccept} />
-    </View>
+    </ChoiceRow>
   );
 }
 
@@ -86,9 +110,9 @@ function BigMinutes({ value, unit }: { value: number; unit: string }) {
   );
 }
 
-function ProposalBox({ proposal, onAccept }: { proposal: NowProposal; onAccept: () => void }) {
+function ProposalBox({ proposal, chosen, onChoose }: { proposal: NowProposal; chosen: boolean; onChoose: () => void }) {
   return (
-    <View testID={`proposal-${proposal.proposal_id}`} style={styles.proposal}>
+    <ChoiceRow id={`proposal-${proposal.proposal_id}`} chosen={chosen} onChoose={onChoose} minHeight={layout.rowAlt}>
       <Text style={text('body')}>{proposal.reason}</Text>
       {proposal.dropped.length > 0 ? (
         <View style={styles.chips}>
@@ -100,9 +124,7 @@ function ProposalBox({ proposal, onAccept }: { proposal: NowProposal; onAccept: 
         </View>
       ) : null}
       <Text style={text('caption', 'muted')}>{`${proposal.first_leave_at}에 출발`}</Text>
-      {/* G5: 한 카드에 주황 큰 버튼이 여러 개 생기지 않게 [이걸로]는 보조 버튼 */}
-      <SecondaryButton small testID={`proposal-accept-${proposal.proposal_id}`} label="이걸로" onPress={onAccept} />
-    </View>
+    </ChoiceRow>
   );
 }
 
@@ -110,7 +132,8 @@ export function NowCardView({
   card,
   main,
   onOpenFailed,
-  onAccept,
+  chosenId = null,
+  onChoose,
   onDismiss,
   onVisit,
   lateAt = null,
@@ -118,8 +141,9 @@ export function NowCardView({
   card: NowCard;
   main: boolean;
   onOpenFailed: () => void;
-  /** T-04 [이걸로] / [그대로 갈래]: 고르기 전에는 아무것도 바뀌지 않는다 (FR-13) */
-  onAccept?: (proposalId: string) => void;
+  /** T-04·T-06 고른 칸의 proposal_id와 칸 누름. 고르는 것만으로는 아무것도 바뀌지 않는다 (FR-13, TASK-009 A5) */
+  chosenId?: string | null;
+  onChoose?: (proposalId: string) => void;
   onDismiss?: (eventId: string) => void;
   /** T-05 [열었어]/[닫혔어]: 답을 서버에 사실로 보낸다 */
   onVisit?: (placeId: string, wasOpen: boolean) => void;
@@ -197,7 +221,7 @@ export function NowCardView({
             <Text style={text('body')}>{`${card.fixed.title} ${card.fixed.start}은 지킬게`}</Text>
           ) : null}
           {card.proposals.map((proposal) => (
-            <ProposalBox key={proposal.proposal_id} proposal={proposal} onAccept={() => onAccept?.(proposal.proposal_id)} />
+            <ProposalBox key={proposal.proposal_id} proposal={proposal} chosen={chosenId === proposal.proposal_id} onChoose={() => onChoose?.(proposal.proposal_id)} />
           ))}
           <SecondaryButton testID="event-dismiss" label="그대로 갈래" onPress={() => onDismiss?.(card.event_id)} />
         </Shell>
@@ -237,7 +261,7 @@ export function NowCardView({
       return (
         <Shell id="card-T-06" main={main}>
           <Text style={text('label', 'muted')}>닫힘 대안</Text>
-          <Text style={text('title')}>{`${withSubject(card.closed.name)} 닫혔대`}</Text>
+          <Text style={text('title')}>{`${withParticle(card.closed.name, '이/가')} 닫혔대`}</Text>
           {alternatives.length > 0 ? (
             <Text style={text('body')}>근처에 이런 데 있어</Text>
           ) : skip ? (
@@ -246,13 +270,13 @@ export function NowCardView({
             <Text style={text('body')}>지금은 바꿀 방법을 못 찾았어</Text>
           )}
           {alternatives.map((proposal) => (
-            <AlternativeBox key={proposal.proposal_id} proposal={proposal} onAccept={() => onAccept?.(proposal.proposal_id)} />
+            <AlternativeBox key={proposal.proposal_id} proposal={proposal} chosen={chosenId === proposal.proposal_id} onChoose={() => onChoose?.(proposal.proposal_id)} />
           ))}
           {skip ? (
-            <View style={styles.proposal}>
+            <ChoiceRow id="closed-skip" chosen={chosenId === skip.proposal_id} onChoose={() => onChoose?.(skip.proposal_id)} minHeight={layout.rowDrop}>
+              <Text style={text('heading')}>빼고 가기</Text>
               <Text style={text('body')}>{skip.reason}</Text>
-              <SecondaryButton testID="closed-skip" label="빼고 가기" onPress={() => onAccept?.(skip.proposal_id)} />
-            </View>
+            </ChoiceRow>
           ) : null}
           <SecondaryButton testID="event-dismiss" label="그대로 둘게" onPress={() => onDismiss?.(card.event_id)} />
         </Shell>
@@ -295,7 +319,31 @@ const styles = StyleSheet.create({
   sub: { backgroundColor: color['bg-2'], borderRadius: radius['r-lg'], padding: space['space-4'] },
   grow: { flexShrink: 1, flexGrow: 1 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], flexWrap: 'wrap' },
-  proposal: { backgroundColor: color.surface, borderRadius: radius['r-md'], padding: space['space-3'], gap: space['space-2'] },
+  // 고르는 칸: 안 골랐을 때도 테두리 자리를 같은 굵기로 잡아 골라도 모양이 안 움직인다
+  choice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['space-3'],
+    backgroundColor: color.surface,
+    borderRadius: radius['r-md'],
+    borderWidth: layout.selRing,
+    borderColor: color.line,
+    padding: space['space-3'],
+  },
+  chosen: { backgroundColor: color['brand-soft'], borderColor: color.brand },
+  choiceBody: { gap: space['space-2'] },
+  radio: {
+    width: layout.radio,
+    height: layout.radio,
+    borderRadius: radius['r-full'],
+    borderWidth: layout.selRing,
+    borderColor: color.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOn: { borderColor: color.brand },
+  radioDot: { width: layout.radioDot, height: layout.radioDot, borderRadius: radius['r-full'], backgroundColor: color.brand },
+  thumb: { width: layout.thumbSm, height: layout.thumbSm, borderRadius: radius['r-sm'], overflow: 'hidden' },
   pair: { flexDirection: 'row', gap: space['space-2'] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['space-2'] },
   dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },

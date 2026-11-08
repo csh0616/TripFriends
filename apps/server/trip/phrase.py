@@ -1,18 +1,38 @@
 """TASK-008 §17: 닫힘 제안의 이유 문장. 이름과 시각 말고는 끼워 넣지 않는다 (LLM 없음)."""
 
 
-def with_ro(name: str) -> str:
-    """'{이름}으로/로'. 한글 끝 글자가 받침 없음 또는 ㄹ받침이면 '로', 그 밖(겹받침 포함)은 '으로'.
-    한글이 아닌 끝 글자(영문·숫자)는 '로' (문서 예시 '골목 카페 E로'). 조사 전체 규칙은 TASK-009 H4."""
-    code = ord(name[-1]) - 0xAC00
-    if 0 <= code <= 0xD7A3 - 0xAC00 and code % 28 not in (0, 8):
-        return f"{name}으로"
-    return f"{name}로"
+_PAIRS = {"이/가": ("이", "가"), "은/는": ("은", "는"), "을/를": ("을", "를"), "으로/로": ("으로", "로")}
+_RIEUL = 8  # 종성 번호 ㄹ
+
+
+def _final_sound(last: str) -> str:
+    """끝 글자의 받침 종류: 'none' / 'rieul' / 'batchim'. 숫자·영문은 읽는 소리 (TASK-009 §9 Q7).
+    일본어·기호는 받침 없음 (Q3). 영문 소문자 l·m·n·r은 문서에 없어 대문자와 같은 소리로 본다."""
+    code = ord(last) - 0xAC00
+    if 0 <= code <= 0xD7A3 - 0xAC00:
+        jong = code % 28
+        return "none" if jong == 0 else ("rieul" if jong == _RIEUL else "batchim")
+    if last in "178LlRr":  # 일·칠·팔·엘·알
+        return "rieul"
+    if last in "036MmNn":  # 영·삼·육·엠·엔
+        return "batchim"
+    return "none"
+
+
+def with_particle(word: str, pair: str) -> str:
+    """'{word}{조사}'. 받침 없음 -> 가·는·를·로, ㄹ -> 이·은·을 + '로', 그 밖 -> 이·은·을·으로. 빈 문자열은 받침 없음 (Q1)."""
+    with_batchim, without = _PAIRS[pair]
+    kind = _final_sound(word[-1]) if word else "none"
+    if kind == "none":
+        return word + without
+    if kind == "rieul" and pair == "으로/로":
+        return word + without
+    return word + with_batchim
 
 
 def swap_reason(alternative_name: str) -> str:
     """자리에 넣은 대안."""
-    return f"{with_ro(alternative_name)} 대신 가기"
+    return f"{with_particle(alternative_name, '으로/로')} 대신 가기"
 
 
 def reorder_reason(start: str) -> str:
