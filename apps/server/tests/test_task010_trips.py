@@ -142,7 +142,7 @@ def test_T10_B1_AC4_기간_1일에서_7일(osaka, days, ok):
         assert response.status_code == 201, response.text
         assert len(response.json()["trip_days"]) == days
     else:
-        assert_400(response, "start_date", "end_date")
+        assert_400(response, "end_date")  # §10 Q30
 
 
 @pytest.mark.parametrize(("offset", "ok"), [(-1, False), (0, True), (180, True), (181, False)], ids=["어제", "오늘", "180일_뒤", "181일_뒤"])
@@ -354,6 +354,15 @@ def test_T10_B3_다른_날이면_같은_시각이어도_된다(osaka):
 @pytest.mark.parametrize(("length", "ok"), [(0, False), (1, True), (30, True), (31, False)], ids=["0자", "1자", "30자", "31자"])
 def test_T10_B3_AC4_제목은_1자에서_30자(osaka, length, ok):
     response = osaka.add_fixed(osaka.make_trip(), 0, "12:00", "13:00", title="가" * length)
+    if ok:
+        assert response.status_code == 201, response.text
+    else:
+        assert_400(response, "title")
+
+
+@pytest.mark.parametrize(("title", "ok"), [("   ", False), ("  가  ", True), (" " + "가" * 30 + " ", True), ("가" * 31, False)], ids=["공백만", "공백_빼면_1자", "공백_빼면_30자", "31자"])
+def test_T10_B3_Q29_제목은_앞뒤_공백을_지우고_센다(osaka, title, ok):
+    response = osaka.add_fixed(osaka.make_trip(), 0, "12:00", "13:00", title=title)
     if ok:
         assert response.status_code == 201, response.text
     else:
@@ -694,7 +703,7 @@ def test_T10_Q10_숙소가_없어도_계획이_된다_숙소로_돌아가기_없
     assert started.status_code == 201, started.text
     for option in started.json()["options"]:
         assert option["items"]
-        assert option["go_home_min"] in (0, None)
+        assert option["go_home_min"] is None  # §10 Q27
 
 
 def test_T10_Q10_하루_시각은_데모와_같은_기본값(osaka):

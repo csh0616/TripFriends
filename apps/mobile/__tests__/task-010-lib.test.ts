@@ -21,10 +21,11 @@
 //                                                  오늘인데 고른 코스가 없으면 계획 대화부터 (§9 Q6, DESIGN-001 §4-9)
 //   src/lib/calendar.ts (§9 Q17: JS 달력 시트, 한 달 칸, 시작 -> 끝 두 번 누르기. 날짜 규칙은 순수 함수)
 //     cityToday(nowMs, timezone = 'Asia/Tokyo'): 'YYYY-MM-DD'   도시 시간대의 오늘 (§9 Q18)
-//     monthGrid('YYYY-MM'): (string | null)[][]                한 달 칸: 주마다 7칸, 그 달 밖은 null
+//     monthGrid('YYYY-MM'): (string | null)[][]                한 달 칸: 주마다 7칸(일요일부터, §10 Q28), 그 달 밖은 null
 //     startSelectable(date, today): boolean                    시작일 = 오늘 ~ 180일 뒤 (§B1)
 //     endSelectable(date, start): boolean                      끝 = 시작 ~ 시작 + 6일 (기간 1~7일, §B1)
-//     pickDate({start, end}, date): {start, end}               첫 번째 누름 = 시작, 두 번째(시작 이후, 범위 안) = 끝
+//     pickDate({start, end}, date): {start, end}               첫 번째 누름 = 시작, 두 번째(시작 이후, 범위 안) = 끝,
+//                                                              두 번째가 시작보다 앞이면 그 날이 새 시작 (§10 Q28)
 // 새 모듈은 테스트 안에서 require 한다 (구현 전에도 이 파일의 다른 테스트가 돈다).
 import fc from 'fast-check';
 
@@ -249,7 +250,7 @@ describe('Q17 달력 시트', () => {
     expect(flat.length - 1 - last).toBeLessThan(7);
   });
 
-  test('T10_Q17_속성_한_달_칸은_요일_자리가_맞다', () => {
+  test('T10_Q28_속성_한_달_칸은_일요일부터', () => {
     fc.assert(
       fc.property(fc.integer({ min: 2026, max: 2030 }), fc.integer({ min: 1, max: 12 }), (year, m) => {
         const month = `${year}-${String(m).padStart(2, '0')}`;
@@ -259,7 +260,7 @@ describe('Q17 달력 시트', () => {
         for (let i = 7; i < dates.length; i += 1) expect(flat.indexOf(dates[i]) - flat.indexOf(dates[i - 7])).toBe(7);
         const offset = flat.indexOf(dates[0]);
         const weekday = new Date(`${month}-01T00:00:00Z`).getUTCDay();
-        expect([weekday % 7, (weekday + 6) % 7]).toContain(offset); // 일요일 시작이든 월요일 시작이든 (질문)
+        expect(offset).toBe(weekday); // 0 = 일요일 칸 (§10 Q28)
       }),
     );
   });
@@ -286,6 +287,11 @@ describe('Q17 달력 시트', () => {
     const first = cal().pickDate({ start: null, end: null }, '2026-12-10');
     expect(first).toEqual({ start: '2026-12-10', end: null });
     expect(cal().pickDate(first, '2026-12-12')).toEqual({ start: '2026-12-10', end: '2026-12-12' });
+  });
+
+  test('T10_Q28_두_번째로_시작보다_앞_날을_누르면_그_날이_새_시작', () => {
+    const first = cal().pickDate({ start: null, end: null }, '2026-12-10');
+    expect(cal().pickDate(first, '2026-12-08')).toEqual({ start: '2026-12-08', end: null });
   });
 
   test('T10_Q17_B1_같은_날을_두_번_누르면_하루_여행', () => {

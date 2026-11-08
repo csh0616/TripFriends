@@ -10,7 +10,8 @@
 //     200 -> 날짜 목록: 날 줄 testID `day-row-{day_id}`, 줄 안에 알약 글자(계획 전·계획 완료·오늘 · 여행 중·지난 날)
 //   SC-01: 도시 글자 '오사카' · 날짜 칸 testID `field-start-date`·`field-end-date` = 누르면 달력 시트(§9 Q17, 글자 입력 아님)
 //     달력 시트 `calendar-sheet` · 날 칸 `cal-day-{YYYY-MM-DD}`(못 고르는 날은 disabled) · 다음·이전 달 `cal-next`·`cal-prev`
-//     · 확정 주 버튼 `calendar-confirm`(DESIGN-001 §4-7: 확정은 시트 아래 주 버튼 하나). 시트는 오늘(도시 시간대)의 달로 열린다
+//     · 확정 주 버튼 `calendar-confirm`(DESIGN-001 §4-7: 확정은 시트 아래 주 버튼 하나).
+//     시트는 고른 시작일이 있으면 그 달, 없으면 오늘(도시 시간대)이 있는 달로 열린다 (§10 Q28)
 //     숙소 검색 칸 `lodging-search` · 날 탭 `tab-day-{YYYY-MM-DD}` · 꼭 갈 곳 검색 칸 `must-search` · 결과는 장소 이름 글자를 누른다
 //     주 버튼 `create-trip-submit`(못 누르면 accessibilityState.disabled) · 못 누르는 이유 한 줄 `create-trip-reason` · 틀린 칸 오류 `field-error`
 //   날 줄을 누르면: planning -> POST /days/{id}/planning · today -> GET /days/{id}/now (고른 코스가 없으면 계획 대화부터, §9 Q6)
@@ -303,6 +304,36 @@ describe('C2 여행 만들기', () => {
     await tap(screen.getByTestId('create-trip-submit'));
     await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
     expect(server.sent(CREATE)[0].body).toMatchObject({ start_date: '2027-01-05', end_date: '2027-01-06' });
+  });
+
+  test('T10_Q28_고른_시작일이_있으면_시트는_그_달로_열린다', async () => {
+    await toForm();
+    await tap(screen.getByTestId('field-start-date'));
+    await screen.findByTestId('calendar-sheet');
+    await tap(screen.getByTestId('cal-next'));
+    await tap(await screen.findByTestId('cal-day-2027-01-05'));
+    await tap(await screen.findByTestId('cal-day-2027-01-06'));
+    await tap(screen.getByTestId('calendar-confirm'));
+    await settleAll();
+    await tap(screen.getByTestId('field-start-date'));
+    await screen.findByTestId('calendar-sheet');
+    expect(screen.getByTestId('cal-day-2027-01-05')).toBeTruthy(); // 넘기지 않아도 1월
+    expect(screen.queryByTestId('cal-day-2026-12-10')).toBeNull();
+  });
+
+  test('T10_Q28_두_번째로_앞_날을_누르면_새_시작일', async () => {
+    server.on(CREATE, json(201, trip(['planning', 'planning'])));
+    await toForm();
+    await tap(screen.getByTestId('field-start-date'));
+    await screen.findByTestId('calendar-sheet');
+    await tap(await screen.findByTestId('cal-day-2026-12-10'));
+    await tap(await screen.findByTestId('cal-day-2026-12-08')); // 앞 날 = 새 시작
+    await tap(await screen.findByTestId('cal-day-2026-12-09'));
+    await tap(screen.getByTestId('calendar-confirm'));
+    await settleAll();
+    await tap(screen.getByTestId('create-trip-submit'));
+    await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
+    expect(server.sent(CREATE)[0].body).toMatchObject({ start_date: '2026-12-08', end_date: '2026-12-09' });
   });
 
   test('T10_C2_날짜만_넣으면_누를_수_있다_숙소_꼭_갈_곳은_선택', async () => {

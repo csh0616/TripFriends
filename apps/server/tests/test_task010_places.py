@@ -239,6 +239,27 @@ def test_T10_A1_숙소_검색은_place_id_이름_짧은_주소():
         assert set(hit) == {"place_id", "name", "address_short"}
 
 
+def test_T10_A1_Q25_구글_요일_번호_0은_일요일을_엔진_0은_월요일로_바꾼다():
+    """Q25: 바꾸는 곳은 GooglePlaces 안. 응답 모양은 Places API (New)의 regularOpeningHours.periods (가짜 전송으로만)."""
+    from places.provider import GooglePlaces
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={
+            "id": "FAKE-google-shape",
+            "location": {"latitude": 34.6, "longitude": 135.5},
+            "businessStatus": "OPERATIONAL",
+            "regularOpeningHours": {"periods": [
+                {"open": {"day": 0, "hour": 10, "minute": 0}, "close": {"day": 0, "hour": 18, "minute": 0}},  # Google 0 = 일
+                {"open": {"day": 1, "hour": 11, "minute": 30}, "close": {"day": 1, "hour": 20, "minute": 0}},  # Google 1 = 월
+            ]},
+        })
+
+    provider = GooglePlaces("TEST-ONLY-NOT-A-KEY", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    hours = provider.details("FAKE-google-shape")["opening_hours"]
+    assert {"weekday": 6, "open": "10:00", "close": "18:00"} in hours  # 엔진 6 = 일 (engine/models.py Opening: 0=월)
+    assert {"weekday": 0, "open": "11:30", "close": "20:00"} in hours
+
+
 def test_T10_A1_구글_공급자는_필드_마스크로_필요한_필드만_부른다():
     """실제 Google을 부르지 않는다: 가짜 전송이 요청만 받아 적는다. 응답 모양은 시험하지 않는다 (Google 형식은 문서 밖)."""
     from places.provider import GooglePlaces
@@ -422,19 +443,17 @@ EXTRACT_CASES = [
     ("전화번호는 시각이 아님", ["電話 06-1234-5678"], None),
     ("날짜는 시각이 아님", ["2026年11月9日 更新"], None),
     ("시각 하나뿐 (구간 아님)", ["開店 11:00"], None),
+    ("翌 없이 끝이 앞 = 자정 넘김 -> 24:00 (Q23 ①)", ["22:00～02:00"], [("22:00", "24:00")]),
+    ("時 표기 (Q23 ②)", ["11時～22時"], H),
+    ("時分 표기 (Q23 ②)", ["11時30分～22時"], [("11:30", "22:00")]),
+    ("한 문장 안 겹치는 두 구간은 합친다 (Q23 ③)", ["11:00～22:00 / 10:00～21:00"], [("10:00", "22:00")]),
+    ("구간마다 L.O. = 각 구간의 끝 (Q23 ④)", ["11:00～14:00(L.O.13:30) / 17:00～22:00(L.O.21:30)"], [("11:00", "13:30"), ("17:00", "21:30")]),
 ]
-# 문서(§9 Q8)에 기대값이 없는 줄 (남은 질문). 표에는 남기되 돌리지 않는다
-EXTRACT_PENDING = [
-    ("닫는 시각 < 여는 시각 (翌 없음)", ["22:00～02:00"], "남은 질문: 翌 없이 끝이 앞이면 자정 넘김인가 모름인가"),
-    ("時 표기", ["11時～22時"], "남은 질문: 時 표기를 시각으로 읽나"),
-    ("한 문장 안 겹치는 두 구간", ["11:00～22:00 / 10:00～21:00"], "남은 질문: 한 문장 안 겹치는 구간은 두 구간인가 엇갈림인가"),
-    ("두 구간 + L.O.", ["11:00～14:00(L.O.13:30) / 17:00～22:00(L.O.21:30)"], "남은 질문: L.O.가 구간마다 붙을 때"),
-]
-
 CLOSED_CASES = [
     ("定休日 월 (Q8)", ["営業時間 11:00～22:00 定休日：月曜"], [0]),
     ("定休日 수 (Q8)", ["営業時間 11:00～22:00 定休日：水曜日"], [2]),
     ("不定休 = 모름 (Q8)", ["営業時間 11:00～22:00 不定休"], "unknown"),
+    ("定休日만 있어도 요일은 뽑는다 (Q24)", ["定休日：水曜日"], [2]),
     ("휴무 말 없음", ["営業時間 11:00～22:00"], None),
 ]
 
@@ -452,11 +471,6 @@ def test_T10_A3_AC3_Q8_시각_뽑기_표(name, texts, expected):
     from places.serper import extract_hours
 
     assert extract_hours(texts) == expected
-
-
-@pytest.mark.parametrize(("name", "texts", "question"), EXTRACT_PENDING, ids=[c[0] for c in EXTRACT_PENDING])
-def test_T10_A3_AC3_시각_뽑기_문서에_기대값_없음(name, texts, question):
-    pytest.skip(question)
 
 
 @pytest.mark.parametrize(("name", "texts", "expected"), CLOSED_CASES, ids=[c[0] for c in CLOSED_CASES])

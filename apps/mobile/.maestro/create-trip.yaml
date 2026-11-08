@@ -52,7 +52,7 @@ appId: com.csh0616.tripfriends
     visible:
       id: "calendar-sheet"
     timeout: 10000
-# 7일 뒤가 다음 달이면 한 달 넘긴다 (시트는 오늘의 달로 열린다)
+# 7일 뒤가 다음 달이면 한 달 넘긴다 (시트는 고른 시작일이 없으면 오늘의 달로 열린다, §10 Q28)
 - runFlow:
     when:
       notVisible:
