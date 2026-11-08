@@ -142,6 +142,52 @@ ink/surface 12.63 · ink/bg-2 11.48 · muted/surface 5.26 · muted/bg-2 4.78 · 
 - 여행이 없을 때 첫 화면 = 빈 상태 + [여행 만들기]. **R1은 여행 하나만** 보여 준다(새로 만들면 이전 여행은 보관, 목록은 나중)
 - 오늘 카드의 주황 고리(연주황 바탕 위 2.83)는 고리만으로 상태를 알리지 않는다: 항상 "오늘 · 여행 중" 알약과 함께 (`sel-ring`도 같음: 고른 상태는 `radio` 채움 + 고리로 함께)
 
+### 4-10. 여행 만들기 부품 (11-09, 캔버스 보드 ⑫~⑯, TASK-010)
+| 토큰 | 값 | 쓰임 |
+|---|---|---|
+| `sheet-cal` | 626 · 위 모서리 r-sheet(28). 짧은 화면은 `min(626, 화면 높이 − 48)`, 넘치는 부분은 시트 안에서 스크롤 | 달력 시트 (핸들 20 + 제목 44 + 칸 64 + 달 44 + 요일 28 + 날 264 + 안내 60 + 확정 68 + 안전 34) |
+| `cal-cell` | 50 × 44 | 날 칸 누르는 영역 |
+| `cal-disc` | 38 + 고리 2 = 42 (ink-strong + 흰 글자 + 주황 고리) | 가는 날 · 오는 날 원 |
+| `cal-off` | 40 × 40 · r12 · `bg-2` + `muted` | 고를 수 없는 날 |
+| `cal-band` | 높이 38 · `brand-soft` (7일 넘는 부분은 `alert-bg`) | 범위 띠 |
+| `cal-today-dot` | 4 · ink (글자 700과 함께) | 오늘 |
+| `cal-head` | 높이 28 · 12/16·600 `muted` | 요일 줄 (**일요일부터**) |
+| `cal-nav` | 보이는 36 / 누르는 44 · `bg-2` + ink (끝은 `muted`) | 달 넘기기 |
+| `cal-slot` | 60 = 상자 56 + 위 4 | 안내 자리 (평소 한 줄, 7일 넘으면 `notice-limit`) |
+| `cal-window` | 가는 날: 오늘 ~ +180일 · 오는 날: 가는 날 ~ +6일 (Asia/Tokyo) | 서버와 같음 (TASK-010 §11 D2) |
+| `city-osaka-a` / `-b` | `#87919C` / `#576069` | = `cat-landmark-a/-b` 별명 (새 색 아님) |
+| `cover-lg` | 316 × 316 · r20 · 그림 120 · 선 3.4 | 큰 표지 (무늬 + 그림) |
+| `cover-tile` | 120 × 144 · r24 · 그림 64 · 선 2.4 | 도시 카드 |
+| `cover-banner` | 350 × 88 · r24 · 그림 56 · 선 2.2 | 여행 머리 표지 |
+| `city-pat` | 해 흰 30% · 물결 세 겹 흰 26·20·15% | 무늬 (`cat-pat` 범위 안) |
+| `city-glyph` | 24칸 성 · 선 1.9 · 면 흰 24% | 그림 (`cat-glyph`·`cat-glyph-fill` 그대로) |
+| `city-glyph-sizes` | 56→28 · 44→24 · 36→20 · 28→16 · 24 이하 → 색만 (선 2.0·1.9·1.8·1.7) | 장소 그림과 같은 사다리 |
+| `city-fallback` | = `cat-fallback` | 그림이 없는 도시 |
+| `input-icon` | 20 · 선 1.9 · `muted` | 검색 칸 아이콘 |
+| `input-focus` | 안쪽 2px `ink-strong` | 검색 칸 포커스 (주황 안 씀) |
+| `add-dot` | 36 원 · 3상태 (+ / ✓ / 가득) | 담기 표시 |
+| `list-google` | `bg-2` · r20 · 안쪽 4 | Google 결과를 묶는 상자 |
+| `list-hair` | 1px `line` · 왼쪽 66 | 결과 줄 사이 |
+| `lodge-thumb` | 44 · r12 · 흰 칸 + 집 24 `muted` | 숙소 그림 |
+| `empty-search` | 44 원 + 15/22·600 + 13/18 `muted` | 결과 없음 · 한 글자 |
+| `notice-info` | `bg-2` · r16 · 안쪽 12×14 | 서비스를 못 쓸 때 (일정 문제 아님, 예: 숙소 검색 실패) |
+| `list-max` | 5줄 = 324 | 보이는 결과 줄 |
+| `list-other-day` | 알약 28 · `bg-2` · r999 · 12/16·600 `muted` · "N일째에 담김" | 다른 날에 이미 담긴 곳 |
+| `row-locked` | 이름·지역 `muted` · aria-disabled (불투명도 안 씀) | 누를 수 없는 줄 |
+| `g-footer` | 34 = 10 + 19 + 5 · 왼쪽 10 | Google Maps 표기 줄 |
+| `src` | 12/16 · 500 · `muted` | 출처 글자 (Tripfriends · 내가 확인 · 검색 결과 · 미확인 · 데모 데이터 · 출처 정보) |
+| `src-google` | **Roboto** 12/16 · 400 · `#5E5E5E` · 줄바꿈 없음 · 번역 금지 | "Google Maps" 글자 (Google 규칙) |
+| `g-slot` | 높이 16~19 (그림 19) · 위·좌·우 10 / 아래 5 | Google Maps 로고 자리 (공식 파일만) |
+| `g-text` | = `src-google` · 겉 높이 19 | 로고 파일 전 글자 대체 (`g-slot`과 같은 크기 → 바꿔도 안 밀림) |
+| `fact-box-google` | `bg-2` · r16 · 안쪽 10×12 (아래 8) | Google 값만 담는 상자 |
+| `fact-head` | 높이 24 · 12/16·600 `muted` + 칩 24 | 값 이름 줄 |
+- 그림 파일: `docs/design/city-images/osaka.svg`(316, 무늬 + 그림) · `osaka-glyph.svg`(24, 그림만). PM 렌더 확인
+- 대비: 37개 조합 중 36개 통과. 미달 1개(연주황 띠 위 주황 고리 2.83)는 검은 원이 함께 알려 주는 경우라 §4-9 규칙과 같다. 주 버튼을 뺀 주황 면적: 달력 시트 0.43%, 도시 카드 0.39%
+- Google 표기(TASK-010 §11 G1~G3): "Google Maps"는 번역하지 않는다. 로고는 공식 파일만 (`g-slot`), 파일 전에는 `g-text`
+- **공식 로고 파일** (11-09, Google 배포 원본 그대로, 수정 금지): `docs/design/google/GoogleMaps_Logo_{Gray|DarkGray|White|WithLightOutline|WithDarkOutline}.svg`(+ 1x·2x·4x png). 밝은 바탕(`bg`·`bg-2`)은 **Gray**, 어두운 바탕은 White, 지도·그림 위는 WithLightOutline. 높이 **18**(16~19 안), 비율 유지
+- 서버도 같은 곳을 두 날에 담는 것을 막는다(TASK-010 §11 D1). 앱도 따로 막는다
+- 기간 7일은 가설
+
 ### 4-5. 다음
 - TASK-004에서 `frontend`가 이 표로 `packages/design-tokens/tokens.json`을 만든다 (이 문서가 유일한 출처). 화면은 캔버스의 F01~F11·부품 보드를 본다
 - 로고: 캔버스의 밝은 배경용 로고를 TASK-004에서 저장소에 넣는다
