@@ -1508,6 +1508,24 @@
         "summary": "Debug Seed Demo",
         "description": "개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.\n`{\"chosen\": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다.",
         "operationId": "debug_seed_demo_debug_seed_demo_post",
+        "parameters": [
+          {
+            "name": "X-Device-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Device-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {

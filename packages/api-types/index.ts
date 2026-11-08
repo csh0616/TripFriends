@@ -2655,7 +2655,9 @@ export interface operations {
     debug_seed_demo_debug_seed_demo_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -17,7 +17,7 @@ from catalog import get_catalog
 from deciders import JevDecider, RuleDecider
 from api.now import router as now_router
 from api.trip import router as trip_router
-from api.trips import api_error_handler, router as trips_router, trip_validation_handler
+from api.trips import DeviceHeader, device, api_error_handler, router as trips_router, trip_validation_handler
 from api.planning import drop_default_422, http_error_response, is_planning_path, is_trip_path, planning_error_handler, planning_validation_handler, router as planning_router
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
@@ -28,6 +28,7 @@ from trip.trips import ApiError, TripBook
 from places.city import open_city
 from planning.schemas import ErrorResponse, SeedChosenResult, SeedRequest, SeedResult
 from planning.service import PlanningError, PlanningService
+from planning.seed import DEMO_DATES
 
 log = logging.getLogger(__name__)
 
@@ -186,7 +187,13 @@ if os.environ.get("APP_ENV", "development") != "production":
 
 
     @app.post("/debug/seed-demo", status_code=201, response_model_exclude_unset=True)
-    def debug_seed_demo(request: Request, body: SeedRequest | None = None) -> SeedResult | SeedChosenResult:
+    def debug_seed_demo(request: Request, body: SeedRequest | None = None, x_device_id: DeviceHeader = None) -> SeedResult | SeedChosenResult:
         """개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.
         `{"chosen": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다."""
-        return request.app.state.planning_service.seed(chosen=bool(body and body.chosen), past_days=body.past_days if body and "past_days" in body.model_fields_set else None)
+        past_days = body.past_days if body and "past_days" in body.model_fields_set else None
+        result = request.app.state.planning_service.seed(chosen=bool(body and body.chosen), past_days=past_days)
+        if x_device_id is not None:  # 점검 전용: 그 기기의 지금 여행으로 붙인다 (이전 여행은 archived)
+            request.app.state.trip_book.attach_demo(
+                device(x_device_id), result.trip_id, result.day_ids, list(DEMO_DATES), DEMO_DATES[0] + timedelta(days=past_days or 0)
+            )
+        return result

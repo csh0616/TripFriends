@@ -135,6 +135,7 @@ class _Trip:
     lodging_place_id: str | None
     day_ids: list[str]
     status: Literal["active", "archived"] = "active"
+    demo_today: date | None = None  # 데모 시드 전용: 이 여행의 날 상태를 계산하는 시계 (없으면 진짜 오늘)
 
 
 @dataclass
@@ -183,7 +184,7 @@ class TripBook:
         return trip
 
     def _view(self, trip: _Trip) -> Trip:
-        today = self._today()
+        today = trip.demo_today or self._today()
         days: list[TripDay] = []
         for number, day_id in enumerate(trip.day_ids):
             chosen = self.planning.chosen_option(day_id)
@@ -258,12 +259,23 @@ class TripBook:
                 day_ids.append(day_id)
                 self._store.day_trip[day_id] = trip_id
             self.planning.save_trip(trip_id, day_ids)
-            for old in self._store.trips.values():
-                if old.device_id == device_id and old.status == "active":
-                    old.status = "archived"  # 지우지 않는다 (B2)
+            self._archive_active(device_id)
             trip = _Trip(trip_id, device_id, body.city_code, body.start_date, body.end_date, body.lodging_place_id, day_ids)
             self._store.trips[trip_id] = trip
             return self._view(trip)
+
+    def _archive_active(self, device_id: str) -> None:
+        for old in self._store.trips.values():
+            if old.device_id == device_id and old.status == "active":
+                old.status = "archived"  # 지우지 않는다 (B2)
+
+    def attach_demo(self, device_id: str, trip_id: str, day_ids: list[str], dates: list[date], demo_today: date) -> None:
+        """개발 점검 전용(승현 11-09): 데모 시드 여행을 이 기기의 지금 여행으로 붙인다. 이전 여행은 B2처럼 archived."""
+        with self._lock:
+            self._archive_active(device_id)
+            for day_id in day_ids:
+                self._store.day_trip[day_id] = trip_id
+            self._store.trips[trip_id] = _Trip(trip_id, device_id, CITY_CODE, dates[0], dates[-1], None, day_ids, demo_today=demo_today)
 
     def current(self, device_id: str) -> Trip:
         with self._lock:
