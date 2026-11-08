@@ -8,6 +8,8 @@ export const space = tokens.space;
 export const control = tokens.control;
 export const radius = tokens.radius;
 export const motion = tokens.motion;
+/** TASK-011 DESIGN-001 §4-11 디자인 맞추기 토큰 12개 (한 토큰에 값이 여럿이라 묶음) */
+export const fit = tokens.fit;
 
 export type TypeName = keyof typeof tokens.type;
 
@@ -29,6 +31,18 @@ export function text(name: TypeName, tone: keyof typeof tokens.color = 'ink'): T
     fontSize: spec.size,
     lineHeight: spec.lineHeight,
     color: color[tone],
+  };
+}
+
+/** §4-11 토큰 안의 글자 값({size, lineHeight, weight, family, fg}) -> 글꼴·크기·색. 줄 높이·굵기가 없으면 label(12/16)·500 */
+export function fitText(spec: { size: number; lineHeight?: number; weight?: number; family?: string; fg?: string }, tone: keyof typeof tokens.color = 'ink'): TextStyle {
+  const weight = spec.weight ?? 500;
+  const mono = spec.family === tokens.font['font-mono'];
+  return {
+    fontFamily: (mono ? MONO : NOTO)[weight],
+    fontSize: spec.size,
+    lineHeight: spec.lineHeight ?? tokens.type.label.lineHeight,
+    color: spec.fg ?? color[tone],
   };
 }
 

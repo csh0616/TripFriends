@@ -4,6 +4,7 @@ import tokens from 'design-tokens';
 
 const touchMin = tokens.control['touch-min'];
 const chip = tokens.control.chip;
+const control = tokens.control;
 
 export const layout = {
   // DESIGN-001 §4-3 / TASK-004 §B-3·§B-4
@@ -132,6 +133,18 @@ export const layout = {
   sheetForm: tokens.select['sheet-form'], // 고정 일정 입력 시트
   rowPast: 68, // 날 줄 높이: 지난 날
   rowPlanned: 84, // 계획 완료
+  // TASK-011 DESIGN-001 §4-9·§4-11 날짜 목록. 문서에 크기가 있고 토큰 이름은 없는 값
+  pillHeight: 24, // 날 상태 알약 높이 (테두리 포함)
+  pillIcon: 14, // 알약 아이콘 상자
+  pillStroke: control['icon-stroke'], // 알약 체크 선 (icon-stroke)
+  pillWhiteDot: 8, // 오늘 알약의 흰 점
+  dayCircle: 32, // 계획 완료 줄의 그림 원
+  dayCirclePast: 28, // 지난 날 줄의 그림 원
+  dayGlyph: 20, // 그림 원 안 그림 (36 -> 20 사다리)
+  dayGlyphPast: 16, // (28 -> 16)
+  progressDot: 10, // 머리 점 진행
+  dayChevron: 20, // › 아이콘
+  coverMargin: 40, // 표지 너비 = 화면 - 40 (양옆 20)
   inputFocus: Number(/(\d+(?:\.\d+)?)px/.exec(tokens.trip['input-focus'])?.[1]), // input-focus 안쪽 굵기
   fieldErrorLine: 2,
   // 누르는 영역 보강: 칩 36 -> 44

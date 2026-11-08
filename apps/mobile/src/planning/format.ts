@@ -2,19 +2,36 @@
 import { withParticle } from '@/lib/particle';
 import type { DaySummary } from '@/lib/planning-api';
 
-const ORDINAL = ['첫째', '둘째', '셋째', '넷째', '다섯째'];
-const WEEKDAY = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
+const EN_DASH = '\u2013';
 
-/** TASK-004 Q10: 첫째~다섯째 날, 6일부터 "{n}일째" (서버와 같은 규칙) */
+/** TASK-011 DESIGN-001 §4-11: 모든 화면 "N일째" ("첫째 날"·"Day N"을 쓰지 않는다) */
 export function dayName(dayNumber: number): string {
-  return dayNumber >= 1 && dayNumber <= ORDINAL.length ? `${ORDINAL[dayNumber - 1]} 날` : `${dayNumber}일째`;
+  return `${dayNumber}일째`;
 }
 
-/** TASK-004 Q32·Q43: "12월 2일 수요일 · 10:00~20:00" */
+/** 요일 한 글자 ("2026-12-12" -> "토") */
+export function weekdayChar(isoDate: string): string {
+  const [year, month, date] = isoDate.split('-').map(Number);
+  return WEEKDAY[new Date(Date.UTC(year, month - 1, date)).getUTCDay()];
+}
+
+/** TASK-011 §4-11 시각 범위: 엔 대시 "17:00–23:00" */
+export function timeRange(start: string, end: string): string {
+  return `${start}${EN_DASH}${end}`;
+}
+
+/** 서버 영업시간 글자("10:00-18:00", "11:00-14:00,17:00-22:00")를 화면 글자로: 범위는 엔 대시, 두 구간은 가운데 점 (TASK-011 §9 Q7·Q8). 모르는 모양은 그대로 */
+export function hoursRangeText(value: string): string {
+  const parts = value.split(',').map((part) => /^(\d{1,2}:\d{2})\s*[-~]\s*(\d{1,2}:\d{2})$/.exec(part.trim()));
+  if (parts.some((part) => part === null)) return value;
+  return parts.map((part) => timeRange(part![1], part![2])).join(' \u00b7 ');
+}
+
+/** TASK-011 §4-11 부제: "12월 2일 수 · 10:00–20:00" (요일 한 글자) */
 export function daySubtitle(day: DaySummary): string {
-  const [year, month, date] = day.date.split('-').map(Number);
-  const weekday = WEEKDAY[new Date(Date.UTC(year, month - 1, date)).getUTCDay()];
-  return `${month}월 ${date}일 ${weekday} · ${day.start}~${day.end}`;
+  const [, month, date] = day.date.split('-').map(Number);
+  return `${month}월 ${date}일 ${weekdayChar(day.date)} · ${timeRange(day.start, day.end)}`;
 }
 
 export function timeToMinutes(time: string): number {
@@ -31,8 +48,3 @@ export function mustVisitLine(names: string[]): string {
 }
 
 export const pad2 = (value: number) => String(value).padStart(2, '0');
-
-/** TASK-011 A0: 시각 범위 "17:00–23:00" (엔 대시 U+2013) */
-export function timeRange(_start: string, _end: string): string {
-  throw new Error('not implemented');
-}

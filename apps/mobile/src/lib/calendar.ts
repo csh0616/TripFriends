@@ -6,6 +6,7 @@ const START_WINDOW_DAYS = 180; // §B1·§11 D2: 시작일 = 오늘 ~ 180일 뒤
 const MAX_SPAN_DAYS = 6; // 끝 = 시작 ~ 시작 + 6일 (기간 1~7일)
 const DAYS_PER_WEEK = 7;
 
+const twoDigits = (value: number): string => String(value).padStart(2, '0');
 const dayNumber = (day: string): number => Date.parse(`${day}T00:00:00Z`) / DAY_MS;
 
 /** 두 날짜 사이의 일 수 (a - b) */
@@ -39,7 +40,7 @@ export function monthGrid(month: string): (string | null)[][] {
   const count = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
   const cells: (string | null)[] = [
     ...Array.from({ length: lead }, () => null),
-    ...Array.from({ length: count }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`),
+    ...Array.from({ length: count }, (_, i) => `${month}-${twoDigits(i + 1)}`),
   ];
   while (cells.length % DAYS_PER_WEEK !== 0) cells.push(null);
   return Array.from({ length: cells.length / DAYS_PER_WEEK }, (_, week) => cells.slice(week * DAYS_PER_WEEK, (week + 1) * DAYS_PER_WEEK));
