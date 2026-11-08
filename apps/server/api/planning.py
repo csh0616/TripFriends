@@ -59,6 +59,14 @@ def is_planning_path(path: str) -> bool:
     return path.startswith(PLANNING_PREFIXES)
 
 
+# TASK-010: 여행 API의 본문 오류는 400 VALIDATION_ERROR (계획 API의 INVALID_REQUEST와 다르다, §9 Q13)
+TRIP_PREFIXES = ("/trips", "/fixed-events", "/places/search", "/places/lodging-search")
+
+
+def is_trip_path(path: str) -> bool:
+    return path.startswith(TRIP_PREFIXES)
+
+
 def _doc(*codes: int) -> dict[int | str, dict]:
     return {code: {"model": ErrorResponse} for code in codes}
 
@@ -124,7 +132,7 @@ def drop_default_422(schema: dict) -> dict:
     """계획 API의 본문 오류는 400이라 FastAPI가 자동으로 붙인 422(HTTPValidationError) 설명을 지운다.
     COURSE_INFEASIBLE을 직접 적어 둔 422는 남긴다."""
     for path, operations in schema["paths"].items():
-        if not is_planning_path(path):
+        if not (is_planning_path(path) or is_trip_path(path)):
             continue
         for operation in operations.values():
             response = operation["responses"].get("422")

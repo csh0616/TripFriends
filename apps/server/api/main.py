@@ -1,6 +1,8 @@
 import logging
 import os
+import re
 import threading
+from datetime import UTC, datetime
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -15,16 +17,37 @@ from catalog import get_catalog
 from deciders import JevDecider, RuleDecider
 from api.now import router as now_router
 from api.trip import router as trip_router
-from api.planning import drop_default_422, http_error_response, is_planning_path, planning_error_handler, planning_validation_handler, router as planning_router
+from api.trips import api_error_handler, router as trips_router, trip_validation_handler
+from api.planning import drop_default_422, http_error_response, is_planning_path, is_trip_path, planning_error_handler, planning_validation_handler, router as planning_router
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
 from planning.repo import MemoryPlanningRepo
 from trip.repo import MemoryTripRepo
 from trip.service import TripService
+from trip.trips import ApiError, TripBook
+from places.city import open_city
 from planning.schemas import ErrorResponse, SeedChosenResult, SeedRequest, SeedResult
 from planning.service import PlanningError, PlanningService
 
 log = logging.getLogger(__name__)
+
+# TASK-010 §9 Q19·§E5: 요청 기록 줄(uvicorn.access)은 남기되 쿼리의 위치 값만 가린다 (실제 GPS는 TASK-011, 그 전의 바닥)
+_POSITION_QUERY = re.compile(r"([?&](?:lat|lng|lon|latitude|longitude)=)[^&\s\"]*", re.IGNORECASE)
+
+
+class MaskPosition(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = _POSITION_QUERY.sub(r"\1***", record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(_POSITION_QUERY.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args)
+        return True
+
+
+def _mask_access_log() -> None:
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, MaskPosition) for f in access.filters):
+        access.addFilter(MaskPosition())
 
 
 def _warm_up(jev: JevDecider) -> None:
@@ -50,6 +73,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.trip_repo = MemoryTripRepo()  # TASK-007: 사건·제안
     app.state.trip_service = TripService(app.state.trip_repo, app.state.planning_repo)
     app.state.trip_graph = app.state.trip_service.graph  # G2, 스레드 ID = 사건 ID
+    _mask_access_log()
+    # TASK-010: 도시 데이터(가짜 또는 실제 오사카 팩)와 여행 저장. 시계는 요청 때마다 읽는다 (테스트가 서버 시작 뒤 바꿔 넣는다)
+    app.state.clock = lambda: datetime.now(UTC)
+    app.state.city, _fake = open_city()
+    app.state.places_provider = app.state.city.provider
+    app.state.trip_book = TripBook(app.state.planning_repo, app.state.city, lambda: app.state.clock())
+    app.state.planning_service.before_start = app.state.trip_book.refresh_for_day  # §A5
     app.state.jev = None
     if os.environ.get("AI_GATEWAY_API_KEY"):
         # Jev가 답하지 못하면 되묻기 (SCREEN-001 §4-3 5번)
@@ -60,11 +90,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Tripfriends", lifespan=lifespan)
 app.add_exception_handler(PlanningError, planning_error_handler)  # type: ignore[arg-type]
+app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
 
 
 @app.exception_handler(RequestValidationError)
 async def validation_handler(request: Request, exc: RequestValidationError):
     """TASK-003 §10 Q23: 계획 API의 본문 오류는 400 공통 형식. 그 밖의 API는 FastAPI 기본(422) 그대로."""
+    if is_trip_path(request.url.path):
+        return trip_validation_handler(exc)  # TASK-010 §9 Q13: 여행 API는 400 VALIDATION_ERROR
     if is_planning_path(request.url.path):
         return planning_validation_handler(request, exc)
     return await request_validation_exception_handler(request, exc)
@@ -98,6 +131,7 @@ async def unexpected_error_handler(request: Request, exc: Exception):
 app.include_router(planning_router)
 app.include_router(now_router)
 app.include_router(trip_router)
+app.include_router(trips_router)
 
 _default_openapi = app.openapi
 

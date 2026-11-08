@@ -209,7 +209,7 @@ class CourseResultOption(BaseModel):
     label: Literal["relaxed", "packed"]
     items: list[CourseItemView]
     dropped: list[DroppedView]
-    go_home_min: int
+    go_home_min: int | None  # 숙소를 고르지 않은 실제 여행이면 null (돌아갈 숙소가 없음, TASK-010 §10 Q27)
     total_travel_min: int
 
 
@@ -253,7 +253,10 @@ class SeedChosenResult(SeedResult):
 class ErrorBody(BaseModel):
     """공통 오류 (§5). code는 NOT_FOUND·INVALID_REQUEST·STATE_CONFLICT·COURSE_INFEASIBLE·INTERNAL_ERROR 5개뿐 (§10 Q24, §10-10 R3)."""
 
-    code: Literal["NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE", "INTERNAL_ERROR"]  # §10 Q24, §10-10 R3
+    # §10 Q24, §10-10 R3 + TASK-010 §9 Q13·Q22 (여행 API: VALIDATION_ERROR · PLAN_EXISTS · PROVIDER_UNAVAILABLE)
+    code: Literal[
+        "NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE", "INTERNAL_ERROR", "VALIDATION_ERROR", "PLAN_EXISTS", "PROVIDER_UNAVAILABLE"
+    ]
     message: str
     detail: Any = None
 

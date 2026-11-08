@@ -115,7 +115,7 @@ def session_response(state: PlanningState, day: DayRecord, overrides: dict[Place
     )
 
 
-def _opening_fact(place: EnginePlace, weekday: int) -> Fact:
+def _opening_fact(place: EnginePlace, weekday: int, source: str = "demo") -> Fact:
     """TASK-003 §6, §10 Q9·Q10 정리: 상태는 **장소 단위**로 먼저 정리하고 요일 값을 만든다.
 
     - 영업시간 모름(None)이면 값 null, 상태 unknown
@@ -123,16 +123,16 @@ def _opening_fact(place: EnginePlace, weekday: int) -> Fact:
     - 그날 휴무(구간 없음)면 값 null, 상태는 위에서 정리한 그대로 (미확인을 확인됨으로 내보내지 않는다)
     """
     if place.hours is None:
-        return Fact(field="opening_hours", value=None, status="unknown", source_type="demo", checked_at=None)
+        return Fact(field="opening_hours", value=None, status="unknown", source_type=source, checked_at=None)
     status = place.hours_status
     if status == "unknown" and place.hours:
         status = "unverified"
     today = sorted((o for o in place.hours if o.weekday == weekday), key=lambda o: (o.open, o.close))
     value = ",".join(f"{o.open}-{o.close}" for o in today) or None
-    return Fact(field="opening_hours", value=value, status=status, source_type="demo", checked_at=None)
+    return Fact(field="opening_hours", value=value, status=status, source_type=source, checked_at=None)
 
 
-def place_view(place: EnginePlace, weekday: int) -> Place:
+def place_view(place: EnginePlace, weekday: int, source: str = "demo") -> Place:
     return Place(
         id=place.id,
         name=place.name,
@@ -142,7 +142,7 @@ def place_view(place: EnginePlace, weekday: int) -> Place:
         crowd_level=place.crowd_level,
         price_level=place.price_level,
         mood_tags=list(place.mood_tags),
-        facts=[_opening_fact(place, weekday)],
+        facts=[_opening_fact(place, weekday, source)],
     )
 
 
@@ -200,7 +200,7 @@ def batch_response(
             why = f"{DIRECTION_LABELS[state.last_direction]} 쪽이에요"  # §10 Q7: 방향을 못 지켜 채운 곳은 기본 문장
         else:
             why = WHY_NONE
-        candidates_out.append(Candidate(place=place_view(p, weekday), why=why))
+        candidates_out.append(Candidate(place=place_view(p, weekday, (day.sources or {}).get(p.id, "demo")), why=why))
 
     return CandidateBatch(
         session_id=state.session_id,
@@ -277,7 +277,7 @@ def course_response(
                 label=record.course.label,
                 items=items,
                 dropped=dropped,
-                go_home_min=record.course.go_home_min,
+                go_home_min=record.course.go_home_min if day.lodging_known else None,  # §10 Q27: 돌아갈 숙소가 없으면 null
                 total_travel_min=record.course.total_travel_min,
             )
         )
