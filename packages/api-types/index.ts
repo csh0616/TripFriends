@@ -327,6 +327,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/days/{day_id}/course": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 그날 고른 코스 (코스안 카드와 같은 모양, 지난 날도 읽힘) */
+        get: operations["chosen_course_days__day_id__course_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/places/search": {
         parameters: {
             query?: never;
@@ -2411,6 +2428,48 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    chosen_course_days__day_id__course_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
+            path: {
+                day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseResultOption"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -20,8 +20,8 @@ def _limits() -> dict[str, timedelta]:
 
 
 def _refresh_rules() -> dict[str, float]:
-    """다시 부르기 한 번에 Google 30회 (A7), 요청 간격 0.1초 이상."""
-    return {"google_cap": 30, "interval": 0.1}
+    """다시 부르기 한 번에 Google 100회 (§12 답 5: 서버 시작 때 좌표 다시 부르기 상한), 요청 간격 0.1초 이상."""
+    return {"google_cap": 100, "interval": 0.1}
 
 
 def is_stale(entry: dict[str, Any], field: Field, now: datetime) -> bool:
@@ -43,7 +43,7 @@ def refresh(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """오래된 좌표만 다시 부른다 (한 번에 Google 30회까지). 반환 (새 캐시, 보고 {calls: {google}, failed: [place_id], stopped: bool}).
+    """오래된 좌표만 다시 부른다 (한 번에 Google 100회까지). 반환 (새 캐시, 보고 {calls: {google}, failed: [place_id], stopped: bool}).
 
     다시 부르다 실패하면 이전 좌표를 그대로 쓰고 failed에 적는다. Google의 영업시간 등은 받아도 버린다 (§11 H1)."""
     rules = _refresh_rules()

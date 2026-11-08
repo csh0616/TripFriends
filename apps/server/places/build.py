@@ -104,7 +104,7 @@ def build_pack(
     area_centers: dict[str, tuple[float, float]] = {}
     resolved: dict[str, tuple[str, dict[str, Any]]] = {}  # 같은 query는 한 번만 부른다 (난바역 = center)
     try:
-        for name, query, area in [("center", seed["center"]["query"], "center"), *((a, v["query"], a) for a, v in seed.get("areas", {}).items())]:
+        for name, query, area in [("center", seed["center"]["query"], "center"), *((a["id"], a["query"], a["id"]) for a in seed.get("areas", []))]:
             if query not in resolved:
                 resolved[query] = fetch(query, area)
             place_id, found = resolved[query]
@@ -112,7 +112,7 @@ def build_pack(
             if name == "center":
                 center_id = place_id
             else:
-                area_pins[name] = {"name_ko": seed["areas"][name]["name_ko"], "place_id": place_id}
+                area_pins[name] = {"name_ko": next(a["name_ko"] for a in seed["areas"] if a["id"] == name), "place_id": place_id}
                 area_centers[name] = (found["location"]["lat"], found["location"]["lng"])
     except _CapExceeded:
         pass

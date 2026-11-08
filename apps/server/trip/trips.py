@@ -14,7 +14,9 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel
 
 from engine.models import DayPlan, PlanFixed
+from planning.presenter import option_view
 from planning.repo import PlanningRepo
+from planning.schemas import CourseResultOption
 from planning.seed import DAY_END, DAY_START
 from places.city import CityData
 from places.live import CAPS
@@ -314,7 +316,10 @@ class TripBook:
                 raise invalid("title", f"제목은 1자에서 {_rules()['title_max']}자까지 쓸 수 있어요")
             tz = self._tz()
             day = trip.start_date + timedelta(days=trip.day_ids.index(body.trip_day_id))
-            start_at, end_at = (m if m.tzinfo else m.replace(tzinfo=tz) for m in (body.start_at, body.end_at))
+            for name, moment in (("start_at", body.start_at), ("end_at", body.end_at)):
+                if moment.tzinfo is None:
+                    raise invalid(name, "시각에 시간대(+09:00 등)가 있어야 해요")  # API-001 §1: ISO 8601 시간대 포함
+            start_at, end_at = body.start_at, body.end_at
             day_start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
             day_end = day_start + timedelta(days=1)
             if end_at <= start_at:
@@ -343,6 +348,20 @@ class TripBook:
                 raise ApiError(409, "PLAN_EXISTS", "계획을 이미 골랐어요. 계획을 다시 짜야 해요", {"day_id": found.trip_day_id})
             del self._store.fixed[fixed_event_id]
             self._sync_plan(found.trip_day_id)
+
+    # ---- 고른 코스 읽기 (§12 답 3) ----
+
+    def course(self, day_id: str, device_id: str) -> CourseResultOption:
+        """그날 고른 코스. 고르지 않은 날·다른 기기의 날·없는 날은 모두 404. 지난 날도 읽힌다."""
+        with self._lock:
+            trip_id = self._store.day_trip.get(day_id)
+            trip = self._store.trips.get(trip_id) if trip_id else None
+            option_id = self.planning.chosen_option(day_id)
+            option = self.planning.get_option(option_id) if option_id else None
+            record = self.planning.get_day(day_id)
+            if trip is None or trip.device_id != device_id or option is None or record is None:
+                raise ApiError(404, "NOT_FOUND", "고른 코스가 없어요", {"resource": "course", "day_id": day_id})
+            return option_view(option, record)
 
     # ---- §11 H3 Google 영업시간을 부르는 때 ----
 

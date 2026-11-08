@@ -1244,6 +1244,71 @@
         }
       }
     },
+    "/days/{day_id}/course": {
+      "get": {
+        "summary": "그날 고른 코스 (코스안 카드와 같은 모양, 지난 날도 읽힘)",
+        "operationId": "chosen_course_days__day_id__course_get",
+        "parameters": [
+          {
+            "name": "day_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Day Id"
+            }
+          },
+          {
+            "name": "X-Device-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Device-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CourseResultOption"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        }
+      }
+    },
     "/places/search": {
       "get": {
         "summary": "장소 검색 (꼭 갈 곳, 도시 팩 안)",

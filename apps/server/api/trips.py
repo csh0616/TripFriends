@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 
 from api.planning import _doc, _error
+from planning.schemas import CourseResultOption
 from trip.trips import CITY_CODE, ApiError, FixedEvent, FixedEventCreate, LodgingHit, PlaceHit, Trip, TripBook, TripCreate, invalid
 
 router = APIRouter()
@@ -70,6 +71,11 @@ def add_fixed_event(trip_id: str, body: FixedEventCreate, request: Request, x_de
 def delete_fixed_event(fixed_event_id: str, request: Request, x_device_id: DeviceHeader = None) -> Response:
     book(request).delete_fixed(fixed_event_id, device(x_device_id))
     return Response(status_code=204)
+
+
+@router.get("/days/{day_id}/course", responses=_doc(400, 404), summary="그날 고른 코스 (코스안 카드와 같은 모양, 지난 날도 읽힘)")
+def chosen_course(day_id: str, request: Request, x_device_id: DeviceHeader = None) -> CourseResultOption:
+    return book(request).course(day_id, device(x_device_id))
 
 
 @router.get("/places/search", responses=_doc(400), summary="장소 검색 (꼭 갈 곳, 도시 팩 안)")

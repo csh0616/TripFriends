@@ -4,8 +4,10 @@ Google 응답 값은 이 모듈 밖으로 나갈 때 우리 모양(details의 �
 """
 
 import json
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, Literal
 
 import httpx
@@ -50,7 +52,12 @@ class ProviderTransientError(Exception):
     """일시 오류(응답 5xx·시간 초과)가 한 번 다시 시도해도 계속됨. 만들기는 그 줄만 provider_error로 뺀다 (PM 답 Q2)."""
 
 
-AUTH_STATUSES = (401, 403, 429)
+AUTH_STATUSES = (401, 403)  # 바로 멈춤. 429(요금·속도 제한)는 기다려서 다시 (아래 _rate_waits)
+
+
+def _rate_waits() -> tuple[float, ...]:
+    """429는 1·2·4초 기다려 3번까지 다시 (TASK-010 §12 답 2). 그래도 429면 멈춘다. 기준 값은 함수 안에 둔다 (돌연변이 대상)."""
+    return (1.0, 2.0, 4.0)
 
 
 class PlacesProvider(ABC):
@@ -136,27 +143,39 @@ def _opening_hours(periods: list[dict[str, Any]] | None) -> list[dict[str, Any]]
 class GooglePlaces(PlacesProvider):
     """Places API (New). 필드 마스크 필수. client는 테스트가 가짜 전송(httpx.MockTransport)을 넣는 자리."""
 
-    def __init__(self, api_key: str, client: httpx.Client | None = None):
+    def __init__(self, api_key: str, client: httpx.Client | None = None, sleep: Callable[[float], None] = time.sleep):
         self._key = api_key
         self._client = client or httpx.Client(timeout=HTTP_TIMEOUT)
+        self._sleep = sleep
 
     def _headers(self, mask: str) -> dict[str, str]:
         return {"X-Goog-Api-Key": self._key, "X-Goog-FieldMask": mask, "Content-Type": "application/json"}
 
     def _send(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        """보내기. 인증·요금 오류는 바로 ProviderAuthError, 5xx·시간 초과는 한 번 다시 시도한 뒤 ProviderTransientError."""
-        for attempt in range(2):
+        """보내기. 401·403은 바로 ProviderAuthError, 429는 1·2·4초 기다려 다시(그래도 429면 ProviderAuthError),
+        5xx·시간 초과는 한 번 다시 시도한 뒤 ProviderTransientError."""
+        waits = list(_rate_waits())
+        transient_left = 1
+        while True:
             try:
                 response = self._client.request(method, url, **kwargs)
+                failed = response.status_code >= 500
             except httpx.TimeoutException:
-                continue
-            if response.status_code in AUTH_STATUSES:
-                raise ProviderAuthError(f"Google 응답 {response.status_code}")
-            if response.status_code >= 500:
-                continue
-            response.raise_for_status()
-            return response
-        raise ProviderTransientError("Google 일시 오류")
+                failed = True
+            else:
+                if response.status_code == 429:
+                    if not waits:
+                        raise ProviderAuthError("Google 응답 429")
+                    self._sleep(waits.pop(0))
+                    continue
+                if response.status_code in AUTH_STATUSES:
+                    raise ProviderAuthError(f"Google 응답 {response.status_code}")
+                if not failed:
+                    response.raise_for_status()
+                    return response
+            if transient_left == 0:
+                raise ProviderTransientError("Google 일시 오류")
+            transient_left -= 1
 
     def _search(self, body: dict[str, Any], mask: str) -> list[dict[str, Any]]:
         return self._send("POST", SEARCH_URL, headers=self._headers(mask), json=body).json().get("places", [])

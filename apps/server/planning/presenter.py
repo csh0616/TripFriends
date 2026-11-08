@@ -248,6 +248,30 @@ def picks_response(reactions: Reactions) -> Picks:
     return Picks(picks=liked, picks_count=len(liked))
 
 
+def option_view(record: OptionRecord, day: DayRecord) -> CourseResultOption:
+    """코스안 한 칸의 응답 모양. 코스안 카드(POST planning)와 고른 코스 읽기(GET /days/{id}/course)가 함께 쓴다."""
+    titles = [f.title for f in sorted((f for f in day.plan.fixed if f.place_id is None), key=lambda f: (f.start, f.end))]
+    untitled = iter(titles)
+    items = [
+        CourseItemView(
+            **item.model_dump(),
+            name=day.places[item.place_id].name if item.place_id else next(untitled),
+            lat=day.places[item.place_id].lat if item.place_id else None,
+            lng=day.places[item.place_id].lng if item.place_id else None,
+        )
+        for item in record.course.items
+    ]
+    dropped = [DroppedView(**d.model_dump(), name=day.places[d.place_id].name) for d in record.course.dropped]
+    return CourseResultOption(
+        option_id=record.option_id,
+        label=record.course.label,
+        items=items,
+        dropped=dropped,
+        go_home_min=record.course.go_home_min if day.lodging_known else None,  # §10 Q27: 돌아갈 숙소가 없으면 null
+        total_travel_min=record.course.total_travel_min,
+    )
+
+
 def course_response(
     state: PlanningState, records: list[OptionRecord], day: DayRecord, overrides: dict[PlaceId, int] | None = None
 ) -> CourseResult:
@@ -257,28 +281,5 @@ def course_response(
     # TASK-004 미정: 장소 없는 고정 일정 항목과 title을 잇는 방법(문서에 없음)
     장소 없는 고정 일정은 서로 겹치지 않아 시각순으로 정렬한 title과 코스의 해당 항목을 순서대로 짝짓는다.
     """
-    titles = [f.title for f in sorted((f for f in day.plan.fixed if f.place_id is None), key=lambda f: (f.start, f.end))]
-    options = []
-    for record in records:
-        untitled = iter(titles)
-        items = [
-            CourseItemView(
-                **item.model_dump(),
-                name=day.places[item.place_id].name if item.place_id else next(untitled),
-                lat=day.places[item.place_id].lat if item.place_id else None,
-                lng=day.places[item.place_id].lng if item.place_id else None,
-            )
-            for item in record.course.items
-        ]
-        dropped = [DroppedView(**d.model_dump(), name=day.places[d.place_id].name) for d in record.course.dropped]
-        options.append(
-            CourseResultOption(
-                option_id=record.option_id,
-                label=record.course.label,
-                items=items,
-                dropped=dropped,
-                go_home_min=record.course.go_home_min if day.lodging_known else None,  # §10 Q27: 돌아갈 숙소가 없으면 null
-                total_travel_min=record.course.total_travel_min,
-            )
-        )
+    options = [option_view(record, day) for record in records]
     return CourseResult(session_id=state.session_id, stage=state.stage, options=options, day=day_summary(state.day_id, day, overrides))
