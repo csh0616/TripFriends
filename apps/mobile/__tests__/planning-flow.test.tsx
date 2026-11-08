@@ -1422,10 +1422,17 @@ describe('AC-12 다시 켜기', () => {
 
 describe('Q30 API 주소', () => {
   const original = process.env.EXPO_PUBLIC_API_URL;
+  const originalCheck = process.env.EXPO_PUBLIC_CHECK_API_URL;
+
+  beforeEach(() => {
+    delete process.env.EXPO_PUBLIC_CHECK_API_URL; // TASK-010 PM 답(11-09): 점검 주소가 있으면 그것이 먼저라 여기서는 지운다
+  });
 
   afterEach(() => {
     if (original === undefined) delete process.env.EXPO_PUBLIC_API_URL;
     else process.env.EXPO_PUBLIC_API_URL = original;
+    if (originalCheck === undefined) delete process.env.EXPO_PUBLIC_CHECK_API_URL;
+    else process.env.EXPO_PUBLIC_CHECK_API_URL = originalCheck;
   });
 
   const load = () => {
@@ -1448,6 +1455,33 @@ describe('Q30 API 주소', () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     expect(load().API_URL).toBe('http://192.168.0.10:8000');
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  // TASK-010 PM 답(11-09, 8000 서버 문제): 점검 전용 서버 주소 변수를 .env.local의 API 주소보다 먼저 읽는다
+  test('W96b_PM_점검_주소가_있으면_API_주소보다_먼저', () => {
+    process.env.EXPO_PUBLIC_API_URL = 'http://192.168.0.10:8000';
+    process.env.EXPO_PUBLIC_CHECK_API_URL = 'http://localhost:8100';
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(load().API_URL).toBe('http://localhost:8100');
+  });
+
+  test('W96c_PM_점검_주소만_있어도_그_주소', () => {
+    delete process.env.EXPO_PUBLIC_API_URL;
+    process.env.EXPO_PUBLIC_CHECK_API_URL = 'http://localhost:8100';
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(load().API_URL).toBe('http://localhost:8100');
+  });
+
+  test('W96d_PM_점검_주소가_없으면_API_주소', () => {
+    process.env.EXPO_PUBLIC_API_URL = 'http://192.168.0.10:8000';
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(load().API_URL).toBe('http://192.168.0.10:8000');
+  });
+
+  test('W96e_PM_둘_다_없으면_localhost_8000', () => {
+    delete process.env.EXPO_PUBLIC_API_URL;
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(load().API_URL).toBe('http://localhost:8000');
   });
 });
 

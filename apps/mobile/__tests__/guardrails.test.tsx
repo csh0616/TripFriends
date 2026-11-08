@@ -492,9 +492,10 @@ describe('G7', () => {
 
 // ---------- §9 ----------
 
+// TASK-010 PM 답(11-09): 점검 전용 서버 주소(EXPO_PUBLIC_CHECK_API_URL)도 주소다. 그 밖의 EXPO_PUBLIC_ 변수(키 등)는 여전히 금지
 test('G30_S9_EXPO_PUBLIC_변수는_API_주소만', () => {
   const names = sourceFiles().flatMap((f) => f.text.match(/EXPO_PUBLIC_\w+/g) ?? []);
-  expect(new Set(names)).toEqual(new Set(['EXPO_PUBLIC_API_URL']));
+  expect([...new Set(names)].sort()).toEqual(['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_CHECK_API_URL']);
 });
 
 // ---------- §13 ----------

@@ -6,7 +6,7 @@
     curated_hours [{days: all, open, close}] = 7개 요일 모두 그 구간
     facts_for(row, entry, live): §13 O3 순서. live fresh -> google·confirmed / open_space·curated_hours -> curated·confirmed /
         live 메모리(fresh False) -> google·unverified / Serper -> serper·unverified / unknown
-    POST /debug/seed-demo {"past_days": 1} -> 201 (첫날이 지난 날). 선택값이 없으면 지금 그대로
+    POST /debug/seed-demo {"past_days": N} -> 201, 응답 trip_days[:N].state == "past" (PM 답 11-09: 데모 시계를 N일 뒤로). 선택값이 없으면 N=0과 같다
 """
 
 from datetime import date
@@ -181,16 +181,40 @@ def test_T10_S13_O3_그_자리에서_받은_Google이_curated보다_먼저():
 # ---------- 질문 답 1: 데모의 지난 날 ----------
 
 
-def test_T10_S13_Q1_seed_demo_past_days_1을_받는다(env):
-    response = env.client.post("/debug/seed-demo", json={"past_days": 1})
+DAY_STATES = {"planning", "planned", "today", "past"}  # §B6
+
+
+def seeded_states(body: dict) -> list[str]:
+    """PM 답 (11-09) 1: 데모 시계를 past_days만큼 뒤로 -> 날 상태를 응답에서 본다.
+    계약 (이 테스트가 정한 것, 승인 대기): 응답 trip_days = [{day_id, date, state}] (Trip.trip_days와 같은 이름, §9 Q12), day_ids와 같은 순서."""
+    days = body["trip_days"]
+    assert [day["day_id"] for day in days] == body["day_ids"]
+    states = [day["state"] for day in days]
+    assert set(states) <= DAY_STATES
+    return states
+
+
+@pytest.mark.parametrize("n", [0, 1, 2], ids=["0일", "1일", "2일"])
+def test_T10_S13_Q1_seed_demo_past_days_N이면_첫_N일이_지난_날(env, n):
+    response = env.client.post("/debug/seed-demo", json={"past_days": n})
     assert response.status_code == 201, response.text
     assert len(response.json()["day_ids"]) == 3
+    states = seeded_states(response.json())
+    assert states[:n] == ["past"] * n
+    assert "past" not in states[n:]
 
 
 def test_T10_S13_Q1_선택값이_없으면_지금_그대로(env):
     plain = env.client.post("/debug/seed-demo")
     assert plain.status_code == 201
-    assert set(plain.json()) == {"trip_id", "day_ids"}
+    assert {"trip_id", "day_ids"} <= set(plain.json())
+    assert "past" not in seeded_states(plain.json())  # N=0과 같다
+
+
+def test_T10_S13_Q1_past_days_0과_선택값_없음은_같은_상태(env):
+    zero = seeded_states(env.client.post("/debug/seed-demo", json={"past_days": 0}).json())
+    plain = seeded_states(env.client.post("/debug/seed-demo").json())
+    assert zero == plain
 
 
 def test_T10_S13_Q1_운영에서는_past_days를_줘도_404(monkeypatch):

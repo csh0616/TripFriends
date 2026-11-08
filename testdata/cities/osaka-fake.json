@@ -1,5 +1,5 @@
 {
- "about": "TASK-010 §A1 FakePlaces 데이터. test-writer가 손으로 지어낸 가짜 값이며 실제 Google·Serper 응답이 아니다 (ADR-015 §3-2: 테스트 데이터도 손으로 만든 가짜). place_id는 모두 'FAKE-'로 시작하고 링크는 모두 example.invalid. 좌표는 오사카 근처의 지어낸 수, 영업시간은 지어낸 시각. resolve: query -> place_id 목록(0개=검색 실패, 2개 이상=여러 곳). details: place_id -> {location, opening_hours(엔진 Opening 모양 또는 null=없음), website, maps_url, business_status}. serper: '{query} 営業時間' -> [{text, link}] (문장은 모두 '【テスト用の作り話】'로 시작하는 작문). lodging: 숙소 검색 결과(팩 밖). seed는 testdata/cities/osaka-seed-fake.yaml (center = 難波駅, 지역 중심 難波駅·心斎橋駅·梅田駅·森ノ宮駅(osakajo, TASK-010 §12)도 resolve 표에 있다. FAKE-osaka-edge-in/out은 梅田駅에서 북쪽 2.9km/3.1km, far-umeda는 난바 쪽 약 4km).",
+ "about": "TASK-010 §A1 FakePlaces 데이터. test-writer가 손으로 지어낸 가짜 값이며 실제 Google·Serper 응답이 아니다 (ADR-015 §3-2: 테스트 데이터도 손으로 만든 가짜). place_id는 모두 'FAKE-'로 시작하고 링크는 모두 example.invalid. 좌표는 오사카 근처의 지어낸 수, 영업시간은 지어낸 시각. resolve: query -> place_id 목록(0개=검색 실패, 2개 이상=여러 곳). details: place_id -> {location, opening_hours(엔진 Opening 모양 또는 null=없음), website, maps_url, business_status}. serper: '{query} 営業時間' -> [{text, link}] (문장은 모두 '【テスト用の作り話】'로 시작하는 작문). lodging: 숙소 검색 결과(팩 밖). seed는 testdata/cities/osaka-seed-fake.yaml (center = 難波駅, 지역 중심 難波駅·心斎橋駅·梅田駅·森ノ宮駅(osakajo, TASK-010 §12)도 resolve 표에 있다. FAKE-osaka-edge-in/out은 梅田駅에서 북쪽 2.9km/3.1km, far-umeda는 난바 쪽 약 4km). lodging의 숙소도 details에 지어낸 좌표가 있다 (숙소를 고른 흐름을 가짜 공급자로 재현, TASK-010 PM 답 11-09): 호텔 1~7은 난바역 근처, 게스트하우스는 우메다역 근처. 영업시간은 null.",
  "timezone": "Asia/Tokyo",
  "center": {
   "lat": 34.669,
@@ -1017,6 +1017,86 @@
    ],
    "website": "https://example.invalid/FAKE-osaka-ambiguous-2",
    "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-ambiguous-2",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-1": {
+   "location": {
+    "lat": 34.6656,
+    "lng": 135.4996
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-1",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-1",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-2": {
+   "location": {
+    "lat": 34.666,
+    "lng": 135.4999
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-2",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-2",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-3": {
+   "location": {
+    "lat": 34.6664,
+    "lng": 135.5002
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-3",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-3",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-4": {
+   "location": {
+    "lat": 34.6668,
+    "lng": 135.5005
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-4",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-4",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-5": {
+   "location": {
+    "lat": 34.6672,
+    "lng": 135.5008
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-5",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-5",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-6": {
+   "location": {
+    "lat": 34.6676,
+    "lng": 135.5011
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-6",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-6",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-7": {
+   "location": {
+    "lat": 34.668,
+    "lng": 135.5014
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-7",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-7",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-guesthouse": {
+   "location": {
+    "lat": 34.7031,
+    "lng": 135.4968
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-guesthouse",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-guesthouse",
    "business_status": "OPERATIONAL"
   }
  },
