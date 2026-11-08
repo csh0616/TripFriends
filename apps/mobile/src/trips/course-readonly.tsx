@@ -1,5 +1,5 @@
 // TASK-010 §12 답 3: 계획 완료·지난 날의 "고른 코스" 읽기만 화면 (DESIGN-001 §4-9). GET /days/{id}/course 한 번.
-// 머무는 시간 조정·확정·다시 계획하기 버튼은 없다. 뒤로 = 날짜 목록.
+// 머무는 시간 조정·확정·다시 계획하기 버튼은 없다. 뒤로 = "‹ 날짜"(back-day). 줄은 row-read, 동선 그림은 없다 (TASK-011 A3).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
@@ -7,8 +7,8 @@ import { Text } from '@/components/app-text';
 import { Notice } from '@/components/planning/notice';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { send } from '@/lib/planning-api';
-import { CourseRow } from '@/planning/screens/p3';
-import { color, radius, space, text } from '@/planning/theme';
+import { ReadRow } from '@/planning/screens/p3';
+import { color, fit, fitText, radius, space, text } from '@/planning/theme';
 
 import { tripRequests, type ChosenCourse } from './api';
 import { getDeviceId } from './device-id';
@@ -52,7 +52,7 @@ export function CourseReadonly({ dayId, date, onBack }: { dayId: string; date: s
 
   const course = loaded.state === 'ok' ? loaded.course : null;
   return (
-    <ScreenFrame title={dayLabel(date)} subtitle="고른 코스" onBack={onBack}>
+    <ScreenFrame title={dayLabel(date)} subtitle="고른 코스" onBack={onBack} backLabel="날짜">
       <View testID="course-readonly" style={styles.root}>
         {loaded.state === 'loading' ? <ActivityIndicator color={color.muted} /> : null}
         {loaded.state === 'error' ? <Notice message={loaded.message} tone="plain" onRetry={loaded.retry ? () => void load() : undefined} /> : null}
@@ -60,8 +60,8 @@ export function CourseReadonly({ dayId, date, onBack }: { dayId: string; date: s
           <>
             <Text style={text('caption', 'muted')}>{`${course.items.length}곳 · 이동 ${course.total_travel_min}분`}</Text>
             <View>
-              {course.items.map((item, index) => (
-                <CourseRow key={item.seq} readOnly first={index === 0} last={index === course.items.length - 1} item={item} must={false} open={false} busy={false} onToggle={noop} onAdjust={noop} />
+              {course.items.map((item) => (
+                <ReadRow key={item.seq} item={item} must={false} />
               ))}
             </View>
             {course.go_home_min !== null ? (
@@ -69,14 +69,13 @@ export function CourseReadonly({ dayId, date, onBack }: { dayId: string; date: s
                 <Text style={text('body')}>{`숙소까지 ${course.go_home_min}분`}</Text>
               </View>
             ) : null /* 숙소가 없으면 돌아갈 곳이 없다 (TASK-010 Q27) */}
+            <Text style={fitText(fit['read-note'])}>지금은 보기만 할 수 있어</Text>
           </>
         ) : null}
       </View>
     </ScreenFrame>
   );
 }
-
-const noop = () => undefined;
 
 const styles = StyleSheet.create({
   root: { gap: space['space-3'] },

@@ -34,7 +34,7 @@ type View_ =
   | { name: 'demo'; start?: 'demo' | 'now' }
   | { name: 'create' }
   | { name: 'days' }
-  | { name: 'planning'; dayId: string }
+  | { name: 'planning'; dayId: string; mode?: 'conversation' | 'auto' }
   | { name: 'course'; day: TripDay }
   | { name: 'now'; record: NowRecord };
 
@@ -90,8 +90,11 @@ export default function Home() {
     void load();
   }, [load]);
 
-  const open = (day: TripDay, destination: DayDestination) => {
-    if (destination === 'planning') setView({ name: 'planning', dayId: day.day_id });
+  const open = (day: TripDay, destination: DayDestination, mode?: 'auto') => {
+    if (destination === 'planning') {
+      if (mode === 'auto') delete sessions.current[day.day_id]; // [알아서 짜 줘]는 이어 가던 대화가 아니라 새로 자동 계획
+      setView({ name: 'planning', dayId: day.day_id, mode });
+    }
     else if (destination === 'course' || destination === 'review') setView({ name: 'course', day });
     else if (destination === 'now' && trip) setView({ name: 'now', record: liveRecord(day, trip.trip_days.indexOf(day)) });
   };
@@ -130,6 +133,7 @@ export default function Home() {
       return (
         <PlanningFlow
           dayId={dayId}
+          startMode={view.mode}
           resumeSessionId={sessions.current[dayId]}
           onSession={(sid) => (sessions.current[dayId] = sid)}
           onBackToList={() => setView({ name: 'days' })}

@@ -1,24 +1,29 @@
-// TASK-010 §C3 날짜 목록 (SC-03 위, DESIGN-001 §4-9): 날 줄마다 알약 + 글자. 상태는 서버가 계산해 준 값(state)을 그대로 쓴다.
-import tokens from 'design-tokens';
+// TASK-010 §C3 날짜 목록 (SC-03 위, DESIGN-001 §4-9·§4-11). 날 상태는 서버가 계산해 준 값(state)을 그대로 쓴다.
+// TASK-011: 머리(제목·점 진행·D-숫자) / 날 줄 크기 3가지(지난 날 68 · 계획 완료 84 · 계획 전 카드) / 아래 큰 버튼 하나(bottom-primary) /
+// 주 버튼이 없으면 끝맺음 글(end-note) / 맨 끝 [새 여행 만들기](btn-new-trip) -> 확인 시트.
 import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { Text } from '@/components/app-text';
-import { CloseIcon } from '@/components/planning/icons';
+import { CardButton } from '@/components/planning/card-button';
+import { CheckIcon, CloseIcon, NextIcon, PlusIcon } from '@/components/planning/icons';
+import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { ScreenFrame } from '@/components/planning/screen-frame';
-import { SecondaryButton } from '@/components/planning/secondary-button';
 import { CityCover } from '@/components/trips/city-cover';
-import { cityClock } from '@/lib/calendar';
-import { dayDestination, dayPill, type DayDestination } from '@/lib/day-list';
+import { DayPill } from '@/components/trips/day-pill';
+import { cityClock, cityToday } from '@/lib/calendar';
+import { dayDestination, dayListPrimary, shortDateLabel, tripHeader, type DayDestination } from '@/lib/day-list';
 import { fixedEventError } from '@/lib/create-trip';
 import { send } from '@/lib/planning-api';
+import { dayName, timeRange } from '@/planning/format';
 import { layout } from '@/planning/layout';
-import { color, control, radius, space, text } from '@/planning/theme';
+import { color, control, fit, fitText, radius, space, text } from '@/planning/theme';
 
 import { tripRequests, type FixedEvent, type Trip, type TripDay } from './api';
 import { getDeviceId } from './device-id';
 import { FixedEventSheet } from './fixed-event-sheet';
-import { dayLabel } from './format';
+import { periodLabel, summaryLine } from './format';
+import { NewTripSheet } from './new-trip-sheet';
 
 const FAILED = '일정을 못 지웠어';
 
@@ -28,12 +33,7 @@ const clockOf = (iso: string): string => {
   return `${pad(Math.floor(clock.minutes / 60))}:${pad(clock.minutes % 60)}`;
 };
 
-const PILL_LOOK = {
-  planning: tokens.pill['pill-planning'],
-  planned: tokens.pill['pill-planned'],
-  today: tokens.pill['pill-today'],
-  past: tokens.pill['pill-past'],
-} as const;
+const FILLED = '●';
 
 export function TripDays({
   trip,
@@ -42,28 +42,33 @@ export function TripDays({
   onNewTrip,
 }: {
   trip: Trip;
-  onOpen: (day: TripDay, destination: DayDestination) => void;
+  /** mode 'auto' = 카드의 [알아서 짜 줘]: 대화 없이 바로 자동 계획 (TASK-011 §9 Q3) */
+  onOpen: (day: TripDay, destination: DayDestination, mode?: 'auto') => void;
   onTripChange: (trip: Trip) => void;
   onNewTrip: () => void;
 }) {
+  const { width } = useWindowDimensions();
   const [sheetDay, setSheetDay] = useState<TripDay | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const today = cityToday(Date.now());
+  const header = tripHeader(trip, today);
+  const primary = dayListPrimary(trip.trip_days, today);
+  const finished = trip.trip_days.every((day) => day.state === 'past');
 
   const change = (dayId: string, edit: (events: FixedEvent[]) => FixedEvent[]) =>
     onTripChange({ ...trip, trip_days: trip.trip_days.map((day) => (day.day_id === dayId ? { ...day, fixed_events: edit(day.fixed_events) } : day)) });
 
-  const open = (day: TripDay) => {
+  const open = (day: TripDay, mode?: 'auto') => {
     setHint(null);
-    onOpen(day, dayDestination(day.state, day.chosen_option_id !== null));
+    onOpen(day, dayDestination(day.state, day.chosen_option_id !== null), mode);
   };
-
-  // 글자 버튼: 누르면 바로 가지 않고 확인 한 번 (지금 여행은 보관된다)
-  const confirmNewTrip = () =>
-    Alert.alert('지금 여행은 보관돼. 새로 만들까?', undefined, [
-      { text: '취소', style: 'cancel' },
-      { text: '새로 만들기', onPress: onNewTrip },
-    ]);
+  const plan = (day: TripDay, mode?: 'auto') => {
+    setHint(null);
+    onOpen(day, 'planning', mode);
+  };
 
   const remove = async (day: TripDay, event: FixedEvent) => {
     if (busy) return;
@@ -76,22 +81,64 @@ export function TripDays({
     } else setHint((result.failure.kind === 'conflict' ? fixedEventError(409, result.failure.code ?? null) : null) ?? FAILED);
   };
 
+  const primaryDay = primary ? trip.trip_days.find((day) => day.day_id === primary.dayId) : undefined;
+
   return (
     <>
-      <ScreenFrame title="오사카 여행" subtitle={`${dayLabel(trip.start_date)} ~ ${dayLabel(trip.end_date)}`}>
-        <CityCover size="banner" style={styles.banner} />
-        {trip.trip_days.map((day, index) => (
-          <DayRow key={day.day_id} day={day} number={index + 1} onOpen={() => open(day)} onAdd={() => setSheetDay(day)} onRemove={(event) => void remove(day, event)} />
-        ))}
+      <ScreenFrame
+        action={
+          primary && primaryDay ? (
+            <View style={styles.primaryWrap}>
+              <Pressable testID="bottom-primary" accessibilityRole="button" onPress={() => open(primaryDay)} style={styles.primary}>
+                <Text style={fitText(fit['bottom-primary'])}>{primary.label}</Text>
+              </Pressable>
+              {primary.sublabel ? <Text style={fitText(fit['bottom-primary'].sub)}>{primary.sublabel}</Text> : null}
+            </View>
+          ) : undefined
+        }
+      >
+        <View style={styles.head}>
+          <Text style={text('caption', 'muted')}>{periodLabel(trip.start_date, trip.end_date)}</Text>
+          <Text style={text('title')}>{header.title}</Text>
+          <View style={styles.progress}>
+            <View accessible accessibilityLabel={header.dots} style={styles.dots}>
+              {Array.from(header.dots).map((dot, index) => (
+                <View key={index} style={[styles.dotMark, dot === FILLED ? styles.dotFilled : styles.dotEmpty]} />
+              ))}
+            </View>
+            <Text style={text('caption', 'muted')}>{header.line}</Text>
+          </View>
+        </View>
+        <CityCover size="banner" width={width - layout.coverMargin} style={styles.banner} />
+        {trip.trip_days.map((day, index) => {
+          const card = day.state === 'planning' || (day.state === 'today' && day.chosen_option_id === null);
+          return (
+            <DayRow
+              key={day.day_id}
+              day={day}
+              index={index}
+              card={card}
+              focus={card && primary?.dayId === day.day_id}
+              onOpen={() => open(day)}
+              onPlan={() => plan(day)}
+              onAuto={() => plan(day, 'auto')}
+              onAdd={() => setSheetDay(day)}
+              onRemove={(event) => void remove(day, event)}
+            />
+          );
+        })}
         {hint ? (
           <Text testID="day-list-hint" style={text('caption', 'muted')}>
             {hint}
           </Text>
         ) : null}
         {busy ? <ActivityIndicator color={color.muted} /> : null}
-        <Pressable testID="new-trip" accessibilityRole="button" onPress={confirmNewTrip} style={styles.textButton}>
-          <Text style={text('body', 'ink')}>새 여행 만들기</Text>
-        </Pressable>
+        {primary === null ? <EndNote finished={finished} count={trip.trip_days.length} /> : null}
+        <View style={[styles.newTripSlot, primary === null && { marginBottom: fit['btn-new-trip'].bottom - layout.screenMargin }]}>
+          <Pressable testID="new-trip" accessibilityRole="button" onPress={() => setConfirming(true)} style={styles.newTrip}>
+            <Text style={fitText(fit['btn-new-trip'])}>새 여행 만들기</Text>
+          </Pressable>
+        </View>
       </ScreenFrame>
       {sheetDay ? (
         <FixedEventSheet
@@ -105,52 +152,128 @@ export function TripDays({
           }}
         />
       ) : null}
+      {confirming ? (
+        <NewTripSheet
+          onConfirm={() => {
+            setConfirming(false);
+            onNewTrip();
+          }}
+          onKeep={() => setConfirming(false)}
+        />
+      ) : null}
     </>
+  );
+}
+
+/** 주 버튼이 없을 때 끝맺음 글: 왜 버튼이 없는지 한 줄로 알려 준다 (E1) */
+function EndNote({ finished, count }: { finished: boolean; count: number }) {
+  const note = fit['end-note'];
+  return (
+    <View testID="end-note" style={styles.endNote}>
+      <View style={styles.endCircle}>
+        <CheckIcon color={color['ink-strong']} size={note.icon} />
+      </View>
+      <Text style={[fitText(note.title), styles.center]}>{finished ? '여행이 끝났어' : `${count}일 모두 정했어`}</Text>
+      <Text style={[fitText(note.body), styles.center, styles.endBody]}>
+        {finished ? '날짜를 누르면 고른 코스를 볼 수 있어' : '여행 첫날부터 아래에 ‘오늘 여행 보기’ 버튼이 나와'}
+      </Text>
+    </View>
+  );
+}
+
+/** "2일째" + 날짜 "12/12 토" (한 줄, 이름은 굵게 날짜는 보조 색) */
+function DayTitle({ index, date, small }: { index: number; date: string; small?: boolean }) {
+  return (
+    <View style={styles.title}>
+      <Text numberOfLines={1} style={text(small ? 'body' : 'heading')}>
+        {dayName(index + 1)}
+      </Text>
+      <Text numberOfLines={1} style={text('caption', 'muted')}>
+        {shortDateLabel(date)}
+      </Text>
+    </View>
+  );
+}
+
+function DayCircle({ past }: { past: boolean }) {
+  const size = past ? layout.dayCirclePast : layout.dayCircle;
+  return (
+    <PhotoPlaceholder category="landmark" glyph={past ? layout.dayGlyphPast : layout.dayGlyph} style={{ width: size, height: size, borderRadius: radius['r-full'] }} />
   );
 }
 
 function DayRow({
   day,
-  number,
+  index,
+  card,
+  focus,
   onOpen,
+  onPlan,
+  onAuto,
   onAdd,
   onRemove,
 }: {
   day: TripDay;
-  number: number;
+  index: number;
+  /** 계획 전 카드 (계획 전 날, 코스가 없는 오늘) */
+  card: boolean;
+  /** 지금 할 일 카드 = 아래 큰 버튼이 가리키는 날: 큰 [같이 고르기] + [알아서 짜 줘] */
+  focus: boolean;
   onOpen: () => void;
+  onPlan: () => void;
+  onAuto: () => void;
   onAdd: () => void;
   onRemove: (event: FixedEvent) => void;
 }) {
-  const look = PILL_LOOK[day.state] ?? PILL_LOOK.planning;
+  const summary = day.summary ?? null;
+  const must = day.must_visits ?? [];
+  const past = day.state === 'past';
+  const today = day.state === 'today';
+
+  if (!card) {
+    return (
+      <Pressable
+        testID={`day-row-${day.day_id}`}
+        accessible={false} // 알약을 따로 읽히게 한다
+        accessibilityRole="button"
+        onPress={onOpen}
+        style={[styles.row, past ? styles.rowPast : styles.rowPlanned, today && styles.rowToday]}
+      >
+        <DayCircle past={past} />
+        <View style={styles.grow}>
+          <DayTitle index={index} date={day.date} small={past} />
+          {summary ? (
+            <Text numberOfLines={1} style={text('caption', 'muted')}>
+              {summaryLine(summary)}
+            </Text>
+          ) : null}
+        </View>
+        <DayPill dayId={day.day_id} state={day.state} />
+        <NextIcon color={color.muted} size={layout.dayChevron} />
+      </Pressable>
+    );
+  }
+
   return (
     <Pressable
       testID={`day-row-${day.day_id}`}
-      accessible={false} // 알약·고정 일정·[+ 일정]을 따로 읽히게 한다
+      accessible={false} // 알약·고정 일정·버튼을 따로 읽히게 한다
       accessibilityRole="button"
       onPress={onOpen}
-      style={[styles.row, day.state === 'past' ? styles.rowPast : styles.rowFull, day.state === 'today' && styles.rowToday]}
+      style={[styles.card, today && styles.rowToday]}
     >
       <View style={styles.top}>
         <View style={styles.grow}>
-          <Text style={text('heading')}>{`${number}일째`}</Text>
-          <Text style={text('caption', 'muted')}>{dayLabel(day.date)}</Text>
+          <DayTitle index={index} date={day.date} />
         </View>
-        <View
-          testID={`day-pill-${day.day_id}`}
-          style={[
-            styles.pill,
-            { backgroundColor: look.bg },
-            'border' in look && { borderWidth: layout.pillBorder, borderColor: look.border },
-          ]}
-        >
-          {'dot' in look ? <View testID={`day-pill-dot-${day.day_id}`} style={[styles.pillDot, { borderColor: look.dot }]} /> : null}
-          <Text style={[text('label'), { color: look.fg }]}>{dayPill(day.state)}</Text>
-        </View>
+        <DayPill dayId={day.day_id} state={day.state} />
       </View>
+      {must.length > 0 ? (
+        <Text numberOfLines={1} style={text('caption', 'muted')}>{`꼭 갈 곳 · ${must.map((one) => one.name).join(', ')}`}</Text>
+      ) : null}
       {day.fixed_events.map((event) => (
         <View key={event.fixed_event_id} style={styles.event}>
-          <Text style={[text('num-md'), styles.time]}>{`${clockOf(event.start_at)}~${clockOf(event.end_at)}`}</Text>
+          <Text style={[text('num-md'), styles.time]}>{timeRange(clockOf(event.start_at), clockOf(event.end_at))}</Text>
           <Text style={[text('body'), styles.grow]} numberOfLines={1}>
             {event.title}
           </Text>
@@ -165,28 +288,90 @@ function DayRow({
           </Pressable>
         </View>
       ))}
-      {day.state === 'planning' || (day.state === 'today' && day.chosen_option_id === null) ? (
-        <View style={styles.addRow}>
-          <SecondaryButton small testID={`add-fixed-${day.day_id}`} label="+ 일정" onPress={onAdd} />
+      <View style={styles.addRow}>
+        <Pressable
+          testID={`add-fixed-${day.day_id}`}
+          accessibilityRole="button"
+          accessibilityLabel="일정 추가"
+          onPress={onAdd}
+          hitSlop={{ top: addSlop, bottom: addSlop }}
+          style={styles.addEvent}
+        >
+          <PlusIcon color={fit['btn-add-event'].fg} size={fit['btn-add-event'].icon} />
+          <Text style={fitText(fit['btn-add-event'])}>일정</Text>
+        </Pressable>
+      </View>
+      {focus ? (
+        <View style={styles.pair}>
+          <View style={styles.grow}>
+            <CardButton size="large" testID={`card-plan-${day.day_id}`} label="같이 고르기" onPress={onPlan} />
+          </View>
+          <View style={styles.grow}>
+            <CardButton size="auto" testID={`card-auto-${day.day_id}`} label="알아서 짜 줘" onPress={onAuto} />
+          </View>
         </View>
-      ) : null}
+      ) : (
+        <View style={styles.addRow}>
+          <CardButton size="small" testID={`card-plan-${day.day_id}`} label="같이 고르기" onPress={onPlan} />
+        </View>
+      )}
     </Pressable>
   );
 }
 
+const addSlop = (fit['btn-add-event'].hit - fit['btn-add-event'].height) / 2;
+
 const styles = StyleSheet.create({
   banner: { borderRadius: radius['r-xl'], alignSelf: 'center' },
   grow: { flex: 1 },
-  row: { borderRadius: radius['r-lg'], backgroundColor: color['bg-2'], padding: space['space-4'], gap: space['space-2'] },
+  title: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },
+  center: { textAlign: 'center' },
+  head: { gap: space['space-1'] },
+  progress: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  dots: { flexDirection: 'row', alignItems: 'center', gap: space['space-1'] },
+  dotMark: { width: layout.progressDot, height: layout.progressDot, borderRadius: radius['r-full'], borderWidth: layout.pillBorder, borderColor: color.ink },
+  dotFilled: { backgroundColor: color.ink },
+  dotEmpty: { backgroundColor: color.surface },
+  row: { borderRadius: radius['r-lg'], backgroundColor: color['bg-2'], paddingHorizontal: space['space-4'], flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
   rowPast: { minHeight: layout.rowPast },
-  rowFull: { minHeight: layout.rowPlanned },
+  rowPlanned: { minHeight: layout.rowPlanned },
+  card: { borderRadius: radius['r-lg'], backgroundColor: color['bg-2'], padding: space['space-4'], gap: space['space-2'] },
   rowToday: { backgroundColor: color['brand-soft'], borderWidth: layout.selRing, borderColor: color.brand },
   top: { flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
-  pillDot: { width: layout.pillDot, height: layout.pillDot, borderRadius: radius['r-full'], borderStyle: 'dashed', borderWidth: layout.pillBorder },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: space['space-1'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'], borderRadius: radius['r-full'] },
   event: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   time: { minWidth: layout.timeColumn },
   remove: { width: control['touch-min'], height: control['touch-min'], alignItems: 'center', justifyContent: 'center' },
-  textButton: { minHeight: control['touch-min'], minWidth: control['touch-min'], alignSelf: 'center', alignItems: 'center', justifyContent: 'center', paddingHorizontal: space['space-4'] },
   addRow: { flexDirection: 'row' },
+  addEvent: {
+    height: fit['btn-add-event'].height,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['space-1'],
+    paddingHorizontal: space['space-3'],
+    borderRadius: fit['btn-add-event'].radius,
+    backgroundColor: fit['btn-add-event'].bg,
+    borderWidth: fit['btn-add-event'].borderWidth,
+    borderColor: fit['btn-add-event'].border,
+  },
+  pair: { flexDirection: 'row', gap: space['space-2'] },
+  primaryWrap: { alignItems: 'center', gap: space['space-1'] },
+  primary: {
+    alignSelf: 'stretch',
+    height: fit['bottom-primary'].height,
+    borderRadius: radius['r-md'],
+    backgroundColor: fit['bottom-primary'].bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  endNote: { marginTop: fit['end-note'].top - space['space-4'], alignItems: 'center', gap: space['space-2'] },
+  endCircle: { width: fit['end-note'].circle, height: fit['end-note'].circle, borderRadius: radius['r-full'], backgroundColor: fit['end-note'].circleBg, alignItems: 'center', justifyContent: 'center' },
+  endBody: { width: fit['end-note'].width },
+  newTripSlot: { marginTop: 'auto' },
+  newTrip: {
+    minHeight: fit['btn-new-trip'].height,
+    borderRadius: fit['btn-new-trip'].radius,
+    backgroundColor: fit['btn-new-trip'].bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -94,6 +94,7 @@ type Problem = { tone: 'plain' | 'problem'; retry: (() => void) | null };
  */
 export default function PlanningFlow({
   dayId,
+  startMode,
   autoStart,
   onLeave,
   resumeSessionId,
@@ -101,6 +102,8 @@ export default function PlanningFlow({
   onBackToList,
 }: {
   dayId?: string;
+  /** 실제 여행의 날: 'auto'면 대화 없이 바로 자동 계획 (TASK-011 [알아서 짜 줘]) */
+  startMode?: 'conversation' | 'auto';
   autoStart?: 'demo' | 'now';
   onLeave?: () => void;
   /** 실제 여행의 날: 이미 시작한 대화가 있으면 새로 만들지 않고 GET으로 이어 간다 (TASK-010 §12 답 3) */
@@ -127,6 +130,7 @@ export default function PlanningFlow({
       start={boot.start}
       restartNotice={boot.notice}
       dayId={dayId}
+      startMode={startMode}
       resumeSessionId={resumeSessionId}
       onSession={onSession}
       onBackToList={onBackToList}
@@ -140,6 +144,7 @@ function Session({
   start,
   restartNotice,
   dayId,
+  startMode,
   autoStart,
   resumeSessionId,
   onSession,
@@ -149,6 +154,7 @@ function Session({
   start: 'boot' | 's0';
   restartNotice: string | null;
   dayId?: string;
+  startMode?: 'conversation' | 'auto';
   autoStart?: 'demo' | 'now';
   resumeSessionId?: string;
   onSession?: (sessionId: string) => void;
@@ -397,7 +403,7 @@ function Session({
         if (typeof dayId !== 'string') return stop({ kind: 'server' });
         seedDay.current = dayId;
       }
-      const started = await send(requests.start(seedDay.current), signals.current);
+      const started = await send(requests.start(seedDay.current, tripDay ? startMode : undefined), signals.current);
       if (!alive.current) return;
       if (!started.ok) return stop(started.failure);
       try {

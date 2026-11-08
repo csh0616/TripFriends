@@ -122,10 +122,11 @@ export const requests = {
   seed: (): Request => ({ method: 'POST', path: '/debug/seed-demo' }),
   // TASK-006 §14: 둘째 날을 코스 선택까지 해 둔 시드. 응답의 day로 바로 여행 중 화면을 연다
   seedChosen: (): Request => ({ method: 'POST', path: '/debug/seed-demo', body: { chosen: true } satisfies Partial<Schemas['SeedRequest']> }),
-  start: (dayId: string): Request => ({
+  // mode 'auto' = [알아서 짜 줘] (TASK-011 §9 Q3): 대화 없이 바로 자동 계획 -> 코스안
+  start: (dayId: string, mode: StartBody['mode'] = 'conversation'): Request => ({
     method: 'POST',
     path: `/days/${dayId}/planning`,
-    body: { mode: 'conversation' } satisfies StartBody,
+    body: { mode } satisfies StartBody,
   }),
   current: (sessionId: string): Request => ({ method: 'GET', path: `/planning/${sessionId}` }),
   answer: (sessionId: string, body: AnswerBody): Request => ({
