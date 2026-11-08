@@ -109,7 +109,7 @@ function freezeDate(iso: string) {
 }
 
 async function type(id: string, value: string) {
-  fireEvent.changeText(await screen.findByTestId(id), value);
+  await fireEvent.changeText(await screen.findByTestId(id), value); // RNTL 14: fireEvent는 약속을 돌려준다. 기다리지 않으면 settleAll의 act와 겹친다
   await settleAll();
 }
 

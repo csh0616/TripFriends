@@ -32,7 +32,11 @@ appId: com.csh0616.tripfriends
 - extendedWaitUntil:
     visible: "여행 만들기"
     timeout: 60000
-# planning.yaml과 같은 우회: 첫 탭이 앱에 닿지 않는 현상(원인 미확인). 화면이 가만해진 뒤 첫 탭을 먼저 쓴다
+# planning.yaml과 같은 우회: 첫 탭이 앱에 닿지 않는 현상(원인 미확인, 시작 때 개발 메뉴 시트가 열려 있음).
+# 화면이 가만해진 뒤 아무 일 없는 글자를 한 번 눌러 첫 탭을 먼저 쓴다
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn: "AI 여행친구"
 - waitForAnimationToEnd:
     timeout: 5000
 - takeScreenshot: create-trip-1-empty-home
