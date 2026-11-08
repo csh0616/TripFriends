@@ -19,6 +19,7 @@
 //        날짜 목록을 그릴 때 GET /days/{id}/course 를 부르지 않는다
 //     Q3 카드 [알아서 짜 줘]를 누르면 바로 POST /days/{id}/planning {mode: 'auto'} -> 코스안(`option-relaxed`). 오늘인데 코스 없는 카드도 버튼 둘
 //     Q4 [오늘 여행 보기] 밑 줄 "2일째 · 12/12 토"
+//   §10 E1: 주 버튼이 없으면(모든 날 계획 완료·지난 날) 마지막 날 줄 아래 `end-note` 끝맺음 글, 그 아래 맨 끝 [새 여행 만들기]
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -410,5 +411,67 @@ describe('§9 Q8 날짜 목록 고정 일정도 엔 대시', () => {
     await show(trip(tripDay(1, 'planned'), { ...tripDay(2, 'planning'), fixed_events: [event] }, tripDay(3, 'planning')), AT.before);
     expect(within(screen.getByTestId('day-row-d2')).getByText('12:00–13:00')).toBeTruthy();
     expect(screen.queryByText(/\d{2}:\d{2}\s*[-~]\s*\d{2}:\d{2}/)).toBeNull();
+  });
+});
+
+// ---------- §10 E1 끝맺음 글 ----------
+
+describe('§10 E1 주 버튼이 없으면 end-note', () => {
+  /** 화면 나무에서 testID가 나오는 순서 */
+  const order = () =>
+    (screen.root as unknown as Host)
+      .queryAll((host) => typeof host.props.testID === 'string')
+      .map((host) => host.props.testID as string)
+      .filter((id, index, all) => all.indexOf(id) === index);
+
+  test('T11_E1_모두_계획_완료(여행_전)면_n일_모두_정했어', async () => {
+    await show(ALL_PLANNED, AT.before);
+    const note = within(screen.getByTestId('end-note'));
+    expect(note.getByText('3일 모두 정했어')).toBeTruthy();
+    expect(note.getByText(/^여행 첫날부터 아래에 \[?오늘 여행 보기\]? 버튼이 나와$/)).toBeTruthy();
+  });
+
+  test('T11_E1_날_수는_실제_값', async () => {
+    const two = { ...trip(tripDay(1, 'planned'), tripDay(2, 'planned')), end_date: DATES[1] };
+    await show(two, AT.before);
+    expect(within(screen.getByTestId('end-note')).getByText('2일 모두 정했어')).toBeTruthy();
+  });
+
+  test('T11_E1_모두_지난_날(여행_끝)이면_여행이_끝났어', async () => {
+    await show(ALL_PAST, AT.after);
+    const note = within(screen.getByTestId('end-note'));
+    expect(note.getByText('여행이 끝났어')).toBeTruthy();
+    expect(note.getByText('날짜를 누르면 고른 코스를 볼 수 있어')).toBeTruthy();
+    expect(note.queryByText(/모두 정했어/)).toBeNull();
+  });
+
+  test.each([
+    ['여행 전 섞임', MIXED, AT.before],
+    ['오늘 여행 중', TODAY_WITH_COURSE, AT.day2],
+    ['오늘인데 코스 없음', TODAY_NO_COURSE, AT.day2],
+  ])('T11_E1_%s(주_버튼_있음)에는_end_note가_없다', async (_name, value, at) => {
+    await show(value, at);
+    expect(screen.getByTestId('bottom-primary')).toBeTruthy();
+    expect(screen.queryByTestId('end-note')).toBeNull();
+  });
+
+  test.each([
+    ['모두 계획 완료', ALL_PLANNED, AT.before],
+    ['모두 지난 날', ALL_PAST, AT.after],
+  ])('T11_E1_%s_순서는_마지막_날_줄_→_end_note_→_새_여행_만들기', async (_name, value, at) => {
+    await show(value, at);
+    const ids = order();
+    const lastRow = ids.indexOf('day-row-d3');
+    const note = ids.indexOf('end-note');
+    const newTrip = ids.indexOf('new-trip');
+    expect(lastRow).toBeGreaterThanOrEqual(0);
+    expect(note).toBeGreaterThan(lastRow);
+    expect(newTrip).toBeGreaterThan(note);
+    expect(screen.queryByTestId('bottom-primary')).toBeNull();
+  });
+
+  test('T11_E1_end_note에는_주황이_없다', async () => {
+    await show(ALL_PLANNED, AT.before);
+    expect(filledWith(COLORS.brand, byId('end-note'))).toEqual([]);
   });
 });

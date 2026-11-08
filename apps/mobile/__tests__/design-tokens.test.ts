@@ -105,9 +105,9 @@ test.each(Object.entries(FIT))('T19_S4_11_디자인_맞추기_%s', (name, value)
   expect(upperColors(one(name))).toEqual(value);
 });
 
-test('T19_S4_11_새_토큰은_정확히_11개', () => {
+test('T19_S4_11_새_토큰은_정확히_12개(TASK_011_S10_E6)', () => {
   expect(Object.keys(FIT).sort()).toEqual(
-    ['back-day', 'row-read', 'read-note', 'btn-add-event', 'btn-new-trip', 'sheet-confirm', 'fact-line', 'btn-card-secondary', 'bottom-primary', 'chip-hint', 'pill-count'].sort(),
+    ['end-note', 'back-day', 'row-read', 'read-note', 'btn-add-event', 'btn-new-trip', 'sheet-confirm', 'fact-line', 'btn-card-secondary', 'bottom-primary', 'chip-hint', 'pill-count'].sort(),
   );
 });
 
@@ -117,7 +117,7 @@ test('T19_S4_11_bottom_primary_바탕은_brand_글자는_on_brand와_같은_값'
 });
 
 test('T19_S4_11_카드_안_버튼·추천_칩·일정_버튼에_주황이_없다', () => {
-  for (const name of ['btn-card-secondary', 'chip-hint', 'btn-add-event', 'btn-new-trip', 'back-day', 'pill-count']) {
+  for (const name of ['btn-card-secondary', 'chip-hint', 'btn-add-event', 'btn-new-trip', 'back-day', 'pill-count', 'end-note']) {
     expect(JSON.stringify(one(name)).toUpperCase()).not.toContain(COLORS.brand);
   }
 });

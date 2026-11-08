@@ -183,9 +183,10 @@ export const FIT: Record<string, Record<string, unknown>> = {
     radius: 999,
     icon: 16,
   },
-  // 350 × 52 · bg-2 · 15/22·600 ink-strong · r16. 너비는 TASK-011 §9 Q1·§4-11 줄 "화면 − 40"이라 고정 값으로 두지 않는다
-  'btn-new-trip': { height: 52, bg: '#F3F4F6', size: 15, lineHeight: 22, weight: 600, fg: '#1A1A1A', radius: 16 },
-  // scrim 40% · r-sheet 28 · 손잡이 36×4 · 글 17/24·700 · 버튼 52 + 52 세로, 사이 8 · 아래 34
+  // 350(화면 − 40) × 52 · bg-2 · 15/22·600 ink-strong · r16 · 내용이 짧으면 화면 맨 아래(아래 34)까지 (TASK-011 §10 E3)
+  // 너비는 "화면 − 40"이라 고정 값으로 두지 않는다. bottom = 맨 아래 여백
+  'btn-new-trip': { height: 52, bottom: 34, bg: '#F3F4F6', size: 15, lineHeight: 22, weight: 600, fg: '#1A1A1A', radius: 16 },
+  // scrim 40% · r-sheet 28 · 손잡이 36×4 · 글 17/24·700 · 한 줄 14/20·500 #333333 (글 아래 4) · 버튼 52 + 52 세로 (한 줄 아래 16), 사이 8 · 아래 34 · 높이 234
   'sheet-confirm': {
     scrim: 'rgba(26,26,26,0.40)', // §4-1 scrim과 같은 값
     radius: 28,
@@ -193,9 +194,22 @@ export const FIT: Record<string, Record<string, unknown>> = {
     size: 17,
     lineHeight: 24,
     weight: 700,
+    note: { size: 14, lineHeight: 20, weight: 500, fg: '#333333', top: 4 }, // TASK-011 §10 E4 (muted 아님)
     button: 52,
+    buttonTop: 16, // 한 줄 아래
     gap: 8,
     bottom: 34,
+    height: 234,
+  },
+  // TASK-011 §10 E1·E6: 원 40 bg-2 + 체크 20 · 제목 17/24·700 · 설명 14/20·500 #333333 폭 300 · 가운데 · 마지막 날 줄 아래 20
+  'end-note': {
+    circle: 40,
+    circleBg: '#F3F4F6',
+    icon: 20,
+    title: { size: 17, lineHeight: 24, weight: 700 },
+    body: { size: 14, lineHeight: 20, weight: 500, fg: '#333333' },
+    width: 300,
+    top: 20,
   },
   // 칩 · 값 · 거리 한 줄(24) + 출처 줄 4px 아래(19) · 값 자리 "늘 열려 있어" 14/20·500 · 시각 범위 엔 대시
   'fact-line': {

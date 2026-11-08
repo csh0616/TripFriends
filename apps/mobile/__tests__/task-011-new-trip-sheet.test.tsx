@@ -120,6 +120,13 @@ describe('C1 [새 여행 만들기] -> 확인 시트', () => {
     expect(sheet.getByText(NOTE)).toBeTruthy();
   });
 
+  test('T11_E4_한_줄_글자는_ink(#333333)_muted_아님', async () => {
+    await showDays(() => {});
+    await press('new-trip');
+    const note = within(screen.getByTestId('new-trip-sheet')).getByText(NOTE) as unknown as Host;
+    expect(String(styleOf(note).color).toUpperCase()).toBe(COLORS.ink);
+  });
+
   test('T11_C1_버튼은_새로_만들기와_그대로_둘게_두_개', async () => {
     await showDays(() => {});
     await press('new-trip');
