@@ -221,3 +221,17 @@ describe('§9 Q10·Q11 읽기만', () => {
     expect(within(view).getByText('지금은 보기만 할 수 있어')).toBeTruthy();
   });
 });
+
+// ---------- §13 4: 읽기만 머리 = 제목 "N일째", 부제 "12월 2일 수 · 고른 코스" ----------
+
+describe('§13 4 읽기만 머리', () => {
+  test.each([
+    ['day-t3', '3일째', '12월 3일 목 · 고른 코스'],
+    ['day-t1', '1일째', '12월 1일 화 · 고른 코스'],
+  ])('T11_S13_4_%s_제목은_%s_부제는_%s', async (dayId, title, subtitle) => {
+    await openReadonly(dayId);
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.getByText(subtitle)).toBeTruthy();
+    expect(screen.queryByText(/\d+월 \d+일 \([일월화수목금토]\)/)).toBeNull(); // 옛 "12월 3일 (목)"
+  });
+});

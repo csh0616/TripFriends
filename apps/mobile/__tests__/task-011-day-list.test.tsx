@@ -554,3 +554,21 @@ describe('§12 Q3 코스 없는 지난 날은 row-locked', () => {
     expect(screen.getByTestId('day-row-d1')).toBeTruthy(); // 날짜 목록 그대로
   });
 });
+
+// ---------- §13 3: 데모 여행처럼 기기 시계와 날 상태가 다를 때 ----------
+
+describe('§13 3 머리는 날 상태와 같은 시계', () => {
+  test('T11_S13_3_기기_시계는_여행_22일_전인데_날_상태가_오늘이면_머리도_여행_중', async () => {
+    await show(TODAY_WITH_COURSE, '2026-11-20T03:00:00Z'); // 12/12까지 22일
+    expect(screen.getByText(/^여행 중 · 3일 중 \d일 계획 완료$/)).toBeTruthy();
+    expect(screen.queryByText(/D-\d+/)).toBeNull();
+    expect(within(screen.getByTestId('bottom-primary')).getByText('오늘 여행 보기')).toBeTruthy();
+  });
+
+  test('T11_S13_3_기기_시계는_여행_전인데_모든_날이_지난_날이면_여행_끝', async () => {
+    await show(ALL_PAST, AT.before);
+    expect(screen.getByText('여행 끝')).toBeTruthy();
+    expect(screen.queryByText(/D-\d+/)).toBeNull();
+    expect(within(screen.getByTestId('end-note')).getByText('여행이 끝났어'));
+  });
+});

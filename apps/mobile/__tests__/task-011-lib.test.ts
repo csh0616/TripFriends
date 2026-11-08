@@ -337,3 +337,40 @@ describe('A0 tripHeader: 머리 (task-011-review §2 5번 줄)', () => {
     );
   });
 });
+
+// ---------- §13 3: 머리는 날 상태와 같은 시계 ----------
+// 계약 (이 테스트가 정한 것): 서버 응답(Trip/TripDay)에 "오늘" 칸이 없으므로, 여행 중·여행 끝은 서버가 계산한 날 state로 정한다.
+//   어느 날이 'today'면 "여행 중", 모든 날이 'past'면 "여행 끝" — today 인자(기기 시계)가 달라도 같다. D-숫자만 today 인자로 센다
+describe('§13 3 tripHeader·dayListPrimary는 날 상태를 따른다', () => {
+  const three = (states: Day['state'][]) => trip(states.map((state, i) => day(i + 1, state)));
+
+  test('T11_S13_3_데모처럼_날_상태가_오늘이면_기기_시계가_22일_전이어도_여행_중', () => {
+    const found = header(three(['past', 'today', 'planning']), addDays(START, -22));
+    expect(found.line).toBe('여행 중 · 3일 중 2일 계획 완료');
+    expect(found.line).not.toMatch(/D-/);
+  });
+
+  test('T11_S13_3_기기_시계가_여행_뒤여도_날_상태가_오늘이면_여행_중', () => {
+    expect(header(three(['past', 'past', 'today']), '2027-01-30').line).toMatch(/^여행 중 · /);
+  });
+
+  test('T11_S13_3_모든_날이_지난_날이면_기기_시계가_여행_전이어도_여행_끝', () => {
+    expect(header(three(['past', 'past', 'past']), BEFORE)).toEqual({ title: '오사카 2박 3일', dots: '●●●', line: '여행 끝' });
+  });
+
+  test('T11_S13_3_오늘_버튼도_날_상태를_따른다(기기_시계와_달라도)', () => {
+    const found = primary([day(1, 'past'), day(2, 'today', true), day(3, 'planning')], addDays(START, -22));
+    expect(found).toEqual({ label: '오늘 여행 보기', dayId: 'd2', sublabel: '2일째 · 12/12 토' });
+  });
+
+  test('T11_S13_3_속성_오늘_상태가_있으면_어떤_기기_날짜든_여행_중', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 7 }), fc.integer({ min: 0, max: 6 }), fc.integer({ min: -200, max: 200 }), (count, at, shift) => {
+        const index = at % count;
+        const list = Array.from({ length: count }, (_, i) => day(i + 1, i < index ? 'past' : i === index ? 'today' : 'planning'));
+        const found = header(trip(list), addDays(START, shift));
+        expect(found.line.startsWith('여행 중 · ')).toBe(true);
+      }),
+    );
+  });
+});
