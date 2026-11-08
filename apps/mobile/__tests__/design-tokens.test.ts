@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { COLORS, FONTS, LISTS, NUMBERS, STRINGS, TYPE } from '../test-support/design-table';
+import { COLORS, FONTS, LISTS, NUMBERS, PILLS, STRINGS, TYPE } from '../test-support/design-table';
 import { REPO_ROOT } from '../test-support/source-files';
 
 const PACKAGE = join(REPO_ROOT, 'packages', 'design-tokens');
@@ -15,6 +15,7 @@ const KNOWN = new Set([
   ...Object.keys(NUMBERS),
   ...Object.keys(STRINGS),
   ...Object.keys(LISTS), // TASK-006 §13 E2, DESIGN-001 §4-6
+  ...Object.keys(PILLS), // TASK-010 §14 답 2, DESIGN-001 §4-9
 ]);
 
 type Found = Map<string, unknown[]>;
@@ -82,6 +83,18 @@ test.each(Object.entries(STRINGS))('T08_AC4_글자_값_%s', (name, value) => {
 
 test.each(Object.entries(LISTS))('T17_S4_6_목록_값_%s', (name, value) => {
   expect(one(name)).toEqual(value);
+});
+
+// TASK-010 §14 답 2: §4-9 날 상태 알약 색. 문서에 없는 칸(테두리 없음·점선 없음)은 키도 없다
+test.each(Object.entries(PILLS))('T18_S4_9_알약_색_%s', (name, value) => {
+  const found = one(name) as Record<string, unknown>;
+  const upper = Object.fromEntries(Object.entries(found ?? {}).map(([key, v]) => [key, String(v).toUpperCase()]));
+  expect(upper).toEqual(value);
+});
+
+test('T18_S4_9_새_값_D1D5DB는_pill_past_한_곳에만', () => {
+  const text = readFileSync(TOKENS, 'utf8').toUpperCase();
+  expect(text.match(/#D1D5DB/g)).toHaveLength(1);
 });
 
 test.each([

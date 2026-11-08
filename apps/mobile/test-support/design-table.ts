@@ -129,6 +129,15 @@ export const LISTS: Record<string, number[]> = {
   'cover-banner': [350, 88],
 };
 
+// §4-9 날 상태 알약 색 (11-09, TASK-010 §14 답 2). 필드 이름 bg·fg는 trip-days.tsx PILL_LOOK을 따름, border·dot은 이 테스트가 정한 이름(승인 대기)
+// bg = 바탕, fg = 글자·아이콘, border = 테두리 1px (pill-today는 "없음" → 키 없음), dot = 점선 동그라미 (pill-planning만)
+export const PILLS: Record<string, { bg: string; fg: string; border?: string; dot?: string }> = {
+  'pill-planning': { bg: '#FFFFFF', fg: '#333333', border: '#666C7A', dot: '#666C7A' },
+  'pill-planned': { bg: '#DCFCE7', fg: '#15803D', border: '#15803D' },
+  'pill-today': { bg: '#1A1A1A', fg: '#FFFFFF' },
+  'pill-past': { bg: '#D1D5DB', fg: '#333333', border: '#666C7A' },
+};
+
 // §4-3 글자 값
 export const STRINGS: Record<string, string> = {
   'sh-0': 'none', // Q15
