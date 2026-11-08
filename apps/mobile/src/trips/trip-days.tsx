@@ -1,7 +1,7 @@
 // TASK-010 §C3 날짜 목록 (SC-03 위, DESIGN-001 §4-9): 날 줄마다 알약 + 글자. 상태는 서버가 계산해 준 값(state)을 그대로 쓴다.
 import tokens from 'design-tokens';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
 import { CloseIcon } from '@/components/planning/icons';
@@ -58,6 +58,13 @@ export function TripDays({
     onOpen(day, dayDestination(day.state, day.chosen_option_id !== null));
   };
 
+  // 글자 버튼: 누르면 바로 가지 않고 확인 한 번 (지금 여행은 보관된다)
+  const confirmNewTrip = () =>
+    Alert.alert('지금 여행은 보관돼. 새로 만들까?', undefined, [
+      { text: '취소', style: 'cancel' },
+      { text: '새로 만들기', onPress: onNewTrip },
+    ]);
+
   const remove = async (day: TripDay, event: FixedEvent) => {
     if (busy) return;
     setBusy(true);
@@ -82,7 +89,9 @@ export function TripDays({
           </Text>
         ) : null}
         {busy ? <ActivityIndicator color={color.muted} /> : null}
-        <SecondaryButton testID="new-trip" label="새 여행 만들기" onPress={onNewTrip} />
+        <Pressable testID="new-trip" accessibilityRole="button" onPress={confirmNewTrip} style={styles.textButton}>
+          <Text style={text('body', 'ink')}>새 여행 만들기</Text>
+        </Pressable>
       </ScreenFrame>
       {sheetDay ? (
         <FixedEventSheet
@@ -178,5 +187,6 @@ const styles = StyleSheet.create({
   event: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   time: { minWidth: layout.timeColumn },
   remove: { width: control['touch-min'], height: control['touch-min'], alignItems: 'center', justifyContent: 'center' },
+  textButton: { minHeight: control['touch-min'], minWidth: control['touch-min'], alignSelf: 'center', alignItems: 'center', justifyContent: 'center', paddingHorizontal: space['space-4'] },
   addRow: { flexDirection: 'row' },
 });
