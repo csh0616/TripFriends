@@ -104,7 +104,8 @@ appId: com.csh0616.tripfriends
     timeout: 30000
 - takeScreenshot: create-trip-6-first-day-planning
 
-# 피드백 11-09: 날짜 목록의 [새 여행 만들기]는 글자 버튼 + 확인 한 번. 취소면 그대로, [새로 만들기]면 SC-01
+# 피드백 11-09 + TASK-011 C2: 날짜 목록의 [새 여행 만들기]는 확인 시트(sheet-confirm) 한 번. [그대로 둘게]면 그대로, [새로 만들기]면 SC-01
+# 시트 이름(testID)은 apps/mobile/__tests__/task-011-new-trip-sheet.test.tsx 머리말의 계약과 같다.
 # 첫날 계획 화면에서 뒤로 -> 날짜 목록
 - tapOn:
     id: "header-back"
@@ -117,19 +118,27 @@ appId: com.csh0616.tripfriends
 - tapOn:
     id: "new-trip"
 - extendedWaitUntil:
-    visible: "지금 여행은 보관돼. 새로 만들까?"
+    visible:
+      id: "new-trip-sheet"
     timeout: 10000
-- takeScreenshot: create-trip-7-new-trip-confirm
-- tapOn: "취소"
+- assertVisible: "지금 여행은 보관돼. 새로 만들까?"
+- assertVisible: "보관한 여행은 지금은 다시 열 수 없어"
+- takeScreenshot: create-trip-7-new-trip-confirm-sheet
+- tapOn:
+    id: "new-trip-keep"
+- assertNotVisible:
+    id: "new-trip-sheet"
 - assertVisible: "계획 전"
 - assertNotVisible:
     id: "create-trip-submit"
 - tapOn:
     id: "new-trip"
 - extendedWaitUntil:
-    visible: "지금 여행은 보관돼. 새로 만들까?"
+    visible:
+      id: "new-trip-sheet"
     timeout: 10000
-- tapOn: "새로 만들기"
+- tapOn:
+    id: "new-trip-confirm"
 - extendedWaitUntil:
     visible:
       id: "create-trip-submit"

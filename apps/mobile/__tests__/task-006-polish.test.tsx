@@ -214,7 +214,7 @@ describe('D4 글자 확대 1.3배', () => {
   test('T6_D4_머리_제목이_늘어날_수_있다', async () => {
     happyServer();
     await toP1();
-    let now = screen.getByText('둘째 날 계획') as unknown as Tree | null;
+    let now = screen.getByText('2일째 계획') as unknown as Tree | null; // TASK-011 §4-11 날 이름
     while (now) {
       if (now.props.testID !== 'sos-button') expect(styleOf(now).height).toBeUndefined();
       now = now.parent;

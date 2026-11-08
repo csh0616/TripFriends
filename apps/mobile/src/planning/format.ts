@@ -31,3 +31,8 @@ export function mustVisitLine(names: string[]): string {
 }
 
 export const pad2 = (value: number) => String(value).padStart(2, '0');
+
+/** TASK-011 A0: 시각 범위 "17:00–23:00" (엔 대시 U+2013) */
+export function timeRange(_start: string, _end: string): string {
+  throw new Error('not implemented');
+}

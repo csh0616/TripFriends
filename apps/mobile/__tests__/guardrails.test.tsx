@@ -960,7 +960,7 @@ describe('§13-3 Q34 머리 제목', () => {
   test.each<[string, () => Promise<unknown>, string[]]>([
     ['S0', ALL_SCREENS[0][1], []],
     ['S9', ALL_SCREENS[4][1], []],
-    ['P1은 제목이 있어서 검사가 빈손이 아니다', toP1, ['둘째 날 계획', '12월 2일 수요일 · 10:00~20:00']],
+    ['P1은 제목이 있어서 검사가 빈손이 아니다', toP1, ['2일째 계획', '12월 2일 수 · 10:00–20:00']], // TASK-011 §4-11
   ])('G73_Q34_%s_머리_글자', async (_name, go, expected) => {
     happyServer();
     await go();

@@ -28,3 +28,22 @@ export function dayDestination(state: string, hasCourse: boolean): DayDestinatio
       return 'planning';
   }
 }
+
+// ---------- TASK-011 A0 화면 규칙 함수 (껍데기: 테스트가 먼저, 구현은 frontend) ----------
+type Schemas = import('api-types').components['schemas'];
+type DayLike = Pick<Schemas['TripDay'], 'day_id' | 'date' | 'state' | 'chosen_option_id'>;
+type TripLike = Pick<Schemas['Trip'], 'city_code' | 'start_date' | 'end_date'> & { trip_days: DayLike[] };
+
+/** 날짜 목록 아래 큰 버튼 하나. 없으면 null (TASK-011 A0) */
+export type DayListPrimary = { label: string; dayId: string; sublabel: string | null };
+
+/** 날짜 목록 머리 (TASK-011 A0): title "오사카 2박 3일", dots "●○○", line "D-35 · 3일 중 1일 계획 완료" */
+export type TripHeader = { title: string; dots: string; line: string };
+
+export function dayListPrimary(_days: readonly DayLike[], _today: string): DayListPrimary | null {
+  throw new Error('not implemented');
+}
+
+export function tripHeader(_trip: TripLike, _today: string): TripHeader {
+  throw new Error('not implemented');
+}
