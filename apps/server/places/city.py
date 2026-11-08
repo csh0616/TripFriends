@@ -19,14 +19,14 @@ from places.build import DEFAULT_CAPS, build_pack
 from places.cache import load_cache, needs_refresh, refresh, save_cache
 from places.factory import FAKE_WARNING, make_providers
 from places.pack import engine_places, facts_for, source_types
-from places.provider import FakePlaces, PlacesProvider
+from places.provider import FakePlaces, PlacesProvider, testdata_dir
 from places.seed import load_seed
 
 log = logging.getLogger(__name__)
 SERVER = Path(__file__).resolve().parents[1]
 PACK_PATH = SERVER / "places" / "packs" / "osaka.json"
 CACHE_PATH = SERVER / ".cache" / "places" / "osaka.json"
-FAKE_SEED = SERVER.parents[1] / "testdata" / "cities" / "osaka-seed-fake.yaml"
+FAKE_SEED = testdata_dir() / "osaka-seed-fake.yaml"
 SEARCH_LIMIT = 10  # B4
 
 

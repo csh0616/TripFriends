@@ -10,8 +10,17 @@ from typing import Any, Literal
 
 import httpx
 
-# 가짜 데이터 (손으로 만든 값). 저장소 루트의 testdata/cities
-FAKE_PLACES_PATH = Path(__file__).resolve().parents[3] / "testdata" / "cities" / "osaka-fake.json"
+
+
+def testdata_dir() -> Path:
+    """저장소 루트의 testdata/cities (손으로 만든 가짜 값). mutmut이 복사본 폴더에서 돌려도 찾도록 위로 올라가며 찾는다."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "testdata" / "cities").is_dir():
+            return parent / "testdata" / "cities"
+    raise FileNotFoundError("testdata/cities를 찾을 수 없어요")
+
+
+FAKE_PLACES_PATH = testdata_dir() / "osaka-fake.json"
 
 SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 DETAILS_URL = "https://places.googleapis.com/v1/places/"
