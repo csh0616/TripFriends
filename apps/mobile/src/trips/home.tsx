@@ -17,9 +17,10 @@ import { TripNowScreen, type NowRecord } from '@/now/trip-now-screen';
 import { fontAssets } from '@/planning/fonts';
 import { layout } from '@/planning/layout';
 import PlanningFlow, { NOW_KEY, STORAGE_KEY } from '@/planning/planning-flow';
-import { color, control, space, text } from '@/planning/theme';
+import { color, space, text } from '@/planning/theme';
 
 import { isTrip, tripRequests, type Trip, type TripDay } from './api';
+import { CourseReadonly } from './course-readonly';
 import { CreateTripScreen } from './create-trip-screen';
 import { getDeviceId } from './device-id';
 import { TripDays } from './trip-days';
@@ -34,6 +35,7 @@ type View_ =
   | { name: 'create' }
   | { name: 'days' }
   | { name: 'planning'; dayId: string }
+  | { name: 'course'; day: TripDay }
   | { name: 'now'; record: NowRecord };
 
 const pad = (value: number) => String(value).padStart(2, '0');
@@ -54,6 +56,7 @@ export default function Home() {
   const [fontsReady, fontError] = useFonts(fontAssets);
   const [view, setView] = useState<View_>({ name: 'loading' });
   const [trip, setTrip] = useState<Trip | null>(null);
+  const sessions = useRef<Record<string, string>>({}); // 날 id -> 계획 대화 세션 (앱이 켜져 있는 동안만)
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -89,6 +92,7 @@ export default function Home() {
 
   const open = (day: TripDay, destination: DayDestination) => {
     if (destination === 'planning') setView({ name: 'planning', dayId: day.day_id });
+    else if (destination === 'course' || destination === 'review') setView({ name: 'course', day });
     else if (destination === 'now' && trip) setView({ name: 'now', record: liveRecord(day, trip.trip_days.indexOf(day)) });
   };
 
@@ -118,9 +122,24 @@ export default function Home() {
           }}
         />
       );
-    case 'planning':
-      // 끝나면(코스 고름·세션 없음) 날짜 목록을 다시 받아 "계획 완료"를 보여 준다
-      return <PlanningFlow dayId={view.dayId} onLeave={() => void load()} />;
+    case 'course':
+      return <CourseReadonly dayId={view.day.day_id} date={view.day.date} onBack={() => setView({ name: 'days' })} />;
+    case 'planning': {
+      // 끝나면(코스 고름·세션 없음) 날짜 목록을 다시 받아 "계획 완료"를 보여 준다. ‹ 날짜로 나가면 대화는 그대로 남고, 다시 들어가면 GET으로 이어 간다
+      const dayId = view.dayId;
+      return (
+        <PlanningFlow
+          dayId={dayId}
+          resumeSessionId={sessions.current[dayId]}
+          onSession={(sid) => (sessions.current[dayId] = sid)}
+          onBackToList={() => setView({ name: 'days' })}
+          onLeave={() => {
+            delete sessions.current[dayId];
+            void load();
+          }}
+        />
+      );
+    }
     case 'now':
       return <TripNowScreen key={view.record.day_id} record={view.record} onAtChange={noop} onNoCourse={() => setView({ name: 'planning', dayId: view.record.day_id })} onExit={() => setView({ name: 'days' })} />;
     case 'days':
@@ -145,8 +164,7 @@ function EmptyHome({
 }) {
   return (
     <ScreenFrame>
-      {/* 개발 빌드는 데모 버튼 두 개가 더 있어 가운데가 위로 밀린다. 기존 Maestro 흐름의 첫 탭("AI 여행친구")이 늘 같은 자리에 닿도록 그만큼 아래로 민다 */}
-      <View style={[styles.center, __DEV__ && styles.centerDev]}>
+      <View style={styles.center}>
         <Image
           testID="s0-logo"
           accessibilityLabel="Tripfriends"
@@ -174,7 +192,6 @@ function EmptyHome({
 const styles = StyleSheet.create({
   blank: { flex: 1, backgroundColor: color.surface },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space['space-3'], minHeight: layout.photo },
-  centerDev: { paddingTop: control.btn + space['space-4'] },
   logo: { width: layout.logoWidth, height: layout.logoHeight },
   action: { gap: space['space-4'] },
 });

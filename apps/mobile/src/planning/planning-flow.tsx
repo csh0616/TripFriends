@@ -6,6 +6,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { InputClearContext } from '@/components/planning/input-bar';
+import { LeaveContext } from '@/components/planning/leave-context';
 import { Notice } from '@/components/planning/notice';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
@@ -95,10 +96,19 @@ export default function PlanningFlow({
   dayId,
   autoStart,
   onLeave,
+  resumeSessionId,
+  onSession,
+  onBackToList,
 }: {
   dayId?: string;
   autoStart?: 'demo' | 'now';
   onLeave?: () => void;
+  /** 실제 여행의 날: 이미 시작한 대화가 있으면 새로 만들지 않고 GET으로 이어 간다 (TASK-010 §12 답 3) */
+  resumeSessionId?: string;
+  /** 새 대화가 시작되면 세션 id를 알린다 */
+  onSession?: (sessionId: string) => void;
+  /** 머리 "‹ 날짜": 대화는 그대로 두고 날짜 목록으로 */
+  onBackToList?: () => void;
 } = {}) {
   const [fontsReady, fontError] = useFonts(fontAssets);
   // 처음부터·404로 S0에 돌아올 때 Session을 새로 만든다 (상태를 통째로 비운다)
@@ -117,6 +127,9 @@ export default function PlanningFlow({
       start={boot.start}
       restartNotice={boot.notice}
       dayId={dayId}
+      resumeSessionId={resumeSessionId}
+      onSession={onSession}
+      onBackToList={onBackToList}
       autoStart={boot.epoch === 0 ? autoStart : undefined}
       onReset={(notice) => (onLeave ? onLeave() : setBoot((now) => ({ epoch: now.epoch + 1, start: 's0', notice })))}
     />
@@ -128,12 +141,18 @@ function Session({
   restartNotice,
   dayId,
   autoStart,
+  resumeSessionId,
+  onSession,
+  onBackToList,
   onReset,
 }: {
   start: 'boot' | 's0';
   restartNotice: string | null;
   dayId?: string;
   autoStart?: 'demo' | 'now';
+  resumeSessionId?: string;
+  onSession?: (sessionId: string) => void;
+  onBackToList?: () => void;
   onReset: (notice: string | null) => void;
 }) {
   const tripDay = dayId !== undefined; // 실제 여행의 날: 데모 시드·기기 저장·여행 중 데모 없음
@@ -397,6 +416,7 @@ function Session({
       sid.current = session.session_id;
       setSessionId(session.session_id);
       lastDay.current = session.day;
+      if (tripDay) onSession?.(session.session_id);
       if (!tripDay) {
         demoDay.current = seedDay.current; // 시드로 만든 날은 데모 시계를 쓴다 (§12 R10)
         void rememberQuietly(DEMO_KEY, String(seedDay.current));
@@ -443,7 +463,11 @@ function Session({
 
   // 첫 화면에서 이미 눌렀거나(autoStart), 실제 여행의 날(dayId)이면 한 번 바로 시작한다
   useEffect(() => {
-    if (tripDay || autoStart === 'demo') void startDemo();
+    if (tripDay && resumeSessionId !== undefined) {
+      sid.current = resumeSessionId;
+      setSessionId(resumeSessionId);
+      void execute(requests.current(resumeSessionId), 'stage');
+    } else if (tripDay || autoStart === 'demo') void startDemo();
     else if (autoStart === 'now') void startNowDemo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -558,7 +582,11 @@ function Session({
     }
   };
 
-  return <InputClearContext.Provider value={inputCleared}>{renderScreen()}</InputClearContext.Provider>;
+  return (
+    <LeaveContext.Provider value={tripDay ? (onBackToList ?? null) : null}>
+      <InputClearContext.Provider value={inputCleared}>{renderScreen()}</InputClearContext.Provider>
+    </LeaveContext.Provider>
+  );
 }
 
 function Loading() {

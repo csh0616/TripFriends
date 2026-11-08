@@ -19,7 +19,6 @@ import { getDeviceId } from './device-id';
 import { FixedEventSheet } from './fixed-event-sheet';
 import { dayLabel } from './format';
 
-const COURSE_SOON = '고른 코스 보기는 곧 열려';
 const FAILED = '일정을 못 지웠어';
 
 const pad = (value: number) => String(value).padStart(2, '0');
@@ -54,13 +53,8 @@ export function TripDays({
     onTripChange({ ...trip, trip_days: trip.trip_days.map((day) => (day.day_id === dayId ? { ...day, fixed_events: edit(day.fixed_events) } : day)) });
 
   const open = (day: TripDay) => {
-    const destination = dayDestination(day.state, day.chosen_option_id !== null);
-    if (destination === 'course' || destination === 'review') {
-      setHint(COURSE_SOON); // 고른 코스를 읽는 API가 아직 없다
-      return;
-    }
     setHint(null);
-    onOpen(day, destination);
+    onOpen(day, dayDestination(day.state, day.chosen_option_id !== null));
   };
 
   const remove = async (day: TripDay, event: FixedEvent) => {

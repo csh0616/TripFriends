@@ -139,7 +139,7 @@ export function P3Screen({
 
           <View style={styles.list}>
             {items.map((item, index) => (
-              <Row
+              <CourseRow
                 key={item.seq}
                 first={index === 0}
                 last={index === items.length - 1}
@@ -170,7 +170,9 @@ export function P3Screen({
   );
 }
 
-function Row({
+/** 코스 줄. readOnly면 머무는 시간을 바꿀 수 없다 (TASK-010 §12: 계획 완료·지난 날의 고른 코스 읽기) */
+export function CourseRow({
+  readOnly = false,
   first,
   last,
   item,
@@ -180,6 +182,7 @@ function Row({
   onToggle,
   onAdjust,
 }: {
+  readOnly?: boolean;
   first: boolean;
   last: boolean;
   item: CourseItem;
@@ -190,7 +193,7 @@ function Row({
   onAdjust: (placeId: string, delta: 15 | -15) => void;
 }) {
   // 고정 일정 줄은 머문 시간을 바꿀 수 없다 (§10-10 R6). 장소 없는 줄도 마찬가지.
-  const placeId = !item.is_fixed ? item.place_id : null;
+  const placeId = !item.is_fixed && !readOnly ? item.place_id : null;
   const kind = item.is_fixed ? '고정 일정 · ' : must ? '꼭 갈 곳 · ' : '';
   const stay = (
     <>

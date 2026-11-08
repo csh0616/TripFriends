@@ -1,12 +1,13 @@
 // 모든 계획 화면의 틀 (TASK-004 §B-3 가드레일): 머리(SOS 고정) / 스크롤 본문 / 아래 고정(떠 있는 줄 + 입력창).
 // SOS와 입력창은 스크롤 밖에 있어서 화면이 움직여도 같은 자리에 있다. 입력창이 없는 화면(S0·S9)은 input을 비운다.
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import { layout } from '@/planning/layout';
 import { color, space } from '@/planning/theme';
 
+import { LeaveContext } from './leave-context';
 import { FloatingBar } from './floating-bar';
 import { Header } from './header';
 import { InputBar } from './input-bar';
@@ -35,9 +36,11 @@ export function ScreenFrame({
   children: React.ReactNode;
 }) {
   const [sosOpen, setSosOpen] = useState(false);
+  const leave = useContext(LeaveContext);
+  const ownBack = onBack !== undefined;
   return (
     <View style={styles.root}>
-      <Header title={title} subtitle={subtitle} onBack={onBack} backDisabled={backDisabled} onSos={() => setSosOpen(true)} />
+      <Header title={title} subtitle={subtitle} onBack={onBack ?? leave ?? undefined} backLabel={!ownBack && leave ? '‹ 날짜' : undefined} backDisabled={backDisabled} onSos={() => setSosOpen(true)} />
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.body}

@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     borderColor: color.line,
     padding: space['space-3'],
   },
-  chosen: { backgroundColor: color['brand-soft'], borderColor: color.brand },
+  chosen: { backgroundColor: color['sel-bg'], borderColor: color.brand },
   choiceBody: { gap: space['space-2'] },
   radio: {
     width: layout.radio,

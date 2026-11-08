@@ -69,16 +69,16 @@ export const layout = {
   sheetHandleHeight: 4,
   demoThumb: 20, // §14 승인: 데모 시각 막대의 손잡이 지름
   mapEdge: 60, // §14 승인: 카메라 맞춤 좌우 여백 (핀 반쪽 + 이름 말풍선이 잘리지 않게)
-  // TASK-009 / DESIGN-001 §4-7 고르기 방식. tokens.json에는 넣지 않는다(design-tokens 시험이 표에 없는 이름을 막는다), 문서 값 그대로
-  radio: 24, // 칸의 선택 표시
-  actionBar: 68, // 시트 아래 확정 버튼 줄
-  rowAlt: 64, // T-06 대안 칸
-  rowDrop: 52, // T-06 [빼고 가기] 칸
-  thumbSm: 44, // 칸 안 사진 자리
-  selRing: 2, // sel-ring: 고른 칸 안쪽 고리 굵기 (색은 brand, 바탕 sel-bg = brand-soft)
+  // TASK-009 / DESIGN-001 §4-7 고르기 방식. 값은 tokens.json(select)에서 읽는다 (TASK-010 §E1)
+  radio: tokens.select.radio, // 칸의 선택 표시
+  actionBar: tokens.select['action-bar'], // 시트 아래 확정 버튼 줄
+  rowAlt: tokens.select['row-alt'], // T-06 대안 칸
+  rowDrop: tokens.select['row-drop'], // T-06 [빼고 가기] 칸
+  thumbSm: tokens.select['thumb-sm'], // 칸 안 사진 자리
+  selRing: Number(/(\d+(?:\.\d+)?)px/.exec(tokens.select['sel-ring'])?.[1]), // sel-ring: 고른 칸 안쪽 고리 굵기 (색은 brand, 바탕 sel-bg)
   actionBarLine: 1, // action-bar 윗선 굵기 (문서에 없는 크기)
   radioDot: 12, // 고른 radio 안 채움 지름 (문서에 없는 크기)
-  // TASK-010 DESIGN-001 §4-10 여행 만들기 부품. tokens.json에는 넣지 않는다(위와 같은 이유), 문서 값 그대로
+  // TASK-010 DESIGN-001 §4-10 여행 만들기 부품. 토큰 표(design-table)에 아직 없어 문서 값 그대로 여기에 둔다
   sheetCal: 626, // 달력 시트 높이 상한 (짧은 화면은 min(626, 화면 높이 - 48))
   sheetCalMargin: 48,
   calCellW: 50, // 날 칸 누르는 영역
@@ -111,8 +111,8 @@ export const layout = {
   coverUnit: 160, // 도시 그림 파일의 좌표 칸 (316 = 160 x 1.975)
   iconGrid: 24, // 그림 24칸
   glyphLine: 1.75, // 장소 그림 선 (icon-stroke와 같음)
-  field: 64, // 날짜·시각·제목 입력 칸 높이
-  tabDay: 36, // 날 탭 보이는 높이 (누르는 영역 touch-min)
+  field: tokens.select.field, // 날짜·시각·제목 입력 칸 높이
+  tabDay: tokens.select['tab-day'][0], // 날 탭 보이는 높이 (누르는 영역 tab-day[1])
   addDot: 36, // 담기 표시 원
   listRow: 64, // 검색 결과 줄
   listMax: 324, // 보이는 결과 5줄
@@ -127,7 +127,7 @@ export const layout = {
   googleFooter: 34, // g-footer
   googleFooterTop: 10,
   googleFooterBottom: 5,
-  sheetForm: 500, // 고정 일정 입력 시트
+  sheetForm: tokens.select['sheet-form'], // 고정 일정 입력 시트
   rowPast: 68, // 날 줄 높이: 지난 날
   rowPlanned: 84, // 계획 완료
   inputFocus: 2, // input-focus 안쪽 굵기

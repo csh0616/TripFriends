@@ -18,9 +18,17 @@ export const CITY_CODE = 'osaka';
 const withDevice = (deviceId: string) => ({ 'X-Device-Id': deviceId });
 const query = (q: string) => `city_code=${CITY_CODE}&q=${encodeURIComponent(q.trim())}`;
 
+export type ChosenCourse = Schemas['CourseResultOption'];
+
 export const tripRequests = {
   current: (deviceId: string): Request => ({ method: 'GET', path: '/trips/current', headers: withDevice(deviceId) }),
   create: (deviceId: string, body: CreateTripBody): Request => ({ method: 'POST', path: '/trips', body, headers: withDevice(deviceId) }),
+  /** TASK-010 §12 답 3: 그날 고른 코스 (읽기만) */
+  course: (deviceId: string, dayId: string): Request => ({
+    method: 'GET',
+    path: `/days/${encodeURIComponent(dayId)}/course`,
+    headers: withDevice(deviceId),
+  }),
   searchPlaces: (q: string): Request => ({ method: 'GET', path: `/places/search?${query(q)}` }),
   searchLodging: (q: string): Request => ({ method: 'GET', path: `/places/lodging-search?${query(q)}`, timeoutMs: LODGING_TIMEOUT_MS }),
   addFixedEvent: (deviceId: string, tripId: string, body: FixedEventBody): Request => ({

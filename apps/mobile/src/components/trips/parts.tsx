@@ -11,8 +11,8 @@ import { color, control, radius, space, text } from '@/planning/theme';
 export function FieldError({ message }: { message: string }) {
   return (
     <View testID="field-error" accessibilityRole="alert" style={styles.error}>
-      <AlertIcon color={color.alert} size={layout.checkSmall} />
-      <Text style={[text('caption', 'alert'), styles.errorText]}>{message}</Text>
+      <AlertIcon color={color['field-error']} size={layout.checkSmall} />
+      <Text style={[text('caption', 'field-error'), styles.errorText]}>{message}</Text>
     </View>
   );
 }
@@ -115,7 +115,7 @@ export function ChipButton({ label, onPress, testID, selected }: { label: string
 
 const styles = StyleSheet.create({
   box: { gap: space['space-2'] },
-  error: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], backgroundColor: color['alert-bg'], borderRadius: radius['r-sm'], padding: space['space-2'] },
+  error: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], backgroundColor: color['field-error-bg'], borderRadius: radius['r-sm'], padding: space['space-2'] },
   errorText: { flexShrink: 1 },
   input: {
     minHeight: control.input,

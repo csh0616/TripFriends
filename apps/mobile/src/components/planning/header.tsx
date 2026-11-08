@@ -13,12 +13,15 @@ export function Header({
   title,
   subtitle,
   onBack,
+  backLabel,
   backDisabled,
   onSos,
 }: {
   title?: string;
   subtitle?: string;
   onBack?: () => void;
+  /** 있으면 아이콘 대신 이 글자의 뒤로 (보조 모양, 주황 아님) */
+  backLabel?: string;
   backDisabled?: boolean;
   onSos: () => void;
 }) {
@@ -34,9 +37,9 @@ export function Header({
               accessibilityLabel="뒤로"
               disabled={backDisabled}
               onPress={onBack}
-              style={[styles.back, backDisabled && styles.backOff]}
+              style={[backLabel ? styles.backLabel : styles.back, backDisabled && styles.backOff]}
             >
-              <BackIcon color={backDisabled ? color.muted : color.ink} />
+              {backLabel ? <Text style={text('caption', backDisabled ? 'muted' : 'ink')}>{backLabel}</Text> : <BackIcon color={backDisabled ? color.muted : color.ink} />}
             </Pressable>
           ) : null}
         </View>
@@ -77,6 +80,16 @@ const styles = StyleSheet.create({
     width: control['touch-min'],
     height: control['touch-min'],
     borderRadius: radius['r-full'],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backLabel: {
+    minHeight: control['touch-min'],
+    minWidth: control['touch-min'],
+    paddingHorizontal: space['space-3'],
+    borderRadius: radius['r-full'],
+    alignSelf: 'flex-start',
+    backgroundColor: color['bg-2'],
     alignItems: 'center',
     justifyContent: 'center',
   },
