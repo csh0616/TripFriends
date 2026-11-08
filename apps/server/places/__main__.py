@@ -16,6 +16,7 @@ from pathlib import Path
 from places.build import DEFAULT_CAPS, BuildResult, build_pack
 from places.cache import save_cache
 from places.factory import make_providers
+from places.provider import ProviderAuthError
 from places.seed import load_seed
 
 SERVER = Path(__file__).resolve().parents[1]
@@ -55,7 +56,11 @@ def main(argv: list[str]) -> int:
         print(f"seed 파일이 없어요: {args.seed}", file=sys.stderr)
         return 2
     provider, serper, _fake = make_providers()
-    result = build_pack(load_seed(args.seed), provider, DEFAULT_CAPS, serper=serper, now=datetime.now(UTC))
+    try:
+        result = build_pack(load_seed(args.seed), provider, DEFAULT_CAPS, serper=serper, now=datetime.now(UTC))
+    except ProviderAuthError:  # 인증·요금 오류: 전체를 멈추고 파일을 쓰지 않는다 (PM 답 Q2). 키·응답 값은 찍지 않는다
+        print("Google 인증 또는 요금 오류로 멈췄어요. 키와 요금 상태를 확인해 주세요. 팩과 캐시는 쓰지 않았어요.", file=sys.stderr)
+        return 3
     for line in _summary(result):
         print(line)
     if result.report["stopped"]:

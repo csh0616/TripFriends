@@ -42,6 +42,17 @@ class ResolveError(Exception):
         self.query = query
 
 
+class ProviderAuthError(Exception):
+    """인증·요금 오류(응답 401·403·429). 다시 시도하지 않고, 만들기는 전체를 멈춘다 (PM 답 Q2)."""
+
+
+class ProviderTransientError(Exception):
+    """일시 오류(응답 5xx·시간 초과)가 한 번 다시 시도해도 계속됨. 만들기는 그 줄만 provider_error로 뺀다 (PM 답 Q2)."""
+
+
+AUTH_STATUSES = (401, 403, 429)
+
+
 class PlacesProvider(ABC):
     @abstractmethod
     def resolve(self, query: str, area: str) -> str:
@@ -132,10 +143,23 @@ class GooglePlaces(PlacesProvider):
     def _headers(self, mask: str) -> dict[str, str]:
         return {"X-Goog-Api-Key": self._key, "X-Goog-FieldMask": mask, "Content-Type": "application/json"}
 
+    def _send(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        """보내기. 인증·요금 오류는 바로 ProviderAuthError, 5xx·시간 초과는 한 번 다시 시도한 뒤 ProviderTransientError."""
+        for attempt in range(2):
+            try:
+                response = self._client.request(method, url, **kwargs)
+            except httpx.TimeoutException:
+                continue
+            if response.status_code in AUTH_STATUSES:
+                raise ProviderAuthError(f"Google 응답 {response.status_code}")
+            if response.status_code >= 500:
+                continue
+            response.raise_for_status()
+            return response
+        raise ProviderTransientError("Google 일시 오류")
+
     def _search(self, body: dict[str, Any], mask: str) -> list[dict[str, Any]]:
-        response = self._client.post(SEARCH_URL, headers=self._headers(mask), json=body)
-        response.raise_for_status()
-        return response.json().get("places", [])
+        return self._send("POST", SEARCH_URL, headers=self._headers(mask), json=body).json().get("places", [])
 
     def resolve(self, query: str, area: str) -> str:
         # 가장 맞는 한 곳만 받는다 (pageSize 1). 한 곳도 없으면 not_found
@@ -145,9 +169,7 @@ class GooglePlaces(PlacesProvider):
         return found[0]["id"]
 
     def details(self, place_id: str) -> dict[str, Any]:
-        response = self._client.get(DETAILS_URL + place_id, headers=self._headers(DETAILS_MASK))
-        response.raise_for_status()
-        body = response.json()
+        body = self._send("GET", DETAILS_URL + place_id, headers=self._headers(DETAILS_MASK)).json()
         where = body["location"]
         return {
             "location": {"lat": where["latitude"], "lng": where["longitude"]},

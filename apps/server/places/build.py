@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
-from places.provider import PlacesProvider, ResolveError
+from engine.planning import distance_km
+from places.provider import PlacesProvider, ProviderTransientError, ResolveError
 from places.serper import extract_closed_days, extract_hours
 
 DEFAULT_CAPS: dict[str, int] = {"google": 300, "serper": 100}  # §A7: 만들기 한 번에 google 300 · serper 100
@@ -18,6 +19,11 @@ MIN_INTERVAL = 0.1  # §A7: 요청 간격 0.1초 이상
 
 def _interval() -> float:
     return MIN_INTERVAL
+
+
+def _area_radius_km() -> float:
+    """찾은 곳이 지역 중심에서 이보다 멀면 ambiguous로 뺀다 (PM 답 Q2). 정확히 3.0km는 넣는다 (1.5km 대안 반경과 같은 '정각 포함')."""
+    return 3.0
 
 
 @dataclass
@@ -94,9 +100,20 @@ def build_pack(
         return place_id, calls.call("google", provider.details, place_id)
 
     center_id = None
+    area_pins: dict[str, dict[str, Any]] = {}
+    area_centers: dict[str, tuple[float, float]] = {}
+    resolved: dict[str, tuple[str, dict[str, Any]]] = {}  # 같은 query는 한 번만 부른다 (난바역 = center)
     try:
-        center_id, center_details = fetch(seed["center"]["query"], "center")
-        cache[center_id] = {"location": center_details["location"], "fetched_at": fetched_at}
+        for name, query, area in [("center", seed["center"]["query"], "center"), *((a, v["query"], a) for a, v in seed.get("areas", {}).items())]:
+            if query not in resolved:
+                resolved[query] = fetch(query, area)
+            place_id, found = resolved[query]
+            cache[place_id] = {"location": found["location"], "fetched_at": fetched_at}  # 좌표만 (좌표는 캐시에만)
+            if name == "center":
+                center_id = place_id
+            else:
+                area_pins[name] = {"name_ko": seed["areas"][name]["name_ko"], "place_id": place_id}
+                area_centers[name] = (found["location"]["lat"], found["location"]["lng"])
     except _CapExceeded:
         pass
 
@@ -106,11 +123,18 @@ def build_pack(
         except ResolveError as error:
             excluded.append({"id": row["id"], "reason": error.reason})
             continue
+        except ProviderTransientError:  # 일시 오류: 그 줄만 뺀다. 인증·요금 오류(ProviderAuthError)는 그대로 밖으로 나가 전체를 멈춘다
+            excluded.append({"id": row["id"], "reason": "provider_error"})
+            continue
         except _CapExceeded:
             excluded.extend({"id": left["id"], "reason": "cap_exceeded"} for left in seed["places"][number:])
             break
         if details["business_status"] == "CLOSED_PERMANENTLY":
             excluded.append({"id": row["id"], "reason": "closed_permanently"})
+            continue
+        near = area_centers.get(row["area"])
+        if near is not None and distance_km(near, (details["location"]["lat"], details["location"]["lng"])) > _area_radius_km():
+            excluded.append({"id": row["id"], "reason": "ambiguous"})  # 엉뚱한 곳을 찾았을 가능성 (PM 답 Q2)
             continue
         entry: dict[str, Any] = {"location": details["location"], "fetched_at": fetched_at}  # Google 영업시간·사이트·지도 링크는 디스크에 두지 않는다
         has_google_hours = bool(details["opening_hours"])
@@ -126,6 +150,7 @@ def build_pack(
         "city_code": seed["city_code"],
         "timezone": seed["timezone"],
         "center": {"name_ko": seed["center"]["name_ko"], "place_id": center_id},
+        "areas": area_pins,
         "places": rows,
     }
     # hours: 영업시간을 어디서 얻을 수 있었나 (채움 비율 측정용, A6). 값 자체는 담지 않는다

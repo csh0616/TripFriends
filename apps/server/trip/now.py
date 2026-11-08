@@ -81,6 +81,7 @@ class _Entry:
     end_min: int
     travel_min: int
     is_fixed: bool
+    source: str = "demo"  # 영업시간 fact의 source_type (TASK-010 Q1: 실제 여행은 장소의 실제 출처, 데모는 demo)
 
     @property
     def leave_min(self) -> int:
@@ -101,7 +102,10 @@ def _entries(day: DayRecord, course: CourseOption) -> list[_Entry]:
             name = place.name
             title = by_slot.get((place.id, item.start, item.end), name)
         entries.append(
-            _Entry(item.seq, place, name, title, item.start, item.end, _minutes(item.start), _minutes(item.end), item.travel_min, item.is_fixed)
+            _Entry(
+                item.seq, place, name, title, item.start, item.end, _minutes(item.start), _minutes(item.end), item.travel_min, item.is_fixed,
+                (day.sources or {}).get(place.id, "demo") if place else "demo",
+            )
         )
     return entries
 
@@ -109,11 +113,11 @@ def _entries(day: DayRecord, course: CourseOption) -> list[_Entry]:
 Checks = Mapping[str, VisitCheckRecord]  # 그날 사용자 확인 기록 (장소 id -> 기록)
 
 
-def _facts(place: Place | None, weekday: int, checks: Checks | None = None) -> list[Fact]:
+def _facts(place: Place | None, weekday: int, checks: Checks | None = None, source: str = "demo") -> list[Fact]:
     """장소가 없으면 [] (Q6). 그날 사용자가 확인했으면 그 확인이 이긴다 (TASK-008 A5·§7). 원본 장소 데이터는 그대로."""
     if place is None:
         return []
-    fact = _opening_fact(place, weekday)
+    fact = _opening_fact(place, weekday, source)
     check = (checks or {}).get(place.id)
     return [user_confirmed_fact(fact, check) if check else fact]
 
@@ -129,7 +133,7 @@ def _view(entry: _Entry, weekday: int, checks: Checks | None = None) -> NowCours
         lat=place.lat if place else None,
         lng=place.lng if place else None,
         is_fixed=entry.is_fixed,
-        facts=_facts(place, weekday, checks),
+        facts=_facts(place, weekday, checks, entry.source),
     )
 
 
@@ -268,7 +272,7 @@ def _card(
         place = target.place
         return NowCardT05(
             place=NowPlaceRef(place_id=place.id, name=place.name),
-            facts=_facts(place, weekday, checks),
+            facts=_facts(place, weekday, checks, target.source),
             map_url=map_search_url(place.lat, place.lng),
         )
     if kind == "T-06":
@@ -287,7 +291,7 @@ def _card(
         if fixed is None:
             return None
         return NowCardT07(
-            fixed=NowFixed(name=fixed.name, title=fixed.title, start=fixed.start, end=fixed.end, facts=_facts(fixed.place, weekday, checks)),
+            fixed=NowFixed(name=fixed.name, title=fixed.title, start=fixed.start, end=fixed.end, facts=_facts(fixed.place, weekday, checks, fixed.source)),
             leave_by=_hhmm(fixed.leave_min),
             leave_in_min=max(0, fixed.leave_min - m.now_min),  # Q4: 출발 시각이 지나도 시작 전이면 0
         )
