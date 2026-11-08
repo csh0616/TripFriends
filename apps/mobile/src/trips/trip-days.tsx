@@ -156,9 +156,11 @@ function DayRow({
           </Pressable>
         </View>
       ))}
-      <View style={styles.addRow}>
-        <SecondaryButton small testID={`add-fixed-${day.day_id}`} label="+ 일정" onPress={onAdd} />
-      </View>
+      {day.state === 'planning' || (day.state === 'today' && day.chosen_option_id === null) ? (
+        <View style={styles.addRow}>
+          <SecondaryButton small testID={`add-fixed-${day.day_id}`} label="+ 일정" onPress={onAdd} />
+        </View>
+      ) : null}
     </Pressable>
   );
 }

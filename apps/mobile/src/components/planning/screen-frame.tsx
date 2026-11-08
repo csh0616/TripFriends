@@ -23,6 +23,7 @@ export function ScreenFrame({
   input,
   footer,
   action,
+  listBottomSpace,
   children,
 }: {
   title?: string;
@@ -33,8 +34,11 @@ export function ScreenFrame({
   footer?: React.ReactNode;
   /** TASK-010: 스크롤 밖 맨 아래에 고정되는 주 버튼 자리 (입력창이 없는 화면) */
   action?: React.ReactNode;
+  /** 후보 카드 목록처럼 아래 고정 줄에 가려질 수 있는 본문: action-bar 높이 + 안전 영역만큼 아래 여백 (P2만 켠다) */
+  listBottomSpace?: boolean;
   children: React.ReactNode;
 }) {
+  const insets = useSafeAreaInsets();
   const [sosOpen, setSosOpen] = useState(false);
   const leave = useContext(LeaveContext);
   // 실제 여행의 계획 대화는 어느 단계(코스안 포함)에서든 머리 뒤로가 "‹ 날짜" (TASK-010 §12·§13 답 2). 단계 사이 뒤로는 화면의 단추가 맡는다
@@ -44,7 +48,7 @@ export function ScreenFrame({
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.body}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={listBottomSpace ? [styles.content, { paddingBottom: layout.actionBar + insets.bottom }] : styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

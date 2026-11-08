@@ -88,6 +88,7 @@ export function P2Screen({
 
   return (
     <ScreenFrame
+      listBottomSpace
       title={`${dayName(day.day_number)} 고르는 중`}
       subtitle={daySubtitle(day)}
       input={{ onSend: (value) => next({ text: value }), disabled: busy }}
@@ -210,7 +211,7 @@ export function P2Screen({
                   <Text style={text('src', 'muted')}>{sourceLabel('curated')}</Text>
                 ) : null}
                 {/* TASK-010 §11 G2: 지도 없이 Google 값을 보여 주는 카드에는 Google Maps 로고 자리 */}
-                {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'google') ? <GoogleMark testID="g-slot" /> : null}
+                {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'google' && fact.status !== 'unknown') ? <GoogleMark testID="g-slot" /> : null}
               </View>
             </View>
           );
