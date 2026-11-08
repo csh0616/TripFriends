@@ -25,7 +25,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { apiError, FakeServer, json, networkDown, type Sent } from '../test-support/fake-server';
 import { resetDevice, storedValues, tap } from '../test-support/planning-driver';
-import { session } from '../test-support/planning-fixtures';
+import { relaxed, session } from '../test-support/planning-fixtures';
 import { nowView } from '../test-support/trip-now-fixtures';
 
 jest.mock('expo-constants', () => {
@@ -227,6 +227,7 @@ describe('C3 날짜 목록', () => {
   });
 
   test.each(['day-t1', 'day-t3'])('T10_C3_지난_날·계획_완료_날(%s)은_계획_대화도_여행_중도_부르지_않는다', async (dayId) => {
+    server.on(`GET /days/${dayId}/course`, json(200, relaxed('opt-chosen'))); // §12 답 3: 고른 코스 읽기
     await startHome();
     await tap(await screen.findByTestId(`day-row-${dayId}`));
     await settleAll();
