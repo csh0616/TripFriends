@@ -1,4 +1,5 @@
 // TASK-010 §C3 날짜 목록 (SC-03 위, DESIGN-001 §4-9): 날 줄마다 알약 + 글자. 상태는 서버가 계산해 준 값(state)을 그대로 쓴다.
+import tokens from 'design-tokens';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
@@ -28,10 +29,10 @@ const clockOf = (iso: string): string => {
 };
 
 const PILL_LOOK = {
-  planning: { fg: 'ink', bg: 'bg-2' },
-  planned: { fg: 'ok', bg: 'ok-bg' },
-  today: { fg: 'ink', bg: 'brand-soft' },
-  past: { fg: 'muted', bg: 'bg-2' },
+  planning: tokens.pill['pill-planning'],
+  planned: tokens.pill['pill-planned'],
+  today: tokens.pill['pill-today'],
+  past: tokens.pill['pill-past'],
 } as const;
 
 export function TripDays({
@@ -126,8 +127,16 @@ function DayRow({
           <Text style={text('heading')}>{`${number}일째`}</Text>
           <Text style={text('caption', 'muted')}>{dayLabel(day.date)}</Text>
         </View>
-        <View style={[styles.pill, { backgroundColor: color[look.bg] }]}>
-          <Text style={text('label', look.fg)}>{dayPill(day.state)}</Text>
+        <View
+          testID={`day-pill-${day.day_id}`}
+          style={[
+            styles.pill,
+            { backgroundColor: look.bg },
+            'border' in look && { borderWidth: layout.pillBorder, borderColor: look.border },
+          ]}
+        >
+          {'dot' in look ? <View testID={`day-pill-dot-${day.day_id}`} style={[styles.pillDot, { borderColor: look.dot }]} /> : null}
+          <Text style={[text('label'), { color: look.fg }]}>{dayPill(day.state)}</Text>
         </View>
       </View>
       {day.fixed_events.map((event) => (
@@ -162,7 +171,8 @@ const styles = StyleSheet.create({
   rowFull: { minHeight: layout.rowPlanned },
   rowToday: { backgroundColor: color['brand-soft'], borderWidth: layout.selRing, borderColor: color.brand },
   top: { flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
-  pill: { paddingHorizontal: space['space-3'], paddingVertical: space['space-1'], borderRadius: radius['r-full'] },
+  pillDot: { width: layout.pillDot, height: layout.pillDot, borderRadius: radius['r-full'], borderStyle: 'dashed', borderWidth: layout.pillBorder },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: space['space-1'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'], borderRadius: radius['r-full'] },
   event: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   time: { minWidth: layout.timeColumn },
   remove: { width: control['touch-min'], height: control['touch-min'], alignItems: 'center', justifyContent: 'center' },

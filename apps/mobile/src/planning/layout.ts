@@ -76,6 +76,8 @@ export const layout = {
   rowDrop: tokens.select['row-drop'], // T-06 [빼고 가기] 칸
   thumbSm: tokens.select['thumb-sm'], // 칸 안 사진 자리
   selRing: Number(/(\d+(?:\.\d+)?)px/.exec(tokens.select['sel-ring'])?.[1]), // sel-ring: 고른 칸 안쪽 고리 굵기 (색은 brand, 바탕 sel-bg)
+  pillBorder: 1, // §4-9 날 상태 알약 테두리 1px
+  pillDot: 12, // 계획 전 알약 안 점선 동그라미 지름 (문서에 없는 크기)
   actionBarLine: 1, // action-bar 윗선 굵기 (문서에 없는 크기)
   radioDot: 12, // 고른 radio 안 채움 지름 (문서에 없는 크기)
   // TASK-010 DESIGN-001 §4-10 여행 만들기 부품. 값은 tokens.json(trip)에서 읽는다 (TASK-010 §13 질문 3)
