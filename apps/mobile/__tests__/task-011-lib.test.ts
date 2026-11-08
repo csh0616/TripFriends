@@ -6,11 +6,13 @@
 //   src/lib/day-list.ts
 //     dayListPrimary(days, today): { label, dayId, sublabel } | null
 //       today = 도시 시간대의 오늘 'YYYY-MM-DD'. days = Trip.trip_days (서버가 계산한 state 그대로)
-//       오늘이 여행 중(그날 state 'today') -> label '오늘 여행 보기', dayId = 그날 (코스가 없어도 같다. 갈 곳은 dayDestination이 정한다)
+//       오늘이 여행 중(그날 state 'today') -> label '오늘 여행 보기', dayId = 그날, sublabel "1일째 · 12/11 금" (§9 Q4, 코스가 없어도 같다)
 //       아니면 다음 계획 전 날(state 'planning' 중 맨 앞) -> label '같이 고르기', sublabel "2일째 · 12/12 토"
 //       둘 다 없으면(모두 계획 완료·지난 날) -> null (주 버튼 없음)
 //     tripHeader(trip, today): { title, dots, line }
-//       title "오사카 2박 3일" · dots "●○○"(날 수만큼, 계획 완료 수만큼 ●) · line "D-35 · 3일 중 1일 계획 완료", 여행 중이면 "여행 중 · …"
+//       §9 Q5: title "오사카 2박 3일"(하루면 "오사카 당일 여행", 끝난 뒤에도 그대로)
+//              dots = 날 순서대로 한 자리씩, 그날 고른 코스(chosen_option_id)가 있으면 ●, 없으면 ○ (오늘·지난 날 포함)
+//              line = "{오른쪽 말} · N일 중 K일 계획 완료", K = 고른 코스가 있는 날 수. 오른쪽 말 = 여행 전 "D-35" · 여행 중 "여행 중" · 끝난 뒤 "다녀옴"
 //   src/planning/format.ts (화면 글자 함수가 모인 곳. dayName이 이미 여기 있다)
 //     dayName(n): "N일째" (n = 1부터 세는 날 번호, 서버 day_number와 같다)
 //     timeRange(a, b): "a–b" (엔 대시 U+2013)
@@ -131,25 +133,25 @@ describe('A0 dayListPrimary: 아래 큰 버튼 하나 (AC-2)', () => {
 
   test('T11_AC2_오늘_여행_중(코스_있음)이면_오늘_여행_보기', () => {
     const found = primary([day(1, 'past'), day(2, 'today', true), day(3, 'planning')], '2026-12-12');
-    expect(found).toMatchObject({ label: '오늘 여행 보기', dayId: 'd2' });
+    expect(found).toEqual({ label: '오늘 여행 보기', dayId: 'd2', sublabel: '2일째 · 12/12 토' }); // §9 Q4
   });
 
   test('T11_AC2_오늘_여행_중이면_뒤에_계획_전_날이_있어도_오늘이_먼저', () => {
     const found = primary([day(1, 'today', true), day(2, 'planning'), day(3, 'planning')], '2026-12-11');
-    expect(found).toMatchObject({ label: '오늘 여행 보기', dayId: 'd1' });
+    expect(found).toEqual({ label: '오늘 여행 보기', dayId: 'd1', sublabel: '1일째 · 12/11 금' }); // §9 Q4의 예
   });
 
   test('T11_AC2_오늘인데_코스_없음이어도_버튼은_오늘_여행_보기_누르면_계획_대화', () => {
     const today = day(2, 'today', false);
     const found = primary([day(1, 'past'), today, day(3, 'planned')], '2026-12-12');
-    expect(found).toMatchObject({ label: '오늘 여행 보기', dayId: 'd2' });
+    expect(found).toEqual({ label: '오늘 여행 보기', dayId: 'd2', sublabel: '2일째 · 12/12 토' });
     // §6: 오늘 코스가 없는데 [오늘 여행 보기] -> 계획 대화 (TASK-010 Q6과 같음)
     expect(days().dayDestination(today.state, today.chosen_option_id !== null)).toBe('planning');
   });
 
   test('T11_AC2_마지막_날이_오늘이면_오늘_여행_보기', () => {
     const found = primary([day(1, 'past'), day(2, 'past'), day(3, 'today', true)], '2026-12-13');
-    expect(found).toMatchObject({ label: '오늘 여행 보기', dayId: 'd3' });
+    expect(found).toEqual({ label: '오늘 여행 보기', dayId: 'd3', sublabel: '3일째 · 12/13 일' });
   });
 
   test('T11_AC2_지난_날만_남으면_주_버튼_없음(null)', () => {
@@ -201,7 +203,11 @@ describe('A0 dayListPrimary: 아래 큰 버튼 하나 (AC-2)', () => {
           const todayIndex = list.findIndex((one) => one.state === 'today');
           const nextIndex = list.findIndex((one) => one.state === 'planning');
           if (todayIndex >= 0) {
-            expect(found).toMatchObject({ label: '오늘 여행 보기', dayId: list[todayIndex].day_id });
+            expect(found).toEqual({
+              label: '오늘 여행 보기',
+              dayId: list[todayIndex].day_id,
+              sublabel: `${todayIndex + 1}일째 · ${shortWithWeekday(list[todayIndex].date)}`,
+            });
           } else if (nextIndex >= 0) {
             expect(found).toEqual({
               label: '같이 고르기',
@@ -253,14 +259,41 @@ describe('A0 tripHeader: 머리 (task-011-review §2 5번 줄)', () => {
   });
 
   test('T11_A0_tripHeader_경계_첫날_당일은_D-숫자_대신_여행_중', () => {
-    const line = header(three(['today', 'planning', 'planning']), '2026-12-11').line;
-    expect(line).toMatch(/^여행 중 · 3일 중 \d일 계획 완료$/);
-    expect(line).not.toMatch(/D-/);
+    // 첫날 오늘(코스 있음) -> 오늘도 계획 완료로 센다 (§9 Q5)
+    expect(header(three(['today', 'planning', 'planning']), '2026-12-11')).toEqual({ title: '오사카 2박 3일', dots: '●○○', line: '여행 중 · 3일 중 1일 계획 완료' });
+  });
+
+  test('T11_Q5_오늘인데_코스_없음은_빈_자리', () => {
+    const list = [day(1, 'past', true), day(2, 'today', false), day(3, 'planned')];
+    expect(header(trip(list), '2026-12-12')).toEqual({ title: '오사카 2박 3일', dots: '●○●', line: '여행 중 · 3일 중 2일 계획 완료' });
+  });
+
+  test('T11_Q5_점은_날_순서_자리(앞에서부터_채우지_않는다)', () => {
+    expect(header(three(['planning', 'planned', 'planning']), BEFORE).dots).toBe('○●○');
+    expect(header(three(['planning', 'planning', 'planned']), BEFORE).dots).toBe('○○●');
+  });
+
+  test('T11_Q5_지난_날도_고른_코스가_있으면_센다', () => {
+    const list = [day(1, 'past', true), day(2, 'past', false), day(3, 'today', true)];
+    expect(header(trip(list), '2026-12-13')).toEqual({ title: '오사카 2박 3일', dots: '●○●', line: '여행 중 · 3일 중 2일 계획 완료' });
   });
 
   test('T11_A0_tripHeader_경계_마지막_날도_여행_중', () => {
-    const line = header(three(['past', 'past', 'today']), '2026-12-13').line;
-    expect(line).toMatch(/^여행 중 · 3일 중 \d일 계획 완료$/);
+    expect(header(three(['past', 'past', 'today']), '2026-12-13').line).toMatch(/^여행 중 · 3일 중 \d일 계획 완료$/);
+  });
+
+  test('T11_Q5_경계_마지막_날_다음_날은_다녀옴_제목은_그대로', () => {
+    expect(header(three(['past', 'past', 'past']), '2026-12-14')).toEqual({ title: '오사카 2박 3일', dots: '●●●', line: '다녀옴 · 3일 중 3일 계획 완료' });
+  });
+
+  test('T11_Q5_끝나고_오래_지나도_다녀옴', () => {
+    const list = [day(1, 'past', true), day(2, 'past', false), day(3, 'past', false)];
+    expect(header(trip(list), '2027-03-01').line).toBe('다녀옴 · 3일 중 1일 계획 완료');
+  });
+
+  test('T11_Q5_하루_여행_제목은_오사카_당일_여행', () => {
+    expect(header(trip([day(1, 'planning')]), BEFORE)).toEqual({ title: '오사카 당일 여행', dots: '○', line: 'D-35 · 1일 중 0일 계획 완료' });
+    expect(header(trip([day(1, 'past', true)]), '2026-12-12').title).toBe('오사카 당일 여행');
   });
 
   test.each([
@@ -279,22 +312,21 @@ describe('A0 tripHeader: 머리 (task-011-review §2 5번 줄)', () => {
         const planned = list.filter((one) => one.state === 'planned').length;
         const found = header(trip(list), addDays(START, -before));
         expect(found.title).toBe(`오사카 ${count - 1}박 ${count}일`);
-        expect([...found.dots]).toHaveLength(count);
-        expect([...found.dots].filter((dot) => dot === '●')).toHaveLength(planned);
-        expect([...found.dots].every((dot) => dot === '●' || dot === '○')).toBe(true);
+        expect(found.dots).toBe(list.map((one) => (one.chosen_option_id ? '●' : '○')).join(''));
         expect(found.line).toBe(`D-${before} · ${count}일 중 ${planned}일 계획 완료`);
       }),
     );
   });
 
-  test('T11_A0_tripHeader_속성_여행_중에는_어느_날이든_여행_중', () => {
+  test('T11_Q5_속성_여행_중에는_어느_날이든_여행_중_계획_완료는_고른_코스_수', () => {
     fc.assert(
-      fc.property(fc.integer({ min: 1, max: 7 }), fc.integer({ min: 0, max: 6 }), (count, at) => {
+      fc.property(fc.integer({ min: 1, max: 7 }), fc.integer({ min: 0, max: 6 }), fc.array(fc.boolean(), { minLength: 7, maxLength: 7 }), (count, at, plans) => {
         const index = at % count;
-        const list = Array.from({ length: count }, (_, i) => day(i + 1, i < index ? 'past' : i === index ? 'today' : 'planning'));
+        const list = Array.from({ length: count }, (_, i) => day(i + 1, i < index ? 'past' : i === index ? 'today' : plans[i] ? 'planned' : 'planning', plans[i]));
+        const chosen = list.filter((one) => one.chosen_option_id !== null).length;
         const found = header(trip(list), list[index].date);
-        expect(found.line.startsWith('여행 중 · ')).toBe(true);
-        expect(found.line).not.toMatch(/D-/);
+        expect(found.line).toBe(`여행 중 · ${count}일 중 ${chosen}일 계획 완료`);
+        expect(found.dots).toBe(list.map((one) => (one.chosen_option_id ? '●' : '○')).join(''));
       }),
     );
   });

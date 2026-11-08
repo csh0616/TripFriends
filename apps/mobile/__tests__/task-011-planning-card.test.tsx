@@ -13,12 +13,16 @@
 //       늘 열림(O1)은 A5 대상이 아니라 "확인됨" 그대로
 //   시각 범위: 화면 글자에 "HH:MM-HH:MM"·"HH:MM~HH:MM"이 없고 엔 대시 "HH:MM–HH:MM" (서버 값의 하이픈은 화면에서 바꾼다)
 //   A2 큰 카드 그림: 후보 카드 그림 안에 무늬 `place-pattern`
+//   §9 v1.1:
+//     Q7 두 구간 "11:00–14:00 · 17:00–22:00" · Q9 끝 카드 [다른 곳 보여 줘]는 주황 아님, 주황은 [코스 짜기]만
+//     Q10 늘 열림 -> 칩 없이 "늘 열려 있어". 코스 줄(P3)도 같은 칩 규칙 (코스 줄 facts, test-support hoursFact)
+//     Q13 무늬는 docs/design/place-images/{종류}.svg 파일이 정본 -> 앱 assets 안에 같은 내용의 파일이 있다
 import { screen, within } from '@testing-library/react-native';
 
 import { COLORS } from '../test-support/design-table';
 import { json } from '../test-support/fake-server';
 import { happyServer, R, resetDevice, toP1, toP2, toP3 } from '../test-support/planning-driver';
-import { batch, day, PLACES } from '../test-support/planning-fixtures';
+import { batch, course, day, hoursFact, packed, PLACES, relaxed } from '../test-support/planning-fixtures';
 import { buttonsFilledWith, filledWith, isInside, rootHost, styleOf, type Host } from '../test-support/screen-tree';
 
 const EN_DASH = '–';
@@ -175,12 +179,12 @@ describe('A5 curated 시간대는 추천 시간대 칩', () => {
     expect(todayHoursText([{ field: 'opening_hours', value: '17:00-24:00', status: 'confirmed', source_type: 'curated' }]).chip).toBe('confirmed');
   });
 
-  test('T11_A5_늘_열림(O1)은_확인됨_그대로', async () => {
+  test('T11_Q10_늘_열림(O1)은_칩_없이_늘_열려_있어', async () => {
     serve(withHours('D01', ALWAYS));
     await toP2();
     const inCard = within(screen.getByTestId('candidate-card-D01'));
-    expect(inCard.getByText('확인됨')).toBeTruthy();
-    expect(inCard.queryByText('추천 시간대')).toBeNull();
+    for (const chip of ['확인됨', '미확인', '모름', '추천 시간대']) expect(inCard.queryByText(chip)).toBeNull();
+    expect(inCard.getByText('늘 열려 있어')).toBeTruthy();
   });
 
   test('T11_A5_Google·데모_영업시간은_추천_시간대가_아니다', async () => {
@@ -201,14 +205,29 @@ describe('AC-3 계획 대화의 주황 버튼', () => {
     expect(buttonsFilledWith(COLORS.brand)).toHaveLength(1);
   });
 
-  // 끝 카드(end-card)의 버튼은 캐러셀 맨 끝에서만 보인다 -> 질문 목록 (이번 검수 25줄에 없음)
-  test('T11_AC3_P2_끝_카드_밖_주황_버튼은_코스_짜기_하나', async () => {
+  // §9 Q9: 끝 카드 [다른 곳 보여 줘]는 btn-card-secondary(주황 아님), 주황은 [코스 짜기]만
+  test('T11_Q9_P2_주황_버튼은_코스_짜기_하나뿐(끝_카드_포함)', async () => {
     happyServer();
     await toP2();
-    const end = byId('end-card');
-    const outside = buttonsFilledWith(COLORS.brand).filter((host) => !isInside(host, end));
-    expect(outside).toHaveLength(1);
-    expect(isInside(outside[0], byId('compose-button')) || isInside(byId('compose-button'), outside[0])).toBe(true);
+    const orange = buttonsFilledWith(COLORS.brand);
+    expect(orange).toHaveLength(1);
+    expect(isInside(orange[0], byId('compose-button')) || isInside(byId('compose-button'), orange[0])).toBe(true);
+  });
+
+  test('T11_Q9_끝_카드_다른_곳_보여_줘는_주황이_아니다', async () => {
+    happyServer();
+    await toP2();
+    const label = within(screen.getByTestId('end-card')).getByText('다른 곳 보여 줘') as unknown as Host;
+    expect(buttonsFilledWith(COLORS.brand, byId('end-card'))).toEqual([]);
+    expect(isInside(label, byId('end-card'))).toBe(true);
+  });
+
+  test('T11_Q9_소진이면_끝_카드_주황은_코스_짜기만', async () => {
+    happyServer().on(R.answer, json(200, batch({ exhausted: true })));
+    await toP2();
+    const orange = buttonsFilledWith(COLORS.brand);
+    expect(orange.length).toBeGreaterThanOrEqual(1);
+    for (const host of orange) expect(textsUnder(host).join('')).toBe('코스 짜기');
   });
 
   test('T11_AC3_P2_후보_카드_안_버튼에_주황이_없다', async () => {
@@ -221,5 +240,63 @@ describe('AC-3 계획 대화의 주황 버튼', () => {
     happyServer();
     await toP3();
     expect(buttonsFilledWith(COLORS.brand, rootHost())).toHaveLength(1);
+  });
+});
+
+// ---------- §9 Q7 두 구간 ----------
+
+describe('§9 Q7 두 구간 영업시간', () => {
+  test('T11_Q7_두_구간은_가운데_점으로', async () => {
+    happyServer();
+    await toP2();
+    expect(within(screen.getByTestId('candidate-card-D02')).getByText('11:00–14:00 · 17:00–22:00')).toBeTruthy();
+  });
+});
+
+// ---------- §9 Q10 코스 줄(P3)도 같은 칩 규칙 ----------
+
+describe('§9 Q10 코스안 줄의 칩', () => {
+  const withItemHours = (over: object) => {
+    const option = relaxed();
+    option.items[0] = { ...option.items[0], facts: [hoursFact('confirmed', over)] };
+    return course([option, packed()]);
+  };
+
+  test('T11_Q10_P3_curated_시간대_줄은_추천_시간대', async () => {
+    happyServer().on(R.compose, json(200, withItemHours(NIGHT)));
+    await toP3();
+    const row = within(screen.getByTestId('course-row-1'));
+    expect(row.getByText('추천 시간대')).toBeTruthy();
+    expect(row.queryByText('확인됨')).toBeNull();
+  });
+
+  test('T11_Q10_P3_늘_열림_줄은_칩_없이_늘_열려_있어', async () => {
+    happyServer().on(R.compose, json(200, withItemHours(ALWAYS)));
+    await toP3();
+    const row = within(screen.getByTestId('course-row-1'));
+    for (const chip of ['확인됨', '미확인', '모름', '추천 시간대']) expect(row.queryByText(chip)).toBeNull();
+    expect(row.getByText(/늘 열려 있어/)).toBeTruthy();
+  });
+
+  test('T11_Q10_P3_데모·Google_줄은_전과_같이_확인_칩', async () => {
+    happyServer();
+    await toP3();
+    expect(within(screen.getByTestId('course-row-1')).getByText('확인됨')).toBeTruthy();
+    expect(within(screen.getByTestId('course-row-2')).getByText('미확인')).toBeTruthy();
+  });
+});
+
+// ---------- §9 Q13 무늬 파일 ----------
+
+describe('§9 Q13 무늬는 docs 그림 파일이 정본', () => {
+  const { readdirSync, readFileSync, statSync } = require('node:fs') as typeof import('node:fs');
+  const { join } = require('node:path') as typeof import('node:path');
+  const { MOBILE_ROOT, REPO_ROOT } = require('../test-support/source-files');
+  const walk = (dir: string): string[] => readdirSync(dir).flatMap((name) => (statSync(join(dir, name)).isDirectory() ? walk(join(dir, name)) : [join(dir, name)]));
+  const appFiles = () => [...walk(join(MOBILE_ROOT, 'assets')), ...walk(join(MOBILE_ROOT, 'src'))].map((path) => readFileSync(path, 'utf8'));
+
+  test.each(['cafe', 'food', 'walk', 'museum', 'landmark', 'shop', 'experience', 'night'])('T11_Q13_%s_무늬_파일이_앱에_그대로_있다', (kind) => {
+    const original = readFileSync(join(REPO_ROOT, 'docs', 'design', 'place-images', `${kind}.svg`), 'utf8').trim();
+    expect(appFiles().some((text) => text.trim() === original || text.includes(original))).toBe(true);
   });
 });

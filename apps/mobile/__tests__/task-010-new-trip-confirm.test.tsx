@@ -7,8 +7,7 @@
 //   여행이 없을 때 빈 첫 화면의 주 버튼은 그대로.
 //
 // 계약 (이 테스트가 정한 것, 승인 대기):
-//   날짜 목록 `new-trip`: 눌리는 상자에 바탕색이 없다(미지정 또는 'transparent'). 누를 수 있는 높이 = height·minHeight + hitSlop >= touch-min(44)
-//     (앱에 글자 버튼 부품이 아직 없어 "바탕색 없음"으로 확인한다)
+//   날짜 목록 `new-trip`: TASK-011 §9 Q1부터 btn-new-trip(bg-2 바탕). 누를 수 있는 높이 = height·minHeight + hitSlop >= touch-min(44)
 //   확인 방식 = TASK-011 C1부터 sheet-confirm 시트 (task-011-new-trip-sheet.test.tsx). 아래 피드백 3은 Alert도 시트도 없음을 본다
 //   빈 첫 화면 `home-create`: 주 버튼(brand 바탕) 그대로, 누르면 확인 없이 바로 SC-01(`field-start-date`)
 import { fireEvent, render, screen } from '@testing-library/react-native';
@@ -67,7 +66,6 @@ function reachHeight(host: Host): number {
   const numeric = [style.height, style.minHeight].filter((v): v is number => typeof v === 'number');
   return (numeric.length ? Math.max(...numeric) : 0) + extra;
 }
-const noFill = (value: unknown) => value === undefined || value === null || value === 'transparent' || /^(#0000|#00000000|rgba\(.*,\s*0\))$/i.test(String(value));
 
 function showDays(onNewTrip: () => void) {
   return render(
@@ -102,12 +100,12 @@ afterEach(() => {
 // ---------- 1. 여행이 있을 때 [새 여행 만들기]는 글자 버튼 ----------
 
 describe('피드백 1 날짜 목록의 [새 여행 만들기]는 보조(글자 버튼)', () => {
-  test('T10_NEWTRIP_1_바탕색이_없다(주_버튼도_보조_바탕도_아님)', async () => {
+  // TASK-011 §9 Q1 (승인): 글자 버튼은 TASK-010 임시 모양이라 폐기. btn-new-trip = bg-2 바탕 (주 버튼 아님)
+  test('T10_NEWTRIP_1_바탕은_bg_2(주_버튼_아님)_TASK_011_Q1', async () => {
     await showDays(() => {});
     const bg = styleOf(pressable('new-trip')).backgroundColor;
     expect(bg).not.toBe(color.brand);
-    expect(bg).not.toBe(color['bg-2']);
-    expect(noFill(bg)).toBe(true);
+    expect(String(bg).toUpperCase()).toBe(color['bg-2'].toUpperCase());
   });
 
   test('T10_NEWTRIP_1_글자는_새_여행_만들기_그대로', async () => {

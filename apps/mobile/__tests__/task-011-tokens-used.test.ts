@@ -14,3 +14,14 @@ test.each(Object.keys(FIT))('T11_AC4_토큰_%s를_앱_소스가_이름으로_읽
   const users = files.filter(({ text }) => text.includes(`'${name}'`) || text.includes(`"${name}"`)).map(({ path }) => path);
   expect(users.length).toBeGreaterThan(0);
 });
+
+// TASK-011 §9 Q8: 시각 범위를 보여 주는 곳은 앱 전체가 timeRange(엔 대시). 시각 두 개를 "~"·"-"로 이어 붙인 화면 글자가 소스에 없다
+test('T11_Q8_소스에_물결·하이픈으로_이은_시각_범위_글자가_없다', () => {
+  const found = files.flatMap(({ path, text }) =>
+    text
+      .split('\n')
+      .filter((line) => /\}\s*[~-]\s*\$\{[^}]*(start|end|clock|close)/i.test(line) && !/^\s*\/\//.test(line))
+      .map((line) => `${path}: ${line.trim()}`),
+  );
+  expect(found).toEqual([]);
+});

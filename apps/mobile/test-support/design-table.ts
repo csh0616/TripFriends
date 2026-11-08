@@ -163,7 +163,7 @@ export const FIT: Record<string, Record<string, unknown>> = {
     minHeight: 52,
     badge: 28,
     name: { size: 15, lineHeight: 22, weight: 600 },
-    sub: { size: 13, lineHeight: 18 },
+    sub: { size: 13, lineHeight: 18, weight: 500 }, // TASK-011 §9 Q14
     subFg: '#666C7A',
     subLines: 1,
   },
@@ -183,8 +183,8 @@ export const FIT: Record<string, Record<string, unknown>> = {
     radius: 999,
     icon: 16,
   },
-  // 350 × 52 · bg-2 · 15/22·600 ink-strong · r16
-  'btn-new-trip': { width: 350, height: 52, bg: '#F3F4F6', size: 15, lineHeight: 22, weight: 600, fg: '#1A1A1A', radius: 16 },
+  // 350 × 52 · bg-2 · 15/22·600 ink-strong · r16. 너비는 TASK-011 §9 Q1·§4-11 줄 "화면 − 40"이라 고정 값으로 두지 않는다
+  'btn-new-trip': { height: 52, bg: '#F3F4F6', size: 15, lineHeight: 22, weight: 600, fg: '#1A1A1A', radius: 16 },
   // scrim 40% · r-sheet 28 · 손잡이 36×4 · 글 17/24·700 · 버튼 52 + 52 세로, 사이 8 · 아래 34
   'sheet-confirm': {
     scrim: 'rgba(26,26,26,0.40)', // §4-1 scrim과 같은 값
@@ -212,7 +212,7 @@ export const FIT: Record<string, Record<string, unknown>> = {
     border: '#666C7A',
     large: { height: 52, size: 17, lineHeight: 24, weight: 700 },
     auto: { height: 52, size: 15, lineHeight: 22, weight: 600 },
-    small: { height: 44 },
+    small: { height: 44, size: 15, lineHeight: 22, weight: 600 }, // TASK-011 §9 Q14
   },
   // 주황 #FF5A00 · 52 · 17/24·700 on-brand #1A1A1A · 밑 한 줄 12/16·500 muted
   'bottom-primary': {

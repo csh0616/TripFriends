@@ -13,14 +13,21 @@
 //   알약 아이콘 상자 `day-pill-icon-{day_id}`: 네 알약 모두 알약 안에. 계획 전의 점선 원 `day-pill-dot-{day_id}`는 그 상자 안
 //   머리: tripHeader의 title·line 글자가 화면에 보인다
 //   AC-3: 화면 전체에서 바탕이 brand인 상자는 bottom-primary 하나 이하 (카드 안 버튼에 주황 0)
+//   §9 v1.1:
+//     Q1 [새 여행 만들기] `new-trip` = btn-new-trip (bg-2 바탕, 높이 52 이상)
+//     Q2 고른 코스가 있는 날(계획 완료·지난 날) 줄에 요약 "18:30 끝 · 8곳 · 이동 125분" (서버 summary 그대로). 계획 전 카드에 꼭 갈 곳 이름
+//        날짜 목록을 그릴 때 GET /days/{id}/course 를 부르지 않는다
+//     Q3 카드 [알아서 짜 줘]를 누르면 바로 POST /days/{id}/planning {mode: 'auto'} -> 코스안(`option-relaxed`). 오늘인데 코스 없는 카드도 버튼 둘
+//     Q4 [오늘 여행 보기] 밑 줄 "2일째 · 12/12 토"
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TripDays } from '@/trips/trip-days';
 
 import { COLORS } from '../test-support/design-table';
-import { apiError, FakeServer, networkDown } from '../test-support/fake-server';
-import { resetDevice } from '../test-support/planning-driver';
+import { apiError, FakeServer, json, networkDown } from '../test-support/fake-server';
+import { resetDevice, tap } from '../test-support/planning-driver';
+import { course, SID } from '../test-support/planning-fixtures';
 import { filledWith, isInside, pressableOf, styleOf, type Host } from '../test-support/screen-tree';
 
 jest.mock('expo-constants', () => {
@@ -32,12 +39,18 @@ const METRICS = { frame: { x: 0, y: 0, width: 402, height: 874 }, insets: { top:
 
 type State = 'planning' | 'planned' | 'today' | 'past';
 const DATES = ['2026-12-11', '2026-12-12', '2026-12-13']; // 금 · 토 · 일
+// §9 Q2: 서버가 날마다 summary(고른 코스가 있을 때)와 must_visits를 함께 준다
+const SUMMARY = { end_time: '18:30', place_count: 8, move_min: 125 }; // §4-11 요약 줄의 예
+const SUMMARY_TEXT = '18:30 끝 · 8곳 · 이동 125분';
+const MUST = [{ place_id: 'osaka-fake-kuromon', name: '구로몬 시장' }];
 const tripDay = (n: number, state: State, chosen = state !== 'planning') => ({
   day_id: `d${n}`,
   date: DATES[n - 1],
   state,
   chosen_option_id: chosen ? `opt-${n}` : null,
   fixed_events: [] as unknown[],
+  summary: chosen ? SUMMARY : null,
+  must_visits: MUST,
 });
 const trip = (...days: ReturnType<typeof tripDay>[]) => ({
   trip_id: 'trip-osaka-1',
@@ -115,6 +128,7 @@ describe('A1 아래 큰 버튼 bottom-primary', () => {
     const onOpen = await show(TODAY_WITH_COURSE, AT.day2);
     expect(within(screen.getByTestId('bottom-primary')).getByText('오늘 여행 보기')).toBeTruthy();
     expect(within(screen.getByTestId('bottom-primary')).queryByText('같이 고르기')).toBeNull();
+    expect(screen.getByText('2일째 · 12/12 토')).toBeTruthy(); // §9 Q4
     await press('bottom-primary');
     expect(onOpen.mock.calls[0][0]).toMatchObject({ day_id: 'd2' });
     expect(onOpen.mock.calls[0][1]).toBe('now');
@@ -202,9 +216,10 @@ describe('A1 카드 안 버튼', () => {
     expect(screen.queryByTestId(`card-auto-${dayId}`)).toBeNull();
   });
 
-  test('T11_A1_오늘인데_코스_없음이면_카드_안에_같이_고르기(PM_답_1)', async () => {
+  test('T11_Q3_오늘인데_코스_없음이면_카드_안에_같이_고르기와_알아서_짜_줘', async () => {
     await show(TODAY_NO_COURSE, AT.day2);
     expect(within(screen.getByTestId('day-row-d2')).getByTestId('card-plan-d2')).toBeTruthy();
+    expect(within(screen.getByTestId('day-row-d2')).getByTestId('card-auto-d2')).toBeTruthy();
   });
 
   test('T11_A1_카드_같이_고르기를_누르면_그날_계획_대화', async () => {
@@ -301,5 +316,99 @@ describe('B2 알약 아이콘', () => {
     await show(FOUR, AT.day2);
     expect(within(screen.getByTestId('day-pill-d1')).getByText('지난 날')).toBeTruthy();
     expect(within(screen.getByTestId('day-pill-d2')).getByText('오늘 · 여행 중')).toBeTruthy();
+  });
+});
+
+// ---------- §9 v1.1 Q1·Q2·Q3 ----------
+
+describe('§9 Q1 [새 여행 만들기]는 btn-new-trip', () => {
+  test('T11_Q1_바탕은_bg_2_높이_52_이상', async () => {
+    await show(ALL_PLANNED, AT.before);
+    const button = pressableOf(byId('new-trip'));
+    const style = styleOf(button);
+    expect(String(style.backgroundColor).toUpperCase()).toBe(COLORS['bg-2']);
+    expect(Math.max(...[style.height, style.minHeight].filter((v): v is number => typeof v === 'number'))).toBeGreaterThanOrEqual(52);
+    expect(within(screen.getByTestId('new-trip')).getByText('새 여행 만들기')).toBeTruthy();
+  });
+});
+
+describe('§9 Q2 날 요약과 꼭 갈 곳 (서버 값 그대로)', () => {
+  test.each([
+    ['계획 완료', MIXED, AT.before, 'd1'],
+    ['지난 날', TODAY_WITH_COURSE, AT.day2, 'd1'],
+  ])('T11_Q2_%s_줄에_요약_한_줄', async (_name, value, at, dayId) => {
+    await show(value, at);
+    expect(within(screen.getByTestId(`day-row-${dayId}`)).getByText(SUMMARY_TEXT)).toBeTruthy();
+  });
+
+  test('T11_Q2_요약은_서버_숫자를_그대로', async () => {
+    const other = { ...tripDay(1, 'planned'), summary: { end_time: '21:05', place_count: 3, move_min: 0 } };
+    await show(trip(other, tripDay(2, 'planning'), tripDay(3, 'planning')), AT.before);
+    expect(within(screen.getByTestId('day-row-d1')).getByText('21:05 끝 · 3곳 · 이동 0분')).toBeTruthy();
+  });
+
+  test('T11_Q2_계획_전_카드에는_요약이_없고_꼭_갈_곳_이름', async () => {
+    await show(MIXED, AT.before);
+    const row = within(screen.getByTestId('day-row-d2'));
+    expect(row.queryByText(/끝 · \d+곳/)).toBeNull();
+    expect(row.getByText(/구로몬 시장/)).toBeTruthy();
+  });
+
+  test('T11_Q2_꼭_갈_곳이_없으면_그_줄이_없다', async () => {
+    await show(trip(tripDay(1, 'planned'), { ...tripDay(2, 'planning'), must_visits: [] }, tripDay(3, 'planning')), AT.before);
+    expect(within(screen.getByTestId('day-row-d2')).queryByText(/구로몬 시장/)).toBeNull();
+  });
+
+  test('T11_Q2_걷기_km는_쓰지_않는다', async () => {
+    await show(MIXED, AT.before);
+    expect(screen.queryByText(/km/)).toBeNull();
+  });
+});
+
+describe('§9 Q2·Q3 첫 화면 흐름', () => {
+  async function startHome() {
+    const Index = require('@/app/index').default;
+    return render(
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <Index />
+      </SafeAreaProvider>,
+    );
+  }
+
+  test('T11_Q2_날짜_목록은_코스를_따로_부르지_않는다', async () => {
+    resetDevice();
+    freezeDate(AT.before);
+    const server = new FakeServer().on('GET /trips/current', json(200, MIXED));
+    await startHome();
+    await screen.findByTestId('day-row-d1');
+    await act(async () => {
+      await new Promise<void>((done) => setImmediate(done));
+    });
+    expect(screen.getByText(SUMMARY_TEXT)).toBeTruthy();
+    expect(server.requests.filter((one) => /\/course$/.test(one.path))).toEqual([]);
+  });
+
+  test('T11_Q3_알아서_짜_줘를_누르면_바로_자동_계획_코스안', async () => {
+    resetDevice();
+    freezeDate(AT.before);
+    const server = new FakeServer()
+      .on('GET /trips/current', json(200, MIXED))
+      .on('POST /days/d2/planning', json(201, course()))
+      .on(`GET /planning/${SID}`, json(200, course()));
+    await startHome();
+    await tap(await screen.findByTestId('card-auto-d2'));
+    expect(await screen.findByTestId('option-relaxed')).toBeTruthy();
+    const sent = server.sent('POST /days/d2/planning');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body).toMatchObject({ mode: 'auto' });
+  });
+});
+
+describe('§9 Q8 날짜 목록 고정 일정도 엔 대시', () => {
+  test('T11_Q8_고정_일정_시각은_12:00–13:00', async () => {
+    const event = { fixed_event_id: 'fe-1', trip_day_id: 'd2', title: '저녁 예약', start_at: '2026-12-12T12:00:00+09:00', end_at: '2026-12-12T13:00:00+09:00', place_id: null };
+    await show(trip(tripDay(1, 'planned'), { ...tripDay(2, 'planning'), fixed_events: [event] }, tripDay(3, 'planning')), AT.before);
+    expect(within(screen.getByTestId('day-row-d2')).getByText('12:00–13:00')).toBeTruthy();
+    expect(screen.queryByText(/\d{2}:\d{2}\s*[-~]\s*\d{2}:\d{2}/)).toBeNull();
   });
 });

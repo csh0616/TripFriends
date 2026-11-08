@@ -41,7 +41,7 @@ test('T10_S14_PM2_Google_영업시간이_보이면_미확인이어도_g_slot이_
   happyServer().on(R.answer, json(200, batch({ candidates: places.map((p) => ({ place: p, why: `이유 ${p.id}` })) })));
   await toP2();
   const card = await screen.findByTestId('candidate-card-D02');
-  expect(within(card).getByText(/11:00–14:00.*17:00–22:00/)).toBeTruthy(); // TASK-011 review 20번 줄: 엔 대시 (두 범위 사이 표기는 질문)
+  expect(within(card).getByText('11:00–14:00 · 17:00–22:00')).toBeTruthy(); // TASK-011 §9 Q7·Q8 (승인)
   expect(within(card).getByTestId('g-slot')).toBeTruthy();
 });
 

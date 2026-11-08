@@ -8,13 +8,14 @@
 //   읽기만 줄 `course-row-{seq}` 그대로. 이름 줄 `course-row-name-{seq}`(이름 + 칩), 보조 줄 `course-row-sub-{seq}`(지금 이름 그대로)
 //     칩은 미확인·모름만 이름 줄 안. 확인됨 칩은 없다. 보조 줄 글자는 한 줄(numberOfLines 1)
 //   읽기만 화면에 동선 그림(`route-diagram`) 없음, 주황 버튼 없음
+//   §9 v1.1: Q10 curated 시간대 줄 -> 이름 줄에 "추천 시간대", 늘 열림 -> 칩 없이 "늘 열려 있어" · Q11 안내 "지금은 보기만 할 수 있어"
 import { act, render, screen, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { COLORS } from '../test-support/design-table';
 import { FakeServer, json } from '../test-support/fake-server';
 import { resetDevice, tap } from '../test-support/planning-driver';
-import { course, relaxed, session, SID } from '../test-support/planning-fixtures';
+import { course, hoursFact, relaxed, session, SID } from '../test-support/planning-fixtures';
 import { buttonsFilledWith, isInside, noFill, pressableOf, styleOf, type Host } from '../test-support/screen-tree';
 
 jest.mock('expo-constants', () => {
@@ -47,10 +48,13 @@ const FOUR = {
 const base = relaxed('opt-3');
 const MIXED = relaxed('opt-3', {
   items: [
-    { ...base.items[0], seq: 1, hours_status: 'confirmed' as const },
-    { ...base.items[1], seq: 2, hours_status: 'unverified' as const },
-    { ...base.items[0], seq: 3, place_id: 'D05', name: '모르는 가게', hours_status: 'unknown' as const },
-    { ...base.items[2], seq: 4, hours_status: 'confirmed' as const }, // 고정 일정 · 이동 48분
+    { ...base.items[0], seq: 1, hours_status: 'confirmed' as const, facts: [hoursFact('confirmed')] },
+    { ...base.items[1], seq: 2, hours_status: 'unverified' as const, facts: [hoursFact('unverified')] },
+    { ...base.items[0], seq: 3, place_id: 'D05', name: '모르는 가게', hours_status: 'unknown' as const, facts: [hoursFact('unknown')] },
+    { ...base.items[2], seq: 4, hours_status: 'confirmed' as const, facts: [hoursFact('confirmed')] }, // 고정 일정 · 이동 48분
+    // §9 Q10: 밤거리(curated 시간대)·늘 열림
+    { ...base.items[0], seq: 5, place_id: 'D06', name: '밤 골목', hours_status: 'confirmed' as const, facts: [hoursFact('confirmed', { source_type: 'curated', value: '17:00-24:00' })] },
+    { ...base.items[0], seq: 6, place_id: 'D07', name: '작은 공원', hours_status: 'confirmed' as const, facts: [hoursFact('confirmed', { source_type: 'curated', value: '00:00-24:00' })] },
   ],
 });
 
@@ -164,7 +168,7 @@ describe('A3 읽기만 칩은 미확인·모름만, 이름 줄 오른쪽', () =>
     expect(within(screen.getByTestId('course-row-name-3')).getByText('모르는 가게')).toBeTruthy();
   });
 
-  test.each([1, 2, 3, 4])('T11_A3_%i번_줄_보조_줄은_한_줄(넘치면_…)', async (seq) => {
+  test.each([1, 2, 3, 4, 5, 6])('T11_A3_%i번_줄_보조_줄은_한_줄(넘치면_…)', async (seq) => {
     await openReadonly();
     const texts = (screen.getByTestId(`course-row-sub-${seq}`) as unknown as Host).queryAll((h) => h.type === 'Text');
     expect(texts.length).toBeGreaterThan(0);
@@ -195,5 +199,25 @@ describe('A3 읽기만 화면 가드레일', () => {
     const view = await openReadonly();
     for (const item of MIXED.items) expect(within(view).getByTestId(`course-row-${item.seq}`)).toBeTruthy();
     expect(isInside(screen.getByTestId('course-row-1') as unknown as Host, view as unknown as Host)).toBe(true);
+  });
+});
+
+describe('§9 Q10·Q11 읽기만', () => {
+  test('T11_Q10_읽기만_curated_시간대_줄은_이름_줄에_추천_시간대', async () => {
+    await openReadonly();
+    expect(within(screen.getByTestId('course-row-name-5')).getByText('추천 시간대')).toBeTruthy();
+    expect(within(screen.getByTestId('course-row-5')).queryByText('확인됨')).toBeNull();
+  });
+
+  test('T11_Q10_읽기만_늘_열림_줄은_칩_없이_늘_열려_있어', async () => {
+    await openReadonly();
+    const row = within(screen.getByTestId('course-row-6'));
+    for (const chip of ['확인됨', '미확인', '모름', '추천 시간대']) expect(row.queryByText(chip)).toBeNull();
+    expect(row.getByText(/늘 열려 있어/)).toBeTruthy();
+  });
+
+  test('T11_Q11_읽기만_안내는_지금은_보기만_할_수_있어', async () => {
+    const view = await openReadonly();
+    expect(within(view).getByText('지금은 보기만 할 수 있어')).toBeTruthy();
   });
 });

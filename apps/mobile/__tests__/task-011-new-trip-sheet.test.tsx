@@ -9,6 +9,7 @@
 //   버튼 [새로 만들기] `new-trip-confirm` -> onNewTrip 한 번 / [그대로 둘게] `new-trip-keep` -> 시트 닫힘, 아무 일 없음
 //   빨강 안 씀: 시트 안 어디에도 danger 색(바탕·글자·테두리)이 없다
 //   빈 첫 화면 [여행 만들기]는 시트 없이 바로 SC-01 (TASK-010 피드백 3 그대로)
+//   §9 Q12: [새로 만들기]가 주 버튼(주황), [그대로 둘게]는 보조(주황 아님). 바깥 어두운 곳 `new-trip-sheet-scrim`을 누르면 [그대로 둘게]와 같다
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,7 +20,7 @@ import { TripDays } from '@/trips/trip-days';
 import { COLORS } from '../test-support/design-table';
 import { apiError, FakeServer, json } from '../test-support/fake-server';
 import { resetDevice } from '../test-support/planning-driver';
-import { pressableOf, styleOf, type Host } from '../test-support/screen-tree';
+import { buttonsFilledWith, pressableOf, styleOf, type Host } from '../test-support/screen-tree';
 
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
@@ -173,6 +174,31 @@ describe('C1 [새 여행 만들기] -> 확인 시트', () => {
     await showDays(() => {});
     await press('new-trip');
     expect(reachHeight(pressableOf(screen.getByTestId(id) as unknown as Host))).toBeGreaterThanOrEqual(control['touch-min']);
+  });
+});
+
+describe('§9 Q12 주 버튼과 바깥', () => {
+  test('T11_Q12_새로_만들기는_주황_주_버튼', async () => {
+    await showDays(() => {});
+    await press('new-trip');
+    expect(String(styleOf(pressableOf(screen.getByTestId('new-trip-confirm') as unknown as Host)).backgroundColor).toUpperCase()).toBe(COLORS.brand);
+  });
+
+  test('T11_Q12_그대로_둘게는_주황이_아니다_시트_안_주황은_하나', async () => {
+    await showDays(() => {});
+    await press('new-trip');
+    expect(String(styleOf(pressableOf(screen.getByTestId('new-trip-keep') as unknown as Host)).backgroundColor).toUpperCase()).not.toBe(COLORS.brand);
+    expect(buttonsFilledWith(COLORS.brand, screen.getByTestId('new-trip-sheet') as unknown as Host)).toHaveLength(1);
+  });
+
+  test('T11_Q12_바깥을_누르면_그대로_둘게와_같다', async () => {
+    const onNewTrip = jest.fn();
+    await showDays(onNewTrip);
+    await press('new-trip');
+    await press('new-trip-sheet-scrim');
+    expect(onNewTrip).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('new-trip-sheet')).toBeNull();
+    expect(screen.getByTestId('day-row-day-t1')).toBeTruthy();
   });
 });
 
