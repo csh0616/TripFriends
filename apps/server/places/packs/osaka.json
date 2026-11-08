@@ -46,6 +46,7 @@
     "야경",
     "대표"
    ],
+   "open_space": true,
    "place_id": "ChIJg2DcJhXnAGARCbeAHoZrPeQ"
   },
   {
@@ -69,6 +70,7 @@
     "사진",
     "대표"
    ],
+   "open_space": true,
    "place_id": "ChIJ6XHOkxTnAGARvyn92D4gWVs"
   },
   {
@@ -93,6 +95,7 @@
     "옛거리",
     "조용"
    ],
+   "open_space": true,
    "place_id": "ChIJY4ZQxRTnAGAR0mjfWQwO7ho"
   },
   {
@@ -442,6 +445,13 @@
     "골목",
     "밤"
    ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
    "place_id": "ChIJG8GPFGrnAGARL-25AQZO3wM"
   },
   {
@@ -465,6 +475,7 @@
     "레트로",
     "골목"
    ],
+   "open_space": true,
    "place_id": "ChIJV6JXdmDnAGAR-9a4atjXsTY"
   },
   {
@@ -623,6 +634,7 @@
     "빈티지",
     "스트릿"
    ],
+   "open_space": true,
    "place_id": "ChIJby5T_xbnAGARF39mR8GVhdc"
   },
   {
@@ -736,6 +748,7 @@
     "장미",
     "조용"
    ],
+   "open_space": true,
    "place_id": "ChIJqWEt-fvmAGARjB6FHsOgvtI"
   },
   {
@@ -757,6 +770,13 @@
    "mood_tags": [
     "강변",
     "밤거리"
+   ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
    ],
    "place_id": "ChIJ0T43_xTnAGARnvKjZXmrFDw"
   },
@@ -936,6 +956,7 @@
     "공원",
     "새 명소"
    ],
+   "open_space": true,
    "place_id": "ChIJsUzNAQDnAGARvwF0BsUBPZo"
   },
   {
@@ -959,6 +980,7 @@
     "카페",
     "레트로"
    ],
+   "open_space": true,
    "place_id": "ChIJV2R0lpXmAGAR0isU5tWq7pU"
   },
   {
@@ -1048,6 +1070,7 @@
     "장미",
     "산책"
    ],
+   "open_space": true,
    "place_id": "ChIJPXiMg97mAGARsiccqVj_Os8"
   },
   {
@@ -1184,6 +1207,13 @@
     "이자카야",
     "골목"
    ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
    "place_id": "ChIJD_IxlOzmAGARsV1m5x-7eCs"
   },
   {
@@ -1206,6 +1236,13 @@
     "술집",
     "활기"
    ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
    "place_id": "ChIJIQPNF5PmAGARw-MkeHW_4mA"
   },
   {
@@ -1227,6 +1264,13 @@
    "mood_tags": [
     "바",
     "고급"
+   ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
    ],
    "place_id": "ChIJRcIjfe3mAGARyfyG6oGPTew"
   },
@@ -1274,6 +1318,7 @@
     "산책",
     "벚꽃"
    ],
+   "open_space": true,
    "place_id": "ChIJVVVld8ngAGARi9mE-a6e9mc"
   },
   {
