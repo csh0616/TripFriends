@@ -32,13 +32,16 @@ export const COLORS: Record<string, string> = {
   'sel-bg': '#FFF1E8',
   'field-error-bg': '#FFEDD5',
   'field-error': '#C2410C',
+  // §4-10 여행 만들기 부품 (TASK-010 §13 질문 3): 도시 표지 = cat-landmark 별명
+  'city-osaka-a': '#87919C',
+  'city-osaka-b': '#576069',
 };
 
 // §4-3 글꼴 이름 (Q15)
 export const FONTS: Record<string, string> = { 'font-text': 'Noto Sans KR', 'font-mono': 'DM Mono' };
 
 // §4-2 크기 (필드 이름 size·lineHeight·weight·family는 §12-3에서 계약으로 승인)
-export const TYPE: Record<string, { size: number; lineHeight: number; weight: number; family?: string }> = {
+export const TYPE: Record<string, { size: number; lineHeight: number; weight: number; family?: string; color?: string }> = {
   'num-xl': { size: 44, lineHeight: 44, weight: 500, family: 'DM Mono' },
   title: { size: 22, lineHeight: 30, weight: 700 },
   heading: { size: 17, lineHeight: 24, weight: 600 },
@@ -46,6 +49,9 @@ export const TYPE: Record<string, { size: number; lineHeight: number; weight: nu
   caption: { size: 13, lineHeight: 18, weight: 500 },
   label: { size: 12, lineHeight: 16, weight: 600 },
   'num-md': { size: 14, lineHeight: 20, weight: 500, family: 'DM Mono' },
+  // §4-10 출처 글자 (TASK-010 §13 질문 3)
+  src: { size: 12, lineHeight: 16, weight: 500 },
+  'src-google': { size: 12, lineHeight: 16, weight: 400, family: 'Roboto', color: '#5E5E5E' },
 };
 
 // §4-3 숫자 토큰 (Q15 r-full·icon-stroke, Q28 r-xl·r-tail)
@@ -95,12 +101,32 @@ export const NUMBERS: Record<string, number> = {
   field: 64,
   'notice-limit': 16, // 넘침 안내 상자 모서리
   'sheet-form': 500,
+  // §4-10 여행 만들기 부품 (TASK-010 §13 질문 3)
+  'sheet-cal': 626,
+  'cal-band': 38,
+  'cal-today-dot': 4,
+  'cal-head': 28,
+  'cal-slot': 60,
+  'input-icon': 20,
+  'add-dot': 36,
+  'lodge-thumb': 44,
+  'list-max': 324,
+  'g-footer': 34,
 };
 
 // §4-6 목록 값: route-dash = 선 길이, 빈 길이
 export const LISTS: Record<string, number[]> = {
   'route-dash': [10, 8],
   'tab-day': [36, 44], // §4-7: [보이는 높이, 누르는 높이]
+  // §4-10 (TASK-010 §13 질문 3): 크기 두 개는 [폭, 높이] 또는 [보이는, 누르는]
+  'cal-cell': [50, 44],
+  'cal-disc': [38, 2], // [원 지름, 고리 굵기]
+  'cal-off': [40, 40],
+  'cal-nav': [36, 44],
+  'g-slot': [16, 19], // [가장 낮은, 가장 높은] 높이
+  'cover-lg': [316, 316],
+  'cover-tile': [120, 144],
+  'cover-banner': [350, 88],
 };
 
 // §4-3 글자 값
@@ -110,7 +136,8 @@ export const STRINGS: Record<string, string> = {
   'sh-sheet': '0 -10px 32px rgba(26,26,26,.16)',
   'sh-raise': '0 1px 2px rgba(26,26,26,.08), 0 2px 8px rgba(26,26,26,.08)', // v2.3, TASK-005 §9 Q14
   'ease-out': 'cubic-bezier(.2,.8,.2,1)',
-  'sel-ring': 'inset 0 0 0 2px #FF5A00', // §4-7: 안쪽 2px brand (§4-3 선 표기 'inset 0 0 0 1px'와 같은 모양)
+  'sel-ring': 'inset 0 0 0 2px #FF5A00',
+  'input-focus': 'inset 0 0 0 2px #1A1A1A', // §4-10: 안쪽 2px ink-strong // §4-7: 안쪽 2px brand (§4-3 선 표기 'inset 0 0 0 1px'와 같은 모양)
   scrim: 'rgba(26,26,26,0.40)', // §4-1 v2.2, TASK-004 §13-3 #2
 };
 

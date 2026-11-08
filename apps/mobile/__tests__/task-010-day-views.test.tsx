@@ -13,7 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { FakeServer, json } from '../test-support/fake-server';
 import { resetDevice, tap } from '../test-support/planning-driver';
-import { relaxed, session, SID } from '../test-support/planning-fixtures';
+import { course, relaxed, session, SID } from '../test-support/planning-fixtures';
 
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
@@ -149,5 +149,21 @@ describe('§12 답 3 계획 대화에서 나가기', () => {
     await waitFor(() => expect(server.sent(`GET /planning/${SID}`).length).toBeGreaterThan(before));
     await settleAll();
     expect(server.sent('POST /days/day-t4/planning')).toHaveLength(1);
+  });
+});
+
+// ---------- §13 질문 답 2: 코스안(P3)에서도 "‹ 날짜" ----------
+
+describe('§13 코스안에서 나가기', () => {
+  test('T10_S13_Q2_코스안_머리에도_‹_날짜_누르면_날짜_목록', async () => {
+    // 그날 세션이 코스안 단계에 있다 (자동 모드 시작 응답 = CourseResult)
+    server.on('POST /days/day-t4/planning', json(201, course())).on(`GET /planning/${SID}`, json(200, course()));
+    await startHome();
+    await tap(await screen.findByTestId('day-row-day-t4'));
+    await screen.findByTestId('option-relaxed');
+    const back = await screen.findByTestId('header-back');
+    expect(within(back).getByText(/‹\s*날짜/)).toBeTruthy();
+    await tap(back);
+    expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
   });
 });

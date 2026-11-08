@@ -132,6 +132,35 @@ describe('G1', () => {
     expect(readFileSync(join(SRC, LAYOUT_FILE), 'utf8')).not.toMatch(new RegExp(`\\b${key}\\s*:\\s*\\d`));
   });
 
+  // TASK-010 §13 질문 3: §4-10 여행 만들기 부품도 tokens.json에서 읽는다. layout.ts에 숫자로 적지 않는다
+  test.each([
+    ['sheetCal', 'sheet-cal'],
+    ['calCellW', 'cal-cell'],
+    ['calCellH', 'cal-cell'],
+    ['calDisc', 'cal-disc'],
+    ['calRing', 'cal-disc'],
+    ['calOff', 'cal-off'],
+    ['calBand', 'cal-band'],
+    ['calTodayDot', 'cal-today-dot'],
+    ['calHead', 'cal-head'],
+    ['calNav', 'cal-nav'],
+    ['calSlot', 'cal-slot'],
+    ['coverTile', 'cover-tile'],
+    ['coverBanner', 'cover-banner'],
+    ['addDot', 'add-dot'],
+    ['lodgeThumb', 'lodge-thumb'],
+    ['listMax', 'list-max'],
+    ['googleSlot', 'g-slot'],
+    ['googleFooter', 'g-footer'],
+  ])('G33c_S13_여행_만들기_토큰_%s(%s)는_layout_ts에_숫자로_적지_않는다', (key) => {
+    expect(readFileSync(join(SRC, LAYOUT_FILE), 'utf8')).not.toMatch(new RegExp(`\\b${key}\\s*:\\s*[\\d\\[]`));
+  });
+
+  test('G33d_S13_Google_글자_색은_화면_소스에_hex로_없다', () => {
+    const files = sourceFiles().filter((f) => f.path !== PLACEHOLDER_FILE);
+    expect(hits(files, /#5E5E5E\b/i)).toEqual([]);
+  });
+
   test('G33b_E1_고르기_색은_화면_소스에_hex로_없다_토큰에서_읽는다', () => {
     // sel-bg·field-error-bg·field-error는 다른 색의 별명이라 값이 같다. 화면 소스(placeholderFor 예외 파일 밖)에 그 값을 직접 쓰지 않는다
     const files = sourceFiles().filter((f) => f.path !== PLACEHOLDER_FILE);

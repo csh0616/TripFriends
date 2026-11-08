@@ -327,3 +327,29 @@ describe('G3 Roboto', () => {
     expect(Object.keys(fontAssets)).toContain('Roboto_400Regular');
   });
 });
+
+// ---------- §13 O4 늘 열림·우리가 정한 시간대 ----------
+
+describe('§13 O4 열린 장소 글자', () => {
+  const hoursText = (fact: object) => {
+    const facts = [{ field: 'stay_min', value: '{}', status: 'confirmed', source_type: 'curated' }, fact];
+    return require('@/lib/today-hours-text').todayHoursText(facts as never) as { text: string; chip: string };
+  };
+  const sourceLabel = (type: string): string => require('@/lib/source-label').sourceLabel(type);
+
+  test('T10_S13_O4_늘_열림은_늘_열려_있어_확인됨_출처_Tripfriends', () => {
+    const found = hoursText({ field: 'opening_hours', value: '00:00-24:00', status: 'confirmed', source_type: 'curated', source_url: null, checked_at: null });
+    expect(found).toEqual({ text: '늘 열려 있어', chip: 'confirmed' });
+    expect(sourceLabel('curated')).toBe('Tripfriends');
+  });
+
+  test('T10_S13_O4_우리가_정한_시간대는_시각_그대로_확인됨', () => {
+    const found = hoursText({ field: 'opening_hours', value: '17:00-24:00', status: 'confirmed', source_type: 'curated', source_url: null, checked_at: null });
+    expect(found).toEqual({ text: '17:00-24:00', chip: 'confirmed' });
+  });
+
+  test('T10_S13_O4_다른_시각은_전과_같다', () => {
+    expect(hoursText({ field: 'opening_hours', value: '06:00-22:00', status: 'confirmed', source_type: 'google', source_url: null, checked_at: null })).toEqual({ text: '06:00-22:00', chip: 'confirmed' });
+    expect(hoursText({ field: 'opening_hours', value: null, status: 'unknown', source_type: 'google', source_url: null, checked_at: null })).toEqual({ text: '영업시간 모름', chip: 'unknown' });
+  });
+});
