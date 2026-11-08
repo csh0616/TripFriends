@@ -20,6 +20,7 @@ import { SecondaryButton } from '@/components/planning/secondary-button';
 import { SosButton } from '@/components/planning/sos-button';
 import { SosSheet } from '@/components/planning/sos-sheet';
 import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBOUNCE_MS, toMinutes } from '@/lib/demo-clock';
+import { cityClock } from '@/lib/calendar';
 import { delayedPosition } from '@/lib/fake-position';
 import { acceptRequest, checkRequest, dismissRequest, nowRequest, visitCheckRequest, type NowCard, type NowParams, type NowView } from '@/lib/now-api';
 import { send, type DaySummary, type Request, type Result } from '@/lib/planning-api';
@@ -27,7 +28,14 @@ import { layout } from '@/planning/layout';
 import { color, control, radius, shadow, space, text } from '@/planning/theme';
 
 /** 기기에 저장해 다시 켜도 이 화면으로 돌아오는 값 (§11 Q16, §12 R10) */
-export type NowRecord = { day_id: string; day: DaySummary; at: string; demo: boolean };
+export type NowRecord = {
+  day_id: string;
+  day: DaySummary;
+  at: string;
+  demo: boolean;
+  /** TASK-010 C4·C7: 실제 여행의 오늘. 시계는 도시 시간대의 지금, 위치·데모 시계·데모 버튼 없음. day는 첫 응답 전까지의 임시 값 */
+  live?: boolean;
+};
 
 const OFFLINE_BAND = '연결이 안 돼, 저장된 일정만 보여';
 const OOPS_BAND = '잠깐 문제가 생겼어';
@@ -40,6 +48,8 @@ const ACCEPTED_NOTE = '바꾼 일정으로 안내할게'; // §11 Q15: 서버 re
 const STALE_NOTE = '시간이 지나서 다시 찾아봤어'; // §6: accept 409 stale 뒤
 const DELAY_STEP_MIN = 10; // C2
 const DELAY_MAX_MIN = 60;
+const LIVE_END_MIN = 23 * 60 + 59; // 실제 여행의 오늘은 하루 전체가 시계 범위
+const LIVE_TICK_MS = 30000; // 실제 시계를 다시 읽는 간격
 
 /** 시각이 바뀔 때는 POST check(위치는 본문), 재실행·되돌림은 GET now (위치 없음). C1 */
 type Call = { kind: 'now' | 'check'; params: NowParams };
@@ -109,13 +119,16 @@ export function TripNowScreen({
   /** 저장값을 지우고 S0로 (프로필 [처음부터 다시], /now 404 day) */
   onExit: () => void;
 }) {
-  const { day } = record;
+  const live = record.live === true;
   const insets = useSafeAreaInsets();
   const { width, height: windowHeight } = useWindowDimensions();
-  const [startMin, endMin] = [toMinutes(day.start), toMinutes(day.end)];
+
+  const [view, setView] = useState<NowView | null>(null);
+  // 실제 여행의 오늘은 첫 응답의 day(서버가 정한 하루 요약)를 쓴다. 그 전까지는 임시 값
+  const day = live && view ? view.day : record.day;
+  const [startMin, endMin] = live ? [0, LIVE_END_MIN] : [toMinutes(day.start), toMinutes(day.end)];
 
   const [minutes, setMinutes] = useState(() => Math.min(endMin, Math.max(startMin, minutesOfAt(record.at) ?? startMin)));
-  const [view, setView] = useState<NowView | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [demoOpen, setDemoOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -162,6 +175,7 @@ export function TripNowScreen({
   /** 코스대로 걷는 위치 (B7). 핀이 아직 없으면 보내지 않는다 */
   const positionFor = useCallback(
     (when: string): { lat?: number; lng?: number } => {
+      if (live) return {}; // C4: 실제 위치는 아직 없다. 위치가 필요한 늦어짐 감지는 꺼져 있다
       const now = viewRef.current;
       if (!now || now.pins.length === 0) return {};
       // C2·§14: 지연 중이면 길 위가 아니라 "아직 머무는" 장소 (일정 안 = 그 장소, 이동 중 = 앞 장소, 첫 일정 전 = 숙소)
@@ -172,7 +186,7 @@ export function TripNowScreen({
       });
       return spot ? { lat: spot.lat, lng: spot.lng } : {};
     },
-    [day.lodging, day.date],
+    [day.lodging, day.date, live],
   );
 
   /** 응답(성공·실패)을 화면에 반영한다. 반영했으면 true */
@@ -272,6 +286,17 @@ export function TripNowScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [at, delay]);
 
+  // 실제 여행의 오늘: 도시 시간대의 지금 시각을 따라간다 (C4). 시각이 바뀌면 아래 효과가 서버에 다시 묻는다
+  useEffect(() => {
+    if (!live) return undefined;
+    const timer = setInterval(() => {
+      const clock = cityClock(Date.now());
+      const next = clock.date === record.day.date ? clock.minutes : clock.date > record.day.date ? LIVE_END_MIN : 0;
+      setMinutes(Math.min(LIVE_END_MIN, next));
+    }, LIVE_TICK_MS);
+    return () => clearInterval(timer);
+  }, [live, record.day.date]);
+
   // 재생: 1초에 5분. 하루 끝에서 멈춘다 (§11 Q22)
   useEffect(() => {
     if (!playing) return undefined;
@@ -342,7 +367,7 @@ export function TripNowScreen({
   return (
     <View testID="trip-now-screen" style={styles.root}>
       <View style={styles.area} onLayout={(event) => setAreaHeight(event.nativeEvent.layout.height)}>
-        {mapFailed ? (
+        {live && view === null ? null : mapFailed ? (
           <View testID="map-fallback" style={[styles.fallback, { paddingTop: bandTop + space['space-10'] }]}>
             <Text style={text('body', 'muted')}>{MAP_FAILED}</Text>
             <RouteDiagram
@@ -423,7 +448,7 @@ export function TripNowScreen({
 
         {/* 시트 위에 떠 있는 것: 데모 시계 패널·버튼, [내 위치] */}
         <Animated.View pointerEvents="box-none" style={[styles.float, floatStyle]}>
-          {record.demo || __DEV__ ? (
+          {!live && (record.demo || __DEV__) ? (
             demoOpen ? (
               <DemoPanel
                 start={day.start}
@@ -442,7 +467,7 @@ export function TripNowScreen({
           {/* F3: 시트가 가장 높을 때 [데모]·[내 위치]는 숨긴다 (열린 패널은 시트 뒤로 간다) */}
           {sheetIndex < snapPoints.length - 1 ? (
             <View pointerEvents="box-none" style={styles.floatRow}>
-              {record.demo || __DEV__ ? (
+              {!live && (record.demo || __DEV__) ? (
                 <SecondaryButton small testID="demo-toggle" label={demoOpen ? '데모 접기' : '데모'} onPress={() => setDemoOpen((now) => !now)} />
               ) : (
                 <View />
@@ -516,7 +541,7 @@ export function TripNowScreen({
         <View style={styles.profileOverlay}>
           <Pressable testID="profile-scrim" accessibilityLabel="닫기" style={StyleSheet.absoluteFill} onPress={() => setProfileOpen(false)} />
           <View testID="profile-sheet" style={styles.profileSheet}>
-            <SecondaryButton testID="profile-restart" label="처음부터 다시" onPress={onExit} />
+            <SecondaryButton testID="profile-restart" label={live ? '날짜 목록으로' : '처음부터 다시'} onPress={onExit} />
             <SecondaryButton testID="profile-close" label="닫기" onPress={() => setProfileOpen(false)} />
           </View>
         </View>

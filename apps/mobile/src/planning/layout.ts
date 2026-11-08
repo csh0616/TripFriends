@@ -78,6 +78,60 @@ export const layout = {
   selRing: 2, // sel-ring: 고른 칸 안쪽 고리 굵기 (색은 brand, 바탕 sel-bg = brand-soft)
   actionBarLine: 1, // action-bar 윗선 굵기 (문서에 없는 크기)
   radioDot: 12, // 고른 radio 안 채움 지름 (문서에 없는 크기)
+  // TASK-010 DESIGN-001 §4-10 여행 만들기 부품. tokens.json에는 넣지 않는다(위와 같은 이유), 문서 값 그대로
+  sheetCal: 626, // 달력 시트 높이 상한 (짧은 화면은 min(626, 화면 높이 - 48))
+  sheetCalMargin: 48,
+  calCellW: 50, // 날 칸 누르는 영역
+  calCellH: 44,
+  calDisc: 38, // 가는 날·오는 날 원
+  calRing: 2,
+  calOff: 40, // 고를 수 없는 날
+  calBand: 38, // 범위 띠
+  calTodayDot: 4,
+  calHead: 28, // 요일 줄
+  calNav: 36, // 달 넘기기 (누르는 영역은 touch-min)
+  calSlot: 60, // 안내 자리
+  calHandle: 20, // 시트 핸들 자리
+  calTitle: 44,
+  coverTile: [120, 144], // 도시 카드 폭·높이
+  coverBanner: [350, 88], // 여행 머리 표지
+  coverGlyphTile: 64,
+  coverGlyphBanner: 56,
+  coverGlyphLarge: 120,
+  coverLine: 2.4,
+  coverLineLarge: 3.4,
+  coverLineBanner: 2.2,
+  glyphFillOpacity: 0.24, // cat-glyph-fill: 흰색 24%
+  sunX: 38, // 해 중심 (도시 그림 파일의 160칸 좌표)
+  sunY: 42,
+  sunRadius: 13,
+  waveStroke: 2.5,
+  sunOpacity: 0.3, // city-pat: 해 흰색 30%
+  waveOpacity: [0.26, 0.2, 0.15], // 물결 세 겹
+  coverUnit: 160, // 도시 그림 파일의 좌표 칸 (316 = 160 x 1.975)
+  iconGrid: 24, // 그림 24칸
+  glyphLine: 1.75, // 장소 그림 선 (icon-stroke와 같음)
+  field: 64, // 날짜·시각·제목 입력 칸 높이
+  tabDay: 36, // 날 탭 보이는 높이 (누르는 영역 touch-min)
+  addDot: 36, // 담기 표시 원
+  listRow: 64, // 검색 결과 줄
+  listMax: 324, // 보이는 결과 5줄
+  listHairInset: 66, // 결과 줄 사이 선의 왼쪽
+  lodgeThumb: 44,
+  lodgeIcon: 24,
+  emptyDot: 44, // 결과 없음 원
+  otherDayPill: 28,
+  googleLogoWidth: 98, // GoogleMaps_Logo_Gray 원본 98x18 (높이 18, 비율 유지)
+  googleLogoHeight: 18,
+  googleSlot: 19, // g-slot / g-text 겉 높이
+  googleFooter: 34, // g-footer
+  googleFooterTop: 10,
+  googleFooterBottom: 5,
+  sheetForm: 500, // 고정 일정 입력 시트
+  rowPast: 68, // 날 줄 높이: 지난 날
+  rowPlanned: 84, // 계획 완료
+  inputFocus: 2, // input-focus 안쪽 굵기
+  fieldErrorLine: 2,
   // 누르는 영역 보강: 칩 36 -> 44
   chipSlop: (touchMin - chip) / 2,
 } as const;

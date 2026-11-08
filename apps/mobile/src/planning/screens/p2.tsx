@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { GoogleMark } from '@/components/google-mark';
 import { FriendBubble } from '@/components/planning/friend-bubble';
 import { DrawnRing } from '@/components/planning/drawn-ring';
 import { CheckIcon, CloseIcon, PlusIcon } from '@/components/planning/icons';
@@ -151,7 +152,7 @@ export function P2Screen({
           const hours = todayHoursText(place.facts);
           return (
             <View key={place.id} testID={`candidate-card-${place.id}`} style={{ width: cardWidth }}>
-              <PhotoPlaceholder category={place.category} style={styles.photo}>
+              <PhotoPlaceholder category={place.category} glyph={layout.coverGlyphLarge} style={styles.photo}>
                 <View style={styles.counter}>
                   <Text style={text('num-md')}>{`${pad2(index + 1)} / ${pad2(total)}`}</Text>
                 </View>
@@ -203,6 +204,8 @@ export function P2Screen({
                     lng: place.lng,
                   })}
                 </Text>
+                {/* TASK-010 §11 G2: 지도 없이 Google 값을 보여 주는 카드에는 Google Maps 로고 자리 */}
+                {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'google') ? <GoogleMark testID="g-slot" /> : null}
               </View>
             </View>
           );

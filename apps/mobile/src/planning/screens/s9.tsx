@@ -10,7 +10,12 @@ import { SecondaryButton } from '@/components/planning/secondary-button';
 import { layout } from '../layout';
 import { color, radius, space, text } from '../theme';
 
-export function S9Screen({ onRestart, onEnterNow }: { onRestart: () => void; onEnterNow: () => void }) {
+type Props =
+  | { onRestart: () => void; onEnterNow: () => void; onClose?: undefined }
+  // TASK-010: 실제 여행의 날이면 데모 버튼 없이 날짜 목록으로 돌아간다
+  | { onClose: () => void; onRestart?: undefined; onEnterNow?: undefined };
+
+export function S9Screen({ onRestart, onEnterNow, onClose }: Props) {
   return (
     <ScreenFrame>
       <View style={styles.center}>
@@ -20,9 +25,15 @@ export function S9Screen({ onRestart, onEnterNow }: { onRestart: () => void; onE
         <Text style={text('title')}>코스 저장했어</Text>
       </View>
       <View style={styles.actions}>
-        {/* TASK-006 B9: 데모 시계로 여행 중 화면을 본다 */}
-        <PrimaryButton label="여행 중 화면 보기(데모)" onPress={onEnterNow} />
-        <SecondaryButton label="처음부터" onPress={onRestart} />
+        {onClose ? (
+          <PrimaryButton testID="s9-close" label="날짜 목록으로" onPress={onClose} />
+        ) : (
+          <>
+            {/* TASK-006 B9: 데모 시계로 여행 중 화면을 본다 */}
+            <PrimaryButton label="여행 중 화면 보기(데모)" onPress={onEnterNow} />
+            <SecondaryButton label="처음부터" onPress={onRestart} />
+          </>
+        )}
       </View>
     </ScreenFrame>
   );

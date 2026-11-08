@@ -4,6 +4,8 @@ import { NotoSansKR_400Regular } from '@expo-google-fonts/noto-sans-kr/400Regula
 import { NotoSansKR_500Medium } from '@expo-google-fonts/noto-sans-kr/500Medium';
 import { NotoSansKR_600SemiBold } from '@expo-google-fonts/noto-sans-kr/600SemiBold';
 import { NotoSansKR_700Bold } from '@expo-google-fonts/noto-sans-kr/700Bold';
+// TASK-010 §11 G1·G3: "Google Maps" 글자는 Roboto 400. JS 글꼴 불러오기 (네이티브 모듈 추가 없음)
+import { Roboto_400Regular } from '@expo-google-fonts/roboto/400Regular';
 
 export const fontAssets = {
   NotoSansKR_400Regular,
@@ -11,4 +13,5 @@ export const fontAssets = {
   NotoSansKR_600SemiBold,
   NotoSansKR_700Bold,
   DMMono_500Medium,
+  Roboto_400Regular,
 };

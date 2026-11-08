@@ -20,14 +20,22 @@ export type StageResponse = PlanningSession | CandidateBatch | CourseResult | Pl
 
 export const REQUEST_TIMEOUT_MS = 10000;
 
-export type Request = { method: 'GET' | 'POST'; path: string; body?: unknown };
+export type Request = {
+  method: 'GET' | 'POST' | 'DELETE';
+  path: string;
+  body?: unknown;
+  /** TASK-010 B2: 여행 API는 X-Device-Id를 싣는다 */
+  headers?: Record<string, string>;
+  /** 기본 10초. 숙소 검색은 3초 (TASK-010 §6) */
+  timeoutMs?: number;
+};
 
 /** 실패 종류 (TASK-004 §7, §12 Q18·Q21). 끊김·시간 초과는 network, 모르는 모양은 server */
 export type Failure =
   | { kind: 'network' }
-  | { kind: 'invalid' }
+  | { kind: 'invalid'; field?: string } // TASK-010 §9 Q13: 400 VALIDATION_ERROR의 detail.field
   | { kind: 'not_found'; resource: string | null }
-  | { kind: 'conflict'; reason: string | null }
+  | { kind: 'conflict'; reason: string | null; code?: string } // code: 공통 오류 코드 (예: PLAN_EXISTS)
   | { kind: 'infeasible'; reason: string; blocking: string[] }
   | { kind: 'server' };
 
@@ -37,12 +45,19 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 
 function classify(status: number, body: unknown): Failure {
   const detail = isRecord(body) && isRecord(body.error) ? body.error.detail : undefined;
-  if (status === 400) return { kind: 'invalid' };
+  if (status === 400) {
+    const field = isRecord(detail) && typeof detail.field === 'string' ? detail.field : undefined;
+    return field === undefined ? { kind: 'invalid' } : { kind: 'invalid', field };
+  }
   if (status === 404) {
     const resource = isRecord(detail) && typeof detail.resource === 'string' ? detail.resource : null;
     return resource === null ? { kind: 'server' } : { kind: 'not_found', resource };
   }
-  if (status === 409) return { kind: 'conflict', reason: isRecord(detail) && typeof detail.reason === 'string' ? detail.reason : null };
+  if (status === 409) {
+    const reason = isRecord(detail) && typeof detail.reason === 'string' ? detail.reason : null;
+    const code = isRecord(body) && isRecord(body.error) && typeof body.error.code === 'string' ? body.error.code : undefined;
+    return code === undefined ? { kind: 'conflict', reason } : { kind: 'conflict', reason, code };
+  }
   // 미정(§13): detail.reason 없는 422는 아래 500 줄과 같다
   if (status === 422 && isRecord(detail) && typeof detail.reason === 'string') {
     const blocking = Array.isArray(detail.blocking) ? detail.blocking.map(String) : [];
@@ -62,13 +77,17 @@ export function send(request: Request, signals?: Set<AbortController>): Promise<
     try {
       response = await fetch(`${API_URL}${request.path}`, {
         method: request.method,
-        headers: request.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+        headers:
+          request.body === undefined && request.headers === undefined
+            ? undefined
+            : { ...(request.body === undefined ? {} : { 'Content-Type': 'application/json' }), ...request.headers },
         body: request.body === undefined ? undefined : JSON.stringify(request.body),
         signal: controller.signal,
       });
     } catch {
       return { ok: false, failure: { kind: 'network' } };
     }
+    if (response.status === 204) return { ok: true, data: null }; // DELETE는 본문이 없다
     let body: unknown;
     try {
       body = await response.json();
@@ -83,7 +102,7 @@ export function send(request: Request, signals?: Set<AbortController>): Promise<
     const timer = setTimeout(() => {
       resolve({ ok: false, failure: { kind: 'network' } });
       controller.abort();
-    }, REQUEST_TIMEOUT_MS);
+    }, request.timeoutMs ?? REQUEST_TIMEOUT_MS);
     call().then((result) => {
       clearTimeout(timer);
       signals?.delete(controller);

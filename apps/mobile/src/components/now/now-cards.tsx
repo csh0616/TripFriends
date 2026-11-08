@@ -12,7 +12,7 @@ import { sourceLabel } from '@/lib/source-label';
 import type { NowCard, NowCourseItem, NowFact, NowProposal, NowT06Proposal } from '@/lib/now-api';
 import { todayHoursText } from '@/lib/today-hours-text';
 import { layout } from '@/planning/layout';
-import { color, radius, space, text } from '@/planning/theme';
+import { color, googleText, radius, space, text } from '@/planning/theme';
 
 function FactChip({ facts }: { facts: NowCourseItem['facts'] }) {
   if (facts.length === 0) return null;
@@ -35,7 +35,8 @@ function FactLine({ fact }: { fact: NowFact }) {
     <View style={styles.titleRow}>
       <StatusChip status={fact.status} />
       <Text style={text('body')}>{shown.text}</Text>
-      <Text style={text('caption', 'muted')}>
+      {/* §11 G1: Google 출처 글자는 Roboto 400 (src-google). 번역하지 않는다 */}
+      <Text style={fact.source_type === 'google' ? googleText : text('caption', 'muted')}>
         {`${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`}
       </Text>
     </View>

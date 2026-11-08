@@ -2,6 +2,8 @@
 import type { TextStyle, ViewStyle } from 'react-native';
 import tokens from 'design-tokens';
 
+import { GOOGLE_TEXT_COLOUR } from '@/lib/placeholder-for';
+
 export const color = tokens.color;
 export const space = tokens.space;
 export const control = tokens.control;
@@ -57,3 +59,6 @@ export const shadow = {
   sheet: shadowFrom(tokens.shadow['sh-sheet']),
   raise: shadowFrom(tokens.shadow['sh-raise']),
 } as const;
+
+/** src-google (DESIGN-001 §4-10): "Google Maps" 글자. Roboto 400, 12/16, 줄바꿈 없음, 번역 금지 (TASK-010 §11 G1) */
+export const googleText: TextStyle = { ...text('label'), fontFamily: 'Roboto_400Regular', color: GOOGLE_TEXT_COLOUR };
