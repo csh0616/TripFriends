@@ -51,6 +51,19 @@ def test_T10_시드_헤더만_주면_그_기기의_current가_데모_여행이�
     assert "past" not in states(trip)
 
 
+def test_T10_시드_헤더만_주면_날_상태는_past_days_0과_같다_첫날_오늘_나머지_계획_전(osaka):
+    # PM 답 (11-09): past_days 없는 데모의 날 상태를 직접 본다.
+    # 근거: seed.py·§14 답 1 "데모 시계 = 첫날 + past_days" (값이 없으면 0과 같다, test_T10_S13_Q1_past_days_0과_선택값_없음은_같은_상태),
+    # §B6·§9 Q6 날 상태 (오늘 = today, 계획 전이어도) · 본문 없는 시드는 chosen이 아니라 고른 코스가 없다 -> 앞날은 planning
+    plain = seed(osaka, device=DEVICE)
+    zero = seed(osaka, {"past_days": 0}, OTHER)
+    assert plain.status_code == 201 and zero.status_code == 201, (plain.text, zero.text)
+    got = states(osaka.current(DEVICE).json())
+    assert got == ["today", "planning", "planning"]
+    assert got == states(osaka.current(OTHER).json())
+    assert got == [day["state"] for day in zero.json()["trip_days"]]
+
+
 def test_T10_시드_헤더로_붙여도_다른_기기에는_여행이_생기지_않는다(osaka):
     seed(osaka, {"past_days": 1}, DEVICE)
     assert osaka.current(OTHER).status_code == 404
