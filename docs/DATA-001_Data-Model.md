@@ -210,7 +210,7 @@ erDiagram
 | 테이블 | 핵심 열 | 규칙 |
 |---|---|---|
 | profiles | id | R1은 기기 ID로 시작, 로그인하면 계정으로 옮김 (FR-32). 전화번호·실명 없음 |
-| trips | city_code, start_date, end_date, lodging_place_id, status(`planning`/`active`/`done`) | city_code는 지역 팩 키 (NFR-15) |
+| trips | city_code, start_date, end_date, lodging_place_id, status(`active`/`archived`, 11-09 TASK-010 §9 Q2: 날의 진행 상태는 저장하지 않고 매번 계산) | city_code는 지역 팩 키 (NFR-15) |
 | trip_days | day, start_time, end_time, chosen_option_id | 하루 1행. 선택한 코스를 가리킴 |
 | fixed_events | start_at, end_at, place_id(없어도 됨) | **재조합 때 절대 지킴** (AC-05) |
 | must_visits | trip_id, place_id | 꼭 갈 곳 → 코스 계산의 고정 장소 |
@@ -219,7 +219,7 @@ erDiagram
 | 테이블 | 핵심 열 | 규칙 |
 |---|---|---|
 | places | name, category, lat/lng, crowd_level(1~5), price_level(1~4), mood_tags | 후보 추천·취향 추정에 쓰는 속성. 원문 리뷰·사진 복제 금지, 사진은 라이선스 확인된 것만 |
-| place_facts | field(`opening_hours`, `closed_days`, `stay_min`(머무는 시간 범위 `{min, typical, max}`, FR-07a), …), value, **status**(`confirmed`/`unverified`/`unknown`), **source_type**(`official`/`api`/`collected`/`user`/`estimate`/`demo`(개발용 가상 데이터, 11-05)), source_url, checked_at | 장소의 사실 값은 항상 여기서. 화면 신뢰 순서: official·user > collected > estimate > unknown (NFR-07) |
+| place_facts | field(`opening_hours`, `closed_days`, `stay_min`(머무는 시간 범위 `{min, typical, max}`, FR-07a), …), value, **status**(`confirmed`/`unverified`/`unknown`), **source_type**(`google`/`serper`/`curated`/`user`/`estimate`/`demo`(개발용 가상 데이터, 11-05). 11-09 ADR-015 §3-5가 정본, 이전 `official`/`api`/`collected`는 한국 기준), source_url, checked_at | 장소의 사실 값은 항상 여기서. 화면 신뢰 순서: official·user > collected > estimate > unknown (NFR-07) |
 
 ### C. 계획 대화 (FR-02~02c)
 | 테이블 | 핵심 열 | 규칙 |

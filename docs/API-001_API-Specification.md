@@ -28,7 +28,8 @@
 |---|---|---|---|
 | POST `/trips` | `{city_code, start_date, end_date, lodging_place_id?, must_visits: [{date, place_id}]}` (**꼭 갈 곳은 날마다**, 11-09 변경. 정본 TASK-010 §B) | 201 `Trip` (trip_days 포함) | FR-01 |
 | GET `/trips/{trip_id}` | — | `Trip` + 날짜별 선택 코스 | FR-33 |
-| POST `/trips/{trip_id}/fixed-events` | `{trip_day_id, title, start_at, end_at, place_id?}` | 201 `FixedEvent` | FR-01 |
+| POST `/trips/{trip_id}/fixed-events` | `{trip_day_id, title, start_at, end_at, place_id?}` | 201 `FixedEvent`. 계획을 고른 날이면 409 `PLAN_EXISTS` (TASK-010) | FR-01 |
+| DELETE `/fixed-events/{id}` | — | 204. 계획을 고른 날이면 409 `PLAN_EXISTS` | FR-01 (TASK-010) |
 | GET `/places/search?city_code&q` | 장소 이름 검색 (꼭 갈 곳, 도시 팩 안) | `Place[]` | FR-01 |
 | GET `/places/lodging-search?city_code&q` | 숙소 검색 (Google 실시간, TASK-010 §B5) | `{place_id, name, address_short}[]` | FR-01 |
 | GET `/trips/current` | 이 기기의 지금 여행 (R1은 하나) | `Trip` 또는 404 | FR-33 (TASK-010) |
