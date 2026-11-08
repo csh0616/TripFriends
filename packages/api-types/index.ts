@@ -581,6 +581,8 @@ export interface components {
             lat: number | null;
             /** Lng */
             lng: number | null;
+            /** Facts */
+            facts: components["schemas"]["Fact"][];
         };
         /** CourseResult */
         CourseResult: {
@@ -613,6 +615,18 @@ export interface components {
             /** Total Travel Min */
             total_travel_min: number;
         };
+        /**
+         * DayBrief
+         * @description 날짜 목록의 날 요약 (TASK-011 §9 Q2). 고른 코스의 마지막 줄 끝 · 장소가 있는 줄 수 · 이동 합계(분).
+         */
+        DayBrief: {
+            /** End Time */
+            end_time: string;
+            /** Place Count */
+            place_count: number;
+            /** Move Min */
+            move_min: number;
+        };
         /** DayFixed */
         DayFixed: {
             /** Place Id */
@@ -623,6 +637,13 @@ export interface components {
             start: string;
             /** End */
             end: string;
+        };
+        /** DayMust */
+        DayMust: {
+            /** Place Id */
+            place_id: string;
+            /** Name */
+            name: string;
         };
         /** DayMustVisit */
         DayMustVisit: {
@@ -1528,6 +1549,12 @@ export interface components {
             chosen_option_id: string | null;
             /** Fixed Events */
             fixed_events: components["schemas"]["FixedEvent-Output"][];
+            summary?: components["schemas"]["DayBrief"] | null;
+            /**
+             * Must Visits
+             * @default []
+             */
+            must_visits: components["schemas"]["DayMust"][];
         };
         /** ValidationError */
         ValidationError: {

@@ -55,12 +55,27 @@ class FixedEvent(BaseModel):
     place_id: str | None
 
 
+class DayBrief(BaseModel):
+    """날짜 목록의 날 요약 (TASK-011 §9 Q2). 고른 코스의 마지막 줄 끝 · 장소가 있는 줄 수 · 이동 합계(분)."""
+
+    end_time: str
+    place_count: int
+    move_min: int
+
+
+class DayMust(BaseModel):
+    place_id: str
+    name: str
+
+
 class TripDay(BaseModel):
     day_id: str
     date: date
     state: DayState
     chosen_option_id: str | None  # 그날 고른 코스. 없으면 null -> 앱은 계획 대화부터 (§9 Q6)
     fixed_events: list[FixedEvent]
+    summary: DayBrief | None = None  # 고른 코스가 있는 날만 (TASK-011 §9 Q2)
+    must_visits: list[DayMust] = []  # 넣은 순서, 이름은 도시 팩 장소 이름
 
 
 class Trip(BaseModel):
@@ -156,6 +171,16 @@ class _Store:
     day_trip: dict[str, str] = field(default_factory=dict)  # day_id -> trip_id
 
 
+def _brief(course: CourseResultOption) -> DayBrief | None:
+    if not course.items:
+        return None
+    return DayBrief(
+        end_time=course.items[-1].end,
+        place_count=sum(1 for item in course.items if item.place_id is not None),
+        move_min=course.total_travel_min,
+    )
+
+
 def _hhmm(moment: datetime, day: date) -> str:
     """도시 시간대 시각. 다음 날 00:00은 24:00 (그날 끝)."""
     if moment.date() > day:
@@ -190,6 +215,8 @@ class TripBook:
             chosen = self.planning.chosen_option(day_id)
             day = trip.start_date + timedelta(days=number)
             events = sorted((f for f in self._store.fixed.values() if f.trip_day_id == day_id), key=lambda f: f.start_at)
+            record = self.planning.get_day(day_id)
+            option = self.planning.get_option(chosen) if chosen else None
             days.append(
                 TripDay(
                     day_id=day_id,
@@ -197,6 +224,8 @@ class TripBook:
                     state=day_state(day, today, chosen is not None),
                     chosen_option_id=chosen,
                     fixed_events=[_fixed_view(f) for f in events],
+                    summary=_brief(option_view(option, record)) if option and record else None,
+                    must_visits=[DayMust(place_id=pid, name=record.places[pid].name) for pid in record.plan.must_visit] if record else [],
                 )
             )
         return Trip(

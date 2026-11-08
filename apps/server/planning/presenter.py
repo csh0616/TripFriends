@@ -252,12 +252,14 @@ def option_view(record: OptionRecord, day: DayRecord) -> CourseResultOption:
     """코스안 한 칸의 응답 모양. 코스안 카드(POST planning)와 고른 코스 읽기(GET /days/{id}/course)가 함께 쓴다."""
     titles = [f.title for f in sorted((f for f in day.plan.fixed if f.place_id is None), key=lambda f: (f.start, f.end))]
     untitled = iter(titles)
+    weekday = day.plan.date.weekday()
     items = [
         CourseItemView(
             **item.model_dump(),
             name=day.places[item.place_id].name if item.place_id else next(untitled),
             lat=day.places[item.place_id].lat if item.place_id else None,
             lng=day.places[item.place_id].lng if item.place_id else None,
+            facts=[_opening_fact(day.places[item.place_id], weekday, (day.sources or {}).get(item.place_id, "demo"))] if item.place_id else [],
         )
         for item in record.course.items
     ]

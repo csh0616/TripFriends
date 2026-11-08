@@ -196,6 +196,7 @@ class CourseItemView(CourseItem):
     name: str
     lat: float | None  # TASK-004 A8: 장소 좌표(표시용). 장소 없는 고정 일정이면 null (키는 있음)
     lng: float | None
+    facts: list["Fact"]  # TASK-011 §11 Q1: 여행 중 화면 코스 줄과 같은 모양. 장소가 없으면 []
 
 
 class DroppedView(Dropped):
