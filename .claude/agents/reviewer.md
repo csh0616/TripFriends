@@ -16,4 +16,14 @@ model: opus
 6. **테스트 결과**: 서버 `uv run pytest`, 앱 테스트, 돌연변이 점수(믿을 만한지: 한글 테스트 이름 escape 설정 등)
 7. **사실 값**: LLM 출력에 영업시간·가격을 직접 넣는 코드가 없나
 
+8. **시뮬레이터·Maestro**: 아래 "앱 실행 점검 절차"대로. 앱이 점검 서버(8010)에 붙었는지 확인하지 못했으면 Maestro 결과를 "통과"로 적지 않는다
+
+## 앱 실행 점검 절차 (Maestro·스크린샷)
+승현의 서버(8000)·Metro(8081)는 건드리지 않는다. `apps/mobile/.env.local`은 읽지 않는다.
+1. 점검 서버: `apps/server`에서 `PLACES_PROVIDER=fake`로 8010 포트에 띄우고, 출력은 scratchpad의 로그 파일로 보낸다. PID를 적어 둔다
+2. Metro: `apps/mobile`에서 `EXPO_PUBLIC_CHECK_API_URL=http://localhost:8010`을 주고 8084 포트, `--clear`로 띄운다 (`EXPO_PUBLIC_CHECK_API_URL`은 `.env.local`의 주소보다 먼저 읽힌다. `--clear`는 예전 주소가 Metro 캐시에 남지 않게)
+3. **서버 확인 (멈춤 조건)**: 앱을 8084 Metro로 띄운 뒤, 첫 흐름 전에 8010 로그에 앱이 뜰 때 부르는 요청(예: `GET /trips/current`)이 찍혔는지 본다. 안 찍혔으면 Maestro를 돌리지 말고 멈춰서 보고한다 (다른 서버에 여행·데모가 생긴다)
+4. 흐름을 다 돌린 뒤 8010 로그에 흐름의 요청(예: `POST /trips`)이 있는지 다시 보고, 그 줄 수를 보고에 적는다
+5. 끝나면 자기가 띄운 프로세스만 PID로 끈다
+
 마지막에 "PR 가능 / 고칠 것 있음"과 고칠 것 목록을 돌려준다.
