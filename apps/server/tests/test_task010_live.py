@@ -260,7 +260,10 @@ def test_T10_H4_계획_세션은_공급자가_모두_실패해도_멈추지_않�
     assert batch.status_code == 200, batch.text
     for c in batch.json()["candidates"]:
         fact = next(f for f in c["place"]["facts"] if f["field"] == "opening_hours")
-        assert fact["status"] in ("unverified", "unknown")  # 받은 값이 없으니 확인됨은 없다
+        # 받은 Google 값이 없으니 google 출처 확인됨은 없다. §13 O1·O2: 늘 열림·밤거리 시간대(curated)는 우리 값이라 확인됨
+        assert not (fact["source_type"] == "google" and fact["status"] == "confirmed"), fact
+        if fact["source_type"] != "curated":
+            assert fact["status"] in ("unverified", "unknown"), fact
 
 
 def today_course(osaka) -> tuple[dict, str]:  # noqa: F811

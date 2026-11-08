@@ -100,7 +100,7 @@ def test_T10_S13_O1_늘_열림은_curated_confirmed_00시_24시():
 
 def test_T10_S13_O1_엔진에는_하루_종일_열림_확인됨():
     place = engine_place("osaka-fake-park")
-    assert sorted(o.model_dump() for o in place.hours or []) == sorted(ALL_DAY, key=lambda o: o["weekday"])
+    assert sorted((o.model_dump() for o in place.hours or []), key=lambda o: (o["weekday"], o["open"], o["close"])) == sorted(ALL_DAY, key=lambda o: o["weekday"])
     assert place.hours_status == "confirmed"  # 영업 확인(T-05)은 확인됨이 아닌 곳에만 (TASK-008)
 
 
@@ -123,7 +123,7 @@ def test_T10_S13_O2_curated_hours는_그_시간대를_curated_confirmed로():
     assert (fact["source_type"], fact["status"]) == ("curated", "confirmed")
     assert fact["value"] == "17:00-24:00"
     place = engine_place("osaka-fake-night-street")
-    assert sorted(o.model_dump() for o in place.hours or []) == sorted(NIGHT, key=lambda o: o["weekday"])
+    assert sorted((o.model_dump() for o in place.hours or []), key=lambda o: (o["weekday"], o["open"], o["close"])) == sorted(NIGHT, key=lambda o: o["weekday"])
     assert place.hours_status == "confirmed"
 
 
