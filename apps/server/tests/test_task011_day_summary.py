@@ -6,12 +6,12 @@ Q5(고른 코스가 있는 날), DESIGN-001 §4-11(요약 글 "18:30 끝 · 8곳
 계약 (이 테스트가 정한 해석, 승인 대기 -> 질문 목록):
     GET /trips/current 의 trip_days[] 에 두 칸을 더한다 (기존 칸은 그대로)
         summary: 고른 코스가 있으면 {end_time, place_count, move_min}, 없으면 null(또는 칸 없음)
-            end_time = 고른 코스 마지막 줄의 end ("HH:MM") · place_count = 고른 코스 items 수 · move_min = total_travel_min
-            (GET /days/{id}/course 와 같은 값. 앱 읽기만 화면의 "N곳 · 이동 M분"과 같은 셈)
+            end_time = 고른 코스 마지막 줄의 end ("HH:MM") · place_count = 장소가 있는 줄 수(place_id 있음, §11 Q2: 장소 있는 고정 일정은 셈, 장소 없는 고정 일정은 안 셈) · move_min = total_travel_min
+            (GET /days/{id}/course 와 같은 값)
         must_visits: 그날 꼭 갈 곳 [{place_id, name}] (POST /trips 에 넣은 순서, 없으면 []). name = 도시 팩 장소 이름
     Q10 코스 줄(GET /days/{id}/course 의 items[], POST 계획 응답의 options[].items[])에 facts 를 더한다:
         facts = 여행 중 화면 NowCourseItem.facts 와 같은 Fact 모양 [{field, value, status, source_type, checked_at}]
-        영업시간 fact(field "opening_hours")의 status 는 기존 hours_status 와 같다. 장소 없는 고정 일정은 []
+        영업시간 fact(field "opening_hours")의 status 는 기존 hours_status 와 같다. 장소 없는 고정 일정은 [] (§11 Q1 승인)
 """
 
 from test_task010_trips import DEVICE, osaka  # noqa: F401 (픽스처)
@@ -53,7 +53,7 @@ def test_T11_Q2_summary_값은_고른_코스와_같다(osaka):  # noqa: F811
     course = course_of(osaka, day_id)
     summary = current_days(osaka)[0]["summary"]
     assert summary["end_time"] == course["items"][-1]["end"]
-    assert summary["place_count"] == len(course["items"])
+    assert summary["place_count"] == sum(1 for item in course["items"] if item["place_id"] is not None)
     assert summary["move_min"] == course["total_travel_min"]
 
 
@@ -184,3 +184,32 @@ def test_T11_Q10_장소_없는_고정_일정_줄은_facts_빈_목록(osaka):  # 
     fixed = [item for option in started.json()["options"] for item in option["items"] if item["is_fixed"] and item["place_id"] is None]
     assert fixed, started.json()
     assert all(item.get("facts") == [] for item in fixed)
+
+
+# ---------- §11 Q2 place_count 경계: 장소 없는 고정 일정은 안 센다, 장소 있는 고정 일정은 센다 ----------
+
+
+def selected_with_fixed(osaka, **fixed_extra) -> tuple[dict, dict]:  # noqa: F811
+    trip = osaka.make_trip()
+    assert osaka.add_fixed(trip, 0, "12:00", "13:00", **fixed_extra).status_code == 201
+    day_id = trip["trip_days"][0]["day_id"]
+    osaka.plan_and_select(day_id)
+    return course_of(osaka, day_id), current_days(osaka)[0]
+
+
+def test_T11_S11_Q2_장소_없는_고정_일정은_place_count에_안_센다(osaka):  # noqa: F811
+    course, day = selected_with_fixed(osaka)
+    placeless = [item for item in course["items"] if item["is_fixed"] and item["place_id"] is None]
+    assert len(placeless) == 1, course["items"]
+    summary = day["summary"]
+    assert summary["place_count"] == len(course["items"]) - 1
+    assert summary["end_time"] == course["items"][-1]["end"]
+    assert summary["move_min"] == course["total_travel_min"]
+
+
+def test_T11_S11_Q2_장소_있는_고정_일정은_place_count에_센다(osaka):  # noqa: F811
+    course, day = selected_with_fixed(osaka, place_id=KUROMON)
+    fixed = [item for item in course["items"] if item["is_fixed"]]
+    assert [item["place_id"] for item in fixed] == [KUROMON], course["items"]
+    summary = day["summary"]
+    assert summary["place_count"] == len(course["items"])

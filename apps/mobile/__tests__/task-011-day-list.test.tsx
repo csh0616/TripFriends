@@ -428,7 +428,7 @@ describe('§10 E1 주 버튼이 없으면 end-note', () => {
     await show(ALL_PLANNED, AT.before);
     const note = within(screen.getByTestId('end-note'));
     expect(note.getByText('3일 모두 정했어')).toBeTruthy();
-    expect(note.getByText(/^여행 첫날부터 아래에 \[?오늘 여행 보기\]? 버튼이 나와$/)).toBeTruthy();
+    expect(note.getByText('여행 첫날부터 아래에 \u2018오늘 여행 보기\u2019 버튼이 나와')).toBeTruthy(); // §11 Q4: 작은따옴표 U+2018·U+2019
   });
 
   test('T11_E1_날_수는_실제_값', async () => {

@@ -13,7 +13,7 @@
 //       §9 Q5: title "오사카 2박 3일"(하루면 "오사카 당일 여행", 끝난 뒤에도 그대로)
 //              dots = 날 순서대로 한 자리씩, 그날 고른 코스(chosen_option_id)가 있으면 ●, 없으면 ○ (오늘·지난 날 포함)
 //              line = "{오른쪽 말} · N일 중 K일 계획 완료", K = 고른 코스가 있는 날 수. 오른쪽 말 = 여행 전 "D-35" · 여행 중 "여행 중"
-//       §10 E2: 여행 끝 = ● 전부 + "여행 끝" ("다녀옴" 대체). 그 뒤 글은 질문 (line은 "여행 끝"으로 시작하는지만 본다)
+//       §10 E2·§11 Q3: 여행 끝 = ● 전부 + line "여행 끝"만 (계획 완료 수 없음)
 //   src/planning/format.ts (화면 글자 함수가 모인 곳. dayName이 이미 여기 있다)
 //     dayName(n): "N일째" (n = 1부터 세는 날 번호, 서버 day_number와 같다)
 //     timeRange(a, b): "a–b" (엔 대시 U+2013)
@@ -287,15 +287,14 @@ describe('A0 tripHeader: 머리 (task-011-review §2 5번 줄)', () => {
     const found = header(three(['past', 'past', 'past']), '2026-12-14');
     expect(found.title).toBe('오사카 2박 3일');
     expect(found.dots).toBe('●●●');
-    expect(found.line.startsWith('여행 끝')).toBe(true);
-    expect(found.line).not.toMatch(/다녀옴|D-|여행 중/);
+    expect(found.line).toBe('여행 끝');
   });
 
   test('T11_E2_고른_코스가_없던_날이_있어도_여행_끝이면_점_전부', () => {
     const list = [day(1, 'past', true), day(2, 'past', false), day(3, 'past', false)];
     const found = header(trip(list), '2027-03-01');
     expect(found.dots).toBe('●●●');
-    expect(found.line.startsWith('여행 끝')).toBe(true);
+    expect(found.line).toBe('여행 끝');
   });
 
   test('T11_Q5_하루_여행_제목은_오사카_당일_여행', () => {
