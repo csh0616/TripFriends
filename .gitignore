@@ -11,3 +11,6 @@ mutants/
 
 # Claude가 만든 초안·임시 파일 (저장소에 넣지 않음)
 Claude outputs/
+
+# 장소 캐시 (Google 값, TASK-010 §A2·ADR-015: git 밖)
+apps/server/.cache/

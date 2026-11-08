@@ -89,7 +89,7 @@ describe('G1', () => {
   });
 
   test('G04_B6_G1_예외_파일에는_표의_색이_실제로_있다_예외가_빈_허용이_아니다', () => {
-    expect(readFileSync(join(SRC, PLACEHOLDER_FILE), 'utf8')).toMatch(/#8FA3B8/i);
+    expect(readFileSync(join(SRC, PLACEHOLDER_FILE), 'utf8')).toMatch(/#476C94/i); // TASK-010 §C5: DESIGN-001 §4-8 food 밝은 끝
   });
 
   test('G05_B1_Q28_글자_크기_줄_높이_모서리_숫자는_어디에도_없다_layout도_예외_아님', () => {
@@ -116,6 +116,55 @@ describe('G1', () => {
   test('G32_Q28_높이_너비_테두리_숫자는_layout_ts_한_파일에만', () => {
     const files = sourceFiles().filter((f) => f.path !== LAYOUT_FILE);
     expect(hits(files, LAYOUT_LITERAL)).toEqual([]);
+  });
+
+  // TASK-010 §E1·§12 답 6: 고르기·입력 토큰(DESIGN-001 §4-7)은 tokens.json에서 읽는다. layout.ts에도 숫자로 적지 않는다
+  test.each([
+    ['radio', 'radio'],
+    ['actionBar', 'action-bar'],
+    ['rowAlt', 'row-alt'],
+    ['rowDrop', 'row-drop'],
+    ['thumbSm', 'thumb-sm'],
+    ['field', 'field'],
+    ['tabDay', 'tab-day'],
+    ['sheetForm', 'sheet-form'],
+  ])('G33a_E1_고르기_토큰_%s(%s)는_layout_ts에_숫자로_적지_않는다', (key) => {
+    expect(readFileSync(join(SRC, LAYOUT_FILE), 'utf8')).not.toMatch(new RegExp(`\\b${key}\\s*:\\s*\\d`));
+  });
+
+  // TASK-010 §13 질문 3: §4-10 여행 만들기 부품도 tokens.json에서 읽는다. layout.ts에 숫자로 적지 않는다
+  test.each([
+    ['sheetCal', 'sheet-cal'],
+    ['calCellW', 'cal-cell'],
+    ['calCellH', 'cal-cell'],
+    ['calDisc', 'cal-disc'],
+    ['calRing', 'cal-disc'],
+    ['calOff', 'cal-off'],
+    ['calBand', 'cal-band'],
+    ['calTodayDot', 'cal-today-dot'],
+    ['calHead', 'cal-head'],
+    ['calNav', 'cal-nav'],
+    ['calSlot', 'cal-slot'],
+    ['coverTile', 'cover-tile'],
+    ['coverBanner', 'cover-banner'],
+    ['addDot', 'add-dot'],
+    ['lodgeThumb', 'lodge-thumb'],
+    ['listMax', 'list-max'],
+    ['googleSlot', 'g-slot'],
+    ['googleFooter', 'g-footer'],
+  ])('G33c_S13_여행_만들기_토큰_%s(%s)는_layout_ts에_숫자로_적지_않는다', (key) => {
+    expect(readFileSync(join(SRC, LAYOUT_FILE), 'utf8')).not.toMatch(new RegExp(`\\b${key}\\s*:\\s*[\\d\\[]`));
+  });
+
+  test('G33d_S13_Google_글자_색은_화면_소스에_hex로_없다', () => {
+    const files = sourceFiles().filter((f) => f.path !== PLACEHOLDER_FILE);
+    expect(hits(files, /#5E5E5E\b/i)).toEqual([]);
+  });
+
+  test('G33b_E1_고르기_색은_화면_소스에_hex로_없다_토큰에서_읽는다', () => {
+    // sel-bg·field-error-bg·field-error는 다른 색의 별명이라 값이 같다. 화면 소스(placeholderFor 예외 파일 밖)에 그 값을 직접 쓰지 않는다
+    const files = sourceFiles().filter((f) => f.path !== PLACEHOLDER_FILE);
+    expect(hits(files, /#(FFF1E8|FFEDD5|C2410C)\b/i)).toEqual([]);
   });
 
   test.each([
@@ -443,9 +492,10 @@ describe('G7', () => {
 
 // ---------- §9 ----------
 
+// TASK-010 PM 답(11-09): 점검 전용 서버 주소(EXPO_PUBLIC_CHECK_API_URL)도 주소다. 그 밖의 EXPO_PUBLIC_ 변수(키 등)는 여전히 금지
 test('G30_S9_EXPO_PUBLIC_변수는_API_주소만', () => {
   const names = sourceFiles().flatMap((f) => f.text.match(/EXPO_PUBLIC_\w+/g) ?? []);
-  expect(new Set(names)).toEqual(new Set(['EXPO_PUBLIC_API_URL']));
+  expect([...new Set(names)].sort()).toEqual(['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_CHECK_API_URL']);
 });
 
 // ---------- §13 ----------

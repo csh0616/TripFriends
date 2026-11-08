@@ -23,3 +23,9 @@ export const MicIcon = (p: Props) => (
 export const LocateIcon = (p: Props) => (
   <Icon {...p} d="M12 3v3M12 18v3M3 12h3M18 12h3M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" />
 );
+
+// TASK-010 여행 만들기: 검색 칸·숙소·다음·알림
+export const SearchIcon = (p: Props) => <Icon {...p} d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5L20 20" />;
+export const HouseIcon = (p: Props) => <Icon {...p} d="M4 11l8-6.5 8 6.5M6 9.8V19h12V9.8M10 19v-5h4v5" />;
+export const NextIcon = (p: Props) => <Icon {...p} d="M9.5 5.5L16 12l-6.5 6.5" />;
+export const AlertIcon = (p: Props) => <Icon {...p} d="M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 8v5M12 16v.5" />;

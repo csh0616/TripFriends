@@ -7,8 +7,10 @@
 그래프 안에서 계산해야 알 수 있는데, 줄 함수가 "계산 -> 성공했을 때만 저장" 순서라 저장소는 그대로이고 상태 갱신도 없다.
 """
 
+import logging
 import threading
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 from langgraph.types import Command
@@ -34,6 +36,8 @@ from planning.schemas import (
 )
 from planning import presenter
 from planning.seed import prepare_demo_scenario, seed_demo
+
+log = logging.getLogger(__name__)
 
 # §10 Q24, §10-10 R3
 STATUS = {"NOT_FOUND": 404, "INVALID_REQUEST": 400, "STATE_CONFLICT": 409, "COURSE_INFEASIBLE": 422, "INTERNAL_ERROR": 500}
@@ -65,6 +69,8 @@ class PlanningService:
         self.graph = graph if graph is not None else build_planning_graph(repo)
         # 같은 세션의 요청이 동시에 들어와도 한 번에 하나씩 처리한다 (체크포인터·저장소가 메모리라 서버 안에서만 막으면 된다)
         self._lock = threading.RLock()
+        # 계획 세션을 시작하기 전에 부르는 곳 (TASK-010 §A5: 그날 후보 중 오래된 장소 값만 다시 부르기). 실패해도 계획은 계속한다
+        self.before_start: Callable[[str], None] | None = None
 
     # ---- 도우미 ----
 
@@ -108,10 +114,10 @@ class PlanningService:
 
     # ---- 엔드포인트 ----
 
-    def seed(self, chosen: bool = False) -> SeedResult | SeedChosenResult:
+    def seed(self, chosen: bool = False, past_days: int | None = None) -> SeedResult | SeedChosenResult:
         """chosen(TASK-006 A5·Q14): 둘째 날을 자동으로 계획하고 relaxed 안을 고른 상태로 둔다 (저녁 예약 포함)."""
         with self._lock:
-            result = seed_demo(self.repo, with_dinner=chosen)
+            result = seed_demo(self.repo, with_dinner=chosen, past_days=past_days)
             if chosen:
                 course = self.start(result.day_ids[1], "auto")
                 option = next(o for o in course.options if o.label == "relaxed")  # type: ignore[union-attr]
@@ -121,7 +127,8 @@ class PlanningService:
                 chosen_option = self.repo.get_option(self.repo.chosen_option(result.day_ids[1]))
                 assert record is not None and chosen_option is not None
                 summary = presenter.day_summary(result.day_ids[1], record, self.repo.stay_overrides(chosen_option.session_id))  # NowView의 day와 같은 함수
-                return SeedChosenResult(trip_id=result.trip_id, day_ids=result.day_ids, day=summary)
+                extra = {"trip_days": result.trip_days} if result.trip_days is not None else {}
+                return SeedChosenResult(trip_id=result.trip_id, day_ids=result.day_ids, day=summary, **extra)
             return result
 
     def start(self, day_id: str, mode: str) -> PlanningSession | CourseResult:
@@ -129,6 +136,11 @@ class PlanningService:
             day = self.repo.get_day(day_id)
             if day is None:
                 raise PlanningError("NOT_FOUND", "없는 날이에요", {"resource": "day", "day_id": day_id})  # TASK-004 §12-1 A7
+            if self.before_start is not None:
+                try:
+                    self.before_start(day_id)
+                except Exception as error:  # 다시 부르기 실패는 계획을 멈추지 않는다 (A5): 이전 값 그대로
+                    log.warning("장소 값 다시 부르기 실패: %s", type(error).__name__)
             session_id = str(uuid.uuid4())
             box = Outbox()
             self.graph.invoke(new_state(session_id, day_id, mode), self._config(session_id, box))  # type: ignore[arg-type]

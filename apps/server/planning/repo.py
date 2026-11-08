@@ -19,6 +19,8 @@ class DayRecord(NamedTuple):
     plan: DayPlan
     places: dict[PlaceId, Place]
     day_number: int  # trip 안에서 몇째 날인지, 1부터 (TASK-003 §10 Q5)
+    lodging_known: bool = True  # False면 lodging은 도시 중심(출발점)일 뿐 숙소가 아니다 -> 숙소로 돌아가기 없음 (TASK-010 §9 Q10·§10 Q27)
+    sources: dict[PlaceId, str] | None = None  # 장소 -> 영업시간 fact의 source_type. None이면 모두 "demo" (TASK-010 B7)
 
 
 class OptionRecord(NamedTuple):
@@ -33,7 +35,16 @@ class OptionRecord(NamedTuple):
 class PlanningRepo(ABC):
     # ---- 하루·여행 (심어 두는 쪽) ----
     @abstractmethod
-    def save_day(self, day_id: str, plan: DayPlan, places: dict[PlaceId, Place], day_number: int = 1) -> None: ...
+    def save_day(
+        self,
+        day_id: str,
+        plan: DayPlan,
+        places: dict[PlaceId, Place],
+        day_number: int = 1,
+        *,
+        lodging_known: bool = True,
+        sources: dict[PlaceId, str] | None = None,
+    ) -> None: ...
 
     @abstractmethod
     def get_day(self, day_id: str) -> DayRecord | None: ...
@@ -141,9 +152,24 @@ class MemoryPlanningRepo(PlanningRepo):
         self._chosen: dict[str, str] = {}
         self._logs: list[dict[str, Any]] = []
 
-    def save_day(self, day_id: str, plan: DayPlan, places: dict[PlaceId, Place], day_number: int = 1) -> None:
+    def save_day(
+        self,
+        day_id: str,
+        plan: DayPlan,
+        places: dict[PlaceId, Place],
+        day_number: int = 1,
+        *,
+        lodging_known: bool = True,
+        sources: dict[PlaceId, str] | None = None,
+    ) -> None:
         with self._lock:
-            self._days[day_id] = DayRecord(plan.model_copy(deep=True), {k: v.model_copy(deep=True) for k, v in places.items()}, day_number)
+            self._days[day_id] = DayRecord(
+                plan.model_copy(deep=True),
+                {k: v.model_copy(deep=True) for k, v in places.items()},
+                day_number,
+                lodging_known,
+                dict(sources) if sources is not None else None,
+            )
 
     def get_day(self, day_id: str) -> DayRecord | None:
         with self._lock:
@@ -153,7 +179,7 @@ class MemoryPlanningRepo(PlanningRepo):
         with self._lock:
             record = self._days[day_id]
             must = [new if pid == old else pid for pid in record.plan.must_visit]
-            self._days[day_id] = DayRecord(record.plan.model_copy(update={"must_visit": list(dict.fromkeys(must))}), record.places, record.day_number)
+            self._days[day_id] = record._replace(plan=record.plan.model_copy(update={"must_visit": list(dict.fromkeys(must))}))
 
     def save_trip(self, trip_id: str, day_ids: list[str]) -> None:
         with self._lock:

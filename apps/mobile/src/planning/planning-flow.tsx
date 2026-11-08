@@ -6,7 +6,9 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { InputClearContext } from '@/components/planning/input-bar';
+import { LeaveContext } from '@/components/planning/leave-context';
 import { Notice } from '@/components/planning/notice';
+import { SecondaryButton } from '@/components/planning/secondary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import {
   requests,
@@ -35,9 +37,9 @@ import { S0Screen } from './screens/s0';
 import { S9Screen } from './screens/s9';
 import type { NoticeData } from './screens/types';
 
-const STORAGE_KEY = 'tripfriends.planning_session_id';
+export const STORAGE_KEY = 'tripfriends.planning_session_id';
 // TASK-006: 여행 중 화면(SC-04)을 위해 기기에 남기는 값. 위치는 저장하지 않는다
-const NOW_KEY = 'tripfriends.trip_now'; // 마지막 화면이 SC-04였는지 + 하루 요약 + 마지막 데모 시각 (§11 Q16)
+export const NOW_KEY = 'tripfriends.trip_now'; // 마지막 화면이 SC-04였는지 + 하루 요약 + 마지막 데모 시각 (§11 Q16)
 const DAY_KEY = 'tripfriends.course_day'; // 코스를 고른 날의 하루 요약 (S9에서 SC-04로 갈 때 필요)
 const DEMO_KEY = 'tripfriends.demo_day'; // 시드로 만든 날 (§12 R10)
 const NOW_DEMO_START = '17:50'; // §14: 바로 보기는 고정 일정(18:30) 직전부터 시작
@@ -85,12 +87,34 @@ function parseRecord(raw: string | null): NowRecord | null {
 type Kind = 'stage' | 'picks' | 'select';
 type Problem = { tone: 'plain' | 'problem'; retry: (() => void) | null };
 
-export default function PlanningFlow() {
+/**
+ * 계획 흐름. 아무것도 안 넘기면 데모(S0부터, 기기에 저장해 이어 가기).
+ * TASK-010: dayId = 실제 여행의 그날 계획 대화 (시드 없이 바로 시작, 기기 저장 없음, 끝나면 onLeave).
+ * autoStart = 첫 화면의 데모 버튼을 이미 눌렀다. onLeave = 처음으로 돌아갈 때(데모 [처음부터], 날 계획 끝·세션 없음) 첫 화면으로.
+ */
+export default function PlanningFlow({
+  dayId,
+  autoStart,
+  onLeave,
+  resumeSessionId,
+  onSession,
+  onBackToList,
+}: {
+  dayId?: string;
+  autoStart?: 'demo' | 'now';
+  onLeave?: () => void;
+  /** 실제 여행의 날: 이미 시작한 대화가 있으면 새로 만들지 않고 GET으로 이어 간다 (TASK-010 §12 답 3) */
+  resumeSessionId?: string;
+  /** 새 대화가 시작되면 세션 id를 알린다 */
+  onSession?: (sessionId: string) => void;
+  /** 머리 "‹ 날짜": 대화는 그대로 두고 날짜 목록으로 */
+  onBackToList?: () => void;
+} = {}) {
   const [fontsReady, fontError] = useFonts(fontAssets);
   // 처음부터·404로 S0에 돌아올 때 Session을 새로 만든다 (상태를 통째로 비운다)
   const [boot, setBoot] = useState<{ epoch: number; start: 'boot' | 's0'; notice: string | null }>({
     epoch: 0,
-    start: 'boot',
+    start: dayId !== undefined || autoStart !== undefined ? 's0' : 'boot',
     notice: null,
   });
 
@@ -102,7 +126,12 @@ export default function PlanningFlow() {
       key={boot.epoch}
       start={boot.start}
       restartNotice={boot.notice}
-      onReset={(notice) => setBoot((now) => ({ epoch: now.epoch + 1, start: 's0', notice }))}
+      dayId={dayId}
+      resumeSessionId={resumeSessionId}
+      onSession={onSession}
+      onBackToList={onBackToList}
+      autoStart={boot.epoch === 0 ? autoStart : undefined}
+      onReset={(notice) => (onLeave ? onLeave() : setBoot((now) => ({ epoch: now.epoch + 1, start: 's0', notice })))}
     />
   );
 }
@@ -110,12 +139,23 @@ export default function PlanningFlow() {
 function Session({
   start,
   restartNotice,
+  dayId,
+  autoStart,
+  resumeSessionId,
+  onSession,
+  onBackToList,
   onReset,
 }: {
   start: 'boot' | 's0';
   restartNotice: string | null;
+  dayId?: string;
+  autoStart?: 'demo' | 'now';
+  resumeSessionId?: string;
+  onSession?: (sessionId: string) => void;
+  onBackToList?: () => void;
   onReset: (notice: string | null) => void;
 }) {
+  const tripDay = dayId !== undefined; // 실제 여행의 날: 데모 시드·기기 저장·여행 중 데모 없음
   const [state, dispatch] = useReducer(planningReducer, initialPlanningState);
   const [ready, setReady] = useState(start === 's0');
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -127,7 +167,7 @@ function Session({
   const alive = useRef(true);
   const busy = useRef(false); // 한 번에 한 요청 (§6)
   const sid = useRef<string | null>(null);
-  const seedDay = useRef<string | null>(null); // S0: 시드는 됐고 세션만 남았을 때 (Q19)
+  const seedDay = useRef<string | null>(dayId ?? null); // S0: 시드는 됐고 세션만 남았을 때 (Q19)
   const lastDay = useRef<PlanningSession['day'] | null>(null); // 마지막으로 받은 하루 요약 (SC-04 진입용)
   const demoDay = useRef<string | null>(null); // 시드로 만든 날 id (데모 시계 버튼용)
   const nowRef = useRef<NowRecord | null>(null);
@@ -144,6 +184,9 @@ function Session({
     };
   }, []);
 
+  /** 실제 여행의 날은 기기에 저장하지 않는다 (다시 켜면 날짜 목록이 처음) */
+  const remember = useCallback((key: string, value: string) => (tripDay ? Promise.resolve() : rememberQuietly(key, value)), [tripDay]);
+
   const fail = useCallback((message: string, next: Problem) => {
     if (!alive.current) return;
     setProblem(next);
@@ -152,6 +195,10 @@ function Session({
 
   const clearStoredAndReset = useCallback(
     async (notice: string | null) => {
+      if (tripDay) {
+        if (alive.current) onReset(notice); // 실제 여행의 날: 기기 저장값은 건드리지 않고 날짜 목록으로
+        return;
+      }
       try {
         await AsyncStorage.removeItem(STORAGE_KEY);
       } catch {
@@ -166,7 +213,7 @@ function Session({
       }
       if (alive.current) onReset(notice);
     },
-    [onReset],
+    [onReset, tripDay],
   );
 
   /** 422 문구. 이름은 지금 화면 응답의 day.must_visits에서 찾는다 (Q23) */
@@ -237,7 +284,7 @@ function Session({
     }
     const dayInResponse = (response as { day?: PlanningSession['day'] } | null)?.day;
     if (typeof dayInResponse === 'object' && dayInResponse !== null) lastDay.current = dayInResponse;
-    if (kind === 'select' && lastDay.current) void rememberQuietly(DAY_KEY, JSON.stringify(lastDay.current));
+    if (kind === 'select' && lastDay.current) void remember(DAY_KEY, JSON.stringify(lastDay.current));
     // C1: 복구 GET은 응답이 요청 전과 달라졌을 때만 입력 글을 지운다 (지금 화면 응답은 아직 바뀌기 전이다)
     const cleared = fromInput || (recovery && responseChanged(latest.current.response, response));
     dispatch({ type: 'request_success', response });
@@ -360,7 +407,7 @@ function Session({
       }
       const session = started.data as PlanningSession;
       try {
-        await AsyncStorage.setItem(STORAGE_KEY, session.session_id);
+        if (!tripDay) await AsyncStorage.setItem(STORAGE_KEY, session.session_id);
       } catch {
         // 기기 저장이 실패해도 흐름은 계속. 다시 켜면 이어 가기만 안 된다 (§13-3 저장 실패)
         console.warn('STORAGE_FAILED');
@@ -369,13 +416,16 @@ function Session({
       sid.current = session.session_id;
       setSessionId(session.session_id);
       lastDay.current = session.day;
-      demoDay.current = seedDay.current; // 시드로 만든 날은 데모 시계를 쓴다 (§12 R10)
-      void rememberQuietly(DEMO_KEY, String(seedDay.current));
+      if (tripDay) onSession?.(session.session_id);
+      if (!tripDay) {
+        demoDay.current = seedDay.current; // 시드로 만든 날은 데모 시계를 쓴다 (§12 R10)
+        void rememberQuietly(DEMO_KEY, String(seedDay.current));
+      }
       dispatch({ type: 'request_success', response: session });
     } finally {
       busy.current = false;
     }
-  }, [fail]);
+  }, [fail, tripDay]);
 
   // ---------- S0: [여행 중 데모 바로 보기] (개발 빌드 전용, TASK-006 §14) ----------
   // chosen 시드의 응답 day로 둘째 날 SC-04를 그날 17:50부터 연다. 계획 세션은 시작하지 않는다
@@ -410,6 +460,17 @@ function Session({
       busy.current = false;
     }
   }, [fail]);
+
+  // 첫 화면에서 이미 눌렀거나(autoStart), 실제 여행의 날(dayId)이면 한 번 바로 시작한다
+  useEffect(() => {
+    if (tripDay && resumeSessionId !== undefined) {
+      sid.current = resumeSessionId;
+      setSessionId(resumeSessionId);
+      void execute(requests.current(resumeSessionId), 'stage');
+    } else if (tripDay || autoStart === 'demo') void startDemo();
+    else if (autoStart === 'now') void startNowDemo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ---------- 화면이 부르는 동작 ----------
   const id = () => sid.current ?? '';
@@ -457,6 +518,17 @@ function Session({
     }
 
     if (state.response === null) {
+      if (sessionId === null && tripDay) {
+        // 실제 여행의 날: 데모 첫 화면(S0)이 아니라 불러오는 중 / 안내(다시 해 보기)
+        return busyNow || !notice ? (
+          <Loading />
+        ) : (
+          <ScreenFrame>
+            <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} />
+            <SecondaryButton testID="trip-day-close" label="날짜 목록으로" onPress={() => onReset(null)} />
+          </ScreenFrame>
+        );
+      }
       if (sessionId === null) {
         const shown = notice ?? (showRestart && restartNotice ? { message: restartNotice, tone: 'plain' as const } : null);
         return <S0Screen busy={busyNow} notice={shown} onStart={() => void startDemo()} onStartNow={__DEV__ ? () => void startNowDemo() : undefined} />;
@@ -502,11 +574,19 @@ function Session({
           />
         );
       case 'S9':
-        return <S9Screen key="S9" onRestart={() => void clearStoredAndReset(null)} onEnterNow={onEnterNow} />;
+        return tripDay ? (
+          <S9Screen key="S9" onClose={() => onReset(null)} />
+        ) : (
+          <S9Screen key="S9" onRestart={() => void clearStoredAndReset(null)} onEnterNow={onEnterNow} />
+        );
     }
   };
 
-  return <InputClearContext.Provider value={inputCleared}>{renderScreen()}</InputClearContext.Provider>;
+  return (
+    <LeaveContext.Provider value={tripDay ? (onBackToList ?? null) : null}>
+      <InputClearContext.Provider value={inputCleared}>{renderScreen()}</InputClearContext.Provider>
+    </LeaveContext.Provider>
+  );
 }
 
 function Loading() {

@@ -5,7 +5,7 @@
 """
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, time
 from typing import Literal
@@ -14,6 +14,7 @@ from engine.compose import REASONS, FixedEvent, OpenEvent, PlanItem, Screen, Sna
 from engine.models import CourseOption, Place
 from planning.presenter import _opening_fact, day_summary
 from planning.repo import DayRecord
+from places.pack import maps_url
 from planning.schemas import Fact, LatLng
 from trip.schemas import (
     NowCard,
@@ -81,6 +82,7 @@ class _Entry:
     end_min: int
     travel_min: int
     is_fixed: bool
+    source: str = "demo"  # 영업시간 fact의 source_type (TASK-010 Q1: 실제 여행은 장소의 실제 출처, 데모는 demo)
 
     @property
     def leave_min(self) -> int:
@@ -101,7 +103,10 @@ def _entries(day: DayRecord, course: CourseOption) -> list[_Entry]:
             name = place.name
             title = by_slot.get((place.id, item.start, item.end), name)
         entries.append(
-            _Entry(item.seq, place, name, title, item.start, item.end, _minutes(item.start), _minutes(item.end), item.travel_min, item.is_fixed)
+            _Entry(
+                item.seq, place, name, title, item.start, item.end, _minutes(item.start), _minutes(item.end), item.travel_min, item.is_fixed,
+                (day.sources or {}).get(place.id, "demo") if place else "demo",
+            )
         )
     return entries
 
@@ -109,11 +114,11 @@ def _entries(day: DayRecord, course: CourseOption) -> list[_Entry]:
 Checks = Mapping[str, VisitCheckRecord]  # 그날 사용자 확인 기록 (장소 id -> 기록)
 
 
-def _facts(place: Place | None, weekday: int, checks: Checks | None = None) -> list[Fact]:
+def _facts(place: Place | None, weekday: int, checks: Checks | None = None, source: str = "demo") -> list[Fact]:
     """장소가 없으면 [] (Q6). 그날 사용자가 확인했으면 그 확인이 이긴다 (TASK-008 A5·§7). 원본 장소 데이터는 그대로."""
     if place is None:
         return []
-    fact = _opening_fact(place, weekday)
+    fact = _opening_fact(place, weekday, source)
     check = (checks or {}).get(place.id)
     return [user_confirmed_fact(fact, check) if check else fact]
 
@@ -129,7 +134,7 @@ def _view(entry: _Entry, weekday: int, checks: Checks | None = None) -> NowCours
         lat=place.lat if place else None,
         lng=place.lng if place else None,
         is_fixed=entry.is_fixed,
-        facts=_facts(place, weekday, checks),
+        facts=_facts(place, weekday, checks, entry.source),
     )
 
 
@@ -206,16 +211,23 @@ def visit_check_target(day: DayRecord, course: CourseOption, at: datetime, check
     return target.place.id if target and target.place else None
 
 
-def _map_url(entry: _Entry) -> str | None:
-    """구글 지도 길찾기 URL (대중교통). 장소가 없으면 None (Q6). 경로 API는 부르지 않는다 (§9)."""
+MapId = Callable[[str], "str | None"]  # 우리 장소 id -> 구글 place_id (실제 여행만. 데모 장소는 None -> 좌표)
+
+
+def _map_url(entry: _Entry, map_id: MapId | None = None) -> str | None:
+    """구글 지도 길찾기 URL (대중교통). 장소가 없으면 None (Q6). 경로 API는 부르지 않는다 (§9).
+    구글 place_id가 있으면 destination_place_id로 넣는다 (TASK-010 PM 답 3, §11 H5)."""
     if entry.place is None:
         return None
-    return _transit_url(entry.place.lat, entry.place.lng)
+    return _transit_url(entry.place.lat, entry.place.lng, map_id(entry.place.id) if map_id else None)
 
 
-def _transit_url(lat: float, lng: float) -> str:
+def _transit_url(lat: float, lng: float, place_id: str | None = None) -> str:
     """도착지 좌표 -> 구글 지도 대중교통 길찾기 URL (T-02·T-08 공용)."""
-    return f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}&travelmode=transit"
+    link = f"https://www.google.com/maps/dir/?api=1&destination={lat},{lng}"
+    if place_id:
+        link += f"&destination_place_id={place_id}"
+    return f"{link}&travelmode=transit"
 
 
 def _card(
@@ -228,6 +240,7 @@ def _card(
     event: NowEvent | None = None,
     checks: Checks | None = None,
     to_check: _Entry | None = None,
+    map_id: MapId | None = None,
 ) -> NowCard | None:
     """카드 값 채우기 (A4). 지금 이 카드를 만들 수 없으면 None. event = 이 카드의 사건 (T-04: 늦어짐, T-06: 닫힘)."""
     checks = checks or {}
@@ -246,7 +259,7 @@ def _card(
             leave_at=_hhmm(nxt.leave_min),
             leave_in_min=max(0, nxt.leave_min - m.now_min),  # 이동 중 0 (Q10), 쉬는 시간은 남은 분 (R2)
             travel_min=nxt.travel_min,
-            map_url=_map_url(nxt),
+            map_url=_map_url(nxt, map_id),
         )
     if kind == "T-03":
         later = [e for e in entries if e.start_min > m.now_min]  # 지금 일정 제외
@@ -268,8 +281,8 @@ def _card(
         place = target.place
         return NowCardT05(
             place=NowPlaceRef(place_id=place.id, name=place.name),
-            facts=_facts(place, weekday, checks),
-            map_url=map_search_url(place.lat, place.lng),
+            facts=_facts(place, weekday, checks, target.source),
+            map_url=maps_url(gid) if map_id and (gid := map_id(place.id)) else map_search_url(place.lat, place.lng),
         )
     if kind == "T-06":
         if event is None or event.type != "closed":
@@ -287,7 +300,7 @@ def _card(
         if fixed is None:
             return None
         return NowCardT07(
-            fixed=NowFixed(name=fixed.name, title=fixed.title, start=fixed.start, end=fixed.end, facts=_facts(fixed.place, weekday, checks)),
+            fixed=NowFixed(name=fixed.name, title=fixed.title, start=fixed.start, end=fixed.end, facts=_facts(fixed.place, weekday, checks, fixed.source)),
             leave_by=_hhmm(fixed.leave_min),
             leave_in_min=max(0, fixed.leave_min - m.now_min),  # Q4: 출발 시각이 지나도 시작 전이면 0
         )
@@ -306,12 +319,13 @@ def _subs(
     weekday: int,
     checks: Checks | None = None,
     to_check: _Entry | None = None,
+    map_id: MapId | None = None,
 ) -> list[NowCard]:
     cards: list[NowCard] = []
     for kind in kinds:
         if kind not in SUPPORTED:
             continue
-        card = _card(kind, m, entries, course, day, weekday, None, checks, to_check)
+        card = _card(kind, m, entries, course, day, weekday, None, checks, to_check, map_id)
         if card is None or (isinstance(card, NowCardT03) and not card.items):
             continue  # Q5·R11: 다음 일정이 없어 보조가 없으면 T-02도 빈 T-03도 뺀다
         cards.append(card)
@@ -374,6 +388,7 @@ def build_now_view(
     event: NowEvent | None = None,
     others: Sequence[NowEvent] = (),
     checks: Checks | None = None,
+    map_id: MapId | None = None,
 ) -> NowView:
     """at는 시간대 없는 그날의 시각. 날짜 검사는 부르는 쪽 몫.
 
@@ -395,7 +410,7 @@ def build_now_view(
 
     main_kind, subs_kinds, reason = _decide(screen, m, entries)
     card_event = delay_awaiting if main_kind == "T-04" else closed_awaiting
-    main = _card(main_kind, m, entries, course, day, weekday, card_event, checks, to_check)
+    main = _card(main_kind, m, entries, course, day, weekday, card_event, checks, to_check, map_id)
     if main is None:  # 만들 수 없는 카드는 T-01로 (A3와 같은 안전장치)
         main_kind, subs_kinds, reason = _replace_with_t01(main_kind, screen)
         main = _card("T-01", m, entries, course, day, weekday, None, checks)
@@ -414,7 +429,7 @@ def build_now_view(
         status_text=status_text,
         reason=reason,
         main=main,
-        subs=_subs(subs_kinds, m, entries, course, day, weekday, checks, to_check),
+        subs=_subs(subs_kinds, m, entries, course, day, weekday, checks, to_check, map_id),
         pins=_pins(entries, m),
         route=_route(entries, m, home, position),
         position=LatLng(lat=position[0], lng=position[1]) if position else None,

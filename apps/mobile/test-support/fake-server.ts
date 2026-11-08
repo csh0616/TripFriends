@@ -18,6 +18,8 @@ export const apiError = (status: number, code: string, detail: unknown = null, m
 
 export class FakeServer {
   requests: Sent[] = [];
+  // TASK-010 B2: X-Device-Id 확인용. 요청 기록(requests)의 모양은 그대로 두고 따로 적는다 (이름은 소문자)
+  private sentHeaders = new WeakMap<Sent, Record<string, string>>();
   unexpected: string[] = [];
   private routes = new Map<string, Reply>();
   private queued = new Map<string, (Reply | Deferred)[]>();
@@ -60,6 +62,10 @@ export class FakeServer {
     return this.requests.filter((r) => `${r.method} ${r.path}` === route);
   }
 
+  headers(sent: Sent): Record<string, string> {
+    return this.sentHeaders.get(sent) ?? {};
+  }
+
   last(): Sent {
     return this.requests[this.requests.length - 1];
   }
@@ -74,7 +80,9 @@ export class FakeServer {
     const method = (init?.method ?? 'GET').toUpperCase();
     const path = url.replace(/^[a-z]+:\/\/[^/]+/i, '');
     const body = typeof init?.body === 'string' && init.body ? JSON.parse(init.body) : undefined;
-    this.requests.push({ method, path, body });
+    const sent: Sent = { method, path, body };
+    this.sentHeaders.set(sent, headersOf(init?.headers));
+    this.requests.push(sent);
     const route = `${method} ${path}`;
     const matcher = this.matchers.find(({ prefix }) => route === prefix || route.startsWith(`${prefix}?`));
     const next: Reply | Deferred | undefined =
@@ -117,4 +125,21 @@ function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal | null): Promise
     signal.addEventListener('abort', abort);
     promise.then(resolve, reject);
   });
+}
+
+function headersOf(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw) return out;
+  const entries: [string, string][] =
+    typeof (raw as Headers).forEach === 'function' && !Array.isArray(raw)
+      ? (() => {
+          const list: [string, string][] = [];
+          (raw as Headers).forEach((value, key) => list.push([key, value]));
+          return list;
+        })()
+      : Array.isArray(raw)
+        ? (raw as [string, string][])
+        : Object.entries(raw as Record<string, string>);
+  for (const [key, value] of entries) out[key.toLowerCase()] = String(value);
+  return out;
 }

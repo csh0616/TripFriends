@@ -1,0 +1,1181 @@
+{
+ "about": "TASK-010 §A1 FakePlaces 데이터. test-writer가 손으로 지어낸 가짜 값이며 실제 Google·Serper 응답이 아니다 (ADR-015 §3-2: 테스트 데이터도 손으로 만든 가짜). place_id는 모두 'FAKE-'로 시작하고 링크는 모두 example.invalid. 좌표는 오사카 근처의 지어낸 수, 영업시간은 지어낸 시각. resolve: query -> place_id 목록(0개=검색 실패, 2개 이상=여러 곳). details: place_id -> {location, opening_hours(엔진 Opening 모양 또는 null=없음), website, maps_url, business_status}. serper: '{query} 営業時間' -> [{text, link}] (문장은 모두 '【テスト用の作り話】'로 시작하는 작문). lodging: 숙소 검색 결과(팩 밖). seed는 testdata/cities/osaka-seed-fake.yaml (center = 難波駅, 지역 중심 難波駅·心斎橋駅·梅田駅·森ノ宮駅(osakajo, TASK-010 §12)도 resolve 표에 있다. FAKE-osaka-edge-in/out은 梅田駅에서 북쪽 2.9km/3.1km, far-umeda는 난바 쪽 약 4km). lodging의 숙소도 details에 지어낸 좌표가 있다 (숙소를 고른 흐름을 가짜 공급자로 재현, TASK-010 PM 답 11-09): 호텔 1~7은 난바역 근처, 게스트하우스는 우메다역 근처. 영업시간은 null.",
+ "timezone": "Asia/Tokyo",
+ "center": {
+  "lat": 34.669,
+  "lng": 135.501
+ },
+ "resolve": {
+  "難波駅 Osaka": [
+   "FAKE-osaka-center-station"
+  ],
+  "心斎橋駅 Osaka": [
+   "FAKE-osaka-area-shinsaibashi"
+  ],
+  "梅田駅 Osaka": [
+   "FAKE-osaka-area-umeda"
+  ],
+  "森ノ宮駅 Osaka": [
+   "FAKE-osaka-area-osakajo"
+  ],
+  "なんば 小さな公園 Osaka": [
+   "FAKE-osaka-park"
+  ],
+  "なんば 時間のある公園 Osaka": [
+   "FAKE-osaka-park-google"
+  ],
+  "梅田 夜の飲み屋街 Osaka": [
+   "FAKE-osaka-night-street"
+  ],
+  "大阪城 天守閣 Osaka": [
+   "FAKE-osaka-castle"
+  ],
+  "梅田 遠い食堂 Osaka": [
+   "FAKE-osaka-far-umeda"
+  ],
+  "梅田 北の喫茶 Osaka": [
+   "FAKE-osaka-edge-in"
+  ],
+  "梅田 もっと北の喫茶 Osaka": [
+   "FAKE-osaka-edge-out"
+  ],
+  "道頓堀 Osaka": [
+   "FAKE-osaka-dotonbori"
+  ],
+  "黒門市場 Osaka": [
+   "FAKE-osaka-kuromon"
+  ],
+  "なんば ラーメン横丁 Osaka": [
+   "FAKE-osaka-ramen"
+  ],
+  "法善寺横丁 Osaka": [
+   "FAKE-osaka-hozenji"
+  ],
+  "なんば 路地カフェ Osaka": [
+   "FAKE-osaka-alley-cafe"
+  ],
+  "なんば お笑い劇場 Osaka": [
+   "FAKE-osaka-comedy"
+  ],
+  "存在しない食堂 Osaka": [],
+  "心斎橋筋商店街 Osaka": [
+   "FAKE-osaka-shotengai"
+  ],
+  "アメリカ村 Osaka": [
+   "FAKE-osaka-amemura"
+  ],
+  "心斎橋 小さな美術館 Osaka": [
+   "FAKE-osaka-gallery"
+  ],
+  "閉店した雑貨店 Osaka": [
+   "FAKE-osaka-closed-shop"
+  ],
+  "梅田 空中展望台 Osaka": [
+   "FAKE-osaka-sky"
+  ],
+  "梅田 赤い観覧車 Osaka": [
+   "FAKE-osaka-ferris"
+  ],
+  "梅田 美術館 Osaka": [
+   "FAKE-osaka-museum"
+  ],
+  "梅田 居酒屋横丁 Osaka": [
+   "FAKE-osaka-izakaya"
+  ],
+  "梅田 喫茶店 Osaka": [
+   "FAKE-osaka-kissa"
+  ],
+  "梅田 よくある食堂 Osaka": [
+   "FAKE-osaka-ambiguous-1",
+   "FAKE-osaka-ambiguous-2"
+  ]
+ },
+ "details": {
+  "FAKE-osaka-center-station": {
+   "location": {
+    "lat": 34.6663,
+    "lng": 135.5002
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-center-station",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-center-station",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-area-shinsaibashi": {
+   "location": {
+    "lat": 34.675,
+    "lng": 135.501
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-area-shinsaibashi",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-area-shinsaibashi",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-area-umeda": {
+   "location": {
+    "lat": 34.7025,
+    "lng": 135.4959
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-area-umeda",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-area-umeda",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-far-umeda": {
+   "location": {
+    "lat": 34.666,
+    "lng": 135.501
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "21:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-far-umeda",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-far-umeda",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-edge-in": {
+   "location": {
+    "lat": 34.72858,
+    "lng": 135.4959
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-edge-in",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-edge-in",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-edge-out": {
+   "location": {
+    "lat": 34.730379,
+    "lng": 135.4959
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-edge-out",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-edge-out",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-area-osakajo": {
+   "location": {
+    "lat": 34.6863,
+    "lng": 135.526
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-area-osakajo",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-area-osakajo",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-castle": {
+   "location": {
+    "lat": 34.6873,
+    "lng": 135.5259
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "17:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-castle",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-castle",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-park": {
+   "location": {
+    "lat": 34.665,
+    "lng": 135.503
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-park",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-park",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-park-google": {
+   "location": {
+    "lat": 34.667,
+    "lng": 135.499
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 1,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 2,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 3,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 4,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 5,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 6,
+     "open": "06:00",
+     "close": "22:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-park-google",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-park-google",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-night-street": {
+   "location": {
+    "lat": 34.703,
+    "lng": 135.498
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-night-street",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-night-street",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-dotonbori": {
+   "location": {
+    "lat": 34.6687,
+    "lng": 135.5013
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-dotonbori",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-dotonbori",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-kuromon": {
+   "location": {
+    "lat": 34.6651,
+    "lng": 135.5065
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "18:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-kuromon",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-kuromon",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-ramen": {
+   "location": {
+    "lat": 34.6662,
+    "lng": 135.5008
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "23:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-ramen",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-ramen",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-hozenji": {
+   "location": {
+    "lat": 34.6678,
+    "lng": 135.5031
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "17:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 1,
+     "open": "17:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 2,
+     "open": "17:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 3,
+     "open": "17:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 4,
+     "open": "17:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 5,
+     "open": "17:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 6,
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-hozenji",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-hozenji",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-alley-cafe": {
+   "location": {
+    "lat": 34.6642,
+    "lng": 135.4985
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-alley-cafe",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-alley-cafe",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-comedy": {
+   "location": {
+    "lat": 34.6659,
+    "lng": 135.5037
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-comedy",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-comedy",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-shotengai": {
+   "location": {
+    "lat": 34.6739,
+    "lng": 135.5016
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "21:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-shotengai",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-shotengai",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-amemura": {
+   "location": {
+    "lat": 34.6721,
+    "lng": 135.4982
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-amemura",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-amemura",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-gallery": {
+   "location": {
+    "lat": 34.6755,
+    "lng": 135.4993
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "18:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "18:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-gallery",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-gallery",
+   "business_status": "CLOSED_TEMPORARILY"
+  },
+  "FAKE-osaka-closed-shop": {
+   "location": {
+    "lat": 34.6748,
+    "lng": 135.5005
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "19:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-closed-shop",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-closed-shop",
+   "business_status": "CLOSED_PERMANENTLY"
+  },
+  "FAKE-osaka-sky": {
+   "location": {
+    "lat": 34.7053,
+    "lng": 135.4901
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "09:30",
+     "close": "22:30"
+    },
+    {
+     "weekday": 1,
+     "open": "09:30",
+     "close": "22:30"
+    },
+    {
+     "weekday": 2,
+     "open": "09:30",
+     "close": "22:30"
+    },
+    {
+     "weekday": 3,
+     "open": "09:30",
+     "close": "22:30"
+    },
+    {
+     "weekday": 4,
+     "open": "09:30",
+     "close": "22:30"
+    },
+    {
+     "weekday": 5,
+     "open": "09:30",
+     "close": "22:30"
+    },
+    {
+     "weekday": 6,
+     "open": "09:30",
+     "close": "22:30"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-sky",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-sky",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-ferris": {
+   "location": {
+    "lat": 34.7039,
+    "lng": 135.5003
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "23:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "23:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-ferris",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-ferris",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-museum": {
+   "location": {
+    "lat": 34.7021,
+    "lng": 135.4956
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "17:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "17:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-museum",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-museum",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-izakaya": {
+   "location": {
+    "lat": 34.7011,
+    "lng": 135.4988
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "16:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 1,
+     "open": "16:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 2,
+     "open": "16:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 3,
+     "open": "16:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 4,
+     "open": "16:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 5,
+     "open": "16:00",
+     "close": "24:00"
+    },
+    {
+     "weekday": 6,
+     "open": "16:00",
+     "close": "24:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-izakaya",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-izakaya",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-kissa": {
+   "location": {
+    "lat": 34.7028,
+    "lng": 135.4977
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 1,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 2,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 3,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 4,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 5,
+     "open": "08:00",
+     "close": "19:00"
+    },
+    {
+     "weekday": 6,
+     "open": "08:00",
+     "close": "19:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-kissa",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-kissa",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-ambiguous-1": {
+   "location": {
+    "lat": 34.7001,
+    "lng": 135.4965
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "21:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-ambiguous-1",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-ambiguous-1",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-ambiguous-2": {
+   "location": {
+    "lat": 34.7045,
+    "lng": 135.4942
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "21:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-ambiguous-2",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-ambiguous-2",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-1": {
+   "location": {
+    "lat": 34.6656,
+    "lng": 135.4996
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-1",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-1",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-2": {
+   "location": {
+    "lat": 34.666,
+    "lng": 135.4999
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-2",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-2",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-3": {
+   "location": {
+    "lat": 34.6664,
+    "lng": 135.5002
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-3",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-3",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-4": {
+   "location": {
+    "lat": 34.6668,
+    "lng": 135.5005
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-4",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-4",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-5": {
+   "location": {
+    "lat": 34.6672,
+    "lng": 135.5008
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-5",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-5",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-6": {
+   "location": {
+    "lat": 34.6676,
+    "lng": 135.5011
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-6",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-6",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-7": {
+   "location": {
+    "lat": 34.668,
+    "lng": 135.5014
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-7",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-7",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-lodging-guesthouse": {
+   "location": {
+    "lat": 34.7031,
+    "lng": 135.4968
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-lodging-guesthouse",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-lodging-guesthouse",
+   "business_status": "OPERATIONAL"
+  }
+ },
+ "serper": {
+  "道頓堀 Osaka 営業時間": [],
+  "なんば 路地カフェ Osaka 営業時間": [
+   {
+    "text": "【テスト用の作り話】路地カフェの営業時間 10:00～19:00 です 定休日：火曜日",
+    "link": "https://example.invalid/serper/alley-cafe-1"
+   },
+   {
+    "text": "【テスト用の作り話】営業時間：10:00〜19:00 定休日：火曜 ゆっくりできる店",
+    "link": "https://example.invalid/serper/alley-cafe-2"
+   }
+  ],
+  "なんば お笑い劇場 Osaka 営業時間": [
+   {
+    "text": "【テスト用の作り話】劇場 営業時間 11:00～21:00",
+    "link": "https://example.invalid/serper/comedy-1"
+   },
+   {
+    "text": "【テスト用の作り話】公演日は 12:00～22:00 開館",
+    "link": "https://example.invalid/serper/comedy-2"
+   }
+  ],
+  "梅田 夜の飲み屋街 Osaka 営業時間": [
+   {
+    "text": "【テスト用の作り話】飲み屋街 18:00～23:00 ごろが賑わう",
+    "link": "https://example.invalid/serper/night-street"
+   }
+  ],
+  "なんば 小さな公園 Osaka 営業時間": [],
+  "アメリカ村 Osaka 営業時間": [
+   {
+    "text": "【テスト用の作り話】若者の街アメリカ村の散歩ガイド",
+    "link": "https://example.invalid/serper/amemura-1"
+   }
+  ]
+ },
+ "lodging": [
+  {
+   "place_id": "FAKE-lodging-1",
+   "name": "난바 테스트 호텔 1",
+   "address_short": "가짜구 테스트동 1"
+  },
+  {
+   "place_id": "FAKE-lodging-2",
+   "name": "난바 테스트 호텔 2",
+   "address_short": "가짜구 테스트동 2"
+  },
+  {
+   "place_id": "FAKE-lodging-3",
+   "name": "난바 테스트 호텔 3",
+   "address_short": "가짜구 테스트동 3"
+  },
+  {
+   "place_id": "FAKE-lodging-4",
+   "name": "난바 테스트 호텔 4",
+   "address_short": "가짜구 테스트동 4"
+  },
+  {
+   "place_id": "FAKE-lodging-5",
+   "name": "난바 테스트 호텔 5",
+   "address_short": "가짜구 테스트동 5"
+  },
+  {
+   "place_id": "FAKE-lodging-6",
+   "name": "난바 테스트 호텔 6",
+   "address_short": "가짜구 테스트동 6"
+  },
+  {
+   "place_id": "FAKE-lodging-7",
+   "name": "난바 테스트 호텔 7",
+   "address_short": "가짜구 테스트동 7"
+  },
+  {
+   "place_id": "FAKE-lodging-guesthouse",
+   "name": "우메다 테스트 게스트하우스",
+   "address_short": "가짜구 우메다동 1"
+  }
+ ]
+}

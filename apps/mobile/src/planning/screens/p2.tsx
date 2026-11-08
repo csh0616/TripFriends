@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { GoogleMark } from '@/components/google-mark';
 import { FriendBubble } from '@/components/planning/friend-bubble';
 import { DrawnRing } from '@/components/planning/drawn-ring';
 import { CheckIcon, CloseIcon, PlusIcon } from '@/components/planning/icons';
@@ -12,6 +13,7 @@ import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { StatusChip } from '@/components/planning/status-chip';
 import { distanceLabel } from '@/lib/distance-label';
+import { sourceLabel } from '@/lib/source-label';
 import { requests, type CandidateBatch } from '@/lib/planning-api';
 import { todayHoursText } from '@/lib/today-hours-text';
 
@@ -86,6 +88,7 @@ export function P2Screen({
 
   return (
     <ScreenFrame
+      listBottomSpace
       title={`${dayName(day.day_number)} 고르는 중`}
       subtitle={daySubtitle(day)}
       input={{ onSend: (value) => next({ text: value }), disabled: busy }}
@@ -151,7 +154,7 @@ export function P2Screen({
           const hours = todayHoursText(place.facts);
           return (
             <View key={place.id} testID={`candidate-card-${place.id}`} style={{ width: cardWidth }}>
-              <PhotoPlaceholder category={place.category} style={styles.photo}>
+              <PhotoPlaceholder category={place.category} glyph={layout.coverGlyphLarge} style={styles.photo}>
                 <View style={styles.counter}>
                   <Text style={text('num-md')}>{`${pad2(index + 1)} / ${pad2(total)}`}</Text>
                 </View>
@@ -203,6 +206,12 @@ export function P2Screen({
                     lng: place.lng,
                   })}
                 </Text>
+                {/* TASK-010 §13 O4: 우리가 정한 값(curated)은 출처 "Tripfriends" (Google 자리 없음) */}
+                {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'curated') ? (
+                  <Text style={text('src', 'muted')}>{sourceLabel('curated')}</Text>
+                ) : null}
+                {/* TASK-010 §11 G2: 지도 없이 Google 값을 보여 주는 카드에는 Google Maps 로고 자리 */}
+                {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'google' && fact.status !== 'unknown') ? <GoogleMark testID="g-slot" /> : null}
               </View>
             </View>
           );

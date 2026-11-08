@@ -5,13 +5,18 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { placeholderFor } from '@/lib/placeholder-for';
 
+import { PlaceGlyph } from './place-glyph';
+
 export function PhotoPlaceholder({
   category,
   style,
+  glyph,
   children,
 }: {
   category: string;
   style?: StyleProp<ViewStyle>;
+  /** 그림 크기. 28 이상일 때만 넘긴다 (24 이하는 색만, DESIGN-001 §4-8) */
+  glyph?: number;
   children?: React.ReactNode;
 }) {
   const id = `photo-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
@@ -27,9 +32,17 @@ export function PhotoPlaceholder({
         </Defs>
         <Rect width="100%" height="100%" fill={`url(#${id})`} />
       </Svg>
+      {glyph !== undefined ? (
+        <View pointerEvents="none" style={styles.glyph}>
+          <PlaceGlyph category={category} size={glyph} />
+        </View>
+      ) : null}
       {children}
     </View>
   );
 }
 
-const styles = StyleSheet.create({ box: { overflow: 'hidden' } });
+const styles = StyleSheet.create({
+  box: { overflow: 'hidden' },
+  glyph: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
+});

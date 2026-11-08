@@ -3,7 +3,7 @@
 import datetime as dt
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from engine.models import Category, CourseItem, Direction, Dropped, HoursStatus, PlaceId
 
@@ -209,7 +209,7 @@ class CourseResultOption(BaseModel):
     label: Literal["relaxed", "packed"]
     items: list[CourseItemView]
     dropped: list[DroppedView]
-    go_home_min: int
+    go_home_min: int | None  # 숙소를 고르지 않은 실제 여행이면 null (돌아갈 숙소가 없음, TASK-010 §10 Q27)
     total_travel_min: int
 
 
@@ -237,11 +237,22 @@ class SeedRequest(_Request):
     """TASK-006 A5·Q14: JSON 본문. 본문이 없으면 예전 시드 그대로."""
 
     chosen: bool = False
+    # TASK-010 §13 PM 답 1: 데모 시계를 N일 뒤로 돌린다 -> 첫 N일이 지난 날 (응답 trip_days의 state, 기존 day_state 규칙)
+    past_days: int = Field(default=0, ge=0, le=2)
+
+
+class SeedDay(BaseModel):
+    """TASK-010 PM 답 1: 데모 날 하나 (Trip.trip_days와 같은 이름·모양 일부)."""
+
+    day_id: str
+    date: dt.date
+    state: Literal["planning", "planned", "today", "past"]
 
 
 class SeedResult(BaseModel):
     trip_id: str
     day_ids: list[str]
+    trip_days: list[SeedDay] | None = None  # past_days를 준 요청에만 (없으면 키 자체가 없다: response_model_exclude_unset)
 
 
 class SeedChosenResult(SeedResult):
@@ -253,7 +264,10 @@ class SeedChosenResult(SeedResult):
 class ErrorBody(BaseModel):
     """공통 오류 (§5). code는 NOT_FOUND·INVALID_REQUEST·STATE_CONFLICT·COURSE_INFEASIBLE·INTERNAL_ERROR 5개뿐 (§10 Q24, §10-10 R3)."""
 
-    code: Literal["NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE", "INTERNAL_ERROR"]  # §10 Q24, §10-10 R3
+    # §10 Q24, §10-10 R3 + TASK-010 §9 Q13·Q22 (여행 API: VALIDATION_ERROR · PLAN_EXISTS · PROVIDER_UNAVAILABLE)
+    code: Literal[
+        "NOT_FOUND", "INVALID_REQUEST", "STATE_CONFLICT", "COURSE_INFEASIBLE", "INTERNAL_ERROR", "VALIDATION_ERROR", "PLAN_EXISTS", "PROVIDER_UNAVAILABLE"
+    ]
     message: str
     detail: Any = None
 

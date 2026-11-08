@@ -14,7 +14,10 @@
     "src/lib/fake-position.ts",
     "src/lib/demo-clock.ts",
     "src/lib/particle.ts",
-    "src/lib/source-label.ts"
+    "src/lib/source-label.ts",
+    "src/lib/calendar.ts",
+    "src/lib/create-trip.ts",
+    "src/lib/day-list.ts"
   ],
   "reporters": [
     "clear-text",
@@ -41,7 +44,8 @@
         "<rootDir>/__tests__/trip-now.test.tsx",
         "<rootDir>/__tests__/trip-delay.test.tsx",
         "<rootDir>/__tests__/particle.test.ts",
-        "<rootDir>/__tests__/task-009-select.test.tsx"
+        "<rootDir>/__tests__/task-009-select.test.tsx",
+        "<rootDir>/__tests__/task-010-lib.test.ts"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",

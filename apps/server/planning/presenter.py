@@ -115,7 +115,7 @@ def session_response(state: PlanningState, day: DayRecord, overrides: dict[Place
     )
 
 
-def _opening_fact(place: EnginePlace, weekday: int) -> Fact:
+def _opening_fact(place: EnginePlace, weekday: int, source: str = "demo") -> Fact:
     """TASK-003 §6, §10 Q9·Q10 정리: 상태는 **장소 단위**로 먼저 정리하고 요일 값을 만든다.
 
     - 영업시간 모름(None)이면 값 null, 상태 unknown
@@ -123,16 +123,16 @@ def _opening_fact(place: EnginePlace, weekday: int) -> Fact:
     - 그날 휴무(구간 없음)면 값 null, 상태는 위에서 정리한 그대로 (미확인을 확인됨으로 내보내지 않는다)
     """
     if place.hours is None:
-        return Fact(field="opening_hours", value=None, status="unknown", source_type="demo", checked_at=None)
+        return Fact(field="opening_hours", value=None, status="unknown", source_type=source, checked_at=None)
     status = place.hours_status
     if status == "unknown" and place.hours:
         status = "unverified"
     today = sorted((o for o in place.hours if o.weekday == weekday), key=lambda o: (o.open, o.close))
     value = ",".join(f"{o.open}-{o.close}" for o in today) or None
-    return Fact(field="opening_hours", value=value, status=status, source_type="demo", checked_at=None)
+    return Fact(field="opening_hours", value=value, status=status, source_type=source, checked_at=None)
 
 
-def place_view(place: EnginePlace, weekday: int) -> Place:
+def place_view(place: EnginePlace, weekday: int, source: str = "demo") -> Place:
     return Place(
         id=place.id,
         name=place.name,
@@ -142,7 +142,7 @@ def place_view(place: EnginePlace, weekday: int) -> Place:
         crowd_level=place.crowd_level,
         price_level=place.price_level,
         mood_tags=list(place.mood_tags),
-        facts=[_opening_fact(place, weekday)],
+        facts=[_opening_fact(place, weekday, source)],
     )
 
 
@@ -200,7 +200,7 @@ def batch_response(
             why = f"{DIRECTION_LABELS[state.last_direction]} 쪽이에요"  # §10 Q7: 방향을 못 지켜 채운 곳은 기본 문장
         else:
             why = WHY_NONE
-        candidates_out.append(Candidate(place=place_view(p, weekday), why=why))
+        candidates_out.append(Candidate(place=place_view(p, weekday, (day.sources or {}).get(p.id, "demo")), why=why))
 
     return CandidateBatch(
         session_id=state.session_id,
@@ -248,6 +248,30 @@ def picks_response(reactions: Reactions) -> Picks:
     return Picks(picks=liked, picks_count=len(liked))
 
 
+def option_view(record: OptionRecord, day: DayRecord) -> CourseResultOption:
+    """코스안 한 칸의 응답 모양. 코스안 카드(POST planning)와 고른 코스 읽기(GET /days/{id}/course)가 함께 쓴다."""
+    titles = [f.title for f in sorted((f for f in day.plan.fixed if f.place_id is None), key=lambda f: (f.start, f.end))]
+    untitled = iter(titles)
+    items = [
+        CourseItemView(
+            **item.model_dump(),
+            name=day.places[item.place_id].name if item.place_id else next(untitled),
+            lat=day.places[item.place_id].lat if item.place_id else None,
+            lng=day.places[item.place_id].lng if item.place_id else None,
+        )
+        for item in record.course.items
+    ]
+    dropped = [DroppedView(**d.model_dump(), name=day.places[d.place_id].name) for d in record.course.dropped]
+    return CourseResultOption(
+        option_id=record.option_id,
+        label=record.course.label,
+        items=items,
+        dropped=dropped,
+        go_home_min=record.course.go_home_min if day.lodging_known else None,  # §10 Q27: 돌아갈 숙소가 없으면 null
+        total_travel_min=record.course.total_travel_min,
+    )
+
+
 def course_response(
     state: PlanningState, records: list[OptionRecord], day: DayRecord, overrides: dict[PlaceId, int] | None = None
 ) -> CourseResult:
@@ -257,28 +281,5 @@ def course_response(
     # TASK-004 미정: 장소 없는 고정 일정 항목과 title을 잇는 방법(문서에 없음)
     장소 없는 고정 일정은 서로 겹치지 않아 시각순으로 정렬한 title과 코스의 해당 항목을 순서대로 짝짓는다.
     """
-    titles = [f.title for f in sorted((f for f in day.plan.fixed if f.place_id is None), key=lambda f: (f.start, f.end))]
-    options = []
-    for record in records:
-        untitled = iter(titles)
-        items = [
-            CourseItemView(
-                **item.model_dump(),
-                name=day.places[item.place_id].name if item.place_id else next(untitled),
-                lat=day.places[item.place_id].lat if item.place_id else None,
-                lng=day.places[item.place_id].lng if item.place_id else None,
-            )
-            for item in record.course.items
-        ]
-        dropped = [DroppedView(**d.model_dump(), name=day.places[d.place_id].name) for d in record.course.dropped]
-        options.append(
-            CourseResultOption(
-                option_id=record.option_id,
-                label=record.course.label,
-                items=items,
-                dropped=dropped,
-                go_home_min=record.course.go_home_min,
-                total_travel_min=record.course.total_travel_min,
-            )
-        )
+    options = [option_view(record, day) for record in records]
     return CourseResult(session_id=state.session_id, stage=state.stage, options=options, day=day_summary(state.day_id, day, overrides))

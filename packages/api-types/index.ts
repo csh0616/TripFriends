@@ -242,6 +242,142 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/trips": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 여행 만들기 (이전 여행은 archived) */
+        post: operations["create_trip_trips_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/trips/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 이 기기의 지금 여행 */
+        get: operations["current_trip_trips_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/trips/{trip_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 여행 하나 */
+        get: operations["get_trip_trips__trip_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/trips/{trip_id}/fixed-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 고정 일정 추가 */
+        post: operations["add_fixed_event_trips__trip_id__fixed_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fixed-events/{fixed_event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 고정 일정 지우기 */
+        delete: operations["delete_fixed_event_fixed_events__fixed_event_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/days/{day_id}/course": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 그날 고른 코스 (코스안 카드와 같은 모양, 지난 날도 읽힘) */
+        get: operations["chosen_course_days__day_id__course_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/places/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 장소 검색 (꼭 갈 곳, 도시 팩 안) */
+        get: operations["search_places_places_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/places/lodging-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 숙소 검색 (Google 실시간) */
+        get: operations["search_lodging_places_lodging_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -473,7 +609,7 @@ export interface components {
             /** Dropped */
             dropped: components["schemas"]["DroppedView"][];
             /** Go Home Min */
-            go_home_min: number;
+            go_home_min: number | null;
             /** Total Travel Min */
             total_travel_min: number;
         };
@@ -555,7 +691,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "NOT_FOUND" | "INVALID_REQUEST" | "STATE_CONFLICT" | "COURSE_INFEASIBLE" | "INTERNAL_ERROR";
+            code: "NOT_FOUND" | "INVALID_REQUEST" | "STATE_CONFLICT" | "COURSE_INFEASIBLE" | "INTERNAL_ERROR" | "VALIDATION_ERROR" | "PLAN_EXISTS" | "PROVIDER_UNAVAILABLE";
             /** Message */
             message: string;
             /** Detail */
@@ -585,7 +721,7 @@ export interface components {
          * FixedEvent
          * @description 예약·공연 같은 고정 일정.
          */
-        FixedEvent: {
+        "FixedEvent-Input": {
             /** Name */
             name: string;
             /**
@@ -593,6 +729,46 @@ export interface components {
              * Format: time
              */
             leave_by: string;
+        };
+        /** FixedEvent */
+        "FixedEvent-Output": {
+            /** Fixed Event Id */
+            fixed_event_id: string;
+            /** Trip Day Id */
+            trip_day_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Start At
+             * Format: date-time
+             */
+            start_at: string;
+            /**
+             * End At
+             * Format: date-time
+             */
+            end_at: string;
+            /** Place Id */
+            place_id: string | null;
+        };
+        /** FixedEventCreate */
+        FixedEventCreate: {
+            /** Trip Day Id */
+            trip_day_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Start At
+             * Format: date-time
+             */
+            start_at: string;
+            /**
+             * End At
+             * Format: date-time
+             */
+            end_at: string;
+            /** Place Id */
+            place_id?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -612,6 +788,25 @@ export interface components {
             lat: number;
             /** Lng */
             lng: number;
+        };
+        /** LodgingHit */
+        LodgingHit: {
+            /** Place Id */
+            place_id: string;
+            /** Name */
+            name: string;
+            /** Address Short */
+            address_short: string;
+        };
+        /** MustVisit */
+        MustVisit: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Place Id */
+            place_id: string;
         };
         /** NextRequest */
         NextRequest: {
@@ -985,6 +1180,43 @@ export interface components {
             /** Facts */
             facts: components["schemas"]["Fact"][];
         };
+        /** PlaceFact */
+        PlaceFact: {
+            /** Field */
+            field: string;
+            /** Value */
+            value: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "confirmed" | "unverified" | "unknown";
+            /** Source Type */
+            source_type: string;
+            /** Source Url */
+            source_url: string | null;
+            /** Checked At */
+            checked_at: string | null;
+        };
+        /** PlaceHit */
+        PlaceHit: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Category */
+            category: string;
+            /** Area */
+            area: string;
+            /** Facts */
+            facts: components["schemas"]["PlaceFact"][];
+            image: components["schemas"]["PlaceImage"];
+        };
+        /** PlaceImage */
+        PlaceImage: {
+            /** Category */
+            category: string;
+        };
         /**
          * PlanItem
          * @description 오늘 코스의 일정 한 개.
@@ -1098,7 +1330,27 @@ export interface components {
             trip_id: string;
             /** Day Ids */
             day_ids: string[];
+            /** Trip Days */
+            trip_days?: components["schemas"]["SeedDay"][] | null;
             day: components["schemas"]["DaySummary"];
+        };
+        /**
+         * SeedDay
+         * @description TASK-010 PM 답 1: 데모 날 하나 (Trip.trip_days와 같은 이름·모양 일부).
+         */
+        SeedDay: {
+            /** Day Id */
+            day_id: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "planning" | "planned" | "today" | "past";
         };
         /**
          * SeedRequest
@@ -1110,6 +1362,11 @@ export interface components {
              * @default false
              */
             chosen: boolean;
+            /**
+             * Past Days
+             * @default 0
+             */
+            past_days: number;
         };
         /** SeedResult */
         SeedResult: {
@@ -1117,6 +1374,8 @@ export interface components {
             trip_id: string;
             /** Day Ids */
             day_ids: string[];
+            /** Trip Days */
+            trip_days?: components["schemas"]["SeedDay"][] | null;
         };
         /** SelectResult */
         SelectResult: {
@@ -1147,7 +1406,7 @@ export interface components {
             safety: boolean;
             current_item?: components["schemas"]["PlanItem"] | null;
             next_item?: components["schemas"]["PlanItem"] | null;
-            fixed_event?: components["schemas"]["FixedEvent"] | null;
+            fixed_event?: components["schemas"]["FixedEvent-Input"] | null;
             /** Open Events */
             open_events?: components["schemas"]["OpenEvent"][];
             /**
@@ -1202,6 +1461,73 @@ export interface components {
             card: string;
             /** Label */
             label: string;
+        };
+        /** Trip */
+        Trip: {
+            /** Trip Id */
+            trip_id: string;
+            /** City Code */
+            city_code: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Lodging Place Id */
+            lodging_place_id: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+            /** Trip Days */
+            trip_days: components["schemas"]["TripDay"][];
+        };
+        /** TripCreate */
+        TripCreate: {
+            /** City Code */
+            city_code: string;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Lodging Place Id */
+            lodging_place_id?: string | null;
+            /**
+             * Must Visits
+             * @default []
+             */
+            must_visits: components["schemas"]["MustVisit"][];
+        };
+        /** TripDay */
+        TripDay: {
+            /** Day Id */
+            day_id: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "planning" | "planned" | "today" | "past";
+            /** Chosen Option Id */
+            chosen_option_id: string | null;
+            /** Fixed Events */
+            fixed_events: components["schemas"]["FixedEvent-Output"][];
         };
         /** ValidationError */
         ValidationError: {
@@ -1917,6 +2243,342 @@ export interface operations {
             };
         };
     };
+    create_trip_trips_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TripCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trip"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    current_trip_trips_current_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trip"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_trip_trips__trip_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
+            path: {
+                trip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trip"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    add_fixed_event_trips__trip_id__fixed_events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
+            path: {
+                trip_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FixedEventCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixedEvent-Output"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_fixed_event_fixed_events__fixed_event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
+            path: {
+                fixed_event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    chosen_course_days__day_id__course_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
+            path: {
+                day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseResultOption"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    search_places_places_search_get: {
+        parameters: {
+            query: {
+                city_code: string;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceHit"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    search_lodging_places_lodging_search_get: {
+        parameters: {
+            query: {
+                city_code: string;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LodgingHit"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -1993,7 +2655,9 @@ export interface operations {
     debug_seed_demo_debug_seed_demo_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Device-Id"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

@@ -30,12 +30,11 @@ const NO_BATCHIM: Record<Pair, string> = { '이/가': '가', '은/는': '는', '
 const BATCHIM: Record<Pair, string> = { '이/가': '이', '은/는': '은', '을/를': '을', '으로/로': '으로' };
 type Sound = 'ㄹ' | '있음' | undefined;
 const DIGIT_SOUND: Record<string, Sound> = { '0': '있음', '1': 'ㄹ', '3': '있음', '6': '있음', '7': 'ㄹ', '8': 'ㄹ' }; // 영·일·삼·육·칠·팔
-const LETTER_SOUND: Record<string, Sound> = { L: 'ㄹ', M: '있음', N: '있음', R: 'ㄹ' }; // 엘·엠·엔·알
-const UNDECIDED = 'lmnr'; // 소문자 l·m·n·r은 문서에 없다 (질문). 표·속성에 넣지 않는다
+// TASK-010 §E3: 소문자 l·m·n·r은 대문자와 같다
+const LETTER_SOUND: Record<string, Sound> = { L: 'ㄹ', M: '있음', N: '있음', R: 'ㄹ', l: 'ㄹ', m: '있음', n: '있음', r: 'ㄹ' }; // 엘·엠·엔·알
 function sound(word: string): Sound {
   if (word === '') return undefined;
   const last = word[word.length - 1];
-  if (UNDECIDED.includes(last)) throw new Error(`문서에 기대값 없음: ${word}`);
   const code = word.charCodeAt(word.length - 1) - 0xac00;
   if (code >= 0 && code <= 0xd7a3 - 0xac00) {
     const jong = code % 28;
@@ -60,7 +59,7 @@ describe('B1 경계 표 (AC-3, 서버와 같은 파일)', () => {
 
   test('T9_AC3_Q7_표에_숫자_끝_0부터_9와_영문_L_M_N_R이_모두_있다', () => {
     const ends = new Set(READY.filter((row) => row.word !== '').map((row) => row.word[row.word.length - 1]));
-    for (const end of '0123456789LMNR') expect([end, ends.has(end)]).toEqual([end, true]);
+    for (const end of '0123456789LMNRlmnr') expect([end, ends.has(end)]).toEqual([end, true]);
     expect([...'ABCDEFGHIJKOPQSTUVWXYZ'].some((end) => ends.has(end))).toBe(true); // 받침 없는 영문 예도 있다
   });
 
@@ -74,7 +73,7 @@ describe('B1 경계 표 (AC-3, 서버와 같은 파일)', () => {
 
 describe('B1 속성', () => {
   const hangul = fc.integer({ min: 0xac00, max: 0xd7a3 }).map((code) => String.fromCharCode(code));
-  const alnum = fc.constantFrom(...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'.split('').filter((c) => !UNDECIDED.includes(c)));
+  const alnum = fc.constantFrom(...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'.split(''));
   const prefix = fc.array(fc.constantFrom(...'가나다 카페골목ABz09'.split('')), { maxLength: 8 }).map((chars) => chars.join(''));
   const pair = fc.constantFrom<Pair>('이/가', '은/는', '을/를', '으로/로');
 

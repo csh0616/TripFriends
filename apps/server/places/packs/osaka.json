@@ -1,0 +1,1392 @@
+{
+ "city_code": "osaka",
+ "timezone": "Asia/Tokyo",
+ "center": {
+  "name_ko": "난바역",
+  "place_id": "ChIJFXXzNhPnAGARUifDEqMzXl4"
+ },
+ "areas": {
+  "namba": {
+   "name_ko": "난바",
+   "place_id": "ChIJFXXzNhPnAGARUifDEqMzXl4"
+  },
+  "shinsaibashi": {
+   "name_ko": "신사이바시",
+   "place_id": "ChIJEeUCdRrnAGARFkXthBm7LvU"
+  },
+  "umeda": {
+   "name_ko": "우메다",
+   "place_id": "ChIJC6fjlY3mAGARSshZ6CLIrhs"
+  },
+  "osakajo": {
+   "name_ko": "오사카성",
+   "place_id": "ChIJ0V0ngc_gAGARYlH4qd7-N_c"
+  }
+ },
+ "places": [
+  {
+   "id": "osaka-dotonbori",
+   "name_ko": "도톤보리",
+   "aliases": [
+    "道頓堀",
+    "Dotonbori"
+   ],
+   "query": "Dotonbori Osaka",
+   "area": "namba",
+   "category": "walk",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 5,
+   "price_level": 1,
+   "mood_tags": [
+    "활기",
+    "야경",
+    "대표"
+   ],
+   "open_space": true,
+   "place_id": "ChIJg2DcJhXnAGARCbeAHoZrPeQ"
+  },
+  {
+   "id": "osaka-glico-sign",
+   "name_ko": "글리코 간판",
+   "aliases": [
+    "グリコサイン",
+    "Glico"
+   ],
+   "query": "Glico Running Man Sign Dotonbori",
+   "area": "namba",
+   "category": "landmark",
+   "stay": {
+    "min": 10,
+    "typical": 15,
+    "max": 30
+   },
+   "crowd_level": 5,
+   "price_level": 1,
+   "mood_tags": [
+    "사진",
+    "대표"
+   ],
+   "open_space": true,
+   "place_id": "ChIJ6XHOkxTnAGARvyn92D4gWVs"
+  },
+  {
+   "id": "osaka-hozenji-yokocho",
+   "name_ko": "호젠지 요코초",
+   "aliases": [
+    "法善寺横丁",
+    "Hozenji"
+   ],
+   "query": "Hozenji Yokocho Osaka",
+   "area": "namba",
+   "category": "walk",
+   "stay": {
+    "min": 20,
+    "typical": 30,
+    "max": 45
+   },
+   "crowd_level": 3,
+   "price_level": 1,
+   "mood_tags": [
+    "골목",
+    "옛거리",
+    "조용"
+   ],
+   "open_space": true,
+   "place_id": "ChIJY4ZQxRTnAGAR0mjfWQwO7ho"
+  },
+  {
+   "id": "osaka-kuromon-market",
+   "name_ko": "구로몬 시장",
+   "aliases": [
+    "黒門市場",
+    "Kuromon"
+   ],
+   "query": "Kuromon Ichiba Market Osaka",
+   "area": "namba",
+   "category": "food",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 5,
+   "price_level": 2,
+   "mood_tags": [
+    "시장",
+    "먹거리"
+   ],
+   "place_id": "ChIJXSJB5UHnAGARQcEjvngsHaw"
+  },
+  {
+   "id": "osaka-namba-yasaka",
+   "name_ko": "난바 야사카 신사",
+   "aliases": [
+    "難波八阪神社",
+    "사자머리 신사"
+   ],
+   "query": "Namba Yasaka Shrine Osaka",
+   "area": "namba",
+   "category": "landmark",
+   "stay": {
+    "min": 15,
+    "typical": 20,
+    "max": 30
+   },
+   "crowd_level": 3,
+   "price_level": 1,
+   "mood_tags": [
+    "신사",
+    "사진"
+   ],
+   "place_id": "ChIJQVW9eXLnAGARn-pUdRl0w4A"
+  },
+  {
+   "id": "osaka-kamigata-ukiyoe",
+   "name_ko": "가미가타 우키요에관",
+   "aliases": [
+    "上方浮世絵館"
+   ],
+   "query": "Kamigata Ukiyoe Museum Osaka",
+   "area": "namba",
+   "category": "museum",
+   "stay": {
+    "min": 30,
+    "typical": 40,
+    "max": 60
+   },
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "우키요에",
+    "작은 미술관",
+    "조용"
+   ],
+   "place_id": "ChIJVVUJmBTnAGARhrDdnLdfzuc"
+  },
+  {
+   "id": "osaka-namba-parks",
+   "name_ko": "난바 파크스",
+   "aliases": [
+    "なんばパークス",
+    "Namba Parks"
+   ],
+   "query": "Namba Parks Osaka",
+   "area": "namba",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 75,
+    "max": 120
+   },
+   "crowd_level": 3,
+   "price_level": 3,
+   "mood_tags": [
+    "옥상정원",
+    "쇼핑"
+   ],
+   "place_id": "ChIJ9RFkRWnnAGARZh-hyWjBhtg"
+  },
+  {
+   "id": "osaka-den-den-town",
+   "name_ko": "덴덴타운",
+   "aliases": [
+    "でんでんタウン",
+    "닛폰바시",
+    "Nipponbashi"
+   ],
+   "query": "Den Den Town Nipponbashi Osaka",
+   "area": "namba",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 120
+   },
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "애니",
+    "게임",
+    "피규어"
+   ],
+   "place_id": "ChIJv6w_-2fnAGARH2p9wbwos3c"
+  },
+  {
+   "id": "osaka-doguyasuji",
+   "name_ko": "센니치마에 도구야스지",
+   "aliases": [
+    "千日前道具屋筋",
+    "도구야스지"
+   ],
+   "query": "Sennichimae Doguyasuji Shopping Street",
+   "area": "namba",
+   "category": "shop",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 60
+   },
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "주방용품",
+    "구경"
+   ],
+   "place_id": "ChIJfQfezmvnAGARy4Sd3VGFy_A"
+  },
+  {
+   "id": "osaka-mizuno",
+   "name_ko": "미즈노 오코노미야키",
+   "aliases": [
+    "美津の",
+    "Mizuno"
+   ],
+   "query": "Okonomiyaki Mizuno Dotonbori",
+   "area": "namba",
+   "category": "food",
+   "stay": {
+    "min": 40,
+    "typical": 50,
+    "max": 70
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "오코노미야키",
+    "줄서는 집"
+   ],
+   "place_id": "ChIJp6r1whTnAGARQi9RHXsUEtA"
+  },
+  {
+   "id": "osaka-wanaka-takoyaki",
+   "name_ko": "와나카 다코야키 센니치마에 본점",
+   "aliases": [
+    "わなか",
+    "Wanaka"
+   ],
+   "query": "Takoyaki Wanaka Sennichimae Honten",
+   "area": "namba",
+   "category": "food",
+   "stay": {
+    "min": 15,
+    "typical": 20,
+    "max": 30
+   },
+   "crowd_level": 4,
+   "price_level": 1,
+   "mood_tags": [
+    "다코야키",
+    "길거리"
+   ],
+   "place_id": "ChIJY971B2vnAGAR9orLBLBsj8Y"
+  },
+  {
+   "id": "osaka-kinryu-ramen",
+   "name_ko": "킨류 라멘 도톤보리",
+   "aliases": [
+    "金龍ラーメン",
+    "Kinryu"
+   ],
+   "query": "Kinryu Ramen Dotonbori",
+   "area": "namba",
+   "category": "food",
+   "stay": {
+    "min": 15,
+    "typical": 20,
+    "max": 30
+   },
+   "crowd_level": 4,
+   "price_level": 1,
+   "mood_tags": [
+    "라멘",
+    "늦게까지"
+   ],
+   "place_id": "ChIJs0wJ7BTnAGARb7rarouI46o"
+  },
+  {
+   "id": "osaka-kani-doraku",
+   "name_ko": "카니도라쿠 도톤보리 본점",
+   "aliases": [
+    "かに道楽",
+    "Kani Doraku"
+   ],
+   "query": "Kani Doraku Dotonbori Honten",
+   "area": "namba",
+   "category": "food",
+   "stay": {
+    "min": 60,
+    "typical": 75,
+    "max": 90
+   },
+   "crowd_level": 4,
+   "price_level": 4,
+   "mood_tags": [
+    "게 요리",
+    "대표"
+   ],
+   "place_id": "ChIJVVVFgBPnAGARLbCliBbVOI8"
+  },
+  {
+   "id": "osaka-551-horai",
+   "name_ko": "551 호라이 난바 본점",
+   "aliases": [
+    "551蓬莱",
+    "호라이 만두"
+   ],
+   "query": "551 Horai Namba Honten",
+   "area": "namba",
+   "category": "food",
+   "stay": {
+    "min": 10,
+    "typical": 15,
+    "max": 25
+   },
+   "crowd_level": 5,
+   "price_level": 1,
+   "mood_tags": [
+    "만두",
+    "포장"
+   ],
+   "place_id": "ChIJdZFNUxPnAGARewk2xIG6bR0"
+  },
+  {
+   "id": "osaka-rikuro",
+   "name_ko": "리쿠로 오지상 난바 본점",
+   "aliases": [
+    "りくろーおじさんの店",
+    "리쿠로"
+   ],
+   "query": "Rikuro Ojisan no Mise Namba Honten",
+   "area": "namba",
+   "category": "cafe",
+   "stay": {
+    "min": 10,
+    "typical": 15,
+    "max": 25
+   },
+   "crowd_level": 4,
+   "price_level": 1,
+   "mood_tags": [
+    "치즈케이크",
+    "포장"
+   ],
+   "place_id": "ChIJK2A0qGznAGARxPHcddHFYYA"
+  },
+  {
+   "id": "osaka-tombori-cruise",
+   "name_ko": "톤보리 리버 크루즈",
+   "aliases": [
+    "とんぼりリバークルーズ"
+   ],
+   "query": "Tombori River Cruise Osaka",
+   "area": "namba",
+   "category": "experience",
+   "stay": {
+    "min": 20,
+    "typical": 30,
+    "max": 40
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "배",
+    "강",
+    "야경"
+   ],
+   "place_id": "ChIJ2ySFjBTnAGAR3ngfXW-dwaU"
+  },
+  {
+   "id": "osaka-round1-sennichimae",
+   "name_ko": "라운드원 센니치마에",
+   "aliases": [
+    "ラウンドワン",
+    "Round1"
+   ],
+   "query": "Round1 Sennichimae Osaka",
+   "area": "namba",
+   "category": "experience",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "게임",
+    "실내",
+    "비 오는 날"
+   ],
+   "place_id": "ChIJqU3TtxTnAGARbMBactGzXDM"
+  },
+  {
+   "id": "osaka-ura-namba",
+   "name_ko": "우라난바",
+   "aliases": [
+    "裏なんば",
+    "Ura Namba"
+   ],
+   "query": "Ura Namba Osaka",
+   "area": "namba",
+   "category": "night",
+   "stay": {
+    "min": 60,
+    "typical": 90,
+    "max": 120
+   },
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "이자카야",
+    "골목",
+    "밤"
+   ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
+   "place_id": "ChIJG8GPFGrnAGARL-25AQZO3wM"
+  },
+  {
+   "id": "osaka-shinsekai",
+   "name_ko": "신세카이",
+   "aliases": [
+    "新世界",
+    "Shinsekai"
+   ],
+   "query": "Shinsekai Osaka",
+   "area": "namba",
+   "category": "walk",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 75
+   },
+   "crowd_level": 4,
+   "price_level": 1,
+   "mood_tags": [
+    "레트로",
+    "골목"
+   ],
+   "open_space": true,
+   "place_id": "ChIJV6JXdmDnAGAR-9a4atjXsTY"
+  },
+  {
+   "id": "osaka-tsutenkaku",
+   "name_ko": "츠텐카쿠",
+   "aliases": [
+    "通天閣",
+    "Tsutenkaku"
+   ],
+   "query": "Tsutenkaku Tower Osaka",
+   "area": "namba",
+   "category": "landmark",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 60
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "전망",
+    "레트로"
+   ],
+   "place_id": "ChIJ_0Lgd2DnAGARV0X03lbPy-U"
+  },
+  {
+   "id": "osaka-kushikatsu-daruma",
+   "name_ko": "쿠시카츠 다루마 신세카이 총본점",
+   "aliases": [
+    "串かつだるま",
+    "Daruma"
+   ],
+   "query": "Kushikatsu Daruma Shinsekai Sohonten",
+   "area": "namba",
+   "category": "food",
+   "stay": {
+    "min": 40,
+    "typical": 50,
+    "max": 70
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "쿠시카츠",
+    "대표"
+   ],
+   "place_id": "ChIJ5V4HCWDnAGARd6bIaaK91O4"
+  },
+  {
+   "id": "osaka-shinsaibashi-suji",
+   "name_ko": "신사이바시스지 상점가",
+   "aliases": [
+    "心斎橋筋商店街"
+   ],
+   "query": "Shinsaibashi-suji Shopping Street",
+   "area": "shinsaibashi",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 75,
+    "max": 120
+   },
+   "crowd_level": 5,
+   "price_level": 2,
+   "mood_tags": [
+    "쇼핑",
+    "아케이드",
+    "비 오는 날"
+   ],
+   "place_id": "ChIJc7M3_BPnAGARI8OZlTnEXGI"
+  },
+  {
+   "id": "osaka-daimaru-shinsaibashi",
+   "name_ko": "다이마루 신사이바시",
+   "aliases": [
+    "大丸心斎橋店"
+   ],
+   "query": "Daimaru Shinsaibashi",
+   "area": "shinsaibashi",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 120
+   },
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "백화점",
+    "건축"
+   ],
+   "place_id": "ChIJZ-xhShHnAGARHwpJWTM60q0"
+  },
+  {
+   "id": "osaka-pokemon-center-dx",
+   "name_ko": "포켓몬 센터 오사카 DX",
+   "aliases": [
+    "ポケモンセンターオーサカDX"
+   ],
+   "query": "Pokemon Center Osaka DX",
+   "area": "shinsaibashi",
+   "category": "shop",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 60
+   },
+   "crowd_level": 5,
+   "price_level": 2,
+   "mood_tags": [
+    "캐릭터",
+    "굿즈"
+   ],
+   "place_id": "ChIJiZ8OQInnAGART2BGEGqySKk"
+  },
+  {
+   "id": "osaka-shinsaibashi-parco",
+   "name_ko": "신사이바시 파르코",
+   "aliases": [
+    "心斎橋PARCO"
+   ],
+   "query": "Shinsaibashi PARCO",
+   "area": "shinsaibashi",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 120
+   },
+   "crowd_level": 4,
+   "price_level": 3,
+   "mood_tags": [
+    "캐릭터",
+    "쇼핑"
+   ],
+   "place_id": "ChIJHZ9qxhDnAGARS3udWVQdvD0"
+  },
+  {
+   "id": "osaka-amerikamura",
+   "name_ko": "아메리카무라",
+   "aliases": [
+    "アメリカ村",
+    "아메무라"
+   ],
+   "query": "Amerikamura Osaka",
+   "area": "shinsaibashi",
+   "category": "walk",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "빈티지",
+    "스트릿"
+   ],
+   "open_space": true,
+   "place_id": "ChIJby5T_xbnAGARF39mR8GVhdc"
+  },
+  {
+   "id": "osaka-orange-street",
+   "name_ko": "오렌지 스트리트",
+   "aliases": [
+    "立花通り",
+    "호리에"
+   ],
+   "query": "Orange Street Horie Osaka",
+   "area": "shinsaibashi",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 2,
+   "price_level": 3,
+   "mood_tags": [
+    "편집숍",
+    "한적"
+   ],
+   "place_id": "ChIJE_-SNXbnAGARVKJ0eMxArus"
+  },
+  {
+   "id": "osaka-lilo-coffee",
+   "name_ko": "릴로 커피 로스터스",
+   "aliases": [
+    "LiLo Coffee"
+   ],
+   "query": "LiLo Coffee Roasters Osaka",
+   "area": "shinsaibashi",
+   "category": "cafe",
+   "stay": {
+    "min": 20,
+    "typical": 30,
+    "max": 45
+   },
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "로스터리",
+    "작은 가게"
+   ],
+   "place_id": "ChIJ1T9unxrnAGARhtQGwQaaF-I"
+  },
+  {
+   "id": "osaka-arabica-shinsaibashi",
+   "name_ko": "아라비카 신사이바시",
+   "aliases": [
+    "% Arabica"
+   ],
+   "query": "% Arabica Osaka Shinsaibashi",
+   "area": "shinsaibashi",
+   "category": "cafe",
+   "stay": {
+    "min": 20,
+    "typical": 30,
+    "max": 45
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "라테",
+    "사진"
+   ],
+   "place_id": "ChIJBR7SmBTnAGARPDfarmJFyPM"
+  },
+  {
+   "id": "osaka-takamura-coffee",
+   "name_ko": "타카무라 와인 앤 커피 로스터스",
+   "aliases": [
+    "TAKAMURA"
+   ],
+   "query": "Takamura Wine and Coffee Roasters Osaka",
+   "area": "shinsaibashi",
+   "category": "cafe",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 60
+   },
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "넓은 공간",
+    "조용",
+    "와인"
+   ],
+   "place_id": "ChIJb3Q3lfnmAGARP7CUdaGq3P8"
+  },
+  {
+   "id": "osaka-utsubo-park",
+   "name_ko": "우츠보 공원",
+   "aliases": [
+    "靭公園"
+   ],
+   "query": "Utsubo Park Osaka",
+   "area": "shinsaibashi",
+   "category": "walk",
+   "stay": {
+    "min": 20,
+    "typical": 40,
+    "max": 60
+   },
+   "crowd_level": 1,
+   "price_level": 1,
+   "mood_tags": [
+    "공원",
+    "장미",
+    "조용"
+   ],
+   "open_space": true,
+   "place_id": "ChIJqWEt-fvmAGARjB6FHsOgvtI"
+  },
+  {
+   "id": "osaka-soemoncho",
+   "name_ko": "소에몬초",
+   "aliases": [
+    "宗右衛門町"
+   ],
+   "query": "Soemoncho Osaka",
+   "area": "shinsaibashi",
+   "category": "night",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 60
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "강변",
+    "밤거리"
+   ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
+   "place_id": "ChIJ0T43_xTnAGARnvKjZXmrFDw"
+  },
+  {
+   "id": "osaka-umeda-sky-building",
+   "name_ko": "우메다 스카이 빌딩 공중정원",
+   "aliases": [
+    "梅田スカイビル",
+    "空中庭園"
+   ],
+   "query": "Umeda Sky Building Kuchu Teien Observatory",
+   "area": "umeda",
+   "category": "landmark",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "전망",
+    "야경"
+   ],
+   "place_id": "ChIJbbXqmojmAGARh-OQXHzkwEc"
+  },
+  {
+   "id": "osaka-takimi-koji",
+   "name_ko": "타키미코지",
+   "aliases": [
+    "滝見小路"
+   ],
+   "query": "Takimi Koji Umeda Sky Building",
+   "area": "umeda",
+   "category": "food",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 60
+   },
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "레트로 식당가",
+    "오코노미야키"
+   ],
+   "place_id": "ChIJyaKM8ojmAGARAA4XsdLUZfI"
+  },
+  {
+   "id": "osaka-hep-five-wheel",
+   "name_ko": "헵 파이브 관람차",
+   "aliases": [
+    "HEP FIVE 観覧車"
+   ],
+   "query": "HEP FIVE Ferris Wheel Osaka",
+   "area": "umeda",
+   "category": "experience",
+   "stay": {
+    "min": 15,
+    "typical": 20,
+    "max": 30
+   },
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "관람차",
+    "야경"
+   ],
+   "place_id": "ChIJAQDAo5PmAGARcMqvnh2Reqs"
+  },
+  {
+   "id": "osaka-grand-front",
+   "name_ko": "그랑 프론트 오사카",
+   "aliases": [
+    "グランフロント大阪"
+   ],
+   "query": "Grand Front Osaka",
+   "area": "umeda",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 75,
+    "max": 120
+   },
+   "crowd_level": 3,
+   "price_level": 3,
+   "mood_tags": [
+    "쇼핑",
+    "넓음"
+   ],
+   "place_id": "ChIJAQAAB4_mAGAR1alcFGtOaAo"
+  },
+  {
+   "id": "osaka-hankyu-umeda",
+   "name_ko": "한큐 우메다 본점",
+   "aliases": [
+    "阪急うめだ本店"
+   ],
+   "query": "Hankyu Umeda Main Store",
+   "area": "umeda",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 120
+   },
+   "crowd_level": 4,
+   "price_level": 4,
+   "mood_tags": [
+    "백화점",
+    "디저트"
+   ],
+   "place_id": "ChIJ67mcWJLmAGARrUf0FlFtm7w"
+  },
+  {
+   "id": "osaka-yodobashi-umeda",
+   "name_ko": "요도바시 카메라 우메다",
+   "aliases": [
+    "ヨドバシ梅田"
+   ],
+   "query": "Yodobashi Camera Multimedia Umeda",
+   "area": "umeda",
+   "category": "shop",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "전자제품",
+    "비 오는 날"
+   ],
+   "place_id": "ChIJF4pM_Y3mAGARtA_Kf1KIKPg"
+  },
+  {
+   "id": "osaka-nintendo-osaka",
+   "name_ko": "닌텐도 오사카",
+   "aliases": [
+    "Nintendo OSAKA"
+   ],
+   "query": "Nintendo OSAKA Daimaru Umeda",
+   "area": "umeda",
+   "category": "shop",
+   "stay": {
+    "min": 20,
+    "typical": 30,
+    "max": 45
+   },
+   "crowd_level": 5,
+   "price_level": 2,
+   "mood_tags": [
+    "게임",
+    "캐릭터"
+   ],
+   "place_id": "ChIJlQguMSfnAGARBQISujo7yow"
+  },
+  {
+   "id": "osaka-umekita-park",
+   "name_ko": "우메키타 공원",
+   "aliases": [
+    "うめきた公園",
+    "그랑 그린 오사카"
+   ],
+   "query": "Umekita Park Grand Green Osaka",
+   "area": "umeda",
+   "category": "walk",
+   "stay": {
+    "min": 20,
+    "typical": 40,
+    "max": 60
+   },
+   "crowd_level": 3,
+   "price_level": 1,
+   "mood_tags": [
+    "공원",
+    "새 명소"
+   ],
+   "open_space": true,
+   "place_id": "ChIJsUzNAQDnAGARvwF0BsUBPZo"
+  },
+  {
+   "id": "osaka-nakazakicho",
+   "name_ko": "나카자키초",
+   "aliases": [
+    "中崎町"
+   ],
+   "query": "Nakazakicho Osaka",
+   "area": "umeda",
+   "category": "walk",
+   "stay": {
+    "min": 40,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "골목",
+    "카페",
+    "레트로"
+   ],
+   "open_space": true,
+   "place_id": "ChIJV2R0lpXmAGAR0isU5tWq7pU"
+  },
+  {
+   "id": "osaka-salon-de-amanto",
+   "name_ko": "살롱 드 아만토 텐진",
+   "aliases": [
+    "サロン・ド・アマント天人"
+   ],
+   "query": "Salon de AManTo Tenjin Nakazakicho",
+   "area": "umeda",
+   "category": "cafe",
+   "stay": {
+    "min": 20,
+    "typical": 40,
+    "max": 60
+   },
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "레트로",
+    "독특"
+   ],
+   "place_id": "ChIJzUwQeZbmAGARoYXgxwJkjdA"
+  },
+  {
+   "id": "osaka-brooklyn-roasting",
+   "name_ko": "브루클린 로스팅 컴퍼니 기타하마",
+   "aliases": [
+    "Brooklyn Roasting Company"
+   ],
+   "query": "Brooklyn Roasting Company Kitahama",
+   "area": "umeda",
+   "category": "cafe",
+   "stay": {
+    "min": 20,
+    "typical": 40,
+    "max": 60
+   },
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "강변",
+    "테라스"
+   ],
+   "place_id": "ChIJOztrDOfmAGARGp57ZmSWnys"
+  },
+  {
+   "id": "osaka-moto-coffee",
+   "name_ko": "모토 커피",
+   "aliases": [
+    "MOTO COFFEE"
+   ],
+   "query": "MOTO COFFEE Kitahama Osaka",
+   "area": "umeda",
+   "category": "cafe",
+   "stay": {
+    "min": 20,
+    "typical": 40,
+    "max": 60
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "강변",
+    "테라스"
+   ],
+   "place_id": "ChIJAzzg9N3mAGARH2ZW0c4HEXs"
+  },
+  {
+   "id": "osaka-nakanoshima-park",
+   "name_ko": "나카노시마 공원",
+   "aliases": [
+    "中之島公園"
+   ],
+   "query": "Nakanoshima Park Osaka",
+   "area": "umeda",
+   "category": "walk",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 75
+   },
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "강변",
+    "장미",
+    "산책"
+   ],
+   "open_space": true,
+   "place_id": "ChIJPXiMg97mAGARsiccqVj_Os8"
+  },
+  {
+   "id": "osaka-nakanoshima-museum",
+   "name_ko": "나카노시마 미술관",
+   "aliases": [
+    "大阪中之島美術館"
+   ],
+   "query": "Nakanoshima Museum of Art Osaka",
+   "area": "umeda",
+   "category": "museum",
+   "stay": {
+    "min": 60,
+    "typical": 90,
+    "max": 120
+   },
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "미술관",
+    "건축"
+   ],
+   "place_id": "ChIJa7dX-nLnAGARYuCX2mxyVWA"
+  },
+  {
+   "id": "osaka-national-museum-of-art",
+   "name_ko": "국립국제미술관",
+   "aliases": [
+    "国立国際美術館"
+   ],
+   "query": "National Museum of Art Osaka",
+   "area": "umeda",
+   "category": "museum",
+   "stay": {
+    "min": 60,
+    "typical": 90,
+    "max": 120
+   },
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "현대미술",
+    "조용"
+   ],
+   "place_id": "ChIJq6o6zPbmAGAR5Q9OsQN_voo"
+  },
+  {
+   "id": "osaka-housing-museum",
+   "name_ko": "오사카 주택박물관",
+   "aliases": [
+    "大阪くらしの今昔館",
+    "오사카 생활 박물관"
+   ],
+   "query": "Osaka Museum of Housing and Living",
+   "area": "umeda",
+   "category": "museum",
+   "stay": {
+    "min": 60,
+    "typical": 75,
+    "max": 90
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "에도 거리",
+    "기모노",
+    "비 오는 날"
+   ],
+   "place_id": "ChIJ7xEdT7nmAGARYQc8ZWRPI5Q"
+  },
+  {
+   "id": "osaka-tenjinbashisuji",
+   "name_ko": "텐진바시스지 상점가",
+   "aliases": [
+    "天神橋筋商店街"
+   ],
+   "query": "Tenjinbashisuji Shopping Street Osaka",
+   "area": "umeda",
+   "category": "shop",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 3,
+   "price_level": 1,
+   "mood_tags": [
+    "긴 아케이드",
+    "로컬",
+    "비 오는 날"
+   ],
+   "place_id": "ChIJTW9DUrnmAGARVwa3Ga1U-JI"
+  },
+  {
+   "id": "osaka-tsuyuno-tenjinja",
+   "name_ko": "오하츠텐진",
+   "aliases": [
+    "露天神社",
+    "お初天神"
+   ],
+   "query": "Tsuyunoten Shrine Ohatsu Tenjin Osaka",
+   "area": "umeda",
+   "category": "landmark",
+   "stay": {
+    "min": 10,
+    "typical": 15,
+    "max": 25
+   },
+   "crowd_level": 2,
+   "price_level": 1,
+   "mood_tags": [
+    "신사",
+    "도심 속"
+   ],
+   "place_id": "ChIJffnrY-zmAGARVLGXbRijxws"
+  },
+  {
+   "id": "osaka-ohatsutenjin-urasando",
+   "name_ko": "오하츠텐진 우라산도",
+   "aliases": [
+    "お初天神裏参道"
+   ],
+   "query": "Ohatsutenjin Urasando Osaka",
+   "area": "umeda",
+   "category": "night",
+   "stay": {
+    "min": 45,
+    "typical": 75,
+    "max": 120
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "이자카야",
+    "골목"
+   ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
+   "place_id": "ChIJD_IxlOzmAGARsV1m5x-7eCs"
+  },
+  {
+   "id": "osaka-hankyu-higashi-dori",
+   "name_ko": "한큐 히가시도리 상점가",
+   "aliases": [
+    "阪急東通商店街"
+   ],
+   "query": "Hankyu Higashi-dori Shopping Street Osaka",
+   "area": "umeda",
+   "category": "night",
+   "stay": {
+    "min": 45,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "술집",
+    "활기"
+   ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
+   "place_id": "ChIJIQPNF5PmAGARw-MkeHW_4mA"
+  },
+  {
+   "id": "osaka-kitashinchi",
+   "name_ko": "기타신치",
+   "aliases": [
+    "北新地"
+   ],
+   "query": "Kitashinchi Osaka",
+   "area": "umeda",
+   "category": "night",
+   "stay": {
+    "min": 60,
+    "typical": 90,
+    "max": 120
+   },
+   "crowd_level": 2,
+   "price_level": 4,
+   "mood_tags": [
+    "바",
+    "고급"
+   ],
+   "curated_hours": [
+    {
+     "days": "all",
+     "open": "17:00",
+     "close": "24:00"
+    }
+   ],
+   "place_id": "ChIJRcIjfe3mAGARyfyG6oGPTew"
+  },
+  {
+   "id": "osaka-castle",
+   "name_ko": "오사카성 천수각",
+   "aliases": [
+    "大阪城天守閣",
+    "오사카성"
+   ],
+   "query": "Osaka Castle Main Tower",
+   "area": "osakajo",
+   "category": "landmark",
+   "stay": {
+    "min": 60,
+    "typical": 75,
+    "max": 120
+   },
+   "crowd_level": 5,
+   "price_level": 2,
+   "mood_tags": [
+    "역사",
+    "대표"
+   ],
+   "place_id": "ChIJJ_AZutLgAGARwYqBzSs8DkM"
+  },
+  {
+   "id": "osaka-castle-park",
+   "name_ko": "오사카성 공원",
+   "aliases": [
+    "大阪城公園"
+   ],
+   "query": "Osaka Castle Park",
+   "area": "osakajo",
+   "category": "walk",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   },
+   "crowd_level": 3,
+   "price_level": 1,
+   "mood_tags": [
+    "공원",
+    "산책",
+    "벚꽃"
+   ],
+   "open_space": true,
+   "place_id": "ChIJVVVld8ngAGARi9mE-a6e9mc"
+  },
+  {
+   "id": "osaka-gozabune",
+   "name_ko": "오사카성 고자부네 놀잇배",
+   "aliases": [
+    "大阪城御座船"
+   ],
+   "query": "Osaka Castle Gozabune Boat",
+   "area": "osakajo",
+   "category": "experience",
+   "stay": {
+    "min": 20,
+    "typical": 20,
+    "max": 30
+   },
+   "crowd_level": 4,
+   "price_level": 2,
+   "mood_tags": [
+    "배",
+    "해자"
+   ],
+   "place_id": "ChIJtUJaHNPgAGAR5HkjzXjyqoY"
+  },
+  {
+   "id": "osaka-jo-terrace",
+   "name_ko": "조테라스 오사카",
+   "aliases": [
+    "JO-TERRACE OSAKA"
+   ],
+   "query": "JO-TERRACE OSAKA",
+   "area": "osakajo",
+   "category": "food",
+   "stay": {
+    "min": 30,
+    "typical": 45,
+    "max": 60
+   },
+   "crowd_level": 3,
+   "price_level": 2,
+   "mood_tags": [
+    "식당가",
+    "공원 옆"
+   ],
+   "place_id": "ChIJ342Azc_gAGARbj2TEw7tkA4"
+  },
+  {
+   "id": "osaka-museum-of-history",
+   "name_ko": "오사카 역사박물관",
+   "aliases": [
+    "大阪歴史博物館"
+   ],
+   "query": "Osaka Museum of History",
+   "area": "osakajo",
+   "category": "museum",
+   "stay": {
+    "min": 60,
+    "typical": 75,
+    "max": 90
+   },
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "역사",
+    "전망",
+    "비 오는 날"
+   ],
+   "place_id": "ChIJR5zaJTLnAGARyuJ_yX2DhOk"
+  }
+ ]
+}

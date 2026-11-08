@@ -432,15 +432,16 @@ describe('projectRoute', () => {
 // ---------- placeholderFor ----------
 
 describe('placeholderFor', () => {
+  // TASK-010 §C5: DESIGN-001 §4-8 장소 이미지 체계 (cat-*-a 밝은 끝, cat-*-b 깊은 끝). 이전 임시 그라데이션(TASK-004 §B-5)을 바꾼다
   const TABLE: Record<string, [string, string]> = {
-    food: ['#8FA3B8', '#4F6479'],
-    cafe: ['#B7B2C7', '#6E6A85'],
-    walk: ['#D3CABB', '#8D8576'],
-    night: ['#5D6B8A', '#2F3A55'],
-    shop: ['#D9B8B4', '#96706C'],
-    museum: ['#9DB8BF', '#547882'],
-    experience: ['#9DB8BF', '#547882'],
-    landmark: ['#BBC2CA', '#737C88'],
+    food: ['#476C94', '#1B3C60'],
+    cafe: ['#8D75B7', '#5B457F'],
+    walk: ['#3A8989', '#005757'],
+    night: ['#403F79', '#191345'],
+    shop: ['#975388', '#612555'],
+    museum: ['#746C5C', '#443D2F'],
+    experience: ['#4373D5', '#184098'],
+    landmark: ['#87919C', '#576069'],
   };
 
   test.each(Object.entries(TABLE))('L32_B5_%s의_두_색', (category, colours) => {
