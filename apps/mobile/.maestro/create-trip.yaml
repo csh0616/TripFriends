@@ -103,3 +103,35 @@ appId: com.csh0616.tripfriends
       id: "choice-walk_alley"
     timeout: 30000
 - takeScreenshot: create-trip-6-first-day-planning
+
+# 피드백 11-09: 날짜 목록의 [새 여행 만들기]는 글자 버튼 + 확인 한 번. 취소면 그대로, [새로 만들기]면 SC-01
+# 첫날 계획 화면에서 뒤로 -> 날짜 목록
+- tapOn:
+    id: "header-back"
+- extendedWaitUntil:
+    visible: "계획 전"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "new-trip"
+- tapOn:
+    id: "new-trip"
+- extendedWaitUntil:
+    visible: "지금 여행은 보관돼. 새로 만들까?"
+    timeout: 10000
+- takeScreenshot: create-trip-7-new-trip-confirm
+- tapOn: "취소"
+- assertVisible: "계획 전"
+- assertNotVisible:
+    id: "create-trip-submit"
+- tapOn:
+    id: "new-trip"
+- extendedWaitUntil:
+    visible: "지금 여행은 보관돼. 새로 만들까?"
+    timeout: 10000
+- tapOn: "새로 만들기"
+- extendedWaitUntil:
+    visible:
+      id: "create-trip-submit"
+    timeout: 30000
+- takeScreenshot: create-trip-8-new-trip-SC-01
