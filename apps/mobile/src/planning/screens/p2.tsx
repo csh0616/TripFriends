@@ -11,16 +11,17 @@ import { Notice } from '@/components/planning/notice';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
-import { StatusChip } from '@/components/planning/status-chip';
+import { CardButton } from '@/components/planning/card-button';
+import { HoursChipView } from '@/components/planning/status-chip';
 import { distanceLabel } from '@/lib/distance-label';
 import { sourceLabel } from '@/lib/source-label';
 import { requests, type CandidateBatch } from '@/lib/planning-api';
-import { todayHoursText } from '@/lib/today-hours-text';
+import { hoursView } from '@/lib/today-hours-text';
 
 import { readReduceMotion } from '../draw';
 import { dayName, daySubtitle, pad2 } from '../format';
 import { layout } from '../layout';
-import { color, control, radius, space, text } from '../theme';
+import { color, control, fit, fitText, radius, space, text } from '../theme';
 import type { NoticeData, Send } from './types';
 
 const MAX_CIRCLES = 3;
@@ -151,12 +152,13 @@ export function P2Screen({
       >
         {candidates.map(({ place, why }, index) => {
           const liked = picks.includes(place.id);
-          const hours = todayHoursText(place.facts);
+          const hours = hoursView(place.facts);
+          const hoursFact = place.facts.find((fact) => fact.field === 'opening_hours');
           return (
             <View key={place.id} testID={`candidate-card-${place.id}`} style={{ width: cardWidth }}>
-              <PhotoPlaceholder category={place.category} glyph={layout.coverGlyphLarge} style={styles.photo}>
+              <PhotoPlaceholder category={place.category} pattern glyph={layout.coverGlyphLarge} style={styles.photo}>
                 <View style={styles.counter}>
-                  <Text style={text('num-md')}>{`${pad2(index + 1)} / ${pad2(total)}`}</Text>
+                  <Text style={fitText(fit['pill-count'])}>{`${pad2(index + 1)} / ${pad2(total)}`}</Text>
                 </View>
                 {liked ? (
                   <View style={styles.markWrap}>
@@ -197,22 +199,23 @@ export function P2Screen({
                   )}
                 </Pressable>
               </View>
-              <View style={styles.facts}>
-                <StatusChip status={hours.chip} />
-                <Text style={text('caption', 'muted')}>{hours.text}</Text>
+              {/* TASK-011 fact-line: 칩 · 값 · 거리 한 줄 + 4px 아래 출처 한 줄 (Google·Tripfriends 같은 자리). Google 값도 상자 없이 출처 줄만 (A4) */}
+              <View testID={`fact-line-${place.id}`} style={styles.facts}>
+                <HoursChipView chip={hours.chip} />
+                <Text style={fitText(fit['fact-line'].value)}>{hours.text}</Text>
                 <Text style={text('caption', 'muted')}>
                   {distanceLabel(day.lodging, {
                     lat: place.lat,
                     lng: place.lng,
                   })}
                 </Text>
-                {/* TASK-010 §13 O4: 우리가 정한 값(curated)은 출처 "Tripfriends" (Google 자리 없음) */}
-                {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'curated') ? (
-                  <Text style={text('src', 'muted')}>{sourceLabel('curated')}</Text>
-                ) : null}
-                {/* TASK-010 §11 G2: 지도 없이 Google 값을 보여 주는 카드에는 Google Maps 로고 자리 */}
-                {place.facts.some((fact) => fact.field === 'opening_hours' && fact.source_type === 'google' && fact.status !== 'unknown') ? <GoogleMark testID="g-slot" /> : null}
               </View>
+              {/* TASK-010 §13 O4: 우리가 정한 값(curated)은 출처 "Tripfriends". §11 G2: 지도 없이 Google 값을 보여 주는 카드에는 Google Maps 로고 자리 */}
+              {hoursFact?.source_type === 'curated' || (hoursFact?.source_type === 'google' && hoursFact.status !== 'unknown') ? (
+                <View testID={`fact-source-${place.id}`} style={styles.source}>
+                  {hoursFact.source_type === 'curated' ? <Text style={text('src', 'muted')}>{sourceLabel('curated')}</Text> : <GoogleMark testID="g-slot" />}
+                </View>
+              ) : null}
             </View>
           );
         })}
@@ -227,8 +230,8 @@ export function P2Screen({
           ) : (
             <>
               <Text style={text('heading')}>다른 곳도 볼래?</Text>
-              {/* §6: 서버 message와 앱 문구가 겹치면 서버 문구. 앱 문구는 소진이 아닐 때만 */}
-              <PrimaryButton label="다른 곳 보여 줘" disabled={busy} onPress={() => next()} />
+              {/* §6: 서버 message와 앱 문구가 겹치면 서버 문구. 앱 문구는 소진이 아닐 때만. TASK-011 §9 Q9: 주황은 [코스 짜기]만이라 보조 모양 */}
+              <CardButton size="large" label="다른 곳 보여 줘" disabled={busy} onPress={() => next()} />
             </>
           )}
         </View>
@@ -285,10 +288,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: space['space-3'],
     left: space['space-3'],
-    backgroundColor: color.surface,
-    borderRadius: radius['r-full'],
-    paddingHorizontal: space['space-3'],
-    paddingVertical: space['space-1'],
+    height: fit['pill-count'].height,
+    justifyContent: 'center',
+    backgroundColor: fit['pill-count'].bg,
+    borderRadius: fit['pill-count'].radius,
+    paddingHorizontal: fit['pill-count'].paddingHorizontal,
   },
   markWrap: {
     position: 'absolute',
@@ -328,7 +332,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: space['space-2'],
     marginTop: space['space-3'],
+    minHeight: fit['fact-line'].height,
   },
+  source: { marginTop: fit['fact-line'].sourceGap },
   endCard: {
     minHeight: layout.photo,
     borderRadius: radius['r-lg'],

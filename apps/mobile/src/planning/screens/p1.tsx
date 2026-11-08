@@ -139,7 +139,8 @@ export function P1Screen({
 
       <View testID="timetable" style={styles.timetable}>
         <Text style={text('caption', 'muted')}>오늘 시간표</Text>
-        <Text style={text('num-md')}>{`${day.start}~${day.end}`}</Text>
+        {/* 미정(TASK-011 질문): W16(승인된 기존 테스트)이 오늘 시간표 글자를 "10:00 ~ 20:00"으로 고정해서 timeRange(엔 대시)를 못 쓴다 */}
+        <Text style={text('num-md')}>{[day.start, day.end].join(' ~ ')}</Text>
         {free ? <Text style={text('caption', 'muted')}>{free}</Text> : null}
         {day.fixed.length > 0 ? (
           <View testID="timetable-bar" style={styles.track}>

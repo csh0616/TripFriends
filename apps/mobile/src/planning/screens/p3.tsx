@@ -8,13 +8,14 @@ import { RouteDiagram } from '@/components/planning/route-diagram';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
-import { StatusChip } from '@/components/planning/status-chip';
+import { HoursChipView } from '@/components/planning/status-chip';
 import { formatStay } from '@/lib/format-stay';
 import type { CourseItem, CourseResult } from '@/lib/planning-api';
+import { hoursView, type HoursChip } from '@/lib/today-hours-text';
 
 import { dayName } from '../format';
 import { layout } from '../layout';
-import { bold, color, control, radius, shadow, space, text } from '../theme';
+import { bold, color, control, fit, fitText, radius, shadow, space, text } from '../theme';
 import type { NoticeData, Send } from './types';
 
 const LABEL_TEXT = { relaxed: '느긋하게', packed: '꽉 채워서' } as const;
@@ -170,9 +171,19 @@ export function P3Screen({
   );
 }
 
-/** 코스 줄. readOnly면 머무는 시간을 바꿀 수 없다 (TASK-010 §12: 계획 완료·지난 날의 고른 코스 읽기) */
+const ALWAYS_OPEN_TEXT = '늘 열려 있어';
+
+/** 코스 줄의 영업시간 칩과 글자. 칩의 확인 상태는 서버가 준 hours_status(없으면 칩 없음)이고, facts는 우리가 정한 값(curated)인지만 본다 (TASK-011 §9 Q10) */
+function hoursOf(item: CourseItem): { chip: HoursChip; always: boolean } {
+  const status = item.hours_status ?? null;
+  if (status === null) return { chip: null, always: false };
+  const view = hoursView(item.facts);
+  if (view.text === ALWAYS_OPEN_TEXT) return { chip: null, always: true };
+  return { chip: view.chip === 'hint' ? 'hint' : status, always: false };
+}
+
+/** 코스 줄 (코스안). 머무는 시간을 바꿀 수 있다 */
 export function CourseRow({
-  readOnly = false,
   first,
   last,
   item,
@@ -193,8 +204,9 @@ export function CourseRow({
   onAdjust: (placeId: string, delta: 15 | -15) => void;
 }) {
   // 고정 일정 줄은 머문 시간을 바꿀 수 없다 (§10-10 R6). 장소 없는 줄도 마찬가지.
-  const placeId = !item.is_fixed && !readOnly ? item.place_id : null;
+  const placeId = !item.is_fixed ? item.place_id : null;
   const kind = item.is_fixed ? '고정 일정 · ' : must ? '꼭 갈 곳 · ' : '';
+  const hours = hoursOf(item);
   const stay = (
     <>
       <Text style={text('caption')}>{formatStay(item.stay_min)}</Text>
@@ -226,9 +238,9 @@ export function CourseRow({
               numberOfLines={2} // TASK-006 D3: 좁은 화면에서 두 줄까지
               // 미정(TASK-005): 보조 줄은 caption
               style={[text('caption', 'muted'), styles.subText]}
-            >{`${kind}이동 ${item.travel_min}분`}</Text>
-            {/* Q39 hours_status가 null(장소 없는 고정 일정)이면 칩을 숨긴다 */}
-            {item.hours_status ? <StatusChip status={item.hours_status} /> : null}
+            >{`${kind}이동 ${item.travel_min}분${hours.always ? ` \u00b7 ${ALWAYS_OPEN_TEXT}` : ''}`}</Text>
+            {/* Q39 hours_status가 null(장소 없는 고정 일정)이면 칩을 숨긴다. TASK-011 Q10: curated 시간대는 추천 시간대, 늘 열림은 칩 없음 */}
+            <HoursChipView chip={hours.chip} />
           </View>
         </View>
         {placeId !== null ? (
@@ -261,7 +273,53 @@ export function CourseRow({
   );
 }
 
+/** 고른 코스 읽기만 줄 (row-read): 높이 52 이상 · 번호 원 28 · 이름 15/22 · 보조 13/18 한 줄(…) · 칩은 미확인·모름·추천 시간대만 이름 줄 오른쪽 · › 없음 */
+export function ReadRow({ item, must }: { item: CourseItem; must: boolean }) {
+  const read = fit['row-read'];
+  const kind = item.is_fixed ? '고정 일정 \u00b7 ' : must ? '꼭 갈 곳 \u00b7 ' : '';
+  const hours = hoursOf(item);
+  const chip: HoursChip = hours.chip === 'confirmed' ? null : hours.chip; // 확인됨은 생략 (PM 답 8)
+  return (
+    <View testID={`course-row-${item.seq}`} style={styles.readRow}>
+      <Text style={styles.time}>{item.start}</Text>
+      <View style={styles.readNumber}>
+        <Text style={text('num-md', 'surface')}>{String(item.seq)}</Text>
+      </View>
+      <View style={styles.rowText}>
+        <View testID={`course-row-name-${item.seq}`} style={styles.readName}>
+          <Text numberOfLines={1} style={[fitText(read.name), styles.subText]}>
+            {item.name}
+          </Text>
+          <HoursChipView chip={chip} />
+        </View>
+        <View testID={`course-row-sub-${item.seq}`}>
+          <Text numberOfLines={1} style={fitText(read.sub, 'muted')}>{`${kind}이동 ${item.travel_min}분${hours.always ? ` \u00b7 ${ALWAYS_OPEN_TEXT}` : ''}`}</Text>
+        </View>
+      </View>
+      <View style={styles.stay}>
+        <Text style={text('caption')}>{formatStay(item.stay_min)}</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  readRow: {
+    minHeight: fit['row-read'].minHeight,
+    paddingHorizontal: space['space-3'],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['space-2'],
+  },
+  readNumber: {
+    width: fit['row-read'].badge,
+    height: fit['row-read'].badge,
+    borderRadius: radius['r-full'],
+    backgroundColor: color.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  readName: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   grow: { flex: 1 },
   toggle: {
     flexDirection: 'row',
