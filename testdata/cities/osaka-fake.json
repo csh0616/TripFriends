@@ -1,5 +1,5 @@
 {
- "about": "TASK-010 §A1 FakePlaces 데이터. test-writer가 손으로 지어낸 가짜 값이며 실제 Google·Serper 응답이 아니다 (ADR-015 §3-2: 테스트 데이터도 손으로 만든 가짜). place_id는 모두 'FAKE-'로 시작하고 링크는 모두 example.invalid. 좌표는 오사카 근처의 지어낸 수, 영업시간은 지어낸 시각. resolve: query -> place_id 목록(0개=검색 실패, 2개 이상=여러 곳). details: place_id -> {location, opening_hours(엔진 Opening 모양 또는 null=없음), website, maps_url, business_status}. serper: '{query} 営業時間' -> [{text, link}] (문장은 모두 '【テスト用の作り話】'로 시작하는 작문). lodging: 숙소 검색 결과(팩 밖). seed는 testdata/cities/osaka-seed-fake.yaml (center = 難波駅도 resolve 표에 있다).",
+ "about": "TASK-010 §A1 FakePlaces 데이터. test-writer가 손으로 지어낸 가짜 값이며 실제 Google·Serper 응답이 아니다 (ADR-015 §3-2: 테스트 데이터도 손으로 만든 가짜). place_id는 모두 'FAKE-'로 시작하고 링크는 모두 example.invalid. 좌표는 오사카 근처의 지어낸 수, 영업시간은 지어낸 시각. resolve: query -> place_id 목록(0개=검색 실패, 2개 이상=여러 곳). details: place_id -> {location, opening_hours(엔진 Opening 모양 또는 null=없음), website, maps_url, business_status}. serper: '{query} 営業時間' -> [{text, link}] (문장은 모두 '【テスト用の作り話】'로 시작하는 작문). lodging: 숙소 검색 결과(팩 밖). seed는 testdata/cities/osaka-seed-fake.yaml (center = 難波駅, 지역 중심 難波駅·心斎橋駅·梅田駅도 resolve 표에 있다. FAKE-osaka-edge-in/out은 梅田駅에서 북쪽 2.9km/3.1km, far-umeda는 난바 쪽 약 4km).",
  "timezone": "Asia/Tokyo",
  "center": {
   "lat": 34.669,
@@ -8,6 +8,21 @@
  "resolve": {
   "難波駅 Osaka": [
    "FAKE-osaka-center-station"
+  ],
+  "心斎橋駅 Osaka": [
+   "FAKE-osaka-area-shinsaibashi"
+  ],
+  "梅田駅 Osaka": [
+   "FAKE-osaka-area-umeda"
+  ],
+  "梅田 遠い食堂 Osaka": [
+   "FAKE-osaka-far-umeda"
+  ],
+  "梅田 北の喫茶 Osaka": [
+   "FAKE-osaka-edge-in"
+  ],
+  "梅田 もっと北の喫茶 Osaka": [
+   "FAKE-osaka-edge-out"
   ],
   "道頓堀 Osaka": [
    "FAKE-osaka-dotonbori"
@@ -69,6 +84,164 @@
    "opening_hours": null,
    "website": "https://example.invalid/FAKE-osaka-center-station",
    "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-center-station",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-area-shinsaibashi": {
+   "location": {
+    "lat": 34.675,
+    "lng": 135.501
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-area-shinsaibashi",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-area-shinsaibashi",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-area-umeda": {
+   "location": {
+    "lat": 34.7025,
+    "lng": 135.4959
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-area-umeda",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-area-umeda",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-far-umeda": {
+   "location": {
+    "lat": 34.666,
+    "lng": 135.501
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "11:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "11:00",
+     "close": "21:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-far-umeda",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-far-umeda",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-edge-in": {
+   "location": {
+    "lat": 34.72858,
+    "lng": 135.4959
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-edge-in",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-edge-in",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-edge-out": {
+   "location": {
+    "lat": 34.730379,
+    "lng": 135.4959
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 1,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 2,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 3,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 4,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 5,
+     "open": "10:00",
+     "close": "20:00"
+    },
+    {
+     "weekday": 6,
+     "open": "10:00",
+     "close": "20:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-edge-out",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-edge-out",
    "business_status": "OPERATIONAL"
   },
   "FAKE-osaka-dotonbori": {

@@ -52,11 +52,13 @@ SEED_KEYS = {"id", "name_ko", "aliases", "query", "area", "category", "stay", "c
 # Google에서 온 값 (ADR-015 §3-1: 캐시만, git 밖)
 GOOGLE_KEYS = {"location", "lat", "lng", "opening_hours", "hours", "website", "maps_url", "business_status", "fetched_at"}
 SOURCE_TYPES = {"google", "serper", "user", "curated", "estimate", "demo"}  # ADR-015 §3-5 + DATA-001 B (§9 Q3)
-REASONS = {"not_found", "ambiguous", "closed_permanently", "cap_exceeded"}  # §9 Q9
+REASONS = {"not_found", "ambiguous", "closed_permanently", "cap_exceeded", "provider_error"}  # §9 Q9 + PM 답 Q2(provider_error)
 EXCLUDED = {
     "osaka-fake-not-found": "not_found",
     "osaka-fake-ambiguous": "ambiguous",
     "osaka-fake-closed-shop": "closed_permanently",
+    "osaka-fake-far-umeda": "ambiguous",  # PM 답 Q2: 찾은 곳이 지역 중심에서 3km 밖
+    "osaka-fake-edge-out": "ambiguous",  # 3.1km
 }
 NO_GOOGLE_HOURS = ["osaka-fake-dotonbori", "osaka-fake-alley-cafe", "osaka-fake-comedy", "osaka-fake-amemura"]
 SNIPPET_MARK = "作り話"  # 가짜 Serper 문장마다 들어 있는 낱말 (문장이 어딘가 남았는지 찾는 표시)
@@ -187,6 +189,7 @@ def test_T10_S_가짜_seed는_지역_3곳_카테고리_8종을_모두_담는다(
     data = seed()
     assert (data["city_code"], data["timezone"]) == ("osaka", "Asia/Tokyo")
     assert set(data["center"]) == {"name_ko", "query"}
+    assert set(data["areas"]) == AREAS and all(set(a) == {"name_ko", "query"} for a in data["areas"].values())
     rows = data["places"]
     assert {row["area"] for row in rows} == AREAS
     assert {row["category"] for row in rows} == CATEGORIES

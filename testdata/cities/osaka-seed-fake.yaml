@@ -11,11 +11,18 @@
 #   osaka-fake-gallery    : 임시 휴업 -> 팩에 넣고 영업시간 fact unknown (§A4)
 #   osaka-fake-alley-cafe : Google 영업시간 없음 + Serper 값 하나(+ 定休日 火曜) -> serper·unverified, closed_days도 unverified (§A3, §9 Q8)
 #   osaka-fake-comedy     : Google 영업시간 없음 + Serper 값 엇갈림 -> unknown (§A3)
+#   osaka-fake-far-umeda  : area=umeda인데 찾은 곳이 지역 중심에서 약 4km -> ambiguous로 빼고 보고 (PM 답 Q2: 3km 밖)
+#   osaka-fake-edge-in    : 지역 중심에서 2.9km -> 팩에 넣음 / osaka-fake-edge-out: 3.1km -> ambiguous
+# areas(지역 중심)는 이 테스트가 정한 모양 (질문: 정본 seed에 있는지). center처럼 이름 + query, 좌표는 캐시에만.
 city_code: osaka
 timezone: Asia/Tokyo
 center:
   name_ko: 난바역
   query: 難波駅 Osaka
+areas:
+  namba: {name_ko: 난바역, query: 難波駅 Osaka}
+  shinsaibashi: {name_ko: 신사이바시역, query: 心斎橋駅 Osaka}
+  umeda: {name_ko: 우메다역, query: 梅田駅 Osaka}
 places:
   - id: osaka-fake-dotonbori
     name_ko: 도톤보리
@@ -187,3 +194,33 @@ places:
     crowd_level: 3
     price_level: 2
     mood_tags: [현지]
+  - id: osaka-fake-far-umeda
+    name_ko: 우메다 먼 식당
+    aliases: [오사카 먼 식당]
+    query: 梅田 遠い食堂 Osaka
+    area: umeda
+    category: food
+    stay: {min: 30, typical: 45, max: 60}
+    crowd_level: 2
+    price_level: 2
+    mood_tags: [조용]
+  - id: osaka-fake-edge-in
+    name_ko: 우메다 북쪽 찻집
+    aliases: [오사카 북쪽 찻집]
+    query: 梅田 北の喫茶 Osaka
+    area: umeda
+    category: cafe
+    stay: {min: 30, typical: 45, max: 60}
+    crowd_level: 2
+    price_level: 2
+    mood_tags: [조용]
+  - id: osaka-fake-edge-out
+    name_ko: 우메다 더 북쪽 찻집
+    aliases: [오사카 더 북쪽 찻집]
+    query: 梅田 もっと北の喫茶 Osaka
+    area: umeda
+    category: cafe
+    stay: {min: 30, typical: 45, max: 60}
+    crowd_level: 2
+    price_level: 2
+    mood_tags: [조용]
