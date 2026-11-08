@@ -89,7 +89,7 @@ describe('G1', () => {
   });
 
   test('G04_B6_G1_예외_파일에는_표의_색이_실제로_있다_예외가_빈_허용이_아니다', () => {
-    expect(readFileSync(join(SRC, PLACEHOLDER_FILE), 'utf8')).toMatch(/#8FA3B8/i);
+    expect(readFileSync(join(SRC, PLACEHOLDER_FILE), 'utf8')).toMatch(/#476C94/i); // TASK-010 §C5: DESIGN-001 §4-8 food 밝은 끝
   });
 
   test('G05_B1_Q28_글자_크기_줄_높이_모서리_숫자는_어디에도_없다_layout도_예외_아님', () => {

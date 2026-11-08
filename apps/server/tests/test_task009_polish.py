@@ -45,14 +45,13 @@ RIEUL = 8  # 종성 번호 ㄹ
 # §9 Q7 읽는 소리의 받침: "ㄹ" / "있음" / 없으면 받침 없음
 DIGIT_SOUND = {"0": "있음", "1": "ㄹ", "3": "있음", "6": "있음", "7": "ㄹ", "8": "ㄹ"}  # 영·일·삼·육·칠·팔
 LETTER_SOUND = {"L": "ㄹ", "M": "있음", "N": "있음", "R": "ㄹ"}  # 엘·엠·엔·알
-UNDECIDED = set("lmnr")  # 소문자 l·m·n·r은 문서에 없다 (질문). 표·속성에 넣지 않는다
+LETTER_SOUND |= {k.lower(): v for k, v in LETTER_SOUND.items()}  # TASK-010 §E3: 소문자 l·m·n·r은 대문자와 같다
 
 
 def sound(word: str) -> str | None:
     if word == "":
         return None
     last = word[-1]
-    assert last not in UNDECIDED, f"문서에 기대값 없음: {word!r}"
     code = ord(last) - 0xAC00
     if 0 <= code <= 0xD7A3 - 0xAC00:
         jong = code % 28
@@ -91,6 +90,7 @@ def test_T9_AC3_Q7_표에_숫자_끝_0부터_9와_영문_L_M_N_R이_모두_있�
     ends = {case["word"][-1] for case in CASES if case["word"]}
     assert set("0123456789") <= ends
     assert set("LMNR") <= ends
+    assert set("lmnr") <= ends  # TASK-010 §E3
     assert ends & set("ABCDEFGHIJKOPQSTUVWXYZ")  # 받침 없는 영문 예도 있다
 
 
@@ -114,7 +114,7 @@ def test_T9_B1_AC3_공유_경계_표(word, pair, expected):
 
 
 HANGUL = st.integers(min_value=0xAC00, max_value=0xD7A3).map(chr)
-ALNUM = st.sampled_from([c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" if c not in UNDECIDED])
+ALNUM = st.sampled_from(list("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"))  # TASK-010 §E3: 소문자 l·m·n·r도 넣는다
 PREFIX = st.text(alphabet=st.sampled_from("가나다 카페골목ABz09"), max_size=8)
 
 

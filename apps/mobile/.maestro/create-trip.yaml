@@ -1,0 +1,83 @@
+# TASK-010 §D: 빈 첫 화면 -> 날짜 -> 꼭 갈 곳 1곳 -> [여행 만들기] -> 날짜 목록 -> 첫날 계획 대화 시작. 화면마다 스크린샷 (AC-7).
+# 전제: 서버를 가짜 오사카로 켠다 (결과가 늘 같다). 서버를 새로 켜야 여행이 없는 빈 첫 화면이 나온다 (메모리 저장소, TASK-010 §1 알려진 한계).
+#   cd apps/server && PLACES_PROVIDER=fake uv run fastapi dev api/main.py
+# + 개발 빌드가 시뮬레이터에 설치됨 + Metro 실행 중. 개발 서버 주소는 -e로 받는다 (planning.yaml과 같음).
+# 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로):
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/create-trip -e METRO_URL=http://127.0.0.1:8083 .maestro/create-trip.yaml
+# 화면 이름(testID)은 apps/mobile/__tests__/task-010-create-trip.test.tsx 머리말의 계약과 같다.
+# 꼭 갈 곳은 가짜 seed(testdata/cities/osaka-seed-fake.yaml)의 "구로몬 시장".
+appId: com.csh0616.tripfriends
+---
+# 날짜: 오늘(도시 시간대 Asia/Tokyo)부터 7일 뒤 하루~이틀 (시작일 규칙 §B1: 오늘~180일 뒤)
+- evalScript: |
+    ${
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const tokyo = (offsetDays) => {
+        const d = new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400 * 1000);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      };
+      output.start = tokyo(7);
+      output.end = tokyo(8);
+    }
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 만들기"
+    timeout: 60000
+# planning.yaml과 같은 우회: 첫 탭이 앱에 닿지 않는 현상(원인 미확인). 화면이 가만해진 뒤 첫 탭을 먼저 쓴다
+- waitForAnimationToEnd:
+    timeout: 5000
+- takeScreenshot: create-trip-1-empty-home
+
+- tapOn: "여행 만들기"
+- extendedWaitUntil:
+    visible:
+      id: "create-trip-submit"
+    timeout: 30000
+- assertVisible: "오사카"
+- takeScreenshot: create-trip-2-SC-01-empty
+
+- tapOn:
+    id: "field-start-date"
+- inputText: ${output.start}
+- tapOn:
+    id: "field-end-date"
+- inputText: ${output.end}
+- hideKeyboard
+
+- tapOn:
+    id: "tab-day-${output.start}"
+- tapOn:
+    id: "must-search"
+- inputText: "구로"
+- extendedWaitUntil:
+    visible: "구로몬 시장"
+    timeout: 15000
+- tapOn: "구로몬 시장"
+- hideKeyboard
+- takeScreenshot: create-trip-3-SC-01-filled
+
+- tapOn:
+    id: "create-trip-submit"
+- extendedWaitUntil:
+    visible: "계획 전"
+    timeout: 30000
+- takeScreenshot: create-trip-4-day-list
+
+# 첫날 줄 = 처음 보이는 "계획 전" 줄
+- tapOn:
+    text: "계획 전"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "choice-walk_alley"
+    timeout: 30000
+- takeScreenshot: create-trip-5-first-day-planning

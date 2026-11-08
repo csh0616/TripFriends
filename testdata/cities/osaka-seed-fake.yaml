@@ -1,0 +1,181 @@
+# TASK-010 §S 모양을 따른 **테스트용 가짜 seed** (test-writer가 손으로 만듦).
+# 정본 docs/data/osaka-seed.yaml(PM 작성)이 아니다. 이름·별칭·지역·카테고리·머무는 시간·혼잡·가격·분위기는 지어낸 값이다.
+# 지역 3곳(namba·shinsaibashi·umeda), 카테고리 8종을 모두 포함한다.
+# 공급자 응답(가짜)은 testdata/cities/osaka-fake.json 에 있다. 아래 query가 그 파일의 resolve 표 키다.
+# 일부러 넣은 경우:
+#   osaka-fake-not-found  : resolve 0곳 -> 팩에서 빠지고 보고 (§A2)
+#   osaka-fake-ambiguous  : resolve 여러 곳 -> 팩에서 빠지고 보고 (§A2)
+#   osaka-fake-closed-shop: 영구 폐업 -> 팩에서 빠지고 보고 (§A4)
+#   osaka-fake-gallery    : 임시 휴업 -> 팩에 넣고 영업시간 fact unknown (§A4)
+#   osaka-fake-alley-cafe : Google 영업시간 없음 + Serper 값 하나 -> serper·unverified (§A3)
+#   osaka-fake-comedy     : Google 영업시간 없음 + Serper 값 엇갈림 -> unknown (§A3)
+- id: osaka-fake-dotonbori
+  name_ko: 도톤보리
+  aliases: [오사카 도톤보리, 도톤보리 강변]
+  query: 道頓堀 Osaka
+  area: namba
+  category: walk
+  stay: {min: 30, typical: 60, max: 120}
+  crowd_level: 5
+  price_level: 1
+  mood_tags: [활기, 야경]
+- id: osaka-fake-kuromon
+  name_ko: 구로몬 시장
+  aliases: [오사카 시장, 쿠로몬]
+  query: 黒門市場 Osaka
+  area: namba
+  category: food
+  stay: {min: 40, typical: 60, max: 90}
+  crowd_level: 4
+  price_level: 2
+  mood_tags: [현지, 시장]
+- id: osaka-fake-ramen
+  name_ko: 난바 라멘 골목
+  aliases: [오사카 라멘]
+  query: なんば ラーメン横丁 Osaka
+  area: namba
+  category: food
+  stay: {min: 30, typical: 45, max: 60}
+  crowd_level: 3
+  price_level: 2
+  mood_tags: [현지]
+- id: osaka-fake-hozenji
+  name_ko: 호젠지 요코초
+  aliases: [오사카 호젠지, 호젠지]
+  query: 法善寺横丁 Osaka
+  area: namba
+  category: night
+  stay: {min: 30, typical: 60, max: 120}
+  crowd_level: 3
+  price_level: 3
+  mood_tags: [골목, 야경]
+- id: osaka-fake-alley-cafe
+  name_ko: 난바 골목 카페
+  aliases: [오사카 골목 카페]
+  query: なんば 路地カフェ Osaka
+  area: namba
+  category: cafe
+  stay: {min: 30, typical: 60, max: 90}
+  crowd_level: 2
+  price_level: 2
+  mood_tags: [조용, 감성]
+- id: osaka-fake-comedy
+  name_ko: 난바 웃음 극장
+  aliases: [오사카 극장]
+  query: なんば お笑い劇場 Osaka
+  area: namba
+  category: experience
+  stay: {min: 60, typical: 90, max: 120}
+  crowd_level: 4
+  price_level: 3
+  mood_tags: [실내]
+- id: osaka-fake-not-found
+  name_ko: 찾을 수 없는 식당
+  aliases: [오사카 없는 식당]
+  query: 存在しない食堂 Osaka
+  area: namba
+  category: food
+  stay: {min: 30, typical: 60, max: 90}
+  crowd_level: 2
+  price_level: 2
+  mood_tags: [현지]
+- id: osaka-fake-shotengai
+  name_ko: 신사이바시 상점가
+  aliases: [오사카 상점가, 신사이바시스지]
+  query: 心斎橋筋商店街 Osaka
+  area: shinsaibashi
+  category: shop
+  stay: {min: 30, typical: 60, max: 120}
+  crowd_level: 5
+  price_level: 2
+  mood_tags: [쇼핑, 활기]
+- id: osaka-fake-amemura
+  name_ko: 아메리카무라
+  aliases: [오사카 아메무라, 아메무라]
+  query: アメリカ村 Osaka
+  area: shinsaibashi
+  category: walk
+  stay: {min: 30, typical: 60, max: 90}
+  crowd_level: 4
+  price_level: 2
+  mood_tags: [골목, 젊은]
+- id: osaka-fake-gallery
+  name_ko: 신사이바시 작은 미술관
+  aliases: [오사카 작은 미술관]
+  query: 心斎橋 小さな美術館 Osaka
+  area: shinsaibashi
+  category: museum
+  stay: {min: 40, typical: 60, max: 90}
+  crowd_level: 2
+  price_level: 2
+  mood_tags: [조용, 실내]
+- id: osaka-fake-closed-shop
+  name_ko: 문 닫은 잡화점
+  aliases: [오사카 잡화점]
+  query: 閉店した雑貨店 Osaka
+  area: shinsaibashi
+  category: shop
+  stay: {min: 20, typical: 30, max: 60}
+  crowd_level: 2
+  price_level: 2
+  mood_tags: [쇼핑]
+- id: osaka-fake-sky
+  name_ko: 우메다 공중 전망대
+  aliases: [오사카 전망대, 공중정원]
+  query: 梅田 空中展望台 Osaka
+  area: umeda
+  category: landmark
+  stay: {min: 40, typical: 60, max: 90}
+  crowd_level: 4
+  price_level: 3
+  mood_tags: [야경, 사진]
+- id: osaka-fake-ferris
+  name_ko: 우메다 빨간 관람차
+  aliases: [오사카 관람차]
+  query: 梅田 赤い観覧車 Osaka
+  area: umeda
+  category: experience
+  stay: {min: 20, typical: 30, max: 45}
+  crowd_level: 3
+  price_level: 2
+  mood_tags: [사진]
+- id: osaka-fake-museum
+  name_ko: 우메다 미술관
+  aliases: [오사카 미술관]
+  query: 梅田 美術館 Osaka
+  area: umeda
+  category: museum
+  stay: {min: 40, typical: 75, max: 120}
+  crowd_level: 2
+  price_level: 3
+  mood_tags: [조용, 실내]
+- id: osaka-fake-izakaya
+  name_ko: 우메다 이자카야 골목
+  aliases: [오사카 이자카야]
+  query: 梅田 居酒屋横丁 Osaka
+  area: umeda
+  category: night
+  stay: {min: 45, typical: 90, max: 150}
+  crowd_level: 4
+  price_level: 3
+  mood_tags: [현지, 활기]
+- id: osaka-fake-kissa
+  name_ko: 우메다 킷사텐
+  aliases: [오사카 킷사텐]
+  query: 梅田 喫茶店 Osaka
+  area: umeda
+  category: cafe
+  stay: {min: 30, typical: 45, max: 75}
+  crowd_level: 2
+  price_level: 2
+  mood_tags: [조용, 레트로]
+- id: osaka-fake-ambiguous
+  name_ko: 이름이 여러 개인 식당
+  aliases: [오사카 여러 식당]
+  query: 梅田 よくある食堂 Osaka
+  area: umeda
+  category: food
+  stay: {min: 30, typical: 60, max: 90}
+  crowd_level: 3
+  price_level: 2
+  mood_tags: [현지]
