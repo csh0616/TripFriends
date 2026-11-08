@@ -23,10 +23,9 @@ appId: com.csh0616.tripfriends
 - extendedWaitUntil:
     visible: "여행 중 데모 바로 보기"
     timeout: 60000
-# 원인 미확인 우회: 앱이 뜬 뒤 첫 탭이 앱까지 가지 않는다(오래 기다려도 같음). 화면이 가만해진 뒤 아무 일 없는 글자를 한 번 눌러 첫 탭을 먼저 쓴다
-- waitForAnimationToEnd:
-    timeout: 5000
-- tapOn: "AI 여행친구"
+# 개발 메뉴가 떠 있으면 직접 닫는다 (TASK-010 §12). 전에는 "AI 여행친구"를 한 번 눌러 첫 탭을 버렸는데,
+# 그 탭이 실제로는 앱 위에 떠 있던 개발 메뉴 시트를 닫고 있었다 (첫 탭이 앱에 닿지 않던 원인)
+- runFlow: common/close-dev-menu.yaml
 
 # S0의 [여행 중 데모 바로 보기] (개발 빌드에만 있다, TASK-006 §14):
 # POST /debug/seed-demo {"chosen": true} -> 둘째 날 SC-04, 그날 17:50부터. 둘째 날에는 고정 일정 "저녁 예약" 18:30~19:30이 있다.
