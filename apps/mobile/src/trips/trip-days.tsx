@@ -99,7 +99,7 @@ export function TripDays({
       >
         <View style={styles.head}>
           <Text style={text('caption', 'muted')}>{periodLabel(trip.start_date, trip.end_date)}</Text>
-          <Text style={text('title')}>{header.title}</Text>
+          <Text style={fitText(fit['title-trip'])}>{header.title}</Text>
           <View style={styles.progress}>
             <View accessible accessibilityLabel={header.dots} style={styles.dots}>
               {Array.from(header.dots).map((dot, index) => (
@@ -230,6 +230,24 @@ function DayRow({
   const past = day.state === 'past';
   const today = day.state === 'today';
 
+  // 코스 없는 지난 날: 누를 수 없는 줄 (TASK-011 §12 Q3). 요약 자리 "고른 코스 없음", › 없음, 아무 데도 안 감
+  if (past && day.chosen_option_id === null) {
+    return (
+      <View testID={`row-locked-${day.day_id}`} accessibilityState={{ disabled: true }} aria-disabled style={[styles.row, styles.rowPast]}>
+        <View testID={`day-row-${day.day_id}`} style={styles.lockedBody}>
+          <DayCircle past />
+          <View style={styles.grow}>
+            <DayTitle index={index} date={day.date} small />
+            <Text numberOfLines={1} style={text('caption', 'muted')}>
+              고른 코스 없음
+            </Text>
+          </View>
+          <DayPill dayId={day.day_id} state={day.state} />
+        </View>
+      </View>
+    );
+  }
+
   if (!card) {
     return (
       <Pressable
@@ -324,6 +342,7 @@ const addSlop = (fit['btn-add-event'].hit - fit['btn-add-event'].height) / 2;
 const styles = StyleSheet.create({
   banner: { borderRadius: radius['r-xl'], alignSelf: 'center' },
   grow: { flex: 1 },
+  lockedBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
   title: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },
   center: { textAlign: 'center' },
   head: { gap: space['space-1'] },
