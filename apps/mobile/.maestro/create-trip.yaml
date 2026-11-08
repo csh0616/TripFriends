@@ -1,4 +1,4 @@
-# TASK-010 §D: 빈 첫 화면 -> 날짜 -> 꼭 갈 곳 1곳 -> [여행 만들기] -> 날짜 목록 -> 첫날 계획 대화 시작. 화면마다 스크린샷 (AC-7).
+# TASK-010 §D: 빈 첫 화면 -> 날짜(달력 시트, §9 Q17) -> 꼭 갈 곳 1곳 -> [여행 만들기] -> 날짜 목록 -> 첫날 계획 대화 시작. 화면마다 스크린샷 (AC-7).
 # 전제: 서버를 가짜 오사카로 켠다 (결과가 늘 같다). 서버를 새로 켜야 여행이 없는 빈 첫 화면이 나온다 (메모리 저장소, TASK-010 §1 알려진 한계).
 #   cd apps/server && PLACES_PROVIDER=fake uv run fastapi dev api/main.py
 # + 개발 빌드가 시뮬레이터에 설치됨 + Metro 실행 중. 개발 서버 주소는 -e로 받는다 (planning.yaml과 같음).
@@ -45,13 +45,35 @@ appId: com.csh0616.tripfriends
 - assertVisible: "오사카"
 - takeScreenshot: create-trip-2-SC-01-empty
 
+# 날짜: 달력 시트 (§9 Q17, 글자 입력 아님). 시작 -> 끝 두 번 누르고 시트 아래 확정
 - tapOn:
     id: "field-start-date"
-- inputText: ${output.start}
+- extendedWaitUntil:
+    visible:
+      id: "calendar-sheet"
+    timeout: 10000
+# 7일 뒤가 다음 달이면 한 달 넘긴다 (시트는 오늘의 달로 열린다)
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.start}"
+    commands:
+      - tapOn:
+          id: "cal-next"
 - tapOn:
-    id: "field-end-date"
-- inputText: ${output.end}
-- hideKeyboard
+    id: "cal-day-${output.start}"
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.end}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.end}"
+- takeScreenshot: create-trip-3-calendar-sheet
+- tapOn:
+    id: "calendar-confirm"
 
 - tapOn:
     id: "tab-day-${output.start}"
@@ -63,14 +85,14 @@ appId: com.csh0616.tripfriends
     timeout: 15000
 - tapOn: "구로몬 시장"
 - hideKeyboard
-- takeScreenshot: create-trip-3-SC-01-filled
+- takeScreenshot: create-trip-4-SC-01-filled
 
 - tapOn:
     id: "create-trip-submit"
 - extendedWaitUntil:
     visible: "계획 전"
     timeout: 30000
-- takeScreenshot: create-trip-4-day-list
+- takeScreenshot: create-trip-5-day-list
 
 # 첫날 줄 = 처음 보이는 "계획 전" 줄
 - tapOn:
@@ -80,4 +102,4 @@ appId: com.csh0616.tripfriends
     visible:
       id: "choice-walk_alley"
     timeout: 30000
-- takeScreenshot: create-trip-5-first-day-planning
+- takeScreenshot: create-trip-6-first-day-planning

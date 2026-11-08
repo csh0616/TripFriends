@@ -6,6 +6,6 @@ export function dayPill(_state: string): string {
   throw new Error('not implemented');
 }
 
-export function dayDestination(_state: string): DayDestination {
+export function dayDestination(_state: string, _hasCourse: boolean): DayDestination {
   throw new Error('not implemented');
 }

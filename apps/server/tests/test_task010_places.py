@@ -10,12 +10,17 @@
                                               business_status("OPERATIONAL"|"CLOSED_TEMPORARILY"|"CLOSED_PERMANENTLY")}
                         search_lodging(q) -> [{place_id, name, address_short}]
                         FakePlaces(path) · GooglePlaces(api_key, client: httpx.Client)
-    places/serper.py    extract_hours(texts) -> ("HH:MM", "HH:MM") | None · FakeSerper(path).search(q) -> [{text, link}]
-    places/seed.py      load_seed(path) -> [row]
-    places/build.py     build_city(city_code, rows, places, serper, *, now, clock, sleep) -> BuildResult(pack, cache, report)
-                        pack = {city_code, timezone, places: [seed 줄 + place_id]} · cache = {place_id: {..., fetched_at(ISO)}}
+    places/serper.py    extract_hours(texts) -> [("HH:MM", "HH:MM"), ...] | None   (하루 구간 목록, §9 Q8)
+                        extract_closed_days(texts) -> [요일 0=월..6=일] | "unknown"(不定休) | None(말 없음)
+                        FakeSerper(path).search(q) -> [{text, link}]
+    places/seed.py      load_seed(path) -> {city_code, timezone, center: {name_ko, query}, places: [줄]}
+    places/build.py     build_pack(seed, provider, caps, *, serper, now, clock, sleep) -> BuildResult(pack, cache, report)  (§9 Q21)
+                        DEFAULT_CAPS = {"google": 300, "serper": 100}
+                        pack = {city_code, timezone, center: {name_ko, place_id}, places: [seed 줄 + place_id]}
+                        cache = {place_id: {..., fetched_at(ISO)}} (center도 캐시에)
                         report = {excluded: [{id, reason}], calls: {google, serper}, stopped: bool}
-                        reason: not_found · ambiguous · closed_permanently
+                        reason: not_found · ambiguous · closed_permanently · cap_exceeded (§9 Q9)
+    places/__main__.py  main(["build", "osaka", "--seed", 경로, "--pack-dir", 폴더, "--cache-dir", 폴더]) -> 종료 코드 (§9 Q21)
     places/cache.py     is_stale(entry, "location"|"opening_hours", now) · refresh(cache, place_ids, provider, *, now, clock, sleep)
                         -> (새 캐시, {calls: {google}, failed: [place_id], stopped})
     places/pack.py      facts_for(row, entry) -> [{field, value, status, source_type, source_url, checked_at}]
@@ -44,7 +49,8 @@ AREAS = {"namba", "shinsaibashi", "umeda"}
 SEED_KEYS = {"id", "name_ko", "aliases", "query", "area", "category", "stay", "crowd_level", "price_level", "mood_tags"}
 # Google에서 온 값 (ADR-015 §3-1: 캐시만, git 밖)
 GOOGLE_KEYS = {"location", "lat", "lng", "opening_hours", "hours", "website", "maps_url", "business_status", "fetched_at"}
-SOURCE_TYPES = {"google", "serper", "user", "curated", "demo"}  # ADR-015 §3-5
+SOURCE_TYPES = {"google", "serper", "user", "curated", "estimate", "demo"}  # ADR-015 §3-5 + DATA-001 B (§9 Q3)
+REASONS = {"not_found", "ambiguous", "closed_permanently", "cap_exceeded"}  # §9 Q9
 EXCLUDED = {
     "osaka-fake-not-found": "not_found",
     "osaka-fake-ambiguous": "ambiguous",
@@ -111,21 +117,34 @@ def fake_serper():
     return FakeSerper(FAKE_JSON)
 
 
-def seed_rows() -> list[dict]:
+def seed() -> dict:
     from places.seed import load_seed
 
     return load_seed(FAKE_SEED)
 
 
-def build(rows=None, places=None, serper=None, clock: FakeClock | None = None, now: datetime = NOW):
-    from places.build import build_city
+def seed_rows() -> list[dict]:
+    return seed()["places"]
+
+
+def default_caps() -> dict:
+    from places.build import DEFAULT_CAPS
+
+    return dict(DEFAULT_CAPS)
+
+
+def build(rows=None, places=None, serper=None, clock: FakeClock | None = None, now: datetime = NOW, caps: dict | None = None):
+    from places.build import build_pack
 
     clock = clock or FakeClock()
-    return build_city(
-        "osaka",
-        seed_rows() if rows is None else rows,
+    data = seed()
+    if rows is not None:
+        data = {**data, "places": rows}
+    return build_pack(
+        data,
         places or fake_places(),
-        serper or fake_serper(),
+        default_caps() if caps is None else caps,
+        serper=serper or fake_serper(),
         now=now,
         clock=clock.time,
         sleep=clock.sleep,
@@ -163,7 +182,10 @@ def test_T10_AC2_가짜_공급자_데이터는_모두_지어낸_값이다():
 
 
 def test_T10_S_가짜_seed는_지역_3곳_카테고리_8종을_모두_담는다():
-    rows = seed_rows()
+    data = seed()
+    assert (data["city_code"], data["timezone"]) == ("osaka", "Asia/Tokyo")
+    assert set(data["center"]) == {"name_ko", "query"}
+    rows = data["places"]
     assert {row["area"] for row in rows} == AREAS
     assert {row["category"] for row in rows} == CATEGORIES
     for row in rows:
@@ -263,6 +285,12 @@ def test_T10_A8_팩에_시간대_Asia_Tokyo():
     assert build().pack["timezone"] == "Asia/Tokyo"
 
 
+def test_T10_Q10_팩의_center는_이름과_place_id만_좌표는_캐시에():
+    result = build()
+    assert result.pack["center"] == {"name_ko": "난바역", "place_id": "FAKE-osaka-center-station"}
+    assert result.cache["FAKE-osaka-center-station"]["location"] == FAKE["details"]["FAKE-osaka-center-station"]["location"]
+
+
 def test_T10_A2_AC2_팩에_Google_값이_하나도_없다():
     pack = build().pack
     assert not keys_anywhere(pack) & GOOGLE_KEYS
@@ -280,7 +308,7 @@ def test_T10_A2_팩에_8종_3지역이_남는다():
 
 def test_T10_A2_캐시는_팩의_place_id마다_Google_값과_fetched_at():
     result = build()
-    assert set(result.cache) == {row["place_id"] for row in result.pack["places"]}
+    assert set(result.cache) == {row["place_id"] for row in result.pack["places"]} | {result.pack["center"]["place_id"]}
     for place_id, entry in result.cache.items():
         assert datetime.fromisoformat(entry["fetched_at"]) == NOW, place_id
     assert result.cache["FAKE-osaka-kuromon"]["location"] == FAKE["details"]["FAKE-osaka-kuromon"]["location"]
@@ -320,6 +348,17 @@ def test_T10_A3_값이_하나로_맞으면_serper_미확인_결과_링크():
     assert "10:00" in str(fact["value"]) and "19:00" in str(fact["value"])
 
 
+def test_T10_Q8_定休日도_함께면_closed_days_fact도_serper_미확인():
+    from places.pack import facts_for
+
+    result = build()
+    row = row_of(result.pack, "osaka-fake-alley-cafe")
+    closed = [f for f in facts_for(row, result.cache[row["place_id"]]) if f["field"] == "closed_days"]
+    assert len(closed) == 1
+    assert (closed[0]["source_type"], closed[0]["status"]) == ("serper", "unverified")
+    assert "1" in str(closed[0]["value"])  # 火曜 = 1 (0=월)
+
+
 @pytest.mark.parametrize("our_id", ["osaka-fake-comedy", "osaka-fake-dotonbori", "osaka-fake-amemura"], ids=["엇갈림", "결과_없음", "시각_없음"])
 def test_T10_A3_못_뽑거나_엇갈리면_모름(our_id):
     result = build()
@@ -327,12 +366,12 @@ def test_T10_A3_못_뽑거나_엇갈리면_모름(our_id):
     assert hours_fact(row, result.cache[row["place_id"]])["status"] == "unknown"
 
 
-def test_T10_A3_Google_영업시간은_출처_google():
+def test_T10_A3_Q4_Google_영업시간은_google_확인됨_확인_시각은_받은_시각():
     result = build()
     row = row_of(result.pack, "osaka-fake-kuromon")
     fact = hours_fact(row, result.cache[row["place_id"]])
-    assert fact["source_type"] == "google"
-    assert fact["status"] in {"confirmed", "unverified"}  # Google 값의 status는 문서에 없다 (질문)
+    assert (fact["source_type"], fact["status"]) == ("google", "confirmed")  # §9 Q4: 이번에 받은 Google 값 = 확인됨
+    assert datetime.fromisoformat(fact["checked_at"]) == NOW  # checked_at = fetched_at
 
 
 def test_T10_A3_AC3_검색_결과_문장은_팩_캐시_보고_로그_어디에도_없다(caplog):
@@ -343,21 +382,36 @@ def test_T10_A3_AC3_검색_결과_문장은_팩_캐시_보고_로그_어디에�
     assert all(SNIPPET_MARK not in record.getMessage() for record in caplog.records)
 
 
-# AC-3 시각 뽑기 표 (손으로 만든 예). 기대값 None = 못 뽑음·엇갈림 -> unknown
-H = ("11:00", "22:00")
+# AC-3 시각 뽑기 표 (손으로 만든 예, §9 Q8). 기대값 = 하루 구간 목록, None = 하나로 정해지지 않음 -> unknown
+H = [("11:00", "22:00")]
 EXTRACT_CASES = [
     ("일본어 물결 ～(U+FF5E)", ["営業時間 11:00～22:00"], H),
     ("일본어 물결 〜(U+301C)", ["営業時間：11:00〜22:00"], H),
     ("ASCII 물결", ["11:00~22:00"], H),
     ("붙임표", ["11:00-22:00"], H),
+    ("장음 ー (Q8)", ["11:00ー22:00"], H),
+    ("엔 대시 – (Q8)", ["11:00–22:00"], H),
     ("물결 앞뒤 띄어쓰기", ["営業時間 11:00 ～ 22:00"], H),
-    ("한 자리 시", ["9:00～18:00"], ("09:00", "18:00")),
-    ("30분 단위", ["10:30～20:30"], ("10:30", "20:30")),
+    ("한 자리 시", ["9:00～18:00"], [("09:00", "18:00")]),
+    ("30분 단위", ["10:30～20:30"], [("10:30", "20:30")]),
     ("두 결과가 같은 값", ["営業時間 11:00～22:00", "11:00～22:00 営業"], H),
     ("같은 값 + 덧붙인 말", ["営業時間 11:00～22:00", "営業時間 11:00～22:00（変更の場合あり）"], H),
     ("다른 결과는 시각 없음", ["営業時間 11:00～22:00", "アクセス 難波駅から徒歩5分"], H),
-    ("빈 문장 + 값", ["", "営業時間 10:00～19:00"], ("10:00", "19:00")),
-    ("이름 붙은 구간 하나", ["ランチ 11:00～14:00"], ("11:00", "14:00")),
+    ("빈 문장 + 값", ["", "営業時間 10:00～19:00"], [("10:00", "19:00")]),
+    ("이름 붙은 구간 하나", ["ランチ 11:00～14:00"], [("11:00", "14:00")]),
+    ("전각 숫자·전각 쌍점 (Q8)", ["営業時間 １１：００～２２：００"], H),
+    ("전각 숫자 + 반각 쌍점 (Q8)", ["営業時間 １１:００～２２:００"], H),
+    ("전각 쌍점만 (Q8)", ["営業時間 11：00～22：00"], H),
+    ("자정 넘김 翌 -> 24:00 (Q8)", ["18:00～翌2:00"], [("18:00", "24:00")]),
+    ("자정 넘김 26:00 -> 24:00 (Q8)", ["18:00～26:00"], [("18:00", "24:00")]),
+    ("L.O. = 끝 (Q8)", ["11:00～22:00（L.O.21:30）"], [("11:00", "21:30")]),
+    ("ラストオーダー = 끝 (Q8)", ["営業時間 11:00～22:00 ラストオーダー21:30"], [("11:00", "21:30")]),
+    ("하루 두 구간 (Q8)", ["11:00～14:00 / 17:00～22:00"], [("11:00", "14:00"), ("17:00", "22:00")]),
+    ("하루 두 구간이 결과끼리 같음 (Q8)", ["11:00～14:00 / 17:00～22:00", "ランチ 11:00～14:00 ディナー 17:00～22:00"], [("11:00", "14:00"), ("17:00", "22:00")]),
+    ("24時間営業 (Q8)", ["24時間営業"], [("00:00", "24:00")]),
+    ("24時間 (Q8)", ["営業時間 24時間"], [("00:00", "24:00")]),
+    ("시각 + 定休日 -> 시각은 그대로 (Q8)", ["営業時間 11:00～22:00 定休日：月曜"], H),
+    ("요일마다 다름 -> 모름 (Q8)", ["平日 11:00～22:00 / 土日祝 10:00～21:00"], None),
     ("定休日만", ["定休日：水曜日"], None),
     ("定休日なし만", ["定休日なし"], None),
     ("빈 문장", [""], None),
@@ -369,30 +423,32 @@ EXTRACT_CASES = [
     ("날짜는 시각이 아님", ["2026年11月9日 更新"], None),
     ("시각 하나뿐 (구간 아님)", ["開店 11:00"], None),
 ]
-# 문서에 기대값이 없는 줄 (질문 목록). 표에는 남기되 돌리지 않는다
+# 문서(§9 Q8)에 기대값이 없는 줄 (남은 질문). 표에는 남기되 돌리지 않는다
 EXTRACT_PENDING = [
-    ("전각 숫자", ["営業時間 １１:００～２２:００"], "Q 전각 숫자"),
-    ("전각 쌍점", ["営業時間 11：00～22：00"], "Q 전각 숫자"),
-    ("時 표기", ["11時～22時"], "Q 時 표기"),
-    ("자정 넘김 翌", ["18:00～翌2:00"], "Q 자정 넘김"),
-    ("닫는 시각 < 여는 시각", ["22:00～02:00"], "Q 자정 넘김"),
-    ("L.O. 덧붙음", ["11:00～22:00（L.O.21:30）"], "Q L.O."),
-    ("하루 두 구간", ["11:00～14:00 17:00～22:00"], "Q 하루 두 구간"),
-    ("시각 + 定休日", ["営業時間 11:00～22:00 定休日 水曜日"], "Q 定休日"),
-    ("24時間", ["24時間営業"], "Q 24시간"),
+    ("닫는 시각 < 여는 시각 (翌 없음)", ["22:00～02:00"], "남은 질문: 翌 없이 끝이 앞이면 자정 넘김인가 모름인가"),
+    ("時 표기", ["11時～22時"], "남은 질문: 時 표기를 시각으로 읽나"),
+    ("한 문장 안 겹치는 두 구간", ["11:00～22:00 / 10:00～21:00"], "남은 질문: 한 문장 안 겹치는 구간은 두 구간인가 엇갈림인가"),
+    ("두 구간 + L.O.", ["11:00～14:00(L.O.13:30) / 17:00～22:00(L.O.21:30)"], "남은 질문: L.O.가 구간마다 붙을 때"),
+]
+
+CLOSED_CASES = [
+    ("定休日 월 (Q8)", ["営業時間 11:00～22:00 定休日：月曜"], [0]),
+    ("定休日 수 (Q8)", ["営業時間 11:00～22:00 定休日：水曜日"], [2]),
+    ("不定休 = 모름 (Q8)", ["営業時間 11:00～22:00 不定休"], "unknown"),
+    ("휴무 말 없음", ["営業時間 11:00～22:00"], None),
 ]
 
 
 def test_T10_AC3_시각_뽑기_표는_20개_이상이고_네_종류를_모두_담는다():
     assert len(EXTRACT_CASES) >= 20
-    names = " ".join(name for name, _, _ in EXTRACT_CASES + [(n, t, None) for n, t, _ in EXTRACT_PENDING])
+    names = " ".join(name for name, _, _ in EXTRACT_CASES)
     texts = " ".join(t for _, ts, _ in EXTRACT_CASES for t in ts)
     assert "11:00～22:00" in texts and "定休日" in texts
     assert "엇갈림" in names and "없음" in names
 
 
 @pytest.mark.parametrize(("name", "texts", "expected"), EXTRACT_CASES, ids=[c[0] for c in EXTRACT_CASES])
-def test_T10_A3_AC3_시각_뽑기_표(name, texts, expected):
+def test_T10_A3_AC3_Q8_시각_뽑기_표(name, texts, expected):
     from places.serper import extract_hours
 
     assert extract_hours(texts) == expected
@@ -400,7 +456,23 @@ def test_T10_A3_AC3_시각_뽑기_표(name, texts, expected):
 
 @pytest.mark.parametrize(("name", "texts", "question"), EXTRACT_PENDING, ids=[c[0] for c in EXTRACT_PENDING])
 def test_T10_A3_AC3_시각_뽑기_문서에_기대값_없음(name, texts, question):
-    pytest.skip(f"문서에 기대값 없음 ({question})")
+    pytest.skip(question)
+
+
+@pytest.mark.parametrize(("name", "texts", "expected"), CLOSED_CASES, ids=[c[0] for c in CLOSED_CASES])
+def test_T10_A3_Q8_定休日_뽑기(name, texts, expected):
+    from places.serper import extract_closed_days
+
+    assert extract_closed_days(texts) == expected
+
+
+def test_T10_A3_Q8_뽑은_구간은_엔진_영업시간으로_읽힌다():
+    """하루 두 구간·24:00 끝을 엔진 Opening이 그대로 받는다 (엔진 코드는 그대로, NFR-15)."""
+    from engine.models import Opening
+
+    for _, _, expected in EXTRACT_CASES:
+        for low, high in expected or []:
+            Opening(weekday=0, open=low, close=high)
 
 
 # ---------- A4 폐업 ----------
@@ -441,8 +513,10 @@ def test_T10_A5_캐시_수명_좌표_30일_영업시간_24시간(field, age, sta
 
 
 @pytest.mark.parametrize("field, age", [("location", timedelta(days=30)), ("opening_hours", timedelta(hours=24))], ids=["좌표_정각_30일", "영업시간_정각_24시간"])
-def test_T10_A5_캐시_수명_정각(field, age):
-    pytest.skip("정각(정확히 30일·24시간)이 오래된 것인지 문서에 없음 (질문)")
+def test_T10_A5_Q7_캐시_수명_정각이면_오래된_것(field, age):
+    from places.cache import is_stale
+
+    assert is_stale(entry_at(age), field, NOW) is True
 
 
 def refresh(cache, ids, provider, now, clock: FakeClock | None = None):
@@ -525,31 +599,55 @@ def synthetic_rows(count: int) -> list[dict]:
     return [{**base, "id": f"osaka-syn-{n}", "query": f"syn {n} Osaka", "aliases": []} for n in range(count)]
 
 
-@pytest.mark.parametrize(("rows", "stopped"), [(150, False), (151, True)], ids=["Google_300회_딱", "Google_301회_필요"])
-def test_T10_A7_만들기_Google_300회_넘으면_멈추고_보고(rows, stopped):
+def test_T10_A7_만들기_기본_상한은_Google_300_Serper_100():
+    assert default_caps() == {"google": 300, "serper": 100}
+
+
+def needed_calls(rows: int, hours: bool) -> tuple[int, int]:
+    """상한 없이 돌렸을 때 실제 호출 수 (center 호출까지 센다)."""
     clock = FakeClock()
-    places = Recording(Synthetic(), clock)  # 한 줄 = resolve 1 + details 1
-    report = build(rows=synthetic_rows(rows), places=places, serper=Recording(SyntheticSerper(), clock), clock=clock).report
-    assert len(places.calls) <= 300
-    assert report["stopped"] is stopped
-    assert report["calls"]["google"] == len(places.calls)
+    places, serper = Recording(Synthetic(hours), clock), Recording(SyntheticSerper(), clock)
+    build(rows=synthetic_rows(rows), places=places, serper=serper, clock=clock, caps={"google": 10**6, "serper": 10**6})
+    return len(places.calls), len(serper.calls)
 
 
-@pytest.mark.parametrize(("rows", "stopped"), [(100, False), (101, True)], ids=["Serper_100회_딱", "Serper_101회_필요"])
-def test_T10_A7_만들기_Serper_100회_넘으면_멈추고_보고(rows, stopped):
+@pytest.mark.parametrize("short", [0, 1], ids=["Google_상한_딱", "Google_상한_1회_모자람"])
+def test_T10_A7_Q9_만들기_Google_상한을_넘으면_멈추고_남은_줄은_cap_exceeded(short):
+    google, _ = needed_calls(20, hours=True)
+    clock = FakeClock()
+    places = Recording(Synthetic(), clock)
+    result = build(rows=synthetic_rows(20), places=places, serper=SyntheticSerper(), clock=clock, caps={"google": google - short, "serper": 100})
+    assert len(places.calls) <= google - short
+    assert result.report["stopped"] is bool(short)
+    assert result.report["calls"]["google"] == len(places.calls)
+    kept = {row["id"] for row in result.pack["places"]}
+    dropped = {row["id"]: row["reason"] for row in result.report["excluded"]}
+    assert kept | set(dropped) == {row["id"] for row in synthetic_rows(20)}
+    assert set(dropped.values()) <= {"cap_exceeded"} and bool(dropped) is bool(short)
+
+
+@pytest.mark.parametrize("short", [0, 1], ids=["Serper_상한_딱", "Serper_상한_1회_모자람"])
+def test_T10_A7_만들기_Serper_상한을_넘으면_멈추고_보고(short):
+    _, needed = needed_calls(20, hours=False)
     clock = FakeClock()
     serper = Recording(SyntheticSerper(), clock)
-    report = build(rows=synthetic_rows(rows), places=Recording(Synthetic(hours=False), clock), serper=serper, clock=clock).report
-    assert len(serper.calls) <= 100
-    assert report["stopped"] is stopped
+    report = build(rows=synthetic_rows(20), places=Synthetic(hours=False), serper=serper, clock=clock, caps={"google": 10**6, "serper": needed - short}).report
+    assert len(serper.calls) <= needed - short
+    assert report["stopped"] is bool(short)
+
+
+def test_T10_A2_Q9_뺀_이유는_넷_안에서():
+    assert {row["reason"] for row in build().report["excluded"]} <= REASONS
 
 
 @pytest.mark.parametrize(("count", "stopped"), [(30, False), (31, True)], ids=["다시_30회_딱", "다시_31회_필요"])
 def test_T10_A7_다시_부르기_Google_30회_넘으면_멈추고_보고(count, stopped):
     result = build(rows=synthetic_rows(count), places=Synthetic(), serper=SyntheticSerper())
+    result.cache.pop(result.pack["center"]["place_id"], None)  # 후보 장소만 센다
     clock = FakeClock()
     provider = Recording(Synthetic(), clock)
-    _, report = refresh(result.cache, list(result.cache), provider, NOW + timedelta(days=31), clock)
+    ids = [row["place_id"] for row in result.pack["places"]]
+    _, report = refresh(result.cache, ids, provider, NOW + timedelta(days=31), clock)
     assert len(provider.calls) <= 30
     assert report["stopped"] is stopped
 
@@ -646,3 +744,22 @@ def test_T10_AC2_저장소의_도시_팩에_Google_값이_없다():
     for path in packs:
         data = json.loads(path.read_text(encoding="utf-8"))
         assert not keys_anywhere(data) & GOOGLE_KEYS, path.name
+
+
+# ---------- §9 Q21 명령은 얇게: 가짜 공급자로 한 번 ----------
+
+
+def test_T10_A2_Q21_명령을_가짜_공급자로_한_번_돌리면_팩과_캐시_파일이_생긴다(tmp_path, monkeypatch):
+    from places.__main__ import main
+
+    monkeypatch.setenv("PLACES_PROVIDER", "fake")
+    for name in ("GOOGLE_PLACES_API_KEY", "SERPER_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    packs, caches = tmp_path / "packs", tmp_path / "cache"
+    code = main(["build", "osaka", "--seed", str(FAKE_SEED), "--pack-dir", str(packs), "--cache-dir", str(caches)])
+    assert code == 0
+    pack = json.loads((packs / "osaka.json").read_text(encoding="utf-8"))
+    cache = json.loads((caches / "osaka.json").read_text(encoding="utf-8"))
+    assert {row["id"] for row in pack["places"]} == {row["id"] for row in seed_rows()} - set(EXCLUDED)
+    assert not keys_anywhere(pack) & GOOGLE_KEYS
+    assert all("fetched_at" in entry for entry in cache.values())

@@ -1,4 +1,4 @@
-"""캐시 수명과 다시 부르기 (TASK-010 §A5·§A7). 껍데기."""
+"""캐시 수명과 다시 부르기 (TASK-010 §A5·§A7, §9 Q7: 나이가 같으면 오래된 것). 껍데기."""
 
 import time
 from datetime import datetime
@@ -20,5 +20,5 @@ def refresh(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """오래된 것만 다시 부른다. 반환 (새 캐시, 보고 {calls: {google}, failed: [place_id], stopped: bool})."""
+    """오래된 것만 다시 부른다 (한 번에 Google 30회까지). 반환 (새 캐시, 보고 {calls: {google}, failed: [place_id], stopped: bool})."""
     raise NotImplementedError

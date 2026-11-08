@@ -17,7 +17,14 @@
 //     fixedEventError(status, code): string | null 409 PLAN_EXISTS -> "계획을 다시 짜야 해"가 든 안내 (§B3)
 //   src/lib/day-list.ts
 //     dayPill(state): string                       planning 계획 전 · planned 계획 완료 · today 오늘 · 여행 중 · past 지난 날
-//     dayDestination(state): 'planning' | 'course' | 'now' | 'review'
+//     dayDestination(state, hasCourse): 'planning' | 'course' | 'now' | 'review'
+//                                                  오늘인데 고른 코스가 없으면 계획 대화부터 (§9 Q6, DESIGN-001 §4-9)
+//   src/lib/calendar.ts (§9 Q17: JS 달력 시트, 한 달 칸, 시작 -> 끝 두 번 누르기. 날짜 규칙은 순수 함수)
+//     cityToday(nowMs, timezone = 'Asia/Tokyo'): 'YYYY-MM-DD'   도시 시간대의 오늘 (§9 Q18)
+//     monthGrid('YYYY-MM'): (string | null)[][]                한 달 칸: 주마다 7칸, 그 달 밖은 null
+//     startSelectable(date, today): boolean                    시작일 = 오늘 ~ 180일 뒤 (§B1)
+//     endSelectable(date, start): boolean                      끝 = 시작 ~ 시작 + 6일 (기간 1~7일, §B1)
+//     pickDate({start, end}, date): {start, end}               첫 번째 누름 = 시작, 두 번째(시작 이후, 범위 안) = 끝
 // 새 모듈은 테스트 안에서 require 한다 (구현 전에도 이 파일의 다른 테스트가 돈다).
 import fc from 'fast-check';
 
@@ -42,6 +49,7 @@ describe('C6 출처 이름', () => {
     ['user', '내가 확인'],
     ['curated', 'Tripfriends'],
     ['demo', '데모 데이터'],
+    ['estimate', '출처 정보'], // DATA-001 B에는 있지만 ADR-015 §3-5 표에 없다 = 그 밖 (§9 Q3)
     ['official', '출처 정보'],
     ['api', '출처 정보'],
     ['', '출처 정보'],
@@ -156,17 +164,21 @@ describe('C2 여행 만들기 폼', () => {
 
   test.each([
     ['', false],
+    ['   ', false],
     ['도', true],
+    [' 도 ', true],
     ['도톤', true],
-  ])('T10_B4_꼭_갈_곳_검색은_한_글자부터_%j', (q, ok) => {
+  ])('T10_B4_Q14_꼭_갈_곳_검색은_공백을_지우고_한_글자부터_%j', (q, ok) => {
     expect(lib().placeQueryReady(q)).toBe(ok);
   });
 
   test.each([
     ['', false],
     ['호', false],
+    [' 호 ', false],
     ['호텔', true],
-  ])('T10_B5_숙소_검색은_두_글자부터_%j', (q, ok) => {
+    ['  호텔  ', true],
+  ])('T10_B5_Q14_숙소_검색은_공백을_지우고_두_글자부터_%j', (q, ok) => {
     expect(lib().lodgingQueryReady(q)).toBe(ok);
   });
 
@@ -189,6 +201,100 @@ describe('C3 날짜 목록 (DESIGN-001 §4-9)', () => {
     ['past', '지난 날', 'review'],
   ])('T10_C3_%s는_알약_%s_이동_%s', (state, pill, destination) => {
     expect(days().dayPill(state)).toBe(pill);
-    expect(days().dayDestination(state)).toBe(destination);
+    expect(days().dayDestination(state, state !== 'planning')).toBe(destination);
+  });
+
+  test('T10_C3_Q6_오늘인데_고른_코스가_없으면_계획_대화부터', () => {
+    expect(days().dayPill('today')).toBe('오늘 · 여행 중');
+    expect(days().dayDestination('today', false)).toBe('planning');
+    expect(days().dayDestination('today', true)).toBe('now');
+  });
+});
+
+// ---------- Q17 달력 시트 (날짜 규칙) ----------
+
+describe('Q17 달력 시트', () => {
+  const cal = () => require('@/lib/calendar');
+  const addDays = (day: string, n: number) => {
+    const d = new Date(`${day}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
+  test.each([
+    ['2026-11-30T14:59:59Z', '2026-11-30'],
+    ['2026-11-30T15:00:00Z', '2026-12-01'],
+    ['2026-12-31T15:00:00Z', '2027-01-01'],
+  ])('T10_Q18_도시_시간대의_오늘_%s는_%s', (iso, day) => {
+    expect(cal().cityToday(Date.parse(iso), 'Asia/Tokyo')).toBe(day);
+  });
+
+  test.each([
+    ['2026-12', 31],
+    ['2027-02', 28],
+    ['2028-02', 29],
+    ['2026-11', 30],
+  ])('T10_Q17_한_달_칸_%s에는_그_달_날짜가_순서대로_%i개', (month, count) => {
+    const grid = cal().monthGrid(month) as (string | null)[][];
+    expect(grid.length).toBeGreaterThanOrEqual(4);
+    for (const week of grid) expect(week).toHaveLength(7);
+    const flat = grid.flat();
+    const dates = flat.filter((d): d is string => d !== null);
+    expect(dates).toEqual(Array.from({ length: count }, (_, i) => `${month}-${String(i + 1).padStart(2, '0')}`));
+    // 그 달 밖 칸(null)은 앞과 뒤에만, 앞쪽은 7칸 미만
+    const first = flat.indexOf(dates[0]);
+    const last = flat.lastIndexOf(dates[dates.length - 1]);
+    expect(flat.slice(first, last + 1).every((d) => d !== null)).toBe(true);
+    expect(first).toBeLessThan(7);
+    expect(flat.length - 1 - last).toBeLessThan(7);
+  });
+
+  test('T10_Q17_속성_한_달_칸은_요일_자리가_맞다', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 2026, max: 2030 }), fc.integer({ min: 1, max: 12 }), (year, m) => {
+        const month = `${year}-${String(m).padStart(2, '0')}`;
+        const flat = (cal().monthGrid(month) as (string | null)[][]).flat();
+        const dates = flat.filter((d): d is string => d !== null);
+        // 같은 요일은 7칸 간격
+        for (let i = 7; i < dates.length; i += 1) expect(flat.indexOf(dates[i]) - flat.indexOf(dates[i - 7])).toBe(7);
+        const offset = flat.indexOf(dates[0]);
+        const weekday = new Date(`${month}-01T00:00:00Z`).getUTCDay();
+        expect([weekday % 7, (weekday + 6) % 7]).toContain(offset); // 일요일 시작이든 월요일 시작이든 (질문)
+      }),
+    );
+  });
+
+  test.each([
+    [-1, false],
+    [0, true],
+    [180, true],
+    [181, false],
+  ])('T10_Q17_B1_시작일은_오늘부터_180일_뒤까지_%i일', (offset, ok) => {
+    expect(cal().startSelectable(addDays('2026-12-01', offset), '2026-12-01')).toBe(ok);
+  });
+
+  test.each([
+    [-1, false],
+    [0, true],
+    [6, true],
+    [7, false],
+  ])('T10_Q17_B1_끝은_시작부터_7일_안_%i일_뒤', (offset, ok) => {
+    expect(cal().endSelectable(addDays('2026-12-28', offset), '2026-12-28')).toBe(ok);
+  });
+
+  test('T10_Q17_두_번_누르면_시작과_끝', () => {
+    const first = cal().pickDate({ start: null, end: null }, '2026-12-10');
+    expect(first).toEqual({ start: '2026-12-10', end: null });
+    expect(cal().pickDate(first, '2026-12-12')).toEqual({ start: '2026-12-10', end: '2026-12-12' });
+  });
+
+  test('T10_Q17_B1_같은_날을_두_번_누르면_하루_여행', () => {
+    const first = cal().pickDate({ start: null, end: null }, '2026-12-10');
+    expect(cal().pickDate(first, '2026-12-10')).toEqual({ start: '2026-12-10', end: '2026-12-10' });
+  });
+
+  test('T10_Q17_B1_두_번째로_7일을_넘는_날은_끝이_되지_않는다', () => {
+    const first = cal().pickDate({ start: null, end: null }, '2026-12-10');
+    expect(cal().pickDate(first, '2026-12-17').end).not.toBe('2026-12-17');
   });
 });

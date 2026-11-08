@@ -6,9 +6,11 @@ DESIGN-001 §4-9(R1은 여행 하나), TASK-005 A3(하루 꼭 갈 곳 5).
 계약 (이 테스트가 정한 이름, 승인 대기):
     PLACES_PROVIDER=fake -> app.state.places_provider 는 FakePlaces, 도시 팩은 testdata/cities/osaka-seed-fake.yaml + FakePlaces로 시작 때 만든다
     app.state.clock: () -> 시간대 있는 datetime. 테스트는 서버 시작 뒤 바꿔 넣는다 (도시 시간대 오늘은 이 값으로)
-    Trip = {trip_id, city_code, start_date, end_date, lodging_place_id, status, trip_days: [{day_id, date, state, fixed_events: [FixedEvent]}]}
+    Trip = {trip_id, city_code, start_date, end_date, lodging_place_id, status(active|archived, §9 Q2),
+            trip_days: [{day_id, date, state, chosen_option_id(없으면 null, §9 Q6), fixed_events: [FixedEvent]}]}  (§9 Q12 승인)
     FixedEvent = {fixed_event_id, trip_day_id, title, start_at, end_at, place_id}
-    오류는 공통 형식 {"error": {code, message, detail}} (API-001 §1). 409 code = PLAN_EXISTS (§B3)
+    오류는 공통 형식 {"error": {code, message, detail}} (API-001 §1).
+        400 = VALIDATION_ERROR + detail.field(틀린 칸 이름) (§9 Q13) · 409 = PLAN_EXISTS (§B3) · 숙소 검색 실패 503 PROVIDER_UNAVAILABLE (§9 Q13)
     trip/days.py  city_today(now, timezone) -> date · day_state(day, today, planned) -> planning|planned|today|past
 """
 
@@ -31,7 +33,7 @@ PACK_IDS = {
 }  # 가짜 seed 17줄 - 뺀 3줄 (test_task010_places EXCLUDED)
 SIX = sorted(PACK_IDS)[:6]
 STATES = {"planning", "planned", "today", "past"}
-SOURCE_TYPES = {"google", "serper", "user", "curated", "demo"}
+SOURCE_TYPES = {"google", "serper", "user", "curated", "estimate", "demo"}  # §9 Q3
 
 
 class Osaka:
@@ -103,10 +105,14 @@ def trip_body(days: int = 3, offset: int = 10, must: list[tuple[int, str]] = (),
     return body
 
 
-def assert_400(response) -> None:
+def assert_400(response, *fields: str) -> None:
+    """§9 Q13: 400 VALIDATION_ERROR, detail.field = 틀린 칸 이름 (fields를 주면 그 중 하나)."""
     assert response.status_code == 400, response.text
     error = response.json()["error"]
-    assert error["code"] and error["message"]
+    assert error["code"] == "VALIDATION_ERROR" and error["message"]
+    assert isinstance(error["detail"], dict) and error["detail"].get("field"), error
+    if fields:
+        assert error["detail"]["field"] in fields, error
 
 
 def states(trip: dict) -> list[str]:
@@ -123,7 +129,8 @@ def test_T10_B1_AC4_201_Trip과_날짜별_trip_days(osaka):
     assert [day["date"] for day in trip["trip_days"]] == [iso(TODAY + timedelta(days=10 + n)) for n in range(3)]
     assert len({day["day_id"] for day in trip["trip_days"]}) == 3
     assert set(states(trip)) <= STATES
-    assert trip["status"] != "archived"
+    assert trip["status"] == "active"  # §9 Q2
+    assert all(day["chosen_option_id"] is None for day in trip["trip_days"])  # §9 Q6
 
 
 @pytest.mark.parametrize(("days", "ok"), [(0, False), (1, True), (7, True), (8, False)], ids=["0일", "1일", "7일", "8일"])
@@ -135,7 +142,7 @@ def test_T10_B1_AC4_기간_1일에서_7일(osaka, days, ok):
         assert response.status_code == 201, response.text
         assert len(response.json()["trip_days"]) == days
     else:
-        assert_400(response)
+        assert_400(response, "start_date", "end_date")
 
 
 @pytest.mark.parametrize(("offset", "ok"), [(-1, False), (0, True), (180, True), (181, False)], ids=["어제", "오늘", "180일_뒤", "181일_뒤"])
@@ -144,7 +151,7 @@ def test_T10_B1_AC4_시작일은_오늘부터_180일_뒤까지(osaka, offset, ok
     if ok:
         assert response.status_code == 201, response.text
     else:
-        assert_400(response)
+        assert_400(response, "start_date")
 
 
 @pytest.mark.parametrize(
@@ -168,7 +175,7 @@ def test_T10_B1_AC5_오늘은_도시_시간대_기준(osaka, now, start, ok):
 
 @pytest.mark.parametrize("city", ["demo", "tokyo", ""], ids=["데모", "다른_도시", "빈_값"])
 def test_T10_B1_도시는_osaka만(osaka, city):
-    assert_400(osaka.post_trip(trip_body(city=city)))
+    assert_400(osaka.post_trip(trip_body(city=city)), "city_code")
 
 
 @pytest.mark.parametrize(("count", "ok"), [(5, True), (6, False)], ids=["하루_5곳", "하루_6곳"])
@@ -177,7 +184,7 @@ def test_T10_B1_AC4_하루_꼭_갈_곳_5곳까지(osaka, count, ok):
     if ok:
         assert response.status_code == 201, response.text
     else:
-        assert_400(response)
+        assert_400(response, "must_visits")
 
 
 def test_T10_B1_꼭_갈_곳은_날마다_세서_두_날_5곳씩은_된다(osaka):
@@ -191,12 +198,12 @@ def test_T10_B1_꼭_갈_곳은_날마다_세서_두_날_5곳씩은_된다(osaka)
     ids=["팩에서_뺀_폐업", "팩에서_뺀_검색_실패", "데모_장소", "없는_id"],
 )
 def test_T10_B1_팩에_없는_장소는_400(osaka, must):
-    assert_400(osaka.post_trip(trip_body(must=must)))
+    assert_400(osaka.post_trip(trip_body(must=must)), "must_visits")
 
 
 @pytest.mark.parametrize("day_offset", [-1, 3], ids=["시작_전날", "끝_다음날"])
 def test_T10_B1_꼭_갈_곳_날짜가_여행_밖이면_400(osaka, day_offset):
-    assert_400(osaka.post_trip(trip_body(days=3, must=[(day_offset, "osaka-fake-kuromon")])))
+    assert_400(osaka.post_trip(trip_body(days=3, must=[(day_offset, "osaka-fake-kuromon")])), "must_visits")
 
 
 @settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
@@ -209,6 +216,15 @@ def test_T10_B1_속성_기간과_시작일이_둘_다_맞을_때만_201(osaka, d
 
 
 # ---------- B2 여행 하나만 ----------
+
+
+@pytest.mark.parametrize("call", ["post", "current"], ids=["POST_trips", "GET_current"])
+def test_T10_B2_Q16_X_Device_Id가_없으면_400(osaka, call):
+    if call == "post":
+        response = osaka.client.post("/trips", json=trip_body())
+    else:
+        response = osaka.client.get("/trips/current")
+    assert_400(response, "X-Device-Id")
 
 
 def test_T10_B2_여행이_없으면_current_404(osaka):
@@ -229,7 +245,7 @@ def test_T10_B2_새로_만들면_이전_여행은_지우지_않고_archived(osak
     old = osaka.trip(first["trip_id"])
     assert old.status_code == 200
     assert old.json()["status"] == "archived"
-    assert osaka.trip(second["trip_id"]).json()["status"] != "archived"
+    assert osaka.trip(second["trip_id"]).json()["status"] == "active"
 
 
 def test_T10_B2_다른_기기의_여행은_보이지_않는다(osaka):
@@ -274,7 +290,36 @@ def test_T10_B3_AC4_끝은_시작보다_뒤(osaka, start, end, ok):
     if ok:
         assert response.status_code == 201, response.text
     else:
-        assert_400(response)
+        assert_400(response, "start_at", "end_at")
+
+
+def fixed_at(osaka, trip: dict, start_at: str, end_at: str):
+    body = {"trip_day_id": trip["trip_days"][0]["day_id"], "title": "경계", "start_at": start_at, "end_at": end_at}
+    return osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers={"X-Device-Id": DEVICE})
+
+
+def test_T10_B3_Q15_그날_00시부터_24시까지는_된다(osaka):
+    trip = osaka.make_trip()
+    day, nxt = trip["trip_days"][0]["date"], trip["trip_days"][1]["date"]
+    assert fixed_at(osaka, trip, at(day, "00:00"), at(day, "01:00")).status_code == 201
+    assert fixed_at(osaka, trip, at(day, "23:00"), at(nxt, "00:00")).status_code == 201  # 끝 = 24:00
+
+
+def test_T10_B3_Q15_24시를_1분_넘거나_00시_전에_시작하면_400(osaka):
+    trip = osaka.make_trip()
+    day, nxt = trip["trip_days"][0]["date"], trip["trip_days"][1]["date"]
+    prev = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    assert_400(fixed_at(osaka, trip, at(day, "23:00"), at(nxt, "00:01")), "start_at", "end_at")
+    assert_400(fixed_at(osaka, trip, at(prev, "23:59"), at(day, "01:00")), "start_at", "end_at")
+
+
+def test_T10_B3_Q15_그날은_도시_시간대로_센다(osaka):
+    trip = osaka.make_trip()
+    day = trip["trip_days"][0]["date"]
+    # UTC로 쓴 같은 순간: JST 그날 10:00~11:00 = UTC 01:00~02:00
+    assert fixed_at(osaka, trip, f"{day}T01:00:00+00:00", f"{day}T02:00:00+00:00").status_code == 201
+    # UTC 그날 20:00 = JST 다음 날 05:00 -> 그날 밖
+    assert_400(fixed_at(osaka, trip, f"{day}T20:00:00+00:00", f"{day}T21:00:00+00:00"), "start_at", "end_at")
 
 
 def test_T10_B3_그날_밖의_시각은_400(osaka):
@@ -282,7 +327,7 @@ def test_T10_B3_그날_밖의_시각은_400(osaka):
     day = trip["trip_days"][0]
     other = trip["trip_days"][1]["date"]
     body = {"trip_day_id": day["day_id"], "title": "다른 날", "start_at": at(other, "12:00"), "end_at": at(other, "13:00")}
-    assert_400(osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers={"X-Device-Id": DEVICE}))
+    assert_400(osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers={"X-Device-Id": DEVICE}), "start_at", "end_at")
 
 
 @pytest.mark.parametrize(
@@ -297,7 +342,7 @@ def test_T10_B3_AC4_같은_날_겹치면_400_맞닿으면_된다(osaka, second, 
     if ok:
         assert response.status_code == 201, response.text
     else:
-        assert_400(response)
+        assert_400(response, "start_at", "end_at")
 
 
 def test_T10_B3_다른_날이면_같은_시각이어도_된다(osaka):
@@ -312,7 +357,7 @@ def test_T10_B3_AC4_제목은_1자에서_30자(osaka, length, ok):
     if ok:
         assert response.status_code == 201, response.text
     else:
-        assert_400(response)
+        assert_400(response, "title")
 
 
 def test_T10_B3_AC4_계획을_고른_날이면_409_PLAN_EXISTS_일정은_그대로(osaka):
@@ -336,9 +381,20 @@ def test_T10_B3_지우면_사라지고_같은_시각에_다시_넣을_수_있다
     trip = osaka.make_trip()
     made = osaka.add_fixed(trip, 0, "12:00", "13:00").json()
     deleted = osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers={"X-Device-Id": DEVICE})
-    assert deleted.status_code in (200, 204), deleted.text
+    assert deleted.status_code == 204, deleted.text  # §9 Q15
     assert osaka.trip(trip["trip_id"]).json()["trip_days"][0]["fixed_events"] == []
     assert osaka.add_fixed(trip, 0, "12:00", "13:00").status_code == 201
+
+
+def test_T10_B3_Q15_계획을_고른_날의_고정_일정_지우기도_409(osaka):
+    trip = osaka.make_trip()
+    made = osaka.add_fixed(trip, 0, "12:00", "13:00").json()
+    osaka.plan_and_select(trip["trip_days"][0]["day_id"])
+    before = osaka.trip(trip["trip_id"]).json()
+    deleted = osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers={"X-Device-Id": DEVICE})
+    assert deleted.status_code == 409, deleted.text
+    assert deleted.json()["error"]["code"] == "PLAN_EXISTS"
+    assert osaka.trip(trip["trip_id"]).json() == before
 
 
 def test_T10_B3_없는_고정_일정_지우기는_404(osaka):
@@ -369,6 +425,15 @@ def test_T10_B4_한_글자부터_검색(osaka):
     assert "osaka-fake-dotonbori" in found_ids(search(osaka, "도"))
 
 
+@pytest.mark.parametrize("q", ["", "   "], ids=["빈_글", "공백만"])
+def test_T10_B4_Q14_비거나_공백뿐이면_200_빈_목록(osaka, q):
+    assert found_ids(search(osaka, q)) == []
+
+
+def test_T10_B4_Q14_앞뒤_공백은_지우고_찾는다(osaka):
+    assert found_ids(search(osaka, "  아메무라  ")) == ["osaka-fake-amemura"]
+
+
 def test_T10_B4_최대_10개(osaka):
     ids = found_ids(search(osaka, "오사카"))  # 가짜 seed는 모든 줄 별칭에 "오사카"가 있다 (팩 14곳)
     assert len(ids) == 10 and set(ids) <= PACK_IDS
@@ -387,7 +452,7 @@ def test_T10_B4_B7_결과는_facts_형식과_카테고리_그림(osaka):
     response = search(osaka, "오사카")
     for place in response.json():
         assert {"id", "name", "category", "facts", "image"} <= set(place)
-        assert place["category"] in str(place["image"])  # 그림은 카테고리로 정한다 (§C5)
+        assert place["image"] == {"category": place["category"]}  # §9 Q20: 카테고리만, URL 없음
         for fact in place["facts"]:
             assert {"field", "value", "status", "source_type", "source_url", "checked_at"} <= set(fact)
             assert fact["source_type"] in SOURCE_TYPES
@@ -418,9 +483,40 @@ def test_T10_B5_두_글자부터_결과_5개(osaka):
         assert set(hit) == {"place_id", "name", "address_short"}
 
 
-def test_T10_B5_한_글자는_검색하지_않는다(osaka):
-    response = lodging(osaka, "호")
-    assert response.status_code == 400 or (response.status_code == 200 and response.json() == [])  # 어느 쪽인지 문서에 없다 (질문)
+@pytest.mark.parametrize("q", ["호", " 호 ", "", "  "], ids=["한_글자", "공백_지우면_한_글자", "빈_글", "공백만"])
+def test_T10_B5_Q14_두_글자_미만은_200_빈_목록(osaka, q):
+    response = lodging(osaka, q)
+    assert (response.status_code, response.json()) == (200, [])
+
+
+def test_T10_B5_Q14_앞뒤_공백은_지우고_두_글자(osaka):
+    response = lodging(osaka, "  호텔  ")
+    assert response.status_code == 200 and len(response.json()) == 5
+
+
+def test_T10_B5_Q13_숙소_검색_공급자_실패는_503_PROVIDER_UNAVAILABLE(osaka, monkeypatch):
+    def broken(q):
+        raise RuntimeError("공급자 실패 (테스트)")
+
+    monkeypatch.setattr(osaka.app.state.places_provider, "search_lodging", broken)
+    response = lodging(osaka, "호텔")
+    assert response.status_code == 503, response.text
+    assert response.json()["error"]["code"] == "PROVIDER_UNAVAILABLE"
+
+
+@pytest.mark.slow
+def test_T10_B5_Q13_숙소_검색_3초_넘으면_503(osaka, monkeypatch):
+    import time
+
+    def slow(q):
+        time.sleep(4)
+        return []
+
+    monkeypatch.setattr(osaka.app.state.places_provider, "search_lodging", slow)
+    began = time.monotonic()
+    response = lodging(osaka, "호텔")
+    assert response.status_code == 503 and response.json()["error"]["code"] == "PROVIDER_UNAVAILABLE"
+    assert time.monotonic() - began < 3.8
 
 
 def test_T10_B5_고른_숙소는_place_id만_여행에_저장(osaka):
@@ -442,7 +538,40 @@ def test_T10_K_키가_없으면_가짜_공급자로_켜지고_경고(monkeypatch
     caplog.set_level(logging.WARNING)
     with TestClient(app):
         assert isinstance(app.state.places_provider, FakePlaces)
-    assert [r for r in caplog.records if r.levelno == logging.WARNING]
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert sum("가짜 장소 공급자 사용 중" in m for m in warnings) == 1  # §9 Q5: 경고 한 줄
+
+
+def test_T10_Q5_가짜_모드로_켜도_경고_한_줄(monkeypatch, caplog):
+    from api.main import app
+
+    monkeypatch.setenv("PLACES_PROVIDER", "fake")
+    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    caplog.set_level(logging.WARNING)
+    with TestClient(app):
+        pass
+    assert sum("가짜 장소 공급자 사용 중" in r.getMessage() for r in caplog.records) == 1
+
+
+def test_T10_Q5_가짜_공급자의_영업시간_출처는_google(osaka):
+    place = search(osaka, "구로몬").json()[0]
+    hours = [f for f in place["facts"] if f["field"] == "opening_hours"]
+    assert hours and hours[0]["source_type"] == "google"
+
+
+def test_T10_Q11_가짜_모드는_팩을_메모리에서_만들고_파일을_쓰지_않는다(monkeypatch):
+    from pathlib import Path
+
+    from api.main import app
+
+    server = Path(__file__).resolve().parents[1]
+    watched = [server / "places" / "packs" / "osaka.json", server / ".cache" / "places" / "osaka.json"]
+    before = {p: (p.exists(), p.stat().st_mtime_ns if p.exists() else None) for p in watched}
+    monkeypatch.setenv("PLACES_PROVIDER", "fake")
+    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    with TestClient(app) as client:
+        assert client.get("/places/search", params={"city_code": "osaka", "q": "구로몬"}).json()
+    assert {p: (p.exists(), p.stat().st_mtime_ns if p.exists() else None) for p in watched} == before
 
 
 def test_T10_K_키_값은_로그에_찍지_않는다(monkeypatch, caplog):
@@ -474,18 +603,18 @@ def test_T10_B6_날_상태_네_가지(offset, planned, state):
     assert day_state(TODAY + timedelta(days=offset), TODAY, planned) == state
 
 
-def test_T10_B6_오늘인데_계획_전():
-    pytest.skip("오늘 + 계획 전의 state 값(today/planning)이 문서에 없음 (질문). DESIGN-001 §4-9: 이동은 계획 대화부터")
+def test_T10_B6_Q6_오늘인데_계획_전이어도_today():
+    from trip.days import day_state
+
+    assert day_state(TODAY, TODAY, False) == "today"
 
 
 @given(gap=st.integers(min_value=-400, max_value=400), planned=st.booleans())
-def test_T10_B6_속성_지난_날은_계획과_상관없이_past_앞날은_계획_여부대로(gap, planned):
+def test_T10_B6_속성_지난_날은_past_오늘은_today_앞날은_계획_여부대로(gap, planned):
     from trip.days import day_state
 
-    if gap == 0:
-        return
     found = day_state(TODAY + timedelta(days=gap), TODAY, planned)
-    assert found == ("past" if gap < 0 else "planned" if planned else "planning")
+    assert found == ("past" if gap < 0 else "today" if gap == 0 else "planned" if planned else "planning")
 
 
 @pytest.mark.parametrize(
@@ -506,8 +635,8 @@ def test_T10_B6_AC5_도시_시간대_오늘(now, today):
 def test_T10_B6_AC5_API_오늘부터_시작한_여행(osaka):
     osaka.make_trip(days=3, offset=0)
     trip = osaka.current().json()
-    assert states(trip)[1:] == ["planning", "planning"]
-    assert states(trip)[0] in {"today", "planning"}  # 오늘 + 계획 전은 질문
+    assert states(trip) == ["today", "planning", "planning"]  # §9 Q6
+    assert trip["trip_days"][0]["chosen_option_id"] is None  # 앱은 이 값으로 계획 대화부터 (DESIGN-001 §4-9)
 
 
 def test_T10_B6_AC5_자정이_지나면_다시_계산한다_저장하지_않는다(osaka):
@@ -524,7 +653,9 @@ def test_T10_B6_AC5_자정이_지나면_다시_계산한다_저장하지_않는�
 def test_T10_B6_계획을_고르면_planned(osaka):
     trip = osaka.make_trip(days=2, offset=10)
     osaka.plan_and_select(trip["trip_days"][1]["day_id"])
-    assert states(osaka.current().json()) == ["planning", "planned"]
+    days = osaka.current().json()["trip_days"]
+    assert [d["state"] for d in days] == ["planning", "planned"]
+    assert days[0]["chosen_option_id"] is None and days[1]["chosen_option_id"]
 
 
 # ---------- AC-8 만든 여행의 첫날 계획 대화에 오사카 장소 ----------
@@ -551,3 +682,24 @@ def test_T10_AC8_꼭_갈_곳은_그날_코스에_들어간다(osaka):
         assert "osaka-fake-kuromon" in {item["place_id"] for item in option["items"]}
     other = osaka.client.post(f"/days/{trip['trip_days'][1]['day_id']}/planning", json={"mode": "auto"})
     assert other.status_code == 201, other.text
+
+
+# ---------- §9 Q10 숙소가 없으면 시작점 = 도시 center, 끝은 마지막 장소 ----------
+
+
+def test_T10_Q10_숙소가_없어도_계획이_된다_숙소로_돌아가기_없음(osaka):
+    trip = osaka.make_trip(days=1, offset=10)
+    assert trip["lodging_place_id"] is None
+    started = osaka.client.post(f"/days/{trip['trip_days'][0]['day_id']}/planning", json={"mode": "auto"})
+    assert started.status_code == 201, started.text
+    for option in started.json()["options"]:
+        assert option["items"]
+        assert option["go_home_min"] in (0, None)
+
+
+def test_T10_Q10_하루_시각은_데모와_같은_기본값(osaka):
+    trip = osaka.make_trip(days=1, offset=10)
+    started = osaka.client.post(f"/days/{trip['trip_days'][0]['day_id']}/planning", json={"mode": "conversation"})
+    assert started.status_code == 201, started.text
+    day = started.json()["day"]
+    assert (day["start"], day["end"]) == ("10:00", "20:00")  # planning/seed.py DAY_START, DAY_END

@@ -1,11 +1,14 @@
 {
- "about": "TASK-010 §A1 FakePlaces 데이터. test-writer가 손으로 지어낸 가짜 값이며 실제 Google·Serper 응답이 아니다 (ADR-015 §3-2: 테스트 데이터도 손으로 만든 가짜). place_id는 모두 'FAKE-'로 시작하고 링크는 모두 example.invalid. 좌표는 오사카 근처의 지어낸 수, 영업시간은 지어낸 시각. resolve: query -> place_id 목록(0개=검색 실패, 2개 이상=여러 곳). details: place_id -> {location, opening_hours(엔진 Opening 모양 또는 null=없음), website, maps_url, business_status}. serper: '{query} 営業時間' -> [{text, link}] (문장은 모두 '【テスト用の作り話】'로 시작하는 작문). lodging: 숙소 검색 결과(팩 밖). seed는 testdata/cities/osaka-seed-fake.yaml.",
+ "about": "TASK-010 §A1 FakePlaces 데이터. test-writer가 손으로 지어낸 가짜 값이며 실제 Google·Serper 응답이 아니다 (ADR-015 §3-2: 테스트 데이터도 손으로 만든 가짜). place_id는 모두 'FAKE-'로 시작하고 링크는 모두 example.invalid. 좌표는 오사카 근처의 지어낸 수, 영업시간은 지어낸 시각. resolve: query -> place_id 목록(0개=검색 실패, 2개 이상=여러 곳). details: place_id -> {location, opening_hours(엔진 Opening 모양 또는 null=없음), website, maps_url, business_status}. serper: '{query} 営業時間' -> [{text, link}] (문장은 모두 '【テスト用の作り話】'로 시작하는 작문). lodging: 숙소 검색 결과(팩 밖). seed는 testdata/cities/osaka-seed-fake.yaml (center = 難波駅도 resolve 표에 있다).",
  "timezone": "Asia/Tokyo",
  "center": {
   "lat": 34.669,
   "lng": 135.501
  },
  "resolve": {
+  "難波駅 Osaka": [
+   "FAKE-osaka-center-station"
+  ],
   "道頓堀 Osaka": [
    "FAKE-osaka-dotonbori"
   ],
@@ -58,6 +61,16 @@
   ]
  },
  "details": {
+  "FAKE-osaka-center-station": {
+   "location": {
+    "lat": 34.6663,
+    "lng": 135.5002
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-center-station",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-center-station",
+   "business_status": "OPERATIONAL"
+  },
   "FAKE-osaka-dotonbori": {
    "location": {
     "lat": 34.6687,
@@ -701,11 +714,11 @@
   "道頓堀 Osaka 営業時間": [],
   "なんば 路地カフェ Osaka 営業時間": [
    {
-    "text": "【テスト用の作り話】路地カフェの営業時間 10:00～19:00 です",
+    "text": "【テスト用の作り話】路地カフェの営業時間 10:00～19:00 です 定休日：火曜日",
     "link": "https://example.invalid/serper/alley-cafe-1"
    },
    {
-    "text": "【テスト用の作り話】営業時間：10:00〜19:00 ゆっくりできる店",
+    "text": "【テスト用の作り話】営業時間：10:00〜19:00 定休日：火曜 ゆっくりできる店",
     "link": "https://example.invalid/serper/alley-cafe-2"
    }
   ],
