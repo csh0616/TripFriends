@@ -1,7 +1,7 @@
 """도시 팩 + 캐시 -> 엔진 장소·화면 facts (TASK-010 §A8·§B7).
 
-영업시간 fact의 출처·상태 (§9 Q4, ADR-015 §3-5):
-  Google에서 이번에 받은 영업시간 = google · confirmed (checked_at = fetched_at). 다시 받기 실패 = unverified.
+영업시간 fact의 출처·상태 (§9 Q4, §11 H4·H7, ADR-015 §3-5):
+  Google에서 그 자리에서 받은 영업시간 = google · confirmed (checked_at = 받은 시각). 늦거나 실패해 메모리 값을 쓰면 unverified.
   Google에 없고 Serper로 뽑음 = serper · unverified (source_url = 결과 링크). 임시 휴업·못 뽑음 = unknown.
 """
 
@@ -24,19 +24,25 @@ def _serper_openings(serper: dict[str, Any]) -> list[dict[str, Any]] | None:
     return [{"weekday": day, "open": low, "close": high} for day in range(7) if day not in off for low, high in spans]
 
 
-def _hours(entry: dict[str, Any] | None) -> dict[str, Any]:
-    """{openings, status, source_type, source_url, checked_at}."""
+def _hours(entry: dict[str, Any] | None, live: dict[str, Any] | None = None) -> dict[str, Any]:
+    """{openings, status, source_type, source_url, checked_at}. 대체 순서 (§11 H4):
+    그 자리에서 받은 Google 값(confirmed) -> 메모리 값(unverified) -> Serper 값(unverified) -> 모름."""
     unknown = {"openings": None, "status": "unknown", "source_type": "google", "source_url": None, "checked_at": None}
-    if entry is None or entry.get("business_status") == CLOSED_TEMPORARILY:
+    if live is not None and live.get("business_status") == CLOSED_TEMPORARILY:
         return unknown
-    if entry.get("opening_hours"):
-        status = "unverified" if entry.get("refresh_failed") else "confirmed"
-        return {"openings": entry["opening_hours"], "status": status, "source_type": "google", "source_url": None, "checked_at": entry["fetched_at"]}
-    serper = entry.get("serper")
+    if live is not None and live.get("opening_hours"):
+        status = "confirmed" if live["fresh"] else "unverified"
+        return {"openings": live["opening_hours"], "status": status, "source_type": "google", "source_url": None, "checked_at": live["checked_at"]}
+    serper = (entry or {}).get("serper")
     openings = _serper_openings(serper) if serper else None
     if openings:
-        return {"openings": openings, "status": "unverified", "source_type": "serper", "source_url": serper.get("source_url"), "checked_at": entry["fetched_at"]}
+        return {"openings": openings, "status": "unverified", "source_type": "serper", "source_url": serper.get("source_url"), "checked_at": entry["fetched_at"]}  # type: ignore[index]
     return unknown
+
+
+def maps_url(place_id: str) -> str:
+    """지도 링크는 place_id로 우리가 만든다 (§11 H5). Google이 준 링크를 저장하지 않는다."""
+    return f"https://www.google.com/maps/search/?api=1&query=Google&query_place_id={place_id}"
 
 
 def _hours_text(openings: list[dict[str, Any]] | None) -> str | None:
@@ -52,9 +58,9 @@ def _hours_text(openings: list[dict[str, Any]] | None) -> str | None:
     return "; ".join(f"{WEEKDAY_LABELS[day]} {text}" for day, text in sorted(texts.items()))
 
 
-def facts_for(row: dict[str, Any], entry: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """[{field, value, status, source_type, source_url, checked_at}]"""
-    hours = _hours(entry)
+def facts_for(row: dict[str, Any], entry: dict[str, Any] | None, live: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """[{field, value, status, source_type, source_url, checked_at}]. live = places/live.py가 돌려준 Google 영업시간 (메모리 값, 없으면 None)."""
+    hours = _hours(entry, live)
     facts: list[dict[str, Any]] = [
         {"field": "stay_min", "value": json.dumps(row["stay"]), "status": "confirmed", "source_type": "curated", "source_url": None, "checked_at": None},
         {
@@ -67,7 +73,7 @@ def facts_for(row: dict[str, Any], entry: dict[str, Any] | None) -> list[dict[st
         },
     ]
     serper = (entry or {}).get("serper")
-    if serper and serper.get("closed_days") is not None and entry.get("business_status") != CLOSED_TEMPORARILY:  # type: ignore[union-attr]
+    if serper and serper.get("closed_days") is not None and not (live and live.get("business_status") == CLOSED_TEMPORARILY):
         days = serper["closed_days"]
         facts.append(
             {
@@ -79,20 +85,20 @@ def facts_for(row: dict[str, Any], entry: dict[str, Any] | None) -> list[dict[st
                 "checked_at": entry["fetched_at"],  # type: ignore[index]
             }
         )
-    for field, key in (("website", "website"), ("maps_url", "maps_url")):
-        if entry and entry.get(key):
-            facts.append({"field": field, "value": entry[key], "status": "confirmed", "source_type": "google", "source_url": entry[key], "checked_at": entry["fetched_at"]})
+    link = maps_url(row["place_id"])
+    facts.append({"field": "maps_url", "value": link, "status": "confirmed", "source_type": "google", "source_url": link, "checked_at": None})
     return facts
 
 
-def engine_places(pack: dict[str, Any], cache: dict[str, Any]) -> dict[str, Place]:
-    """demo_city.json과 같은 모양의 장소 목록 (엔진 코드는 그대로). 좌표가 아직 캐시에 없는 곳은 뺀다."""
+def engine_places(pack: dict[str, Any], cache: dict[str, Any], live: dict[str, Any] | None = None) -> dict[str, Place]:
+    """demo_city.json과 같은 모양의 장소 목록 (엔진 코드는 그대로). 좌표가 아직 캐시에 없는 곳은 뺀다.
+    live = {Google place_id: LiveHours 값}. 영업시간은 여기서만 온다 (디스크 캐시에는 없다, §11 H1)."""
     found: dict[str, Place] = {}
     for row in pack["places"]:
         entry = cache.get(row["place_id"])
         if not entry or not entry.get("location"):
             continue
-        hours = _hours(entry)
+        hours = _hours(entry, (live or {}).get(row["place_id"]))
         found[row["id"]] = Place(
             id=row["id"],
             name=row["name_ko"],
@@ -109,6 +115,6 @@ def engine_places(pack: dict[str, Any], cache: dict[str, Any]) -> dict[str, Plac
     return found
 
 
-def source_types(pack: dict[str, Any], cache: dict[str, Any]) -> dict[str, str]:
+def source_types(pack: dict[str, Any], cache: dict[str, Any], live: dict[str, Any] | None = None) -> dict[str, str]:
     """우리 id -> 영업시간 fact의 출처 (계획 화면의 출처 표시용)."""
-    return {row["id"]: _hours(cache.get(row["place_id"]))["source_type"] for row in pack["places"]}
+    return {row["id"]: _hours(cache.get(row["place_id"]), (live or {}).get(row["place_id"]))["source_type"] for row in pack["places"]}

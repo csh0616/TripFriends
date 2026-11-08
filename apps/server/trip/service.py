@@ -7,6 +7,7 @@
 import threading
 import uuid
 from datetime import datetime
+from collections.abc import Callable
 from typing import Any
 
 from langgraph.types import Command
@@ -35,8 +36,18 @@ class TripService:
         self._lock = threading.RLock()
         # 그날 마지막 check의 at (§11 Q7). 시각 하나일 뿐 위치가 아니고 사건 데이터도 아니라 저장소 밖에 둔다
         self._last_check: dict[str, datetime] = {}
+        # TASK-010 §11 H3: Google 영업시간을 부르는 자리 (kind, day_id, place_id). 실패해도 화면·대안 찾기는 멈추지 않는다
+        self.refresh_hours: Callable[[str, str, str | None], None] | None = None
 
     # ---- 도우미 ----
+
+    def _hours(self, kind: str, day_id: str, place_id: str | None = None) -> None:
+        if self.refresh_hours is None:
+            return
+        try:
+            self.refresh_hours(kind, day_id, place_id)
+        except Exception:  # 영업시간을 못 불러도 화면은 이전 값·대체 값으로 계속한다 (H4)
+            pass
 
     def load(self, day_id: str, when: datetime) -> tuple[DayRecord, CourseOption, dict[str, int]]:
         day = self.planning.get_day(day_id)
@@ -67,6 +78,7 @@ class TripService:
     def now(self, day_id: str, when: datetime) -> NowView:
         """GET /now: 읽기뿐. 위치는 받지 않는다. 열린 사건이 있으면 싣는다."""
         with self._lock:
+            self._hours("now", day_id)
             day, course, overrides = self.load(day_id, when)
             return build_now_view(
                 day_id, day, course, when, None, overrides, None, self._open_views(day_id, day), self._checks(day.plan, day_id)
@@ -89,6 +101,7 @@ class TripService:
 
     def check(self, day_id: str, when: datetime, position: tuple[float, float] | None) -> NowView:
         with self._lock:
+            self._hours("now", day_id)
             day, course, overrides = self.load(day_id, when)
             build = self._builder(day_id, day, course, when, position, overrides)
             previous = self._last_check.get(day_id)
@@ -176,6 +189,8 @@ class TripService:
     def visit_check(self, place_id: str, day_id: str, when: datetime, was_open: bool) -> NowView:
         """TASK-008 A5·B1: 영업 확인 답. 대상이 아니면 409. 열었어면 기록만, 닫혔어면 G2 그래프로 대안을 계산한다."""
         with self._lock:
+            if not was_open:
+                self._hours("alternatives", day_id, place_id)  # 대안이 도착 때 열려 있는지는 최신 값이어야 한다 (H3 ③)
             day, course, overrides = self.load(day_id, when)
             if place_id not in day.places:
                 raise PlanningError("NOT_FOUND", "그날 데이터에 없는 장소예요", {"resource": "place", "place_id": place_id})

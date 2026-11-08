@@ -17,7 +17,9 @@ from engine.models import DayPlan, PlanFixed
 from planning.repo import PlanningRepo
 from planning.seed import DAY_END, DAY_START
 from places.city import CityData
+from places.live import CAPS
 from trip.days import DayState, city_today, day_state
+from trip.visit import _limits as visit_limits, _meters as meters
 
 CITY_CODE = "osaka"
 
@@ -217,13 +219,16 @@ class TripBook:
         if not today <= body.start_date <= today + timedelta(days=rules["max_start_ahead"]):
             raise invalid("start_date", f"시작일은 오늘부터 {rules['max_start_ahead']}일 뒤까지 고를 수 있어요")
 
-        places = self.city.engine_places()
+        places, sources = self.city.places_now(self.clock())
         per_day: dict[date, list[str]] = {}
+        placed_on: dict[str, date] = {}
         for visit in body.must_visits:
             if not body.start_date <= visit.date <= body.end_date:
                 raise invalid("must_visits", "꼭 갈 곳의 날짜가 여행 기간 밖이에요")
             if visit.place_id not in places:
                 raise invalid("must_visits", "이 도시에 없는 장소예요")
+            if placed_on.setdefault(visit.place_id, visit.date) != visit.date:
+                raise invalid("must_visits", "같은 장소는 한 날에만 꼭 갈 곳으로 담을 수 있어요")  # §11 D1
             ids = per_day.setdefault(visit.date, [])
             if visit.place_id not in ids:
                 ids.append(visit.place_id)
@@ -233,7 +238,6 @@ class TripBook:
         with self._lock:
             lodging = self.city.lodging_location(body.lodging_place_id, self.clock()) if body.lodging_place_id else None
             start_point = lodging or self.city.center()
-            sources = self.city.sources()
             trip_id = str(uuid.uuid4())
             day_ids: list[str] = []
             for number in range(days):
@@ -340,19 +344,40 @@ class TripBook:
             del self._store.fixed[fixed_event_id]
             self._sync_plan(found.trip_day_id)
 
-    # ---- A5 계획 세션 시작 때 오래된 값만 다시 부르기 ----
+    # ---- §11 H3 Google 영업시간을 부르는 때 ----
 
-    def refresh_for_day(self, day_id: str) -> None:
-        """실제 여행의 날이면 그날 후보 중 오래된 장소 값만 다시 부른다. 실패하면 이전 값 + 미확인 (cache.refresh)."""
+    def refresh_hours(self, kind: Literal["planning", "now", "alternatives"], day_id: str, place_id: str | None = None) -> None:
+        """실제 여행의 날이면 필요한 장소의 Google 영업시간을 부르고(메모리 1시간·동시 2초·상한), 그날 데이터에 반영한다.
+
+        planning: 계획 세션 시작 - 그날 후보 전부. now: 여행 중 화면 - 오늘 코스·고정 일정 장소. alternatives: 닫힘 대안 - 닫힌 곳 1.5km 안 후보.
+        늦거나 실패한 곳은 LiveHours·facts의 대체 순서를 따르고, 계획·대안 찾기는 멈추지 않는다."""
         with self._lock:
             record = self.planning.get_day(day_id)
             if record is None or day_id not in self._store.day_trip:
                 return
-            ids = [self.city.row(pid)["place_id"] for pid in record.places if self.city.row(pid)]  # type: ignore[index]
-            self.city.refresh(self.clock(), ids)
-            self.planning.save_day(
-                day_id, record.plan, self.city.engine_places(), record.day_number, lodging_known=record.lodging_known, sources=self.city.sources()
-            )
+            ids = self._hour_targets(kind, day_id, record, place_id)
+            now = self.clock()
+            if kind == "planning":
+                self.city.refresh(now)  # 오래된 좌표(30일)도 이때 한 번에 30곳까지
+            self.city.live.fetch([self.city.row(pid)["place_id"] for pid in ids if self.city.row(pid)], now=now, cap=CAPS[kind])  # type: ignore[index]
+            places, sources = self.city.places_now(now)
+            self.planning.save_day(day_id, record.plan, places, record.day_number, lodging_known=record.lodging_known, sources=sources)
+
+    def _hour_targets(self, kind: str, day_id: str, record: Any, place_id: str | None) -> list[str]:
+        if kind == "planning":
+            return list(record.places)
+        if kind == "now":
+            option_id = self.planning.chosen_option(day_id)
+            option = self.planning.get_option(option_id) if option_id else None
+            course = [item.place_id for item in option.course.items if item.place_id] if option else []
+            fixed = [f.place_id for f in record.plan.fixed if f.place_id]
+            return list(dict.fromkeys([*course, *fixed]))
+        closed = record.places.get(place_id) if place_id else None
+        if closed is None:
+            return []
+        radius = visit_limits().radius_m
+        near = sorted((p for p in record.places.values() if p.id != closed.id and meters(closed, p) <= radius), key=lambda p: (meters(closed, p), p.id))
+        return [p.id for p in near]
 
     # ---- B4 ----
 
@@ -363,7 +388,7 @@ class TripBook:
                 name=row["name_ko"],
                 category=row["category"],
                 area=row["area"],
-                facts=[PlaceFact(**fact) for fact in self.city.facts(row)],
+                facts=[PlaceFact(**fact) for fact in self.city.facts(row, self.clock())],
                 image=PlaceImage(category=row["category"]),
             )
             for row in self.city.search(q)

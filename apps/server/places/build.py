@@ -1,6 +1,6 @@
-"""만들기 명령의 본체 (TASK-010 §A2~§A4·§A7, §9 Q21 `build_pack(seed, provider, caps)`).
+"""만들기 명령의 본체 (TASK-010 §A2~§A4·§A7, §9 Q21 `build_pack(seed, provider, caps)`, §11 H1).
 
-seed를 읽어 resolve -> details -> ① 도시 팩(seed 값 + place_id만, git) ② 캐시(Google 값 + fetched_at, git 밖).
+seed를 읽어 resolve -> details -> ① 도시 팩(seed 값 + place_id만, git) ② 캐시(좌표 + fetched_at + Serper 사실 값, git 밖).
 Google에 영업시간이 없을 때만 Serper를 한 번 부른다. 문장은 어디에도 남기지 않는다 (값만).
 """
 
@@ -23,8 +23,8 @@ def _interval() -> float:
 @dataclass
 class BuildResult:
     pack: dict[str, Any]  # {city_code, timezone, center: {name_ko, place_id}, places: [seed 줄 + place_id]} — git, Google 값 없음
-    cache: dict[str, Any]  # {place_id: {location, opening_hours, website, maps_url, business_status, fetched_at(ISO), ...}} — git 밖
-    report: dict[str, Any]  # {excluded: [{id, reason}], calls: {google, serper}, stopped: bool}
+    cache: dict[str, Any]  # {place_id: {location, fetched_at(ISO), serper?}} — git 밖 (§11 H1: Google 영업시간 등은 없음)
+    report: dict[str, Any]  # {excluded: [{id, reason}], calls: {google, serper}, stopped: bool, hours: {id: google|serper|None}}
 
 
 class _CapExceeded(Exception):
@@ -85,36 +85,41 @@ def build_pack(
     cache: dict[str, Any] = {}
     excluded: list[dict[str, str]] = []
     rows: list[dict[str, Any]] = []
+    hours_source: dict[str, str | None] = {}
     fetched_at = now.isoformat()
 
     def fetch(query: str, area: str) -> tuple[str, dict[str, Any]]:
+        """(place_id, 받은 details). 디스크에 남기는 것은 좌표뿐이라 나머지는 호출한 쪽에서 버린다 (§11 H1)."""
         place_id = calls.call("google", provider.resolve, query, area)
-        return place_id, {**calls.call("google", provider.details, place_id), "fetched_at": fetched_at}
+        return place_id, calls.call("google", provider.details, place_id)
 
     center_id = None
     try:
-        center_id, center_entry = fetch(seed["center"]["query"], "center")
-        cache[center_id] = center_entry
+        center_id, center_details = fetch(seed["center"]["query"], "center")
+        cache[center_id] = {"location": center_details["location"], "fetched_at": fetched_at}
     except _CapExceeded:
         pass
 
     for number, row in enumerate(seed["places"]):
         try:
-            place_id, entry = fetch(row["query"], row["area"])
+            place_id, details = fetch(row["query"], row["area"])
         except ResolveError as error:
             excluded.append({"id": row["id"], "reason": error.reason})
             continue
         except _CapExceeded:
             excluded.extend({"id": left["id"], "reason": "cap_exceeded"} for left in seed["places"][number:])
             break
-        if entry["business_status"] == "CLOSED_PERMANENTLY":
+        if details["business_status"] == "CLOSED_PERMANENTLY":
             excluded.append({"id": row["id"], "reason": "closed_permanently"})
             continue
-        if not entry["opening_hours"] and entry["business_status"] != "CLOSED_TEMPORARILY":
+        entry: dict[str, Any] = {"location": details["location"], "fetched_at": fetched_at}  # Google 영업시간·사이트·지도 링크는 디스크에 두지 않는다
+        has_google_hours = bool(details["opening_hours"])
+        if not has_google_hours and details["business_status"] != "CLOSED_TEMPORARILY":
             found = _supplement(row, serper, calls)
             if found:
                 entry["serper"] = found
         cache[place_id] = entry
+        hours_source[row["id"]] = "google" if has_google_hours else "serper" if entry.get("serper", {}).get("hours") else None
         rows.append({**row, "place_id": place_id})
 
     pack = {
@@ -123,5 +128,6 @@ def build_pack(
         "center": {"name_ko": seed["center"]["name_ko"], "place_id": center_id},
         "places": rows,
     }
-    report = {"excluded": excluded, "calls": dict(calls.used), "stopped": calls.stopped}
+    # hours: 영업시간을 어디서 얻을 수 있었나 (채움 비율 측정용, A6). 값 자체는 담지 않는다
+    report = {"excluded": excluded, "calls": dict(calls.used), "stopped": calls.stopped, "hours": hours_source}
     return BuildResult(pack=pack, cache=cache, report=report)

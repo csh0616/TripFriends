@@ -28,9 +28,9 @@ def _summary(result: BuildResult) -> list[str]:
     google = Counter(), Counter()
     total = Counter(row["category"] for row in rows)
     for row in rows:
-        entry = result.cache[row["place_id"]]
-        google[0][row["category"]] += bool(entry["opening_hours"])
-        google[1][row["category"]] += bool(entry["opening_hours"] or (entry.get("serper") or {}).get("hours"))
+        source = result.report["hours"].get(row["id"])
+        google[0][row["category"]] += source == "google"
+        google[1][row["category"]] += source is not None
     lines = ["카테고리  장소 수  영업시간(Google만)  영업시간(+Serper)"]
     for category, count in sorted(total.items()):
         lines.append(f"{category}  {count}  {google[0][category]}/{count}  {google[1][category]}/{count}")

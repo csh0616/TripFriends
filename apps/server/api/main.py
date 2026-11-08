@@ -79,7 +79,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.city, _fake = open_city()
     app.state.places_provider = app.state.city.provider
     app.state.trip_book = TripBook(app.state.planning_repo, app.state.city, lambda: app.state.clock())
-    app.state.planning_service.before_start = app.state.trip_book.refresh_for_day  # §A5
+    app.state.planning_service.before_start = lambda day_id: app.state.trip_book.refresh_hours("planning", day_id)  # §11 H3 ①
+    app.state.trip_service.refresh_hours = app.state.trip_book.refresh_hours  # H3 ② ③
     app.state.jev = None
     if os.environ.get("AI_GATEWAY_API_KEY"):
         # Jev가 답하지 못하면 되묻기 (SCREEN-001 §4-3 5번)
