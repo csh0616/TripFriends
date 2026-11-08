@@ -81,6 +81,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.trip_book = TripBook(app.state.planning_repo, app.state.city, lambda: app.state.clock())
     app.state.planning_service.before_start = lambda day_id: app.state.trip_book.refresh_hours("planning", day_id)  # §11 H3 ①
     app.state.trip_service.refresh_hours = app.state.trip_book.refresh_hours  # H3 ② ③
+    app.state.trip_service.map_id = lambda our_id: (app.state.city.row(our_id) or {}).get("place_id")  # 지도 링크: 실제 여행은 place_id (PM 답 3)
     app.state.jev = None
     if os.environ.get("AI_GATEWAY_API_KEY"):
         # Jev가 답하지 못하면 되묻기 (SCREEN-001 §4-3 5번)
@@ -184,8 +185,8 @@ if os.environ.get("APP_ENV", "development") != "production":
         return compose_screen(snapshot)
 
 
-    @app.post("/debug/seed-demo", status_code=201)
+    @app.post("/debug/seed-demo", status_code=201, response_model_exclude_unset=True)
     def debug_seed_demo(request: Request, body: SeedRequest | None = None) -> SeedResult | SeedChosenResult:
         """개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.
         `{"chosen": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다."""
-        return request.app.state.planning_service.seed(chosen=bool(body and body.chosen))
+        return request.app.state.planning_service.seed(chosen=bool(body and body.chosen), past_days=body.past_days if body and "past_days" in body.model_fields_set else None)

@@ -37,6 +37,7 @@ class TripService:
         # 그날 마지막 check의 at (§11 Q7). 시각 하나일 뿐 위치가 아니고 사건 데이터도 아니라 저장소 밖에 둔다
         self._last_check: dict[str, datetime] = {}
         # TASK-010 §11 H3: Google 영업시간을 부르는 자리 (kind, day_id, place_id). 실패해도 화면·대안 찾기는 멈추지 않는다
+        self.map_id: Callable[[str], str | None] | None = None  # 우리 장소 id -> 구글 place_id (실제 여행, 지도 링크용)
         self.refresh_hours: Callable[[str, str, str | None], None] | None = None
 
     # ---- 도우미 ----
@@ -81,13 +82,13 @@ class TripService:
             self._hours("now", day_id)
             day, course, overrides = self.load(day_id, when)
             return build_now_view(
-                day_id, day, course, when, None, overrides, None, self._open_views(day_id, day), self._checks(day.plan, day_id)
+                day_id, day, course, when, None, overrides, None, self._open_views(day_id, day), self._checks(day.plan, day_id), self.map_id
             )
 
     def _builder(self, day_id: str, day: DayRecord, course: CourseOption, when: datetime, position, overrides, pending: VisitCheckRecord | None = None):
         def build(event: NowEvent | None, new_course: CourseOption | None) -> NowView:
             others = self._open_views(day_id, day, pending, skip=event)
-            return build_now_view(day_id, day, new_course or course, when, position, overrides, event, others, self._checks(day.plan, day_id, pending))
+            return build_now_view(day_id, day, new_course or course, when, position, overrides, event, others, self._checks(day.plan, day_id, pending), self.map_id)
 
         return build
 

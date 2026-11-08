@@ -94,7 +94,7 @@ class CityData:
         return [self.pack["center"]["place_id"], *(row["place_id"] for row in self.pack["places"])]
 
     def refresh(self, now: datetime, place_ids: list[str] | None = None) -> dict[str, Any]:
-        """오래된 좌표만 다시 부른다 (한 번에 Google 30회까지, A5). 실패한 곳은 이전 좌표 그대로."""
+        """오래된 좌표만 다시 부른다 (한 번에 Google 100회까지, A5). 실패한 곳은 이전 좌표 그대로."""
         with self._lock:
             self.cache, report = refresh(self.cache, place_ids or self._all_place_ids(), self.provider, now=now, sleep=self._sleep)
             if self._cache_path is not None:

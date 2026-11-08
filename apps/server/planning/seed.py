@@ -2,12 +2,13 @@
 
 import json
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from engine.models import CourseOption, DayPlan, Place, PlanFixed
 from planning.repo import PlanningRepo
-from planning.schemas import SeedResult
+from planning.schemas import SeedDay, SeedResult
+from trip.days import day_state
 from trip.visit import closed_candidates
 
 DEMO_PATH = Path(__file__).parents[1] / "engine" / "fixtures" / "demo_city.json"
@@ -44,12 +45,15 @@ def _dinner(places: dict[str, Place], day: date) -> PlanFixed:
     )
 
 
-def seed_demo(repo: PlanningRepo, *, with_dinner: bool = False) -> SeedResult:
+def seed_demo(repo: PlanningRepo, *, with_dinner: bool = False, past_days: int | None = None) -> SeedResult:
     """demo_city 3일. 둘째 날 꼭 갈 곳 1곳 = 그날 여는 곳 중 id가 가장 작은 곳 (§10 Q26).
 
-    with_dinner(TASK-006 A5): 둘째 날에만 고정 일정 "저녁 예약" 1개를 넣는다."""
+    with_dinner(TASK-006 A5): 둘째 날에만 고정 일정 "저녁 예약" 1개를 넣는다.
+    past_days(TASK-010 PM 답 1): 데모 시계 = 첫날 + N일. 날 상태는 기존 day_state 규칙 그대로 (응답 trip_days). None이면 trip_days를 싣지 않는다 (예전 응답 모양 그대로)."""
+    demo_today = DEMO_DATES[0] + timedelta(days=past_days or 0)
     places = demo_places()
     day_ids: list[str] = []
+    days: list[SeedDay] = []
     for number, day in enumerate(DEMO_DATES, start=1):
         must: list[str] = []
         fixed: list[PlanFixed] = []
@@ -70,9 +74,12 @@ def seed_demo(repo: PlanningRepo, *, with_dinner: bool = False) -> SeedResult:
         day_id = str(uuid.uuid4())
         repo.save_day(day_id, plan, places, number)
         day_ids.append(day_id)
+        days.append(SeedDay(day_id=day_id, date=day, state=day_state(day, demo_today, with_dinner and number == 2)))
     trip_id = str(uuid.uuid4())
     repo.save_trip(trip_id, day_ids)
-    return SeedResult(trip_id=trip_id, day_ids=day_ids)
+    if past_days is None:
+        return SeedResult(trip_id=trip_id, day_ids=day_ids)  # trip_days는 unset (응답에 키가 없다)
+    return SeedResult(trip_id=trip_id, day_ids=day_ids, trip_days=days)
 
 
 def demo_extra_places() -> dict[str, Place]:

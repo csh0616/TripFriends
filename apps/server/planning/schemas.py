@@ -237,14 +237,22 @@ class SeedRequest(_Request):
     """TASK-006 A5·Q14: JSON 본문. 본문이 없으면 예전 시드 그대로."""
 
     chosen: bool = False
-    # TASK-010 §13 질문 답 1: 데모 여행의 첫 N일을 지난 날로 보이기 위한 개발용 선택값. 서버는 데모 날의 상태(state)를 갖고 있지 않아
-    # 지금은 값만 받는다 (응답 모양은 그대로). 앱이 지난 날을 화면에 보이려면 날마다 날짜·상태를 줄 곳이 더 필요하다 (보고 참조)
+    # TASK-010 §13 PM 답 1: 데모 시계를 N일 뒤로 돌린다 -> 첫 N일이 지난 날 (응답 trip_days의 state, 기존 day_state 규칙)
     past_days: int = Field(default=0, ge=0, le=2)
+
+
+class SeedDay(BaseModel):
+    """TASK-010 PM 답 1: 데모 날 하나 (Trip.trip_days와 같은 이름·모양 일부)."""
+
+    day_id: str
+    date: dt.date
+    state: Literal["planning", "planned", "today", "past"]
 
 
 class SeedResult(BaseModel):
     trip_id: str
     day_ids: list[str]
+    trip_days: list[SeedDay] | None = None  # past_days를 준 요청에만 (없으면 키 자체가 없다: response_model_exclude_unset)
 
 
 class SeedChosenResult(SeedResult):

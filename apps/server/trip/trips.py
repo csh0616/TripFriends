@@ -377,7 +377,7 @@ class TripBook:
             ids = self._hour_targets(kind, day_id, record, place_id)
             now = self.clock()
             if kind == "planning":
-                self.city.refresh(now)  # 오래된 좌표(30일)도 이때 한 번에 30곳까지
+                self.city.refresh(now)  # 오래된 좌표(30일)도 이때 한 번에 100곳까지
             self.city.live.fetch([self.city.row(pid)["place_id"] for pid in ids if self.city.row(pid)], now=now, cap=CAPS[kind])  # type: ignore[index]
             places, sources = self.city.places_now(now)
             self.planning.save_day(day_id, record.plan, places, record.day_number, lodging_known=record.lodging_known, sources=sources)

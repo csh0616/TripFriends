@@ -3907,6 +3907,20 @@
             "type": "array",
             "title": "Day Ids"
           },
+          "trip_days": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SeedDay"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Days"
+          },
           "day": {
             "$ref": "#/components/schemas/DaySummary"
           }
@@ -3919,6 +3933,37 @@
         ],
         "title": "SeedChosenResult",
         "description": "`{\"chosen\": true}` 응답 (TASK-006 A5·Q1). 일반 시드 응답에는 day 키가 없다 (null도 아님)."
+      },
+      "SeedDay": {
+        "properties": {
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "planning",
+              "planned",
+              "today",
+              "past"
+            ],
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_id",
+          "date",
+          "state"
+        ],
+        "title": "SeedDay",
+        "description": "TASK-010 PM 답 1: 데모 날 하나 (Trip.trip_days와 같은 이름·모양 일부)."
       },
       "SeedRequest": {
         "properties": {
@@ -3952,6 +3997,20 @@
             },
             "type": "array",
             "title": "Day Ids"
+          },
+          "trip_days": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SeedDay"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trip Days"
           }
         },
         "type": "object",

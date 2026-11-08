@@ -114,10 +114,10 @@ class PlanningService:
 
     # ---- 엔드포인트 ----
 
-    def seed(self, chosen: bool = False) -> SeedResult | SeedChosenResult:
+    def seed(self, chosen: bool = False, past_days: int | None = None) -> SeedResult | SeedChosenResult:
         """chosen(TASK-006 A5·Q14): 둘째 날을 자동으로 계획하고 relaxed 안을 고른 상태로 둔다 (저녁 예약 포함)."""
         with self._lock:
-            result = seed_demo(self.repo, with_dinner=chosen)
+            result = seed_demo(self.repo, with_dinner=chosen, past_days=past_days)
             if chosen:
                 course = self.start(result.day_ids[1], "auto")
                 option = next(o for o in course.options if o.label == "relaxed")  # type: ignore[union-attr]
@@ -127,7 +127,8 @@ class PlanningService:
                 chosen_option = self.repo.get_option(self.repo.chosen_option(result.day_ids[1]))
                 assert record is not None and chosen_option is not None
                 summary = presenter.day_summary(result.day_ids[1], record, self.repo.stay_overrides(chosen_option.session_id))  # NowView의 day와 같은 함수
-                return SeedChosenResult(trip_id=result.trip_id, day_ids=result.day_ids, day=summary)
+                extra = {"trip_days": result.trip_days} if result.trip_days is not None else {}
+                return SeedChosenResult(trip_id=result.trip_id, day_ids=result.day_ids, day=summary, **extra)
             return result
 
     def start(self, day_id: str, mode: str) -> PlanningSession | CourseResult:

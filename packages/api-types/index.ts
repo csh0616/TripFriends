@@ -1330,7 +1330,27 @@ export interface components {
             trip_id: string;
             /** Day Ids */
             day_ids: string[];
+            /** Trip Days */
+            trip_days?: components["schemas"]["SeedDay"][] | null;
             day: components["schemas"]["DaySummary"];
+        };
+        /**
+         * SeedDay
+         * @description TASK-010 PM 답 1: 데모 날 하나 (Trip.trip_days와 같은 이름·모양 일부).
+         */
+        SeedDay: {
+            /** Day Id */
+            day_id: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "planning" | "planned" | "today" | "past";
         };
         /**
          * SeedRequest
@@ -1354,6 +1374,8 @@ export interface components {
             trip_id: string;
             /** Day Ids */
             day_ids: string[];
+            /** Trip Days */
+            trip_days?: components["schemas"]["SeedDay"][] | null;
         };
         /** SelectResult */
         SelectResult: {
