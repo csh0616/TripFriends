@@ -30,8 +30,8 @@ PACK_IDS = {
     "osaka-fake-dotonbori", "osaka-fake-kuromon", "osaka-fake-ramen", "osaka-fake-hozenji", "osaka-fake-alley-cafe",
     "osaka-fake-comedy", "osaka-fake-shotengai", "osaka-fake-amemura", "osaka-fake-gallery", "osaka-fake-sky",
     "osaka-fake-ferris", "osaka-fake-museum", "osaka-fake-izakaya", "osaka-fake-kissa", "osaka-fake-edge-in",
-    "osaka-fake-castle",
-}  # 가짜 seed 21줄 - 뺀 5줄 (test_task010_places EXCLUDED)
+    "osaka-fake-castle", "osaka-fake-park", "osaka-fake-park-google", "osaka-fake-night-street",
+}  # 가짜 seed 24줄 - 뺀 5줄 (test_task010_places EXCLUDED)
 SIX = sorted(PACK_IDS)[:6]
 STATES = {"planning", "planned", "today", "past"}
 SOURCE_TYPES = {"google", "serper", "user", "curated", "estimate", "demo"}  # §9 Q3
@@ -458,7 +458,7 @@ def test_T10_B4_Q14_앞뒤_공백은_지우고_찾는다(osaka):
 
 
 def test_T10_B4_최대_10개(osaka):
-    ids = found_ids(search(osaka, "오사카"))  # 가짜 seed는 모든 줄 별칭에 "오사카"가 있다 (팩 16곳)
+    ids = found_ids(search(osaka, "오사카"))  # 가짜 seed는 모든 줄 별칭에 "오사카"가 있다 (팩 19곳)
     assert len(ids) == 10 and set(ids) <= PACK_IDS
 
 

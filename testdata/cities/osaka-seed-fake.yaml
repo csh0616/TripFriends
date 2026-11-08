@@ -13,8 +13,11 @@
 #   osaka-fake-comedy     : Google 영업시간 없음 + Serper 값 엇갈림 -> unknown (§A3)
 #   osaka-fake-far-umeda  : area=umeda인데 찾은 곳이 지역 중심에서 약 4km -> ambiguous로 빼고 보고 (PM 답 Q2: 3km 밖)
 #   osaka-fake-edge-in    : 지역 중심에서 2.9km -> 팩에 넣음 / osaka-fake-edge-out: 3.1km -> ambiguous
+#   osaka-fake-park        : open_space(§13 O1). Google 영업시간 없음 -> 늘 열림 curated·confirmed
+#   osaka-fake-park-google : open_space인데 Google에 영업시간이 있음 -> Google이 먼저 (O1·O3)
+#   osaka-fake-night-street: curated_hours 17:00~24:00 (O2). Serper에도 다른 시각이 있음 -> curated가 Serper보다 먼저 (O3)
 # areas(지역 중심)는 정본과 같은 목록 모양. center처럼 이름 + query, 좌표는 캐시에만. osakajo는 §12로 더한 넷째 지역 (지역 3곳을 가정하지 않게)
-version: 1
+version: 2
 city_code: osaka
 timezone: Asia/Tokyo
 center:
@@ -236,3 +239,36 @@ places:
     crowd_level: 5
     price_level: 2
     mood_tags: [역사, 대표]
+  - id: osaka-fake-park
+    name_ko: 난바 작은 공원
+    aliases: [오사카 작은 공원]
+    query: なんば 小さな公園 Osaka
+    area: namba
+    category: walk
+    stay: {min: 20, typical: 30, max: 60}
+    crowd_level: 2
+    price_level: 1
+    mood_tags: [공원, 조용]
+    open_space: true
+  - id: osaka-fake-park-google
+    name_ko: 난바 시간 있는 공원
+    aliases: [오사카 시간 있는 공원]
+    query: なんば 時間のある公園 Osaka
+    area: namba
+    category: walk
+    stay: {min: 20, typical: 30, max: 60}
+    crowd_level: 2
+    price_level: 1
+    mood_tags: [공원]
+    open_space: true
+  - id: osaka-fake-night-street
+    name_ko: 우메다 밤 골목
+    aliases: [오사카 밤 골목]
+    query: 梅田 夜の飲み屋街 Osaka
+    area: umeda
+    category: night
+    stay: {min: 60, typical: 90, max: 120}
+    crowd_level: 3
+    price_level: 2
+    mood_tags: [이자카야, 밤]
+    curated_hours: [{days: all, open: "17:00", close: "24:00"}]

@@ -18,6 +18,15 @@
   "森ノ宮駅 Osaka": [
    "FAKE-osaka-area-osakajo"
   ],
+  "なんば 小さな公園 Osaka": [
+   "FAKE-osaka-park"
+  ],
+  "なんば 時間のある公園 Osaka": [
+   "FAKE-osaka-park-google"
+  ],
+  "梅田 夜の飲み屋街 Osaka": [
+   "FAKE-osaka-night-street"
+  ],
   "大阪城 天守閣 Osaka": [
    "FAKE-osaka-castle"
   ],
@@ -304,6 +313,72 @@
    ],
    "website": "https://example.invalid/FAKE-osaka-castle",
    "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-castle",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-park": {
+   "location": {
+    "lat": 34.665,
+    "lng": 135.503
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-park",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-park",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-park-google": {
+   "location": {
+    "lat": 34.667,
+    "lng": 135.499
+   },
+   "opening_hours": [
+    {
+     "weekday": 0,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 1,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 2,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 3,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 4,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 5,
+     "open": "06:00",
+     "close": "22:00"
+    },
+    {
+     "weekday": 6,
+     "open": "06:00",
+     "close": "22:00"
+    }
+   ],
+   "website": "https://example.invalid/FAKE-osaka-park-google",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-park-google",
+   "business_status": "OPERATIONAL"
+  },
+  "FAKE-osaka-night-street": {
+   "location": {
+    "lat": 34.703,
+    "lng": 135.498
+   },
+   "opening_hours": null,
+   "website": "https://example.invalid/FAKE-osaka-night-street",
+   "maps_url": "https://maps.example.invalid/?cid=FAKE-osaka-night-street",
    "business_status": "OPERATIONAL"
   },
   "FAKE-osaka-dotonbori": {
@@ -967,6 +1042,13 @@
     "link": "https://example.invalid/serper/comedy-2"
    }
   ],
+  "梅田 夜の飲み屋街 Osaka 営業時間": [
+   {
+    "text": "【テスト用の作り話】飲み屋街 18:00～23:00 ごろが賑わう",
+    "link": "https://example.invalid/serper/night-street"
+   }
+  ],
+  "なんば 小さな公園 Osaka 営業時間": [],
   "アメリカ村 Osaka 営業時間": [
    {
     "text": "【テスト用の作り話】若者の街アメリカ村の散歩ガイド",

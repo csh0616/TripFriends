@@ -15,7 +15,7 @@ import httpx
 import pytest
 import yaml
 
-from test_task010_places import NOW, SEED_KEYS, CATEGORIES, GOOGLE_KEYS, FakeClock, Recording, Synthetic, SyntheticSerper, build, synthetic_rows
+from test_task010_places import NOW, OPTIONAL_SEED_KEYS, SEED_KEYS, CATEGORIES, GOOGLE_KEYS, FakeClock, Recording, Synthetic, SyntheticSerper, build, synthetic_rows
 from test_task010_trips import DEVICE, at, osaka  # noqa: F401 (픽스처)
 
 REPO = next(d for d in Path(__file__).resolve().parents if (d / "docs" / "tasks").is_dir())
@@ -43,7 +43,7 @@ def test_T10_S12_정본_목록의_줄은_S_모양이고_id는_겹치지_않는�
     assert len(ids) == len(set(ids))
     areas = {a["id"] for a in raw["areas"]}
     for row in raw["places"]:
-        assert set(row) == SEED_KEYS, row["id"]
+        assert SEED_KEYS <= set(row) <= SEED_KEYS | OPTIONAL_SEED_KEYS, row["id"]  # §13 seed v2: open_space·curated_hours
         assert row["area"] in areas and row["category"] in CATEGORIES
         assert row["stay"]["min"] <= row["stay"]["typical"] <= row["stay"]["max"], row["id"]
         assert 1 <= row["crowd_level"] <= 5 and 1 <= row["price_level"] <= 4, row["id"]

@@ -51,6 +51,7 @@ CATEGORIES = {"cafe", "food", "walk", "museum", "landmark", "shop", "experience"
 # TASK-010 §12: 지역은 데이터다. 몇 곳인지 가정하지 않고 seed의 areas 목록에서 읽는다 (가짜 seed는 4곳)
 AREAS = {area["id"] for area in yaml.safe_load(FAKE_SEED.read_text(encoding="utf-8"))["areas"]}
 SEED_KEYS = {"id", "name_ko", "aliases", "query", "area", "category", "stay", "crowd_level", "price_level", "mood_tags"}
+OPTIONAL_SEED_KEYS = {"open_space", "curated_hours"}  # TASK-010 §13 O1·O2 (seed v2)
 # Google에서 온 값 (ADR-015 §3-1: 캐시만, git 밖)
 GOOGLE_KEYS = {"location", "lat", "lng", "opening_hours", "hours", "website", "maps_url", "business_status", "fetched_at"}
 SOURCE_TYPES = {"google", "serper", "user", "curated", "estimate", "demo"}  # ADR-015 §3-5 + DATA-001 B (§9 Q3)
@@ -197,7 +198,7 @@ def test_T10_S_가짜_seed는_areas_목록의_지역과_카테고리_8종을_모
     assert {row["area"] for row in rows} == AREAS
     assert {row["category"] for row in rows} == CATEGORIES
     for row in rows:
-        assert set(row) == SEED_KEYS, row["id"]
+        assert SEED_KEYS <= set(row) <= SEED_KEYS | OPTIONAL_SEED_KEYS, row["id"]
         assert set(row["stay"]) == {"min", "typical", "max"}
         assert 1 <= row["crowd_level"] <= 5 and 1 <= row["price_level"] <= 4
 
@@ -305,7 +306,7 @@ def test_T10_A2_팩은_seed_값_더하기_place_id만():
     assert result.pack["city_code"] == "osaka"
     assert {row["id"] for row in result.pack["places"]} == set(seeds) - set(EXCLUDED)
     for row in result.pack["places"]:
-        assert set(row) == SEED_KEYS | {"place_id"}, row["id"]
+        assert SEED_KEYS | {"place_id"} <= set(row) <= SEED_KEYS | OPTIONAL_SEED_KEYS | {"place_id"}, row["id"]
         assert {k: v for k, v in row.items() if k != "place_id"} == seeds[row["id"]]
         assert row["place_id"].startswith("FAKE-osaka-")
 
@@ -390,7 +391,12 @@ def test_T10_A3_Serper는_Google_영업시간이_없는_곳만_한_번씩_営業
     serper = Recording(fake_serper(), clock)
     build(serper=serper, clock=clock)
     queries = {row["id"]: row["query"] for row in seed_rows()}
-    assert sorted(args[0] for args in serper.names("search")) == sorted(f"{queries[i]} 営業時間" for i in NO_GOOGLE_HOURS)
+    called = {args[0] for args in serper.names("search")}
+    must = {f"{queries[i]} 営業時間" for i in NO_GOOGLE_HOURS}
+    # §13 O1·O2: open_space·curated_hours 줄에 Serper를 부를지는 문서에 없다 (질문). 그 줄은 불러도 안 불러도 된다
+    may = {f"{row['query']} 営業時間" for row in seed_rows() if row.get("open_space") or row.get("curated_hours")}
+    assert must <= called <= must | may
+    assert len(serper.names("search")) == len(called)  # 한 번씩
 
 
 def test_T10_A3_값이_하나로_맞으면_serper_미확인_결과_링크():
