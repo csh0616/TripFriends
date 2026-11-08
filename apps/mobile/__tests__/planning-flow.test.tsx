@@ -222,7 +222,7 @@ describe('P1 첫 질문', () => {
   test('W16_B4_Q32_오늘_시간표는_day의_시작과_끝', async () => {
     happyServer();
     await toP1();
-    expect(within(screen.getByTestId('timetable')).getByText(/^10:00\s*~\s*20:00$/)).toBeTruthy();
+    expect(within(screen.getByTestId('timetable')).getByText('10:00–20:00')).toBeTruthy(); // TASK-011 §9 Q8·§12 Q2 (승인)
   });
 
   test('W17_Q6_꼭_갈_곳_줄은_이름만_시각_없음', async () => {

@@ -19,13 +19,15 @@
 //        날짜 목록을 그릴 때 GET /days/{id}/course 를 부르지 않는다
 //     Q3 카드 [알아서 짜 줘]를 누르면 바로 POST /days/{id}/planning {mode: 'auto'} -> 코스안(`option-relaxed`). 오늘인데 코스 없는 카드도 버튼 둘
 //     Q4 [오늘 여행 보기] 밑 줄 "2일째 · 12/12 토"
+//   §12 Q1 머리 제목 = title-trip 값 · Q3 코스 없는 지난 날 = 누를 수 없는 줄 testID `row-locked`(또는 `row-locked-{day_id}`):
+//     요약 자리 "고른 코스 없음", › 없음, 누를 수 없음 표시, 눌러도 onOpen·GET course 없음
 //   §10 E1: 주 버튼이 없으면(모든 날 계획 완료·지난 날) 마지막 날 줄 아래 `end-note` 끝맺음 글, 그 아래 맨 끝 [새 여행 만들기]
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TripDays } from '@/trips/trip-days';
 
-import { COLORS } from '../test-support/design-table';
+import { COLORS, FIT } from '../test-support/design-table';
 import { apiError, FakeServer, json, networkDown } from '../test-support/fake-server';
 import { resetDevice, tap } from '../test-support/planning-driver';
 import { course, SID } from '../test-support/planning-fixtures';
@@ -473,5 +475,82 @@ describe('§10 E1 주 버튼이 없으면 end-note', () => {
   test('T11_E1_end_note에는_주황이_없다', async () => {
     await show(ALL_PLANNED, AT.before);
     expect(filledWith(COLORS.brand, byId('end-note'))).toEqual([]);
+  });
+});
+
+// ---------- §12 Q1 머리 제목 title-trip ----------
+
+describe('§12 Q1 머리 제목은 title-trip', () => {
+  test('T11_S12_Q1_오사카_2박_3일은_28/36·700·ink-strong·왼쪽', async () => {
+    await show(MIXED, AT.before);
+    const title = screen.getByText('오사카 2박 3일') as unknown as Host;
+    const style = styleOf(title);
+    const token = FIT['title-trip'] as { size: number; lineHeight: number; weight: number; fg: string };
+    expect(style.fontSize).toBe(token.size);
+    expect(style.lineHeight).toBe(token.lineHeight);
+    expect(String(style.fontWeight ?? '') === String(token.weight) || String(style.fontFamily ?? '').includes(String(token.weight))).toBe(true);
+    expect(String(style.color).toUpperCase()).toBe(token.fg);
+    expect([undefined, 'left', 'auto']).toContain(style.textAlign);
+  });
+});
+
+// ---------- §12 Q3 코스 없는 지난 날 = 누를 수 없는 줄 row-locked ----------
+
+describe('§12 Q3 코스 없는 지난 날은 row-locked', () => {
+  // ALL_PAST: d1·d2 지난 날(코스 있음), d3 지난 날(코스 없음)
+  const locked = () => screen.getByTestId(/^row-locked/) as unknown as Host;
+
+  test('T11_S12_Q3_코스_없는_지난_날만_row_locked', async () => {
+    await show(ALL_PAST, AT.after);
+    expect(screen.getAllByTestId(/^row-locked/)).toHaveLength(1);
+    expect(within(locked() as never).getByText('3일째', { exact: false })).toBeTruthy();
+  });
+
+  test('T11_S12_Q3_요약_자리에_고른_코스_없음_›_없음', async () => {
+    await show(ALL_PAST, AT.after);
+    const row = within(locked() as never);
+    expect(row.getByText('고른 코스 없음')).toBeTruthy();
+    expect(row.queryByText(/›/)).toBeNull();
+    expect(row.queryByText(/끝 · \d+곳/)).toBeNull();
+  });
+
+  test('T11_S12_Q3_누를_수_없음_표시(aria-disabled)', async () => {
+    await show(ALL_PAST, AT.after);
+    const hosts = [locked(), pressableOf(locked())];
+    expect(hosts.some((h) => h.props.accessibilityState?.disabled === true || h.props['aria-disabled'] === true || h.props.disabled === true)).toBe(true);
+  });
+
+  test('T11_S12_Q3_눌러도_onOpen이_불리지_않는다', async () => {
+    const onOpen = await show(ALL_PAST, AT.after);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId(/^row-locked/));
+    });
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  test('T11_S12_Q3_코스_있는_지난_날은_잠기지_않고_요약', async () => {
+    await show(ALL_PAST, AT.after);
+    expect(within(screen.getByTestId('day-row-d1')).getByText(SUMMARY_TEXT)).toBeTruthy();
+    expect(isInside(byId('day-row-d1'), locked())).toBe(false);
+  });
+
+  test('T11_S12_Q3_첫_화면에서_눌러도_읽기만·코스_요청_없음', async () => {
+    resetDevice();
+    freezeDate(AT.after);
+    const server = new FakeServer().on('GET /trips/current', json(200, ALL_PAST));
+    const Index = require('@/app/index').default;
+    await render(
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <Index />
+      </SafeAreaProvider>,
+    );
+    await screen.findByTestId(/^row-locked/);
+    await act(async () => {
+      fireEvent.press(screen.getByTestId(/^row-locked/));
+      await new Promise<void>((done) => setImmediate(done));
+    });
+    expect(screen.queryByTestId('course-readonly')).toBeNull();
+    expect(server.requests.filter((one) => /\/course$/.test(one.path))).toEqual([]);
+    expect(screen.getByTestId('day-row-d1')).toBeTruthy(); // 날짜 목록 그대로
   });
 });

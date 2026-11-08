@@ -201,6 +201,8 @@ export const FIT: Record<string, Record<string, unknown>> = {
     bottom: 34,
     height: 234,
   },
+  // TASK-011 §12 Q1: 28/36 · 700 · ink-strong · 왼쪽 정렬 (날짜 목록 머리 제목 "오사카 2박 3일")
+  'title-trip': { size: 28, lineHeight: 36, weight: 700, fg: '#1A1A1A', align: 'left' },
   // TASK-011 §10 E1·E6: 원 40 bg-2 + 체크 20 · 제목 17/24·700 · 설명 14/20·500 #333333 폭 300 · 가운데 · 마지막 날 줄 아래 20
   'end-note': {
     circle: 40,
