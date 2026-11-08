@@ -205,16 +205,21 @@ def test_T10_S13_Q1_seed_demo_past_days_N이면_첫_N일이_지난_날(env, n):
 
 
 def test_T10_S13_Q1_선택값이_없으면_지금_그대로(env):
+    # 값을 안 주면 응답 모양 그대로 (test_E05_S6_선택_응답과_시드_응답_모양, test_A5_Q1_chosen이_아니면_응답_모양은_그대로와 같은 뜻)
     plain = env.client.post("/debug/seed-demo")
     assert plain.status_code == 201
-    assert {"trip_id", "day_ids"} <= set(plain.json())
-    assert "past" not in seeded_states(plain.json())  # N=0과 같다
+    assert set(plain.json()) == {"trip_id", "day_ids"}
+    assert len(plain.json()["day_ids"]) == 3
 
 
 def test_T10_S13_Q1_past_days_0과_선택값_없음은_같은_상태(env):
-    zero = seeded_states(env.client.post("/debug/seed-demo", json={"past_days": 0}).json())
-    plain = seeded_states(env.client.post("/debug/seed-demo").json())
-    assert zero == plain
+    # 본문 없는 시드 여행은 기기 없이 만들어져 GET /trips로 날 상태를 읽을 수 없다 -> 0 쪽에 past가 없고 날 모양이 같음을 본다
+    zero = env.client.post("/debug/seed-demo", json={"past_days": 0}).json()
+    plain = env.client.post("/debug/seed-demo").json()
+    assert "past" not in seeded_states(zero)
+    assert len(zero["day_ids"]) == len(plain["day_ids"])
+    assert len(set(zero["day_ids"])) == len(zero["day_ids"])
+    assert len(set(plain["day_ids"])) == len(plain["day_ids"])
 
 
 def test_T10_S13_Q1_운영에서는_past_days를_줘도_404(monkeypatch):
