@@ -7,12 +7,12 @@ import { Text } from '@/components/app-text';
 import { Notice } from '@/components/planning/notice';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { send } from '@/lib/planning-api';
+import { dayName, weekdayChar } from '@/planning/format';
 import { ReadRow } from '@/planning/screens/p3';
 import { color, fit, fitText, radius, space, text } from '@/planning/theme';
 
 import { tripRequests, type ChosenCourse } from './api';
 import { getDeviceId } from './device-id';
-import { dayLabel } from './format';
 
 const OFFLINE = '연결이 안 돼. 다시 해 볼까?';
 const OOPS = '잠깐 문제가 생겼어';
@@ -25,7 +25,7 @@ const isCourse = (data: unknown): data is ChosenCourse => {
   return typeof course === 'object' && course !== null && Array.isArray(course.items);
 };
 
-export function CourseReadonly({ dayId, date, onBack }: { dayId: string; date: string; onBack: () => void }) {
+export function CourseReadonly({ dayId, date, number, onBack }: { dayId: string; date: string; number: number; onBack: () => void }) {
   const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' });
   const alive = useRef(true);
   useEffect(() => {
@@ -52,7 +52,7 @@ export function CourseReadonly({ dayId, date, onBack }: { dayId: string; date: s
 
   const course = loaded.state === 'ok' ? loaded.course : null;
   return (
-    <ScreenFrame title={dayLabel(date)} subtitle="고른 코스" onBack={onBack} backLabel="날짜">
+    <ScreenFrame title={dayName(number)} subtitle={`${Number(date.slice(5, 7))}월 ${Number(date.slice(8, 10))}일 ${weekdayChar(date)} \u00b7 고른 코스`} onBack={onBack} backLabel="날짜">
       <View testID="course-readonly" style={styles.root}>
         {loaded.state === 'loading' ? <ActivityIndicator color={color.muted} /> : null}
         {loaded.state === 'error' ? <Notice message={loaded.message} tone="plain" onRetry={loaded.retry ? () => void load() : undefined} /> : null}

@@ -126,7 +126,7 @@ export default function Home() {
         />
       );
     case 'course':
-      return <CourseReadonly dayId={view.day.day_id} date={view.day.date} onBack={() => setView({ name: 'days' })} />;
+      return <CourseReadonly dayId={view.day.day_id} date={view.day.date} number={(trip ? trip.trip_days.indexOf(view.day) : 0) + 1} onBack={() => setView({ name: 'days' })} />;
     case 'planning': {
       // 끝나면(코스 고름·세션 없음) 날짜 목록을 다시 받아 "계획 완료"를 보여 준다. ‹ 날짜로 나가면 대화는 그대로 남고, 다시 들어가면 GET으로 이어 간다
       const dayId = view.dayId;
