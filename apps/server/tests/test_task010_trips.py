@@ -66,10 +66,11 @@ class Osaka:
     def trip(self, trip_id: str, device: str = DEVICE):
         return self.client.get(f"/trips/{trip_id}", headers=bearer(device))
 
-    def add_fixed(self, trip: dict, day_index: int, start: str, end: str, title: str = "저녁 예약", **extra):
+    def add_fixed(self, trip: dict, day_index: int, start: str, end: str, title: str = "저녁 예약", device: str = DEVICE, **extra):
+        """device = 그 여행 주인의 사용자 이름 (TASK-012 §11 Q3: 남의 여행이면 404)."""
         day = trip["trip_days"][day_index]
         body = {"trip_day_id": day["day_id"], "title": title, "start_at": at(day["date"], start), "end_at": at(day["date"], end), **extra}
-        return self.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers=bearer(DEVICE))
+        return self.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers=bearer(device))
 
     def plan_and_select(self, day_id: str) -> None:
         """계획을 고른 날로 만든다: 자동 모드로 코스안 -> 첫 안 고르기 (TASK-003 §5)."""

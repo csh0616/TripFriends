@@ -25,6 +25,21 @@ def open_server(app, raise_errors: bool = True, user: str | None = ME):
     return TestClient(app, raise_server_exceptions=raise_errors, headers=bearer(user) if user else None)
 
 
+def _hours_fact(item) -> bool:
+    return isinstance(item, dict) and "source_type" in item and (item.get("source_type") == "google" or item.get("field") == "opening_hours")
+
+
+def without_google(value):
+    """Google 값에 달린 fact를 뺀 복사본. ADR-015 §3-2·TASK-010 §11·TASK-012 §10 Q1: Google 영업시간은 메모리에 1시간만 두니
+    서버를 다시 켜면 사라지는 게 정상이다. 그러면 그 자리에 대체 순서(H4)의 영업시간 fact(예: curated)가 나올 수 있어
+    영업시간 fact는 출처와 상관없이 뺀다. 그 밖의 값(여행·날·코스·대화 단계·장소 id·다른 fact)은 그대로 비교한다."""
+    if isinstance(value, dict):
+        return {key: without_google(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [without_google(item) for item in value if not _hours_fact(item)]
+    return value
+
+
 def assert_common(response, status: int, code: str | None = None) -> dict:
     assert response.status_code == status, response.text
     error = response.json()["error"]
@@ -48,7 +63,7 @@ def test_T12_A2_여행_만들기·읽기·고정_일정·보관이_두_구현에
         assert osaka.current(ME).json()["trip_id"] == first["trip_id"]
         assert osaka.trip(first["trip_id"], ME).json() == first
 
-        made = osaka.add_fixed(first, 0, "12:00", "13:00")
+        made = osaka.add_fixed(first, 0, "12:00", "13:00", device=ME)
         assert made.status_code == 201, made.text
         day = osaka.trip(first["trip_id"], ME).json()["trip_days"][0]
         assert [e["fixed_event_id"] for e in day["fixed_events"]] == [made.json()["fixed_event_id"]]
@@ -100,7 +115,7 @@ def test_T12_A3_AC3_Q8_고정_일정_저장_중간에_예외면_500이고_고정
         before = stores(osaka)
         with monkeypatch.context() as patch:
             patch.setattr(type(app.state.planning_repo), "save_day", boom)
-            assert_common(osaka.add_fixed(trip, 0, "12:00", "13:00"), 500, "INTERNAL_ERROR")
+            assert_common(osaka.add_fixed(trip, 0, "12:00", "13:00", device=ME), 500, "INTERNAL_ERROR")
         assert stores(osaka) == before
         assert osaka.trip(trip["trip_id"], ME).json() == trip
 
@@ -139,7 +154,7 @@ def test_T12_A4_계획_대화는_서버를_다시_켜도_그_자리에서_이어
         app.state.clock = lambda: NOON
         again = client.get(f"/planning/{sid}", headers=bearer(ME))
         assert again.status_code == 200, again.text
-        assert again.json() == before
+        assert without_google(again.json()) == without_google(before)
         assert again.json()["picks_count"] == 1
         more = client.post(f"/planning/{sid}/next", json={}, headers=bearer(ME))  # 멈춘 자리에서 다음 묶음
         assert more.status_code == 200, more.text
@@ -160,8 +175,8 @@ def test_T12_AC2_AC7_여행·날짜_목록·고른_코스는_서버를_다시_�
 
     with open_server(app) as client:
         osaka = Osaka(client, app)
-        assert osaka.current(ME).json() == listed
-        assert client.get(f"/days/{day_id}/course", headers=bearer(ME)).json() == chosen
+        assert without_google(osaka.current(ME).json()) == without_google(listed)
+        assert without_google(client.get(f"/days/{day_id}/course", headers=bearer(ME)).json()) == without_google(chosen)
 
 
 @pytest.mark.db

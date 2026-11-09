@@ -725,7 +725,8 @@ def test_F42_AC19_모든_이벤트에서_Jev와_바깥_HTTP_호출_0회(monkeypa
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", counter("http"))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", counter("async http"))
 
-    with TestClient(app) as client:
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 토큰 없이 열린 길은 health·catalog뿐 (가짜 JWKS라 바깥 HTTP 0)
+    with TestClient(app, headers=bearer(TESTER)) as client:
         run_every_event(PlanningEnv(client, app))
 
     assert calls == []
