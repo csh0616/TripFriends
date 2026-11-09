@@ -417,14 +417,14 @@ describe('§14 N9 hoursView 늘 열림 칩', () => {
   });
 });
 
-// ---------- §14 N13 + (a): 후보 카드 출처 줄 아랫변 ≤ [코스 짜기] 막대 윗변 − 12 ----------
-// 근거: TASK-011 §14 N13 + (a), task-011-review.md §9-4 (a) 표 1~3과 "남는 자리" 식, DESIGN-001 §4-11 재검수로 정한 것.
-// 계약 (이 테스트가 정한 이름, 승인 대기): src/planning/candidate-fit.ts
+// ---------- §14 N13 + (a): 후보 카드 높이를 이루는 값 ----------
+// 근거: TASK-011 §14 N13 + (a), task-011-review.md §9-4 (a)·§12-4 1(카드 433 = 316 + 12 + 46 + 12 + 24 + 4 + 19), DESIGN-001 §4-11 재검수로 정한 것.
+// 계약: src/planning/candidate-fit.ts
 //   candidateCardParts() = { photo 316, photoGap 12, nameWhy 46, factGap 12, factLine 24, sourceGap 4, source 19 }
 //   candidateCardHeight() = 합 = 433
-//   candidateRoom(화면 높이, 위 안전 영역) = 처음 화면에서 막대 윗변까지 남는 자리 ≈ 화면 높이 − 위 여백 − 776 (홈 바 있는 기기)
-//   sourceClearsBar(room) = room ≥ 12
-// 한계: 776이 무엇의 합인지는 문서에 없어 렌더 값과 잇지 못한다 (질문). Jest는 실제 레이아웃을 재지 못한다.
+// TASK-011 v1.8 §16 "776"·§15 작은 질문: 화면 고정 높이 합(776 → 실측 817 → 고친 뒤 805)은 테스트하지 않는다.
+//   그래서 candidateRoom(776 기준 남는 자리)·sourceClearsBar(남는 자리 ≥ 12) 테스트를 뺐다 (리뷰 §12-3은 간격 = 막대 위 12 + 남는 자리로 셈이 다르다).
+// 실제 간격(출처 줄 아랫변 ≤ 막대 윗변 − 12, iPhone 17 처음 화면)은 r3-06 스크린샷으로 확인한다 (§16 촬영).
 
 describe('§14 N13 (a) 후보 카드 자리 규칙', () => {
   const fit = () => require('@/planning/candidate-fit');
@@ -449,47 +449,5 @@ describe('§14 N13 (a) 후보 카드 자리 규칙', () => {
     const sum = Object.values(parts as Record<string, number>).reduce((a, b) => a + b, 0);
     expect(fit().candidateCardHeight()).toBe(433);
     expect(fit().candidateCardHeight()).toBe(sum);
-  });
-
-  test.each([
-    ['iPhone 17 (874 · 위 62)', 874, 62, 36],
-    ['iPhone 13 mini급 (812 · 위 50)', 812, 50, -14],
-  ])('T11_S14_a_남는_자리_%s', (_name, height, top, room) => {
-    expect(fit().candidateRoom(height, top)).toBe(room);
-  });
-
-  test('T11_S14_a_처음_화면_iPhone_17에서_출처_줄은_막대_윗변_−_12_위', () => {
-    expect(fit().sourceClearsBar(fit().candidateRoom(874, 62))).toBe(true);
-  });
-
-  test('T11_S14_a_작은_기기(mini급)는_처음_화면에서_걸린다(그래서_스크롤_끝_여백이_안전장치)', () => {
-    expect(fit().sourceClearsBar(fit().candidateRoom(812, 50))).toBe(false);
-  });
-
-  test.each([
-    [12, true],
-    [11, false],
-    [13, true],
-    [0, false],
-    [-14, false],
-  ])('T11_S14_a_경계_남는_자리_%i이면_%s', (room, ok) => {
-    expect(fit().sourceClearsBar(room)).toBe(ok);
-  });
-
-  test('T11_S14_a_속성_남는_자리는_화면_높이_−_위_여백_−_776', () => {
-    fc.assert(
-      fc.property(fc.integer({ min: 500, max: 1400 }), fc.integer({ min: 0, max: 80 }), (height, top) => {
-        expect(fit().candidateRoom(height, top)).toBe(height - top - 776);
-      }),
-    );
-  });
-
-  test('T11_S14_a_속성_화면이_1pt_커지면_남는_자리도_1pt', () => {
-    fc.assert(
-      fc.property(fc.integer({ min: 500, max: 1400 }), fc.integer({ min: 0, max: 80 }), (height, top) => {
-        expect(fit().candidateRoom(height + 1, top) - fit().candidateRoom(height, top)).toBe(1);
-        expect(fit().candidateRoom(height, top + 1) - fit().candidateRoom(height, top)).toBe(-1);
-      }),
-    );
   });
 });

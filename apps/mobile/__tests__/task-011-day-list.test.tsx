@@ -684,6 +684,47 @@ describe('§14 N2 지금 할 날 카드 = 연주황, 링은 오늘만', () => {
   });
 });
 
+// ---------- §16 앱 2: 오늘 카드 주황 링은 레이아웃을 밀지 않는다 (task-011-review.md §12-5 N18, DESIGN-001 §4-11 r2 재검수로 정한 것) ----------
+// 렌더 트리로 본다: 카드 눌리는 상자의 네 변 "안쪽 차지" = 안쪽 여백 + 테두리 굵기. 링 있는 오늘 카드와 링 없는 지금 할 날 카드가 같아야
+//   안쪽 글 자리가 같고 카드 높이가 늘지 않는다(186 유지). 링을 겹쳐 그리는 안쪽 상자가 있으면 그 상자는 자리를 먹지 않는다(position absolute).
+//   방법(겹친 상자 / 테두리만큼 안쪽 여백 줄이기)은 정하지 않는다.
+describe('§16 앱 2 (N18) 오늘 카드 링은 레이아웃을 밀지 않는다', () => {
+  const SIDES = ['Top', 'Bottom', 'Left', 'Right'] as const;
+  const inset = (host: Host) => {
+    const style = styleOf(host);
+    return SIDES.map((at) => {
+      const axis = at === 'Top' || at === 'Bottom' ? 'Vertical' : 'Horizontal';
+      const padding = num(style[`padding${at}`] ?? style[`padding${axis}`] ?? style.padding);
+      const border = num(style[`border${at}Width`] ?? style.borderWidth);
+      return padding + border;
+    });
+  };
+  const sizeOf = (host: Host) => ({ height: styleOf(host).height, minHeight: styleOf(host).minHeight });
+
+  test('T11_S16_N18_오늘_카드(링)의_네_변_안쪽_차지는_링_없는_지금_할_날_카드와_같다', async () => {
+    await show(MIXED, AT.before); // d2 = 지금 할 날 카드, 링 없음
+    const plain = inset(rowBox('d2'));
+    const plainSize = sizeOf(rowBox('d2'));
+    await show(TODAY_NO_COURSE, AT.day2); // d2 = 오늘인데 코스 없음, 링 있음
+    expect(inset(rowBox('d2'))).toEqual(plain);
+    expect(sizeOf(rowBox('d2'))).toEqual(plainSize);
+  });
+
+  test('T11_S16_N18_링은_그대로_있고_굵기_2', async () => {
+    await show(TODAY_NO_COURSE, AT.day2);
+    const box = rowBox('d2');
+    const rings = [box, ...box.queryAll(() => true)].filter(hasRing);
+    expect(rings.length).toBeGreaterThan(0);
+    for (const ring of rings) expect(styleOf(ring).borderWidth).toBe(2);
+  });
+
+  test('T11_S16_N18_링을_겹쳐_그리는_안쪽_상자는_자리를_먹지_않는다(absolute)', async () => {
+    await show(TODAY_NO_COURSE, AT.day2);
+    const box = rowBox('d2');
+    for (const ring of box.queryAll(() => true).filter(hasRing)) expect(styleOf(ring).position).toBe('absolute');
+  });
+});
+
 describe('§14 N3 카드 안 "고정 일정 없음" + [+ 일정] 한 줄', () => {
   const sameRow = (a: Host, b: Host) => styleOf(commonAncestor(a, b)).flexDirection === 'row';
 

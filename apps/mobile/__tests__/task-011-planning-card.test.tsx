@@ -24,12 +24,13 @@
 //     목록 맨 아래 여백 ≥ 막대 72 + 12 -> task-010-s14-pm-answers T10_S14_PM4에서 본다
 //     Q13 무늬는 docs/design/place-images/{종류}.svg 파일이 정본 -> 앱 assets 안에 같은 내용의 파일이 있다
 import { screen, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { COLORS } from '../test-support/design-table';
 import { json } from '../test-support/fake-server';
 import { happyServer, R, resetDevice, toP1, toP2, toP3 } from '../test-support/planning-driver';
 import { batch, course, day, hoursFact, packed, PLACES, relaxed } from '../test-support/planning-fixtures';
-import { buttonsFilledWith, chain, commonAncestor, filledWith, isInside, rootHost, styleOf, treeIndex, type Host } from '../test-support/screen-tree';
+import { buttonsFilledWith, chain, childOn, commonAncestor, filledWith, isInside, rootHost, same, styleOf, treeIndex, type Host } from '../test-support/screen-tree';
 
 const EN_DASH = '–';
 
@@ -315,8 +316,9 @@ describe('§9 Q13 무늬는 docs 그림 파일이 정본', () => {
 
 // ---------- §14 N13 + (a): [패스]·[담기]는 이름·이유 오른쪽 같은 띠, 카드 높이 433, 목록 끝 여백 ----------
 // 근거: TASK-011 §14 N13 + (a), task-011-review.md §9-3 N13·§9-4 (a) 표 1~3, DESIGN-001 §4-11 재검수로 정한 것, §4-11 fact-line.
-// 한계: Jest는 실제 레이아웃(출처 줄 아랫변·막대 윗변)을 재지 못한다. 그래서 (1) 자리 계산은 candidate-fit 함수(task-011-lib),
+// 한계: Jest는 실제 레이아웃(출처 줄 아랫변·막대 윗변)을 재지 못한다. 그래서 (1) 카드 부분값은 candidate-fit 함수(task-011-lib),
 //       (2) 여기서는 렌더 트리의 스타일 값이 그 함수의 값을 쓰는지, (3) 버튼이 이름·이유 아래 따로 한 줄을 먹지 않는지만 본다.
+//       실제 간격(출처 줄 아랫변 ≤ 막대 윗변 − 12, iPhone 17 처음 화면)은 r3-06 스크린샷으로 확인한다 (TASK-011 §16).
 
 describe('§14 N13 후보 카드 버튼 자리와 높이', () => {
   const fit = () => require('@/planning/candidate-fit');
@@ -410,3 +412,94 @@ describe('§14 N13 후보 카드 버튼 자리와 높이', () => {
 });
 
 // 목록 맨 아래 여백 ≥ 막대 72 + 12 는 task-010-s14-pm-answers.test.tsx T10_S14_PM4 (§14로 고친 승인 테스트)
+
+// ---------- §16 앱 1: 후보 화면 위쪽 높이 (task-011-review.md §12-3 1, DESIGN-001 §4-11 r2 재검수로 정한 것) ----------
+// 머리 → 말풍선 8 (20에서 바뀜) · 말풍선 46 · 말풍선 → 칩 줄 16 · 칩 줄 44(보이는 36) · 칩 줄 → 카드 16.
+// 렌더 트리 값으로 본다 (Jest는 실제 레이아웃을 재지 못한다):
+//   세로 스크롤 목록 = 후보 카드를 담은 가장 가까운 세로 ScrollView (테스트 환경에서는 RCTScrollView가 contentContainerStyle을 들고, 안쪽 View 하나가 본문 줄들을 담는다)
+//   머리 → 말풍선 = 목록 contentContainerStyle 위 여백 + 말풍선 줄의 위 바깥 여백 (말풍선 줄이 본문 첫 줄)
+//   줄 사이 = 목록 gap(rowGap) + 앞 줄 아래 바깥 여백 + 뒷 줄 위 바깥 여백
+//   말풍선 46 = 말풍선 상자(bg-2) 위아래 안쪽 여백 + 한 줄 글 줄 높이
+//   칩 줄 44 = 칩 보이는 높이 36 + 칩 가로 스크롤 안쪽 위아래 여백
+describe('§16 앱 1 후보 화면 위쪽 높이', () => {
+  const num = (value: unknown) => (typeof value === 'number' ? value : 0);
+  const side = (style: Record<string, any>, kind: 'padding' | 'margin', at: 'Top' | 'Bottom' | 'Left' | 'Right') =>
+    num(style[`${kind}${at}`] ?? style[at === 'Top' || at === 'Bottom' ? `${kind}Vertical` : `${kind}Horizontal`] ?? style[kind]);
+  const contentStyle = (scroll: Host) => (StyleSheet.flatten(scroll.props.contentContainerStyle) ?? {}) as Record<string, any>;
+
+  /** 후보 카드를 담은 세로 스크롤 목록과 그 안의 본문 줄들 */
+  const page = () => {
+    const list = chain(card('D01')).find((host) => host.props.contentContainerStyle !== undefined && host.props.horizontal !== true);
+    if (!list) throw new Error('후보 카드를 담은 세로 스크롤 목록이 없다');
+    const inner = list.children.find((c): c is Host => typeof c !== 'string')!;
+    const rowOf = (host: Host) => childOn(inner, host);
+    const items = inner.children.filter((c): c is Host => typeof c !== 'string');
+    return { list, inner, rowOf, items };
+  };
+  const bubbleText = () => screen.getByText('서버가_준_묶음_말') as unknown as Host;
+  const chipRow = () => chain(byId('direction-' + batch().directions[0].id)).find((host) => host.props.horizontal === true)!;
+  const gapBetween = (list: Host, inner: Host, a: Host, b: Host) => {
+    const own = { ...contentStyle(list), ...styleOf(inner) };
+    return num(own.rowGap ?? own.gap) + side(styleOf(a), 'margin', 'Bottom') + side(styleOf(b), 'margin', 'Top');
+  };
+
+  test('T11_S16_1_말풍선_줄이_본문_첫_줄이고_그_다음_칩_줄_그_다음_카드', async () => {
+    happyServer();
+    await toP2();
+    const { items, rowOf } = page();
+    expect(items.indexOf(rowOf(bubbleText()))).toBe(0);
+    expect(items.indexOf(rowOf(chipRow()))).toBe(1);
+    expect(items.indexOf(rowOf(card('D01')))).toBe(2);
+  });
+
+  test('T11_S16_1_머리_→_말풍선은_8(20이_아니다)', async () => {
+    happyServer();
+    await toP2();
+    const { list, rowOf } = page();
+    const top = side(contentStyle(list), 'padding', 'Top') + side(styleOf(rowOf(bubbleText())), 'margin', 'Top');
+    expect(top).toBe(8);
+    expect(top).not.toBe(20);
+  });
+
+  test('T11_S16_1_위만_줄이고_좌우_화면_여백은_그대로_20', async () => {
+    happyServer();
+    await toP2();
+    const { list } = page();
+    expect(side(contentStyle(list), 'padding', 'Left')).toBe(20);
+    expect(side(contentStyle(list), 'padding', 'Right')).toBe(20);
+  });
+
+  test('T11_S16_1_말풍선은_46(위아래_안쪽_여백_+_한_줄_글_높이)', async () => {
+    happyServer();
+    await toP2();
+    const text = bubbleText();
+    const box = chain(text).find((host) => same(styleOf(host).backgroundColor, COLORS['bg-2']));
+    expect(box).toBeDefined();
+    const inside = side(styleOf(box!), 'padding', 'Top') + side(styleOf(box!), 'padding', 'Bottom');
+    expect(inside + num(styleOf(text).lineHeight)).toBe(46);
+  });
+
+  test('T11_S16_1_말풍선_→_칩_줄은_16', async () => {
+    happyServer();
+    await toP2();
+    const { list, inner, rowOf } = page();
+    expect(gapBetween(list, inner, rowOf(bubbleText()), rowOf(chipRow()))).toBe(16);
+  });
+
+  test('T11_S16_1_칩_줄은_44(보이는_칩_36_+_위아래_누르는_영역_4)', async () => {
+    happyServer();
+    await toP2();
+    const chip = styleOf(byId('direction-' + batch().directions[0].id));
+    const visible = Math.max(num(chip.height), num(chip.minHeight));
+    expect(visible).toBe(36);
+    const row = contentStyle(chipRow());
+    expect(visible + side(row, 'padding', 'Top') + side(row, 'padding', 'Bottom')).toBe(44);
+  });
+
+  test('T11_S16_1_칩_줄_→_카드는_16', async () => {
+    happyServer();
+    await toP2();
+    const { list, inner, rowOf } = page();
+    expect(gapBetween(list, inner, rowOf(chipRow()), rowOf(card('D01')))).toBe(16);
+  });
+});
