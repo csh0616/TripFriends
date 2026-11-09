@@ -11,7 +11,8 @@
 //   401 -> auth.refreshSession() 한 번 -> 같은 요청을 새 토큰으로 다시.
 //     §10 Q6: 그래도 401(또는 새로 받기 실패)이면 "로그인 정보를 확인하지 못했어" + [다시](retry-button). 기기에 세션이 있으면
 //     새 익명 계정을 만들지 않는다 (새 익명 로그인은 세션이 없을 때만)
-//   §6 익명 로그인 실패 -> 빈 첫 화면(여행 만들기)은 보인다. 여행 만들기에서 다시 로그인. 데모는 로그인 없이 시작
+//   §6 익명 로그인 실패 -> 빈 첫 화면(여행 만들기)은 보인다. 여행 만들기에서 다시 로그인. 데모도 로그인 뒤 (§11: 토큰 없이 열린 길 0)
+//   §11 Q2 데모 버튼: 시드 요청에 Bearer, 본문에 as_current 없음(지금 여행으로 붙이기는 점검 전용). 앱은 시드 응답의 day_ids로 데모에 들어간다
 //     §10 Q7: 여행 만들기에서 다시 해도 실패하면 "지금 연결이 안 돼. 잠시 뒤에 다시 해 줘" + [다시], 입력값 그대로
 //   §6·§10 Q3·Q12 DB 연결 실패 = 서버 503 STORAGE_UNAVAILABLE -> "지금 저장소에 못 붙었어" + [다시] (첫 화면, 여행 만들기는 입력값 그대로)
 //   §10 Q4: Bearer는 여행·계획·여행 중·장소 검색 요청 모두에
@@ -156,6 +157,20 @@ describe('B1 익명 로그인', () => {
 // ---------- B2 요청에 Bearer, X-Device-Id 없음 ----------
 
 describe('B2 요청 헤더', () => {
+  test.each([
+    ['데모 여행 시작', 'home-demo', R.seed],
+    ['여행 중 데모 바로 보기', 's0-now-demo', R.seed],
+  ])('T12_S11_Q2_%s_시드_요청에_Bearer_as_current_없음', async (_name, button, route) => {
+    (globalThis as { __DEV__?: boolean }).__DEV__ = true;
+    server.on(CURRENT, NO_TRIP).on(route, json(201, seed)).on(R.start, json(201, session)).on(R.get, json(200, session));
+    await startHome();
+    await tap(await screen.findByTestId(button));
+    await waitFor(() => expect(server.sent(route).length).toBeGreaterThan(0));
+    const [sent] = server.sent(route);
+    expect(server.headers(sent).authorization).toBe(`Bearer ${await tokenOf()}`);
+    expect((sent.body as { as_current?: unknown } | undefined)?.as_current).toBeUndefined();
+  });
+
   test('T12_Q4_계획_대화_시작_요청에도_Bearer', async () => {
     server.on(CURRENT, json(200, TRIP)).on('POST /days/day-t1/planning', json(201, session));
     await startHome();
@@ -278,14 +293,14 @@ describe('§6 익명 로그인 실패', () => {
     expect(server.headers(server.sent(CREATE)[0]).authorization).toBe(`Bearer ${await tokenOf()}`);
   });
 
-  test('T12_S6_데모는_로그인_없이_시작된다', async () => {
+  test('T12_S6_S11_로그인이_안_되면_데모_시드를_토큰_없이_보내지_않는다', async () => {
     (globalThis as { __DEV__?: boolean }).__DEV__ = true;
     authFake.failSignIn(99);
     server.on(CURRENT, NO_TRIP).on(R.seed, json(201, seed)).on(R.start, json(201, session)).on(R.get, json(200, session));
     await startHome();
     await tap(await screen.findByTestId('home-demo'));
-    await waitFor(() => expect(server.sent(R.seed)).toHaveLength(1));
-    expect(await screen.findByTestId('choice-walk_alley')).toBeTruthy(); // 데모 계획 대화 첫 질문
+    await settleAll();
+    expect(server.sent(R.seed).filter((sent) => !server.headers(sent).authorization)).toEqual([]);
   });
 });
 

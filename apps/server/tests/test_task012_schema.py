@@ -171,13 +171,12 @@ def test_T12_A5_trips에_is_demo_열():
     assert "bool" in columns["is_demo"]
 
 
-def test_T12_Q5_trips_owner_id가_비는_것은_데모_여행일_때만():
-    # §10 Q5: 로그인 없는 데모 여행만 주인이 비어도 된다. 표의 제약으로 고정: owner_id가 null이면 is_demo가 true여야 한다
-    text = schema()["trips"]["text"]
-    assert "owner_id" in schema()["trips"]["columns"]
-    assert re.search(r"check\s*\([^;]*owner_id\s+is\s+not\s+null[^;]*is_demo|check\s*\([^;]*is_demo[^;]*owner_id\s+is\s+not\s+null", text), (
-        "trips에 'owner_id is not null or is_demo' 같은 제약이 없다 (§10 Q5)"
-    )
+def test_T12_S11_Q1_trips_owner_id는_비울_수_없다():
+    # §11 Q1(§10 Q5를 바꿈): 주인 없는 여행은 아예 허용하지 않는다. 데모 여행도 그 사용자 소유
+    trips = schema()["trips"]
+    kind = trips["columns"].get("owner_id", "")
+    later = re.search(r"alter\s+column\s+\"?owner_id\"?\s+set\s+not\s+null", trips["text"])
+    assert "not null" in kind or later, f"trips.owner_id에 not null이 없다: {kind!r}"
 
 
 # ---------- A6 위치 열 0 (AC-4) ----------

@@ -13,6 +13,7 @@ TASK-008 §13 H4·§14·§17, DESIGN-001 §4-7(조사는 앱·서버 대본 공�
 새 이름은 테스트 함수 안에서 불러온다 (구현 전에도 이 파일의 다른 테스트가 모인다).
 """
 
+from auth_helpers import TESTER, bearer, install_fake_jwks  # TASK-012 §11: 시드도 Bearer
 import json
 from pathlib import Path
 
@@ -292,10 +293,11 @@ def test_T9_C2_운영이면_시드는_여전히_404(monkeypatch):
 
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
     monkeypatch.setenv("APP_ENV", "production")
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 시드도 Bearer (운영은 그래도 404)
     try:
         with TestClient(importlib.reload(api.main).app) as client:
-            assert_error(client.post("/debug/seed-demo"), 404)
-            assert_error(client.post("/debug/seed-demo", json={"chosen": True}), 404)
+            assert_error(client.post("/debug/seed-demo", headers=bearer(TESTER)), 404)  # TASK-012 §11: 토큰이 있어도 운영은 404
+            assert_error(client.post("/debug/seed-demo", json={"chosen": True}, headers=bearer(TESTER)), 404)
     finally:
         monkeypatch.delenv("APP_ENV", raising=False)
         importlib.reload(api.main)

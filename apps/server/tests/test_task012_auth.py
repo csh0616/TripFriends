@@ -8,9 +8,11 @@ TASK-010 §B2(다른 기기의 여행은 없는 것과 같다 -> 다른 사용�
         ES256(P-256), 머리 kid로 JWKS의 키를 고른다. aud == "authenticated". 만료 여유 10초:
         now < exp + 10 이면 받고, now >= exp + 10 이면 거절 (정각 exp + 10은 거절 쪽 — test-writer가 정한 경계, 승인 대기)
     서버는 공개 키를 api.auth.fetch_jwks(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json")로 받아 캐시한다 (요청마다 부르지 않음)
-    Bearer가 필요한 길(없거나 틀리면 401 UNAUTHORIZED): 여행·날·고정 일정·계획·여행 중(now·check·accept·dismiss)·영업 확인·장소 검색·숙소 검색
+    Bearer가 필요한 길(없거나 틀리면 401 UNAUTHORIZED): 여행·날·고정 일정·계획·여행 중(now·check·accept·dismiss)·영업 확인·장소 검색·숙소 검색·데모 시드
+        §11 Q1: 토큰 없이 열린 길은 /health·/catalog 둘뿐 (app.routes 전부를 훑어 확인). FastAPI 문서 길(include_in_schema=False)은 세지 않음
+    §11 Q3: 남의 여행·날·계획 세션·코스안·고정 일정·사건·제안은 404 NOT_FOUND (있는지 알리지 않음), 상대 데이터는 그대로
         인증은 다른 검사(없는 리소스 404, 본문 400)보다 먼저
-    필요 없는 길: /health, /catalog, /debug/seed-demo(토큰 있으면 그 사용자 여행으로 붙임 — test_task010_seed_device)
+    데모 시드: 토큰 필요, 데모는 그 사용자 소유·지금 여행은 그대로. as_current: true일 때만 지금 여행으로 붙임 (test_task010_seed_device)
     DB에 못 붙으면(DATABASE_URL이 닿지 않는 곳) 서버는 켜지고, 저장소를 쓰는 요청은 503 STORAGE_UNAVAILABLE (응답에 DB 주소 없음)
     여행 응답 Trip에 is_demo (Q11)
 테스트 키는 auth_helpers의 가짜 P-256 키 (실제 키 금지, 네트워크 0).
@@ -82,6 +84,7 @@ def routes(client: TestClient) -> dict:
         "POST_visit_check": lambda h: client.post("/places/osaka-fake-kuromon/visit-checks", json={"day_id": ID, "at": "2026-12-11T12:00:00", "was_open": True}, headers=h),
         "GET_places_search": lambda h: client.get("/places/search", params=q, headers=h),
         "GET_lodging_search": lambda h: client.get("/places/lodging-search", params={**q, "q": "호텔 닛코"}, headers=h),
+        "POST_seed_demo": lambda h: client.post("/debug/seed-demo", headers=h),  # §11 Q1
     }
 
 
@@ -139,6 +142,30 @@ def test_T12_Q4_health·catalog는_토큰_없이_된다(osaka, path):  # noqa: F
     assert osaka.anon.get(path).status_code == 200
 
 
+PUBLIC = {("GET", "/health"), ("GET", "/catalog")}
+
+
+def test_T12_S11_Q1_토큰_없이_열린_길은_health·catalog_둘뿐(osaka):  # noqa: F811
+    # app의 모든 길(메서드마다)을 토큰 없이 부른다. 경로 칸은 없는 ID, 본문은 빈 JSON. 인증이 먼저라 401이어야 한다
+    import re
+
+    from fastapi.routing import APIRoute
+
+    opened = []
+    for route in osaka.app.routes:
+        if not isinstance(route, APIRoute) or not route.include_in_schema:
+            continue
+        path = re.sub(r"\{[^}]+\}", ID, route.path)
+        for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
+            if (method, route.path) in PUBLIC:
+                continue
+            kwargs = {} if method in ("GET", "DELETE") else {"json": {}}
+            response = osaka.anon.request(method, path, **kwargs)
+            if response.status_code != 401:
+                opened.append(f"{method} {route.path} -> {response.status_code}")
+    assert opened == []
+
+
 def test_T12_B2_틀린_토큰으로는_아무것도_만들지_않는다(osaka):  # noqa: F811
     for headers in BAD.values():
         osaka.anon.post("/trips", json=trip_body(), headers=headers)
@@ -182,27 +209,82 @@ def test_T12_B2_B4_토큰을_새로_받아도_sub가_같으면_같은_사용자(
     assert osaka.anon.get("/trips/current", headers=renewed).json()["trip_id"] == made["trip_id"]
 
 
-def test_T12_B2_다른_사용자의_여행은_보이지도_바뀌지도_않는다(osaka):  # noqa: F811
+def _mine(osaka):
+    """ME의 여행: 0일째 계획 대화(후보 단계), 1일째 고른 코스 + 열린 사건·제안, 고정 일정 하나."""
+    from test_task012_contract import event, proposal
+
     mine = osaka.make_trip(device=ME)
-    day = mine["trip_days"][0]
-    made = osaka.add_fixed(mine, 0, "12:00", "13:00").json()
-    theirs = bearer(YOU)
-    c = osaka.anon
-    assert c.get("/trips/current", headers=theirs).status_code == 404
-    assert c.get(f"/trips/{mine['trip_id']}", headers=theirs).status_code == 404
+    day0, day1 = mine["trip_days"][0]["day_id"], mine["trip_days"][1]["day_id"]
+    fixed = osaka.add_fixed(mine, 0, "12:00", "13:00").json()
+    started = osaka.client.post(f"/days/{day0}/planning", json={"mode": "conversation"}).json()
+    sid = started["session_id"]
+    first = started["question"]["choices"][0]["id"]
+    batch = osaka.client.post(f"/planning/{sid}/answer", json={"choice_ids": [first]}).json()
+    auto = osaka.client.post(f"/days/{day1}/planning", json={"mode": "auto"}).json()
+    option_id = auto["options"][0]["option_id"]
+    other_option = auto["options"][-1]["option_id"]
+    osaka.client.post(f"/course-options/{option_id}/select")
+    record = event(day1)
+    osaka.app.state.trip_repo.put_event(record)
+    made = proposal(record.event_id)
+    osaka.app.state.trip_repo.put_proposals(record.event_id, [made])
+    place = batch["candidates"][0]["place"]["id"]
+    return {"trip": mine, "day0": day0, "day1": day1, "fixed": fixed, "sid": sid, "option": option_id, "other_option": other_option,
+            "event": record.event_id, "proposal": made.proposal_id, "place": place, "auto_sid": auto["session_id"]}
+
+
+def theirs_calls(m: dict) -> dict:
+    day = m["trip"]["trip_days"][0]
     fixed = {"trip_day_id": day["day_id"], "title": "남의 여행", "start_at": at(day["date"], "15:00"), "end_at": at(day["date"], "16:00")}
-    assert c.post(f"/trips/{mine['trip_id']}/fixed-events", json=fixed, headers=theirs).status_code == 404
-    assert c.delete(f"/fixed-events/{made['fixed_event_id']}", headers=theirs).status_code == 404
-    after = osaka.trip(mine["trip_id"], ME).json()
-    assert [e["fixed_event_id"] for e in after["trip_days"][0]["fixed_events"]] == [made["fixed_event_id"]]
-    assert after["status"] == "active"
+    at_day1 = f"{m['trip']['trip_days'][1]['date']}T12:00:00"
+    return {
+        "GET_trip": ("get", f"/trips/{m['trip']['trip_id']}", None),
+        "POST_fixed": ("post", f"/trips/{m['trip']['trip_id']}/fixed-events", fixed),
+        "DELETE_fixed": ("delete", f"/fixed-events/{m['fixed']['fixed_event_id']}", None),
+        "GET_course": ("get", f"/days/{m['day1']}/course", None),
+        "POST_planning_start": ("post", f"/days/{m['day0']}/planning", {"mode": "conversation"}),
+        "GET_planning": ("get", f"/planning/{m['sid']}", None),
+        "POST_answer": ("post", f"/planning/{m['sid']}/answer", {"choice_ids": []}),
+        "POST_reactions": ("post", f"/planning/{m['sid']}/reactions", {"place_id": m["place"], "action": "like"}),
+        "POST_next": ("post", f"/planning/{m['sid']}/next", {}),
+        "POST_compose": ("post", f"/planning/{m['sid']}/compose", None),
+        "POST_back": ("post", f"/planning/{m['sid']}/back", None),
+        "POST_adjust": ("post", f"/planning/{m['auto_sid']}/adjust", {"option_id": m["other_option"], "place_id": m["place"], "delta": 15}),
+        "POST_select": ("post", f"/course-options/{m['other_option']}/select", None),
+        "GET_now": ("get", f"/days/{m['day1']}/now?at={at_day1}", None),
+        "POST_check": ("post", f"/days/{m['day1']}/check", {"at": at_day1}),
+        "POST_accept": ("post", f"/proposals/{m['proposal']}/accept", None),
+        "POST_dismiss": ("post", f"/events/{m['event']}/dismiss", None),
+        "POST_visit_check": ("post", f"/places/{m['place']}/visit-checks", {"day_id": m["day1"], "at": at_day1, "was_open": False}),
+    }
 
 
-def test_T12_B2_다른_사용자의_고른_코스는_404(osaka):  # noqa: F811
-    mine = osaka.make_trip(device=ME)
-    day_id = mine["trip_days"][1]["day_id"]
-    osaka.plan_and_select(day_id)  # 기본 헤더 = ME
-    assert osaka.anon.get(f"/days/{day_id}/course", headers=bearer(YOU)).status_code == 404
+THEIRS = ["GET_trip", "POST_fixed", "DELETE_fixed", "GET_course", "POST_planning_start", "GET_planning", "POST_answer", "POST_reactions",
+          "POST_next", "POST_compose", "POST_back", "POST_adjust", "POST_select", "GET_now", "POST_check", "POST_accept", "POST_dismiss",
+          "POST_visit_check"]
+
+
+@pytest.mark.parametrize("call", THEIRS)
+def test_T12_S11_Q3_남의_것을_읽거나_바꾸면_404_NOT_FOUND이고_상대_데이터는_그대로(osaka, call):  # noqa: F811
+    from trip_helpers import stores
+
+    m = _mine(osaka)
+    before = stores(osaka)
+    planning_before = osaka.client.get(f"/planning/{m['sid']}").json()
+    trip_before = osaka.trip(m["trip"]["trip_id"], ME).json()
+    method, path, body = theirs_calls(m)[call]
+    kwargs = {"json": body} if body is not None else {}
+    response = getattr(osaka.anon, method)(path, headers=bearer(YOU), **kwargs)
+    assert response.status_code == 404, response.text
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+    assert stores(osaka) == before
+    assert osaka.client.get(f"/planning/{m['sid']}").json() == planning_before
+    assert osaka.trip(m["trip"]["trip_id"], ME).json() == trip_before
+
+
+def test_T12_S11_Q3_남의_여행이_있어도_내_지금_여행은_404(osaka):  # noqa: F811
+    _mine(osaka)
+    assert osaka.anon.get("/trips/current", headers=bearer(YOU)).status_code == 404
 
 
 def test_T12_B2_다른_사용자가_여행을_만들어도_내_여행은_보관되지_않는다(osaka):  # noqa: F811
@@ -228,17 +310,12 @@ def test_T12_Q11_직접_만든_여행은_is_demo_false(osaka):  # noqa: F811
     assert osaka.current(ME).json()["is_demo"] is False
 
 
-def test_T12_Q11_Q5_토큰과_함께_시드하면_그_사용자의_데모_여행_is_demo_true(osaka):  # noqa: F811
-    seeded = osaka.anon.post("/debug/seed-demo", headers=bearer(ME))
+def test_T12_Q11_S11_as_current로_시드하면_그_사용자의_지금_여행이_데모_is_demo_true(osaka):  # noqa: F811
+    seeded = osaka.anon.post("/debug/seed-demo", json={"as_current": True}, headers=bearer(ME))
     assert seeded.status_code == 201, seeded.text
     current = osaka.current(ME).json()
     assert current["trip_id"] == seeded.json()["trip_id"]
     assert current["is_demo"] is True
-
-
-def test_T12_S6_데모는_로그인_없이_만들어진다(osaka):  # noqa: F811
-    seeded = osaka.anon.post("/debug/seed-demo")
-    assert seeded.status_code == 201, seeded.text
 
 
 # ---------- verify_token (단위): ES256 · aud · 만료 여유 10초 ----------

@@ -163,8 +163,20 @@ class PlanningEnv:
     def plant_day(self, places: dict[str, Place], plan: DayPlan | None = None, day_number: int = 1) -> str:
         self.day_count += 1
         day_id = f"day-{self.day_count}"
-        self.repo.save_day(day_id, plan or day_plan(), places, day_number)
+        plan = plan or day_plan()
+        self.repo.save_day(day_id, plan, places, day_number)
+        self._own(day_id, plan.date)
         return day_id
+
+    def _own(self, day_id: str, day) -> None:
+        """TASK-012 §11 Q3: 남의 날은 404라, 저장소에 바로 심은 날도 이 환경의 사용자(TESTER) 것으로 둔다.
+        계약 (승인 대기): TripBook.own_days(user_id, day_ids) — 테스트·점검 전용. 지금 여행·보관·영업시간 다시 부르기에 영향 없음.
+        아직 없으면(구현 전) 건너뛴다: 그때는 서버도 주인을 보지 않는다."""
+        from auth_helpers import TESTER, user_id
+
+        own = getattr(self.app.state.trip_book, "own_days", None)
+        if own is not None:
+            own(user_id(TESTER), [day_id])
 
     def seed(self) -> dict:
         response = self.client.post("/debug/seed-demo")

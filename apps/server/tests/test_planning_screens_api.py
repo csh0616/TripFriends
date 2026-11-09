@@ -1,6 +1,6 @@
 """앱 화면용 서버 소작업. 근거: TASK-004 §A(A1~A5), §12-1(A6, A7, Q1, Q2, Q3), §13-1(A8), AC-2, AC-3, TASK-003 §5, §6, §10(원칙 1·2, Q6, Q37, Q38, R1, R4, R5, R11, R12)."""
 
-from auth_helpers import TESTER, bearer  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
+from auth_helpers import TESTER, bearer, install_fake_jwks  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import json
 from datetime import date
 from pathlib import Path
@@ -1209,9 +1209,10 @@ def test_S95_A7_운영의_시드_경로도_route(monkeypatch):
 
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
     monkeypatch.setenv("APP_ENV", "production")
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 시드도 Bearer (운영은 그래도 404)
     try:
         with TestClient(importlib.reload(api.main).app) as client:
-            assert resource_of(client.post("/debug/seed-demo")) == "route"
+            assert resource_of(client.post("/debug/seed-demo", headers=bearer(TESTER))) == "route"  # TASK-012 §11: 토큰이 있어도 운영은 404
     finally:
         monkeypatch.delenv("APP_ENV", raising=False)
         importlib.reload(api.main)

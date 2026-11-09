@@ -1,6 +1,6 @@
 """TASK-012 §A 저장소를 API로 확인: 여행 계약(메모리·Postgres) · A3 트랜잭션 · A4 체크포인터 · AC-2 다시 켜도 그대로 · A5 데모.
 근거: TASK-012 §A A2~A5·§6 "저장 중 예외"·§7 AC-1·AC-2·AC-3·AC-7, TASK-003 §10-11 R11·R12(알려진 한계 -> 여기서 해결),
-TASK-010 §B2(여행 하나, 이전 여행은 archived), API-001 §1 오류 형식, ADR-016 §3-3(Bearer).
+TASK-010 §B2(여행 하나, 이전 여행은 archived), API-001 §1 오류 형식, ADR-016 §3-3(Bearer), TASK-012 §11(데모도 Bearer, as_current).
 
 계약 (이 테스트가 정한 이름, 승인 대기):
     서버는 환경 변수 DATABASE_URL이 있으면 Postgres 저장소·Postgres 체크포인터로, 없으면 지금처럼 메모리로 켠다
@@ -170,7 +170,7 @@ def test_T12_A5_데모_시드도_DB에_저장되고_다시_켜도_그_사용자�
 
     server_env(monkeypatch, "postgres")
     with open_server(app) as client:
-        seeded = client.post("/debug/seed-demo", json={"chosen": True}, headers=bearer(ME))
+        seeded = client.post("/debug/seed-demo", json={"chosen": True, "as_current": True}, headers=bearer(ME))  # §11 Q2: 점검 전용 붙이기
         assert seeded.status_code == 201, seeded.text
         trip_id = seeded.json()["trip_id"]
     with open_server(app) as client:
@@ -178,15 +178,3 @@ def test_T12_A5_데모_시드도_DB에_저장되고_다시_켜도_그_사용자�
         current = osaka.current(ME).json()
         assert current["trip_id"] == trip_id
         assert current["is_demo"] is True  # §10 Q11
-
-
-@pytest.mark.db
-def test_T12_A5_데모는_로그인_없이도_만들어진다_DB_모드(monkeypatch):
-    # §6: 데모는 로그인 없이
-    from api.main import app
-
-    server_env(monkeypatch, "postgres")
-    with open_server(app, user=None) as client:
-        seeded = client.post("/debug/seed-demo")
-        assert seeded.status_code == 201, seeded.text
-        assert set(seeded.json()) == {"trip_id", "day_ids"}

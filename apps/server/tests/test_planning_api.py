@@ -1,6 +1,6 @@
 """완료 기준과 오류. 근거: TASK-003 §4, §5, §10, AC-6·7·10~16·18~20, DATA-001 C·D, TASK-002 §7 Q15·Q16, §8 Q37."""
 
-from auth_helpers import TESTER, bearer  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
+from auth_helpers import TESTER, bearer, install_fake_jwks  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import ast
 import importlib
 import json
@@ -756,6 +756,7 @@ def reload_main(monkeypatch):
     import api.main
 
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 시드도 Bearer
 
     def load(value):
         if value is None:
@@ -771,13 +772,13 @@ def reload_main(monkeypatch):
 
 def test_F45_AC20_R2_운영이면_시드는_공통_형식_404(reload_main):
     with TestClient(reload_main("production")) as client:
-        assert_error(client.post("/debug/seed-demo"), 404)
+        assert_error(client.post("/debug/seed-demo", headers=bearer(TESTER)), 404)  # TASK-012 §11: 토큰이 있어도 운영은 404
 
 
 @pytest.mark.parametrize("value", [None, "development", "staging"], ids=["없음", "development", "staging"])
 def test_F46_AC20_운영이_아니면_시드는_201(reload_main, value):
     with TestClient(reload_main(value)) as client:
-        assert client.post("/debug/seed-demo").status_code == 201
+        assert client.post("/debug/seed-demo", headers=bearer(TESTER)).status_code == 201  # TASK-012 §11: 시드도 Bearer
 
 
 def test_F47_S5_시드는_가상_도시_3일_숙소_중심_둘째_날만_꼭_갈_곳(env):
