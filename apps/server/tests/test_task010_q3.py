@@ -163,7 +163,7 @@ def test_T10_Q3_Q13_Q30_여행_만들기_400의_detail_field는_틀린_칸_하�
 
 def test_T12_B2_토큰이_없으면_400이_아니라_401(osaka):  # noqa: F811
     # TASK-012 B2로 바뀜 (이전: TASK-010 §9 Q16 기기 ID가 없으면 400 detail.field = X-Device-Id)
-    response = osaka.client.get("/trips/current")
+    response = osaka.anon.get("/trips/current")
     assert response.status_code == 401, response.text
     assert response.json()["error"]["message"]
 

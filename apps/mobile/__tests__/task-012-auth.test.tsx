@@ -8,10 +8,14 @@
 //     세션 저장은 createClient(url, key, { auth: { storage: 기기 저장소(AsyncStorage) } })에 맡긴다 -> 기기 저장소 값에 토큰이 보인다
 //   첫 화면(src/app/index.tsx)을 켜면: 기기에 세션이 없으면 auth.signInAnonymously() 한 번, 있으면 부르지 않는다. 로그인 화면 없음
 //   서버 요청 헤더 Authorization = `Bearer <지금 세션의 access_token>`. X-Device-Id는 보내지 않는다
-//   401 -> auth.refreshSession() 한 번 -> 같은 요청을 새 토큰으로 다시. 그래도 401 -> signInAnonymously()부터 (끝없이 되풀이하지 않음)
-//   §6 익명 로그인 실패 -> 빈 첫 화면(여행 만들기)은 보인다. [여행 만들기]를 누르면 다시 로그인. 데모는 로그인 없이 시작
-//   §6 DB 연결 실패 = 서버 503 -> 첫 화면에 "지금 저장소에 못 붙었어" + [다시](retry-button). 503의 code 값은 정해지지 않아 보지 않는다
-import { act, render, screen, waitFor } from '@testing-library/react-native';
+//   401 -> auth.refreshSession() 한 번 -> 같은 요청을 새 토큰으로 다시.
+//     §10 Q6: 그래도 401(또는 새로 받기 실패)이면 "로그인 정보를 확인하지 못했어" + [다시](retry-button). 기기에 세션이 있으면
+//     새 익명 계정을 만들지 않는다 (새 익명 로그인은 세션이 없을 때만)
+//   §6 익명 로그인 실패 -> 빈 첫 화면(여행 만들기)은 보인다. 여행 만들기에서 다시 로그인. 데모는 로그인 없이 시작
+//     §10 Q7: 여행 만들기에서 다시 해도 실패하면 "지금 연결이 안 돼. 잠시 뒤에 다시 해 줘" + [다시], 입력값 그대로
+//   §6·§10 Q3·Q12 DB 연결 실패 = 서버 503 STORAGE_UNAVAILABLE -> "지금 저장소에 못 붙었어" + [다시] (첫 화면, 여행 만들기는 입력값 그대로)
+//   §10 Q4: Bearer는 여행·계획·여행 중·장소 검색 요청 모두에
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { apiError, FakeServer, json } from '../test-support/fake-server';
@@ -29,6 +33,11 @@ const METRICS = { frame: { x: 0, y: 0, width: 402, height: 874 }, insets: { top:
 const CURRENT = 'GET /trips/current';
 const NO_TRIP = apiError(404, 'NOT_FOUND', { resource: 'trip' });
 const STORAGE_DOWN = '지금 저장소에 못 붙었어'; // §6
+const AUTH_FAILED = '로그인 정보를 확인하지 못했어'; // §10 Q6
+const SIGNIN_DOWN = '지금 연결이 안 돼. 잠시 뒤에 다시 해 줘'; // §10 Q7
+const CREATE = 'POST /trips';
+const STORAGE_503 = apiError(503, 'STORAGE_UNAVAILABLE');
+const NOW_ISO = '2026-12-02T03:00:00Z'; // 도시 시간대 2026-12-02 12:00 (달력에서 12-10·12-11을 고를 수 있다)
 const TRIP = {
   trip_id: 'trip-osaka-1',
   city_code: 'osaka',
@@ -48,6 +57,43 @@ function startHome() {
   );
 }
 
+function freezeDate(iso: string) {
+  jest.useFakeTimers({
+    now: Date.parse(iso),
+    doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
+  });
+}
+
+const settleAll = async () => {
+  await act(async () => {
+    await new Promise<void>((done) => setImmediate(done));
+  });
+};
+
+/** 빈 첫 화면 -> [여행 만들기] -> 날짜 두 개 고르기 (task-010-create-trip과 같은 방법) */
+async function toFormWithDates() {
+  server.on(CURRENT, NO_TRIP);
+  await startHome();
+  await tap(await screen.findByText('여행 만들기'));
+  await screen.findByTestId('create-trip-submit');
+  await tap(await screen.findByTestId('field-start-date'));
+  await screen.findByTestId('calendar-sheet');
+  await tap(await screen.findByTestId('cal-day-2026-12-10'));
+  await tap(await screen.findByTestId('cal-day-2026-12-11'));
+  await tap(screen.getByTestId('calendar-confirm'));
+  await settleAll();
+}
+
+const DATES_BODY = { city_code: 'osaka', start_date: '2026-12-10', end_date: '2026-12-11', must_visits: [] };
+
+/** [다시]를 누른다. 다시 보내지 않았으면(로그인만 다시 했으면) 주 버튼을 한 번 더 */
+async function retryCreate(before: number) {
+  await tap(screen.getByTestId('retry-button'));
+  await settleAll();
+  if (server.sent(CREATE).length === before) await tap(screen.getByTestId('create-trip-submit'));
+  await waitFor(() => expect(server.sent(CREATE).length).toBe(before + 1));
+}
+
 const auth = (server: FakeServer, route: string) => server.sent(route).map((sent) => server.headers(sent).authorization);
 const tokenOf = async () => (await authFake.session())?.access_token;
 
@@ -56,11 +102,13 @@ const realDev = (globalThis as { __DEV__?: boolean }).__DEV__;
 
 beforeEach(() => {
   resetDevice();
+  freezeDate(NOW_ISO);
   server = new FakeServer();
 });
 
 afterEach(() => {
   (globalThis as { __DEV__?: boolean }).__DEV__ = realDev;
+  jest.useRealTimers();
   jest.restoreAllMocks();
 });
 
@@ -108,6 +156,28 @@ describe('B1 익명 로그인', () => {
 // ---------- B2 요청에 Bearer, X-Device-Id 없음 ----------
 
 describe('B2 요청 헤더', () => {
+  test('T12_Q4_계획_대화_시작_요청에도_Bearer', async () => {
+    server.on(CURRENT, json(200, TRIP)).on('POST /days/day-t1/planning', json(201, session));
+    await startHome();
+    await tap(await screen.findByTestId('day-row-day-t1'));
+    await waitFor(() => expect(server.sent('POST /days/day-t1/planning')).toHaveLength(1));
+    expect(auth(server, 'POST /days/day-t1/planning')).toEqual([`Bearer ${await tokenOf()}`]);
+  });
+
+  test('T12_Q4_장소_검색_요청에도_Bearer', async () => {
+    server.match('GET /places/search', () => json(200, []));
+    await toFormWithDates();
+    await tap(await screen.findByTestId('tab-day-2026-12-10'));
+    await fireEvent.changeText(await screen.findByTestId('must-search'), '구로');
+    await settleAll();
+    const sent = await waitFor(() => {
+      const found = server.requests.filter((r) => r.path.startsWith('/places/search'));
+      expect(found.length).toBeGreaterThan(0);
+      return found;
+    });
+    for (const one of sent) expect(server.headers(one).authorization).toBe(`Bearer ${await tokenOf()}`);
+  });
+
   test('T12_B2_지금_여행_요청에_Bearer_지금_토큰_X_Device_Id_없음', async () => {
     server.on(CURRENT, json(200, TRIP));
     await startHome();
@@ -132,16 +202,42 @@ describe('B4 401', () => {
     expect(second).toBe(`Bearer ${await tokenOf()}`);
   });
 
-  test('T12_B4_새로_받아도_401이면_익명_로그인부터_끝없이_되풀이하지_않는다', async () => {
+  // §10 Q6로 바뀜 (이전: 그래도 401이면 익명 로그인부터). 세션이 있는 기기에서 새 익명 계정을 만들면 연결 전 여행을 잃는다
+  test('T12_B4_Q6_새로_받아도_401이면_안내와_다시_새_익명_계정을_만들지_않는다', async () => {
     server.on(CURRENT, apiError(401, 'UNAUTHORIZED'));
     await startHome();
-    await waitFor(() => expect(authFake.signIns()).toBe(2)); // 처음 + "익명 로그인부터"
+    expect(await screen.findByText(AUTH_FAILED)).toBeTruthy();
+    expect(screen.getByTestId('retry-button')).toBeTruthy();
     expect(authFake.refreshes()).toBe(1);
-    await act(async () => {
-      await new Promise<void>((done) => setTimeout(done, 50));
-    });
-    expect(server.sent(CURRENT).length).toBeLessThanOrEqual(3);
-    expect(screen.queryByTestId('app-loading')).toBeNull(); // 멈춘 로딩이 아니다
+    expect(authFake.signIns()).toBe(1); // 처음 (세션이 없던 때) 한 번뿐
+    expect(server.sent(CURRENT)).toHaveLength(2); // 처음 + 새 토큰으로 한 번 더
+    expect(screen.queryByTestId('app-loading')).toBeNull();
+  });
+
+  test('T12_B4_Q6_새로_받기가_실패해도_같은_안내_다시_보내지_않는다', async () => {
+    authFake.failRefresh(1);
+    server.on(CURRENT, apiError(401, 'UNAUTHORIZED'));
+    await startHome();
+    expect(await screen.findByText(AUTH_FAILED)).toBeTruthy();
+    expect(authFake.signIns()).toBe(1);
+    expect(server.sent(CURRENT)).toHaveLength(1);
+  });
+
+  test('T12_B4_Q6_기기에_있던_세션이면_401이_이어져도_익명_로그인_0', async () => {
+    await authFake.keepSession();
+    server.on(CURRENT, apiError(401, 'UNAUTHORIZED'));
+    await startHome();
+    await screen.findByText(AUTH_FAILED);
+    expect(authFake.signIns()).toBe(0);
+  });
+
+  test('T12_B4_Q6_안내의_다시를_누르면_다시_묻고_되면_날짜_목록', async () => {
+    server.once(CURRENT, apiError(401, 'UNAUTHORIZED')).once(CURRENT, apiError(401, 'UNAUTHORIZED')).on(CURRENT, json(200, TRIP));
+    await startHome();
+    await screen.findByText(AUTH_FAILED);
+    await tap(screen.getByTestId('retry-button'));
+    expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
+    expect(authFake.signIns()).toBe(1);
   });
 
   test('T12_B4_한_번_401뒤_성공하면_그_뒤_요청은_새_토큰', async () => {
@@ -169,12 +265,17 @@ describe('§6 익명 로그인 실패', () => {
     expect(screen.queryByTestId('app-loading')).toBeNull();
   });
 
-  test('T12_S6_여행_만들기를_누르면_익명_로그인을_다시_한다', async () => {
-    authFake.failSignIn(1);
-    server.on(CURRENT, NO_TRIP);
-    await startHome();
-    await tap(await screen.findByTestId('home-create'));
-    await waitFor(() => expect(authFake.signIns()).toBe(2));
+  test('T12_S6_Q7_여행_만들기에서_다시_로그인하고_또_실패하면_안내·다시_입력값_그대로', async () => {
+    authFake.failSignIn(99);
+    await toFormWithDates();
+    await tap(screen.getByTestId('create-trip-submit'));
+    expect(await screen.findByText(SIGNIN_DOWN)).toBeTruthy();
+    expect(authFake.signIns()).toBeGreaterThanOrEqual(2); // 처음 + 여행 만들기에서 다시
+    expect(server.sent(CREATE)).toEqual([]); // 토큰 없이 보내지 않는다
+    authFake.failSignIn(0); // 연결이 돌아옴
+    await retryCreate(0);
+    expect(server.sent(CREATE)[0].body).toEqual(DATES_BODY); // 고른 날짜 그대로
+    expect(server.headers(server.sent(CREATE)[0]).authorization).toBe(`Bearer ${await tokenOf()}`);
   });
 
   test('T12_S6_데모는_로그인_없이_시작된다', async () => {
@@ -190,7 +291,7 @@ describe('§6 익명 로그인 실패', () => {
 
 describe('§6 DB 연결 실패 (서버 503)', () => {
   test('T12_S6_지금_여행이_503이면_저장소_안내와_다시_버튼', async () => {
-    server.once(CURRENT, apiError(503, 'CODE_미정')).on(CURRENT, json(200, TRIP));
+    server.once(CURRENT, STORAGE_503).on(CURRENT, json(200, TRIP));
     await startHome();
     expect(await screen.findByText(STORAGE_DOWN)).toBeTruthy();
     await tap(screen.getByTestId('retry-button'));
@@ -199,11 +300,25 @@ describe('§6 DB 연결 실패 (서버 503)', () => {
   });
 
   test('T12_S6_503은_로그인_문제가_아니라_토큰을_다시_받지_않는다', async () => {
-    server.on(CURRENT, apiError(503, 'CODE_미정'));
+    server.on(CURRENT, STORAGE_503);
     await startHome();
     await screen.findByText(STORAGE_DOWN);
     expect(authFake.refreshes()).toBe(0);
     expect(authFake.signIns()).toBe(1);
+  });
+});
+
+describe('§10 Q12 여행 만들기 503', () => {
+  test('T12_Q12_만들기가_503이면_저장소_안내·다시_입력값_그대로', async () => {
+    server.once(CREATE, STORAGE_503).on(CREATE, json(201, TRIP));
+    await toFormWithDates();
+    await tap(screen.getByTestId('create-trip-submit'));
+    expect(await screen.findByText(STORAGE_DOWN)).toBeTruthy();
+    expect(screen.queryByTestId('day-row-day-t1')).toBeNull();
+    await retryCreate(1);
+    expect(server.sent(CREATE)[1].body).toEqual(server.sent(CREATE)[0].body);
+    expect(server.sent(CREATE)[0].body).toEqual(DATES_BODY);
+    expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
   });
 });
 

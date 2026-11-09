@@ -21,10 +21,11 @@ OTHER = "device-B"
 
 
 def seed(osaka, body: dict | None = None, device: str | None = None):
+    client = osaka.client if device else osaka.anon  # TASK-012: 토큰 없는 시드 = 기본 헤더 없는 클라이언트
     headers = bearer(device) if device else {}
     if body is None:
-        return osaka.client.post("/debug/seed-demo", headers=headers)
-    return osaka.client.post("/debug/seed-demo", json=body, headers=headers)
+        return client.post("/debug/seed-demo", headers=headers)
+    return client.post("/debug/seed-demo", json=body, headers=headers)
 
 
 # ---------- (1) 헤더 + past_days -> 그 기기의 지금 여행 ----------

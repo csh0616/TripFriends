@@ -14,6 +14,7 @@ Q12(열린 사건이 있는데 다른 장소에서 늦어지면 옛 사건은 �
     고른 코스는 그대로 planning 저장소의 chosen_option / get_option (B-3 "그날의 선택")
 """
 
+from auth_helpers import TESTER, bearer  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import ast
 import logging
 import re
@@ -119,7 +120,7 @@ def assert_view(view: dict) -> None:
 @pytest.fixture
 def quiet_env(env):
     """서버 예외를 테스트로 다시 던지지 않고 500 응답으로 받는다 (TASK-003 R1 재현 방식)."""
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     return env
 
 

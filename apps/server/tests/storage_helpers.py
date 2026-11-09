@@ -8,9 +8,8 @@ import os
 import uuid
 
 import pytest
-from fastapi.testclient import TestClient
 
-from auth_helpers import FAKE_JWT_SECRET, JWT_SECRET_ENV
+from auth_helpers import install_fake_jwks
 from conftest import TEST_DB_ENV
 from planning.repo import MemoryPlanningRepo, PlanningRepo
 from trip.repo import MemoryTripRepo, TripRepo
@@ -28,12 +27,14 @@ def db_url() -> str:
     return url
 
 
-def planning_repo(kind: str) -> PlanningRepo:
+def planning_repo(kind: str, city=None, clock=None) -> PlanningRepo:
+    """§10 Q1: Postgres 쪽은 장소·좌표를 도시 데이터(city)에서 clock() 시각으로 되살린다. 메모리는 받은 값을 그대로 둔다."""
     if kind == "memory":
         return MemoryPlanningRepo()
     from store.postgres import PostgresPlanningRepo
 
-    return PostgresPlanningRepo(db_url())
+    assert city is not None and clock is not None
+    return PostgresPlanningRepo(db_url(), city, clock)
 
 
 def trip_repo(kind: str) -> TripRepo:
@@ -45,21 +46,12 @@ def trip_repo(kind: str) -> TripRepo:
 
 
 def server_env(monkeypatch, kind: str) -> None:
-    """서버를 켜기 전 환경: 가짜 오사카, 바깥 키 없음, 가짜 JWT 비밀값. postgres면 DATABASE_URL = 로컬 테스트 DB."""
+    """서버를 켜기 전 환경: 가짜 오사카, 바깥 키 없음, 가짜 JWKS(§10 Q2). postgres면 DATABASE_URL = 로컬 테스트 DB."""
     for name in ("AI_GATEWAY_API_KEY", "APP_ENV", "GOOGLE_PLACES_API_KEY", "SERPER_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("PLACES_PROVIDER", "fake")
-    monkeypatch.setenv(JWT_SECRET_ENV, FAKE_JWT_SECRET)
+    install_fake_jwks(monkeypatch)
     if kind == "postgres":
         monkeypatch.setenv("DATABASE_URL", db_url())
     else:
         monkeypatch.delenv("DATABASE_URL", raising=False)
-
-
-def start(app, raise_errors: bool = True):
-    """서버 한 번 켜기 (with 블록 = lifespan). Osaka 도우미를 돌려준다."""
-    from test_task010_trips import Osaka
-
-    client = TestClient(app, raise_server_exceptions=raise_errors)
-    client.__enter__()
-    return client, Osaka(client, app)

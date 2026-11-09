@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
-from auth_helpers import FAKE_JWT_SECRET, JWT_SECRET_ENV, bearer  # TASK-012 B2: X-Device-Id 대신 Bearer (사용자 이름 -> 늘 같은 user_id)
+from auth_helpers import bearer, install_fake_jwks  # TASK-012 B2: X-Device-Id 대신 Bearer (사용자 이름 -> 늘 같은 user_id)
 
 # 2026-12-01 12:00 JST (도시 시간대 오늘 = 12-01)
 NOON = datetime(2026, 12, 1, 3, 0, tzinfo=UTC)
@@ -43,6 +43,11 @@ class Osaka:
     def __init__(self, client: TestClient, app):
         self.client, self.app = client, app
         self.set_now(NOON)
+
+    @property
+    def anon(self) -> TestClient:
+        """토큰 없는 요청용 (TASK-012 B2). 서버 시작은 client가 이미 했다."""
+        return TestClient(self.app, raise_server_exceptions=False)
 
     def set_now(self, when: datetime) -> None:
         self.app.state.clock = lambda: when
@@ -83,8 +88,9 @@ def osaka(monkeypatch):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("PLACES_PROVIDER", "fake")
     monkeypatch.delenv("DATABASE_URL", raising=False)  # TASK-012: 기본은 메모리 저장소 (DB 쪽은 test_task012_*의 db 테스트)
-    monkeypatch.setenv(JWT_SECRET_ENV, FAKE_JWT_SECRET)  # TASK-012 B2: 테스트 안에서 만든 가짜 비밀값
-    with TestClient(app) as client:
+    install_fake_jwks(monkeypatch)  # TASK-012 §10 Q2: 가짜 P-256 키의 JWKS (네트워크 0)
+    # TASK-012 §10 Q4: 계획·여행 중·장소 검색도 Bearer. 헤더를 따로 주지 않은 요청은 DEVICE 사용자 (따로 주면 그것이 이긴다)
+    with TestClient(app, headers=bearer(DEVICE)) as client:
         yield Osaka(client, app)
 
 
@@ -240,9 +246,9 @@ def test_T10_B1_속성_기간과_시작일이_둘_다_맞을_때만_201(osaka, d
 def test_T12_B2_토큰이_없으면_401(osaka, call):
     # TASK-012 B2로 바뀜 (이전: TASK-010 §9 Q16 X-Device-Id 없으면 400). 없는 토큰은 401 공통 형식
     if call == "post":
-        response = osaka.client.post("/trips", json=trip_body())
+        response = osaka.anon.post("/trips", json=trip_body())
     else:
-        response = osaka.client.get("/trips/current")
+        response = osaka.anon.get("/trips/current")
     assert response.status_code == 401, response.text
     error = response.json()["error"]
     assert isinstance(error["code"], str) and error["code"] and error["message"]
@@ -603,7 +609,8 @@ def test_T10_Q11_가짜_모드는_팩을_메모리에서_만들고_파일을_쓰
     before = {p: (p.exists(), p.stat().st_mtime_ns if p.exists() else None) for p in watched}
     monkeypatch.setenv("PLACES_PROVIDER", "fake")
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
-    with TestClient(app) as client:
+    install_fake_jwks(monkeypatch)
+    with TestClient(app, headers=bearer(DEVICE)) as client:  # TASK-012 §10 Q4: 장소 검색도 Bearer
         assert client.get("/places/search", params={"city_code": "osaka", "q": "구로몬"}).json()
     assert {p: (p.exists(), p.stat().st_mtime_ns if p.exists() else None) for p in watched} == before
 
@@ -617,7 +624,8 @@ def test_T10_K_키_값은_로그에_찍지_않는다(monkeypatch, caplog):
     monkeypatch.setenv("PLACES_PROVIDER", "fake")
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
     caplog.set_level(logging.DEBUG)
-    with TestClient(app) as client:
+    install_fake_jwks(monkeypatch)
+    with TestClient(app, headers=bearer(DEVICE)) as client:  # TASK-012 §10 Q4: 숙소 검색도 Bearer (없으면 401이라 Google 쪽까지 가지 않는다)
         client.get("/places/lodging-search", params={"city_code": "osaka", "q": "호텔"})
     for record in caplog.records:
         assert secret_google not in record.getMessage() and secret_serper not in record.getMessage()

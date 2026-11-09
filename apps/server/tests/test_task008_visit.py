@@ -31,6 +31,7 @@ API 본문은 TASK-008 A5(`{day_id, at, was_open}`)가 정본 (§11 Q1, API-001 
     대안을 반영(accept)하면 그날 꼭 갈 곳 목록이 planning 저장소 get_day(day_id).plan.must_visit에서 바뀐다 (§7)
 """
 
+from auth_helpers import TESTER, bearer  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import ast
 import logging
 import sys
@@ -89,7 +90,7 @@ def without_logs(found: dict) -> dict:
 
 @pytest.fixture
 def quiet_env(env):
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     return env
 
 

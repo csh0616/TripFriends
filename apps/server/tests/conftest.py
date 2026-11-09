@@ -62,14 +62,15 @@ def env(monkeypatch):
     from fastapi.testclient import TestClient
 
     from api.main import app
-    from auth_helpers import FAKE_JWT_SECRET, JWT_SECRET_ENV
+    from auth_helpers import TESTER, bearer, install_fake_jwks
     from planning_api_helpers import PlanningEnv
 
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
     monkeypatch.delenv("APP_ENV", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)  # TASK-012: 기본 테스트는 메모리 저장소
-    monkeypatch.setenv(JWT_SECRET_ENV, FAKE_JWT_SECRET)  # TASK-012 B2: 테스트 안에서 만든 가짜 비밀값
-    with TestClient(app) as client:
+    install_fake_jwks(monkeypatch)  # TASK-012 §10 Q2: 가짜 P-256 키의 JWKS (네트워크 0)
+    # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer가 필요하다. 이 환경의 요청은 모두 테스트 사용자 토큰을 싣는다
+    with TestClient(app, headers=bearer(TESTER)) as client:
         yield PlanningEnv(client, app)
 
 

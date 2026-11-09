@@ -6,7 +6,7 @@ TASK-010 §B2(여행 하나, 이전 여행은 archived), API-001 §1 오류 형�
     서버는 환경 변수 DATABASE_URL이 있으면 Postgres 저장소·Postgres 체크포인터로, 없으면 지금처럼 메모리로 켠다
     서버를 다시 켜는 것 = 같은 app으로 TestClient를 한 번 닫고 다시 연다 (lifespan을 다시 돈다)
     A3: 저장소 메서드(app.state.planning_repo의 클래스)가 저장 중간에 예외 -> 500 INTERNAL_ERROR 공통 형식,
-        app.state의 snapshot() 가진 저장소 전부와 GET 결과가 요청 전과 같다
+        app.state의 snapshot() 가진 저장소 전부와 GET 결과가 요청 전과 같다. §10 Q8: **메모리도 되돌린다** (두 구현에 같은 테스트)
 """
 
 import pytest
@@ -20,8 +20,9 @@ from trip_helpers import stores
 ME, YOU = "user-A", "user-B"
 
 
-def open_server(app, raise_errors: bool = True):
-    return TestClient(app, raise_server_exceptions=raise_errors)
+def open_server(app, raise_errors: bool = True, user: str | None = ME):
+    """헤더를 따로 주지 않은 요청은 user의 Bearer (§10 Q4: 계획 API도 Bearer). user=None이면 토큰 없음."""
+    return TestClient(app, raise_server_exceptions=raise_errors, headers=bearer(user) if user else None)
 
 
 def assert_common(response, status: int, code: str | None = None) -> dict:
@@ -69,12 +70,12 @@ def boom(*_args, **_kwargs):
     raise RuntimeError("저장 중간 실패 (테스트가 일부러 낸 예외)")
 
 
-@pytest.mark.db
-def test_T12_A3_AC3_여행_만들기_저장_중간에_예외면_500이고_DB는_요청_전과_같다(monkeypatch):
+@pytest.mark.parametrize("kind", KINDS)
+def test_T12_A3_AC3_Q8_여행_만들기_저장_중간에_예외면_500이고_저장소는_요청_전과_같다(monkeypatch, kind):
     # TripBook.create는 날 저장(save_day) -> 여행 저장(save_trip) -> 이전 여행 보관 순서. 가운데서 실패시킨다
     from api.main import app
 
-    server_env(monkeypatch, "postgres")
+    server_env(monkeypatch, kind)
     with open_server(app, raise_errors=False) as client:
         osaka = Osaka(client, app)
         old = osaka.make_trip(days=2, device=ME)
@@ -87,12 +88,12 @@ def test_T12_A3_AC3_여행_만들기_저장_중간에_예외면_500이고_DB는_
         assert current["trip_id"] == old["trip_id"] and current["status"] == "active"  # 이전 여행이 보관되지 않았다
 
 
-@pytest.mark.db
-def test_T12_A3_AC3_고정_일정_저장_중간에_예외면_500이고_고정_일정이_남지_않는다(monkeypatch):
+@pytest.mark.parametrize("kind", KINDS)
+def test_T12_A3_AC3_Q8_고정_일정_저장_중간에_예외면_500이고_고정_일정이_남지_않는다(monkeypatch, kind):
     # add_fixed는 고정 일정 저장 -> 그날 계획 다시 저장(save_day) 순서. 뒤쪽에서 실패시킨다
     from api.main import app
 
-    server_env(monkeypatch, "postgres")
+    server_env(monkeypatch, kind)
     with open_server(app, raise_errors=False) as client:
         osaka = Osaka(client, app)
         trip = osaka.make_trip(days=2, device=ME)
@@ -174,7 +175,9 @@ def test_T12_A5_데모_시드도_DB에_저장되고_다시_켜도_그_사용자�
         trip_id = seeded.json()["trip_id"]
     with open_server(app) as client:
         osaka = Osaka(client, app)
-        assert osaka.current(ME).json()["trip_id"] == trip_id
+        current = osaka.current(ME).json()
+        assert current["trip_id"] == trip_id
+        assert current["is_demo"] is True  # §10 Q11
 
 
 @pytest.mark.db
@@ -183,7 +186,7 @@ def test_T12_A5_데모는_로그인_없이도_만들어진다_DB_모드(monkeypa
     from api.main import app
 
     server_env(monkeypatch, "postgres")
-    with open_server(app) as client:
+    with open_server(app, user=None) as client:
         seeded = client.post("/debug/seed-demo")
         assert seeded.status_code == 201, seeded.text
         assert set(seeded.json()) == {"trip_id", "day_ids"}

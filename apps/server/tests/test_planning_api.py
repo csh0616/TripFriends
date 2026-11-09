@@ -1,5 +1,6 @@
 """완료 기준과 오류. 근거: TASK-003 §4, §5, §10, AC-6·7·10~16·18~20, DATA-001 C·D, TASK-002 §7 Q15·Q16, §8 Q37."""
 
+from auth_helpers import TESTER, bearer  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import ast
 import importlib
 import json
@@ -581,12 +582,12 @@ def test_F34_AC16_요청마다_클라이언트가_달라도_같은_저장소와_
         original(self, *args, **kwargs)
 
     monkeypatch.setattr(MemoryPlanningRepo, "__init__", spy)
-    session = TestClient(env.app).post(f"/days/{day_id}/planning", json={"mode": "conversation"}).json()
+    session = TestClient(env.app, headers=bearer(TESTER)).post(f"/days/{day_id}/planning", json={"mode": "conversation"}).json()
     sid = session["session_id"]
-    assert TestClient(env.app).post(f"/planning/{sid}/answer", json={"choice_ids": []}).status_code == 200
-    response = TestClient(env.app).post(f"/planning/{sid}/reactions", json={"place_id": "P01", "action": "like"})
+    assert TestClient(env.app, headers=bearer(TESTER)).post(f"/planning/{sid}/answer", json={"choice_ids": []}).status_code == 200
+    response = TestClient(env.app, headers=bearer(TESTER)).post(f"/planning/{sid}/reactions", json={"place_id": "P01", "action": "like"})
     assert response.json()["picks"] == ["P01"]
-    second = TestClient(env.app).post(f"/planning/{sid}/next", json={})
+    second = TestClient(env.app, headers=bearer(TESTER)).post(f"/planning/{sid}/next", json={})
     assert second.json()["round"] == 2
     assert created == []
     assert env.repo is repo
@@ -1091,7 +1092,7 @@ def test_F82_Q41_R5_더_고를래_뒤_옛_ID로_adjust도_select도_404(env):
 
 
 def test_F76_Q24_R3_오류_코드는_5개_값까지(env, monkeypatch):
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     sid, course = env.composing(env.plant_day(city()), likes=("P01",))
     with monkeypatch.context() as patch:
         patch.setattr("graphs.planning.compose_courses", raise_forced)
@@ -1122,7 +1123,7 @@ def test_F85_R2_없는_경로도_공통_형식_404(env, method, path):
 @pytest.fixture
 def quiet_env(env):
     """서버 예외를 테스트로 다시 던지지 않고 500 응답으로 받는다."""
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     return env
 
 

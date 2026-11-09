@@ -6,6 +6,7 @@ E5: 서버 요청 로그(서버 쪽 로거 전부, 테스트 클라이언트 htt
     §9 Q19: uvicorn 요청 줄(로거 "uvicorn.access")은 남기고, 쿼리로 위치가 와도 위치 값만 가린다.
 """
 
+from auth_helpers import TESTER, bearer  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import logging
 from datetime import date
 
@@ -102,7 +103,7 @@ def test_T10_E5_처리_중_500이어도_로그에_위치가_없다(env, chosen_d
 
     monkeypatch.setattr(env.app.state.trip_service, "check", boom)
     caplog.set_level(logging.DEBUG)
-    client = TestClient(env.app, raise_server_exceptions=False)  # 서버 시작은 env가 이미 했다. 500 응답을 그대로 받는다
+    client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)  # 서버 시작은 env가 이미 했다. 500 응답을 그대로 받는다
     response = client.post(f"/days/{chosen_day}/check", json={"at": "2026-12-02T12:00", "lat": float(LAT), "lng": float(LNG)})
     assert response.status_code == 500
     assert server_messages(caplog), "500은 로그를 남긴다 (원인은 로그에만, TASK-003 R11)"

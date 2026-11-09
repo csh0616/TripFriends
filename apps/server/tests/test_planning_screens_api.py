@@ -1,5 +1,6 @@
 """앱 화면용 서버 소작업. 근거: TASK-004 §A(A1~A5), §12-1(A6, A7, Q1, Q2, Q3), §13-1(A8), AC-2, AC-3, TASK-003 §5, §6, §10(원칙 1·2, Q6, Q37, Q38, R1, R4, R5, R11, R12)."""
 
+from auth_helpers import TESTER, bearer  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import json
 from datetime import date
 from pathlib import Path
@@ -53,7 +54,7 @@ def city(count=24):
 @pytest.fixture
 def quiet_env(env):
     """서버 예외를 테스트로 다시 던지지 않고 500 응답으로 받는다."""
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     return env
 
 

@@ -29,6 +29,8 @@ R1_TABLES = {
     "trip_events", "recompose_proposals", "visit_checks",
     # B 중 사용자 확인만 (A1)
     "place_facts",
+    # F 중 R1이 이미 쓰는 판단 기록 (§10 Q10)
+    "decision_logs",
 }
 # 위치 열 이름 (api/main.py 위치 가리기 _POSITION_QUERY와 같은 이름 + 좌표·위치 뜻의 이름)
 LOCATION_NAME = re.compile(r"(^|_)(lat|lng|lon|latitude|longitude|location|position|coords?|coordinates|geom|geog|geometry|geography|point)($|_)")
@@ -167,6 +169,15 @@ def test_T12_A5_trips에_is_demo_열():
     columns = schema()["trips"]["columns"]
     assert "is_demo" in columns
     assert "bool" in columns["is_demo"]
+
+
+def test_T12_Q5_trips_owner_id가_비는_것은_데모_여행일_때만():
+    # §10 Q5: 로그인 없는 데모 여행만 주인이 비어도 된다. 표의 제약으로 고정: owner_id가 null이면 is_demo가 true여야 한다
+    text = schema()["trips"]["text"]
+    assert "owner_id" in schema()["trips"]["columns"]
+    assert re.search(r"check\s*\([^;]*owner_id\s+is\s+not\s+null[^;]*is_demo|check\s*\([^;]*is_demo[^;]*owner_id\s+is\s+not\s+null", text), (
+        "trips에 'owner_id is not null or is_demo' 같은 제약이 없다 (§10 Q5)"
+    )
 
 
 # ---------- A6 위치 열 0 (AC-4) ----------
