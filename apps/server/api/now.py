@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 from fastapi import APIRouter, Request
 
+from api.access import UserId, require_day
 from api.planning import _doc
 from planning.service import PlanningError
 from trip.schemas import NowView
@@ -32,7 +33,9 @@ def parse_at(raw: str | None) -> datetime:
     responses=_doc(400, 404),
     summary="여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 받지 않음, 위치는 POST /check)",
 )
-def get_now(day_id: str, request: Request, at: str | None = None) -> NowView:
-    # 순서 (TASK-003 Q40, TASK-006 R9): 쿼리 형식 400 -> 없는 날 404 -> 고른 코스 없음 404 -> 하루 밖 날짜 400
+def get_now(day_id: str, request: Request, user: UserId, at: str | None = None) -> NowView:
+    # 순서 (TASK-003 Q40, TASK-006 R9): 쿼리 형식 400 -> 없는(남의) 날 404 -> 고른 코스 없음 404 -> 하루 밖 날짜 400
     # TASK-007 B-4: lat·lng 쿼리는 받지 않는다 (보내도 무시)
-    return request.app.state.trip_service.now(day_id, parse_at(at))
+    when = parse_at(at)
+    require_day(request, user, day_id)
+    return request.app.state.trip_service.now(day_id, when)

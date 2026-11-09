@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, StrictBool, field_validator, model_validator
 
+from api.access import UserId, require_day, require_event, require_proposal
 from api.now import parse_at
 from api.planning import _doc
 from planning.service import PlanningError
@@ -59,19 +60,22 @@ def service(request: Request) -> TripService:
 
 
 @router.post("/days/{day_id}/check", responses=_doc(400, 404), summary="여행 중 확인: 시각·위치로 늦어짐 감지 (위치는 저장하지 않음)")
-def check(day_id: str, body: CheckRequest, request: Request) -> NowView:
+def check(day_id: str, body: CheckRequest, request: Request, user: UserId) -> NowView:
+    require_day(request, user, day_id)
     position = (body.lat, body.lng) if body.lat is not None and body.lng is not None else None
     when: datetime = parse_at(body.at)
     return service(request).check(day_id, when, position)
 
 
 @router.post("/proposals/{proposal_id}/accept", responses=_doc(404, 409), summary="대안 반영")
-def accept(proposal_id: str, request: Request) -> NowView:
+def accept(proposal_id: str, request: Request, user: UserId) -> NowView:
+    require_proposal(request, user, proposal_id)
     return service(request).accept(proposal_id)
 
 
 @router.post("/events/{event_id}/dismiss", responses=_doc(404, 409), summary="대안 사양: 일정 그대로")
-def dismiss(event_id: str, request: Request) -> NowView:
+def dismiss(event_id: str, request: Request, user: UserId) -> NowView:
+    require_event(request, user, event_id)
     return service(request).dismiss(event_id)
 
 
@@ -80,5 +84,6 @@ def dismiss(event_id: str, request: Request) -> NowView:
     responses=_doc(400, 404, 409),
     summary="영업 확인 답: 열었어/닫혔어 (그날만 사용자 확인으로 저장, 닫혔어면 대안 계산)",
 )
-def visit_check(place_id: str, body: VisitCheckRequest, request: Request) -> NowView:
+def visit_check(place_id: str, body: VisitCheckRequest, request: Request, user: UserId) -> NowView:
+    require_day(request, user, body.day_id)
     return service(request).visit_check(place_id, body.day_id, parse_at(body.at), body.was_open)

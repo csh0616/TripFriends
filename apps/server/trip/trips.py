@@ -1,4 +1,4 @@
-"""여행 만들기·고정 일정·장소 검색 (TASK-010 §B). 메모리 저장 (서버를 다시 켜면 사라진다: 알려진 한계, TASK-011에서 Supabase).
+"""여행 만들기·고정 일정·장소 검색 (TASK-010 §B). 저장은 `trip.store.TripStore` 뒤에 있다 (메모리·Postgres, TASK-012 A2).
 
 원칙: 실패한 요청은 아무것도 바꾸지 않는다 -> 모든 검사를 끝낸 뒤에 저장한다.
 날 상태(state)는 저장하지 않고 응답을 만들 때마다 도시 시간대로 계산한다 (B6).
@@ -6,7 +6,6 @@
 
 import threading
 import uuid
-from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Literal
 from zoneinfo import ZoneInfo
@@ -21,6 +20,7 @@ from planning.seed import DAY_END, DAY_START
 from places.city import CityData
 from places.live import CAPS
 from trip.days import DayState, city_today, day_state
+from trip.store import FixedRow, MemoryTripStore, TripRow, TripStore
 from trip.visit import _limits as visit_limits, _meters as meters
 
 CITY_CODE = "osaka"
@@ -85,6 +85,7 @@ class Trip(BaseModel):
     end_date: date
     lodging_place_id: str | None  # place_id만 저장, 좌표는 캐시 (B5)
     status: Literal["active", "archived"]
+    is_demo: bool = False  # TASK-012 §10 Q11: 개발용 데모 여행 (A5)
     trip_days: list[TripDay]
 
 
@@ -140,37 +141,6 @@ class LodgingHit(BaseModel):
 # ---------- 저장 ----------
 
 
-@dataclass
-class _Trip:
-    trip_id: str
-    device_id: str
-    city_code: str
-    start_date: date
-    end_date: date
-    lodging_place_id: str | None
-    day_ids: list[str]
-    status: Literal["active", "archived"] = "active"
-    demo_today: date | None = None  # 데모 시드 전용: 이 여행의 날 상태를 계산하는 시계 (없으면 진짜 오늘)
-
-
-@dataclass
-class _Fixed:
-    fixed_event_id: str
-    trip_id: str
-    trip_day_id: str
-    title: str
-    start_at: datetime
-    end_at: datetime
-    place_id: str | None
-
-
-@dataclass
-class _Store:
-    trips: dict[str, _Trip] = field(default_factory=dict)
-    fixed: dict[str, _Fixed] = field(default_factory=dict)
-    day_trip: dict[str, str] = field(default_factory=dict)  # day_id -> trip_id
-
-
 def _brief(course: CourseResultOption) -> DayBrief | None:
     if not course.items:
         return None
@@ -189,9 +159,9 @@ def _hhmm(moment: datetime, day: date) -> str:
 
 
 class TripBook:
-    def __init__(self, planning: PlanningRepo, city: CityData, clock: Callable[[], datetime]):
+    def __init__(self, planning: PlanningRepo, city: CityData, clock: Callable[[], datetime], store: TripStore | None = None):
         self.planning, self.city, self.clock = planning, city, clock
-        self._store = _Store()
+        self.store: TripStore = store if store is not None else MemoryTripStore()
         self._lock = threading.RLock()
 
     # ---- 도우미 ----
@@ -202,19 +172,26 @@ class TripBook:
     def _today(self) -> date:
         return city_today(self.clock(), self.city.timezone)
 
-    def _own(self, trip_id: str, device_id: str) -> _Trip:
-        trip = self._store.trips.get(trip_id)
-        if trip is None or trip.device_id != device_id:  # 다른 기기의 여행은 없는 것과 같다
+    def _own(self, trip_id: str, user_id: str) -> TripRow:
+        trip = self.store.get_trip(trip_id)
+        if trip is None or trip.owner_id != user_id:  # 남의 여행은 없는 것과 같다 (§11 Q3)
             raise ApiError(404, "NOT_FOUND", "없는 여행이에요", {"resource": "trip", "trip_id": trip_id})
         return trip
 
-    def _view(self, trip: _Trip) -> Trip:
+    def owns_day(self, day_id: str, user_id: str) -> bool:
+        return self.store.day_owner(day_id) == user_id
+
+    def own_days(self, user_id: str, day_ids: list[str]) -> None:
+        """테스트·점검 전용: 저장소에 바로 심은 날을 이 사용자 것으로 둔다. 지금 여행·보관·영업시간 다시 부르기에 영향 없음."""
+        self.store.own_days(user_id, day_ids)
+
+    def _view(self, trip: TripRow) -> Trip:
         today = trip.demo_today or self._today()
         days: list[TripDay] = []
         for number, day_id in enumerate(trip.day_ids):
             chosen = self.planning.chosen_option(day_id)
             day = trip.start_date + timedelta(days=number)
-            events = sorted((f for f in self._store.fixed.values() if f.trip_day_id == day_id), key=lambda f: f.start_at)
+            events = self.store.fixed_for_day(day_id)
             record = self.planning.get_day(day_id)
             option = self.planning.get_option(chosen) if chosen else None
             days.append(
@@ -235,12 +212,13 @@ class TripBook:
             end_date=trip.end_date,
             lodging_place_id=trip.lodging_place_id,
             status=trip.status,
+            is_demo=trip.is_demo,
             trip_days=days,
         )
 
     # ---- B1·B2 ----
 
-    def create(self, device_id: str, body: TripCreate) -> Trip:
+    def create(self, user_id: str, body: TripCreate) -> Trip:
         rules = _rules()
         if body.city_code != CITY_CODE:
             raise invalid("city_code", "지금은 오사카만 만들 수 있어요")
@@ -286,36 +264,33 @@ class TripBook:
                 day_id = str(uuid.uuid4())
                 self.planning.save_day(day_id, plan, places, number + 1, lodging_known=lodging is not None, sources=sources)
                 day_ids.append(day_id)
-                self._store.day_trip[day_id] = trip_id
+            trip = TripRow(trip_id, user_id, body.city_code, body.start_date, body.end_date, body.lodging_place_id, day_ids)
+            self.store.add_trip(trip)  # 이전 여행은 지우지 않고 archived (B2). 요청 하나 = 트랜잭션 하나라 중간에 실패하면 모두 되돌아간다 (A3)
             self.planning.save_trip(trip_id, day_ids)
-            self._archive_active(device_id)
-            trip = _Trip(trip_id, device_id, body.city_code, body.start_date, body.end_date, body.lodging_place_id, day_ids)
-            self._store.trips[trip_id] = trip
             return self._view(trip)
 
-    def _archive_active(self, device_id: str) -> None:
-        for old in self._store.trips.values():
-            if old.device_id == device_id and old.status == "active":
-                old.status = "archived"  # 지우지 않는다 (B2)
-
-    def attach_demo(self, device_id: str, trip_id: str, day_ids: list[str], dates: list[date], demo_today: date) -> None:
-        """개발 점검 전용(승현 11-09): 데모 시드 여행을 이 기기의 지금 여행으로 붙인다. 이전 여행은 B2처럼 archived."""
+    def attach_demo(
+        self, user_id: str, trip_id: str, day_ids: list[str], dates: list[date], demo_today: date, as_current: bool = False
+    ) -> None:
+        """데모 시드 여행을 이 사용자 소유로 둔다 (§11 Q2, is_demo). 지금 여행은 바꾸지 않는다: as_current(개발 점검 전용, 승현 11-09)일 때만
+        그 사용자의 지금 여행으로 붙이고 이전 여행은 B2처럼 archived. 아니면 보관 상태(archived)로 둬서 /trips/current에 나오지 않는다."""
         with self._lock:
-            self._archive_active(device_id)
-            for day_id in day_ids:
-                self._store.day_trip[day_id] = trip_id
-            self._store.trips[trip_id] = _Trip(trip_id, device_id, CITY_CODE, dates[0], dates[-1], None, day_ids, demo_today=demo_today)
+            row = TripRow(
+                trip_id, user_id, CITY_CODE, dates[0], dates[-1], None, day_ids,
+                status="active" if as_current else "archived", is_demo=True, demo_today=demo_today,
+            )
+            self.store.add_trip(row, archive_active=as_current)
 
-    def current(self, device_id: str) -> Trip:
+    def current(self, user_id: str) -> Trip:
         with self._lock:
-            active = [t for t in self._store.trips.values() if t.device_id == device_id and t.status == "active"]
-            if not active:
+            active = self.store.active_trip(user_id)
+            if active is None:
                 raise ApiError(404, "NOT_FOUND", "여행이 없어요", {"resource": "trip"})
-            return self._view(active[-1])
+            return self._view(active)
 
-    def get(self, trip_id: str, device_id: str) -> Trip:
+    def get(self, trip_id: str, user_id: str) -> Trip:
         with self._lock:
-            return self._view(self._own(trip_id, device_id))
+            return self._view(self._own(trip_id, user_id))
 
     # ---- B3 고정 일정 ----
 
@@ -324,7 +299,7 @@ class TripBook:
         record = self.planning.get_day(day_id)
         assert record is not None
         fixed: list[PlanFixed] = []
-        for f in sorted((f for f in self._store.fixed.values() if f.trip_day_id == day_id), key=lambda f: f.start_at):
+        for f in self.store.fixed_for_day(day_id):
             place = record.places.get(f.place_id) if f.place_id else None
             fixed.append(
                 PlanFixed(
@@ -345,9 +320,9 @@ class TripBook:
         plan = record.plan.model_copy(update={"fixed": self._plan_fixed(day_id)})
         self.planning.save_day(day_id, plan, record.places, record.day_number, lodging_known=record.lodging_known, sources=record.sources)
 
-    def add_fixed(self, trip_id: str, device_id: str, body: FixedEventCreate) -> FixedEvent:
+    def add_fixed(self, trip_id: str, user_id: str, body: FixedEventCreate) -> FixedEvent:
         with self._lock:
-            trip = self._own(trip_id, device_id)
+            trip = self._own(trip_id, user_id)
             if body.trip_day_id not in trip.day_ids:
                 raise ApiError(404, "NOT_FOUND", "없는 날이에요", {"resource": "day", "day_id": body.trip_day_id})
             if self.planning.chosen_option(body.trip_day_id) is not None:
@@ -371,36 +346,34 @@ class TripBook:
                 raise invalid("end_at", "그날 안의 시각이어야 해요")
             if body.place_id is not None and body.place_id not in self.planning.get_day(body.trip_day_id).places:  # type: ignore[union-attr]
                 raise invalid("place_id", "이 도시에 없는 장소예요")
-            for other in self._store.fixed.values():
-                if other.trip_day_id == body.trip_day_id and start_at < other.end_at and other.start_at < end_at:
+            for other in self.store.fixed_for_day(body.trip_day_id):
+                if start_at < other.end_at and other.start_at < end_at:
                     raise invalid("start_at", "같은 날 다른 일정과 시간이 겹쳐요")  # 맞닿는 것은 겹침이 아니다
-            made = _Fixed(str(uuid.uuid4()), trip_id, body.trip_day_id, title, start_at, end_at, body.place_id)
-            self._store.fixed[made.fixed_event_id] = made
+            made = FixedRow(str(uuid.uuid4()), trip_id, body.trip_day_id, title, start_at, end_at, body.place_id)
+            self.store.add_fixed(made)
             self._sync_plan(body.trip_day_id)
             return _fixed_view(made)
 
-    def delete_fixed(self, fixed_event_id: str, device_id: str) -> None:
+    def delete_fixed(self, fixed_event_id: str, user_id: str) -> None:
         with self._lock:
-            found = self._store.fixed.get(fixed_event_id)
+            found = self.store.get_fixed(fixed_event_id)
             if found is None:
                 raise ApiError(404, "NOT_FOUND", "없는 고정 일정이에요", {"resource": "fixed_event", "fixed_event_id": fixed_event_id})
-            self._own(found.trip_id, device_id)
+            self._own(found.trip_id, user_id)
             if self.planning.chosen_option(found.trip_day_id) is not None:
                 raise ApiError(409, "PLAN_EXISTS", "계획을 이미 골랐어요. 계획을 다시 짜야 해요", {"day_id": found.trip_day_id})
-            del self._store.fixed[fixed_event_id]
+            self.store.delete_fixed(fixed_event_id)
             self._sync_plan(found.trip_day_id)
 
     # ---- 고른 코스 읽기 (§12 답 3) ----
 
-    def course(self, day_id: str, device_id: str) -> CourseResultOption:
-        """그날 고른 코스. 고르지 않은 날·다른 기기의 날·없는 날은 모두 404. 지난 날도 읽힌다."""
+    def course(self, day_id: str, user_id: str) -> CourseResultOption:
+        """그날 고른 코스. 고르지 않은 날·다른 사용자의 날·없는 날은 모두 404. 지난 날도 읽힌다."""
         with self._lock:
-            trip_id = self._store.day_trip.get(day_id)
-            trip = self._store.trips.get(trip_id) if trip_id else None
             option_id = self.planning.chosen_option(day_id)
             option = self.planning.get_option(option_id) if option_id else None
             record = self.planning.get_day(day_id)
-            if trip is None or trip.device_id != device_id or option is None or record is None:
+            if not self.owns_day(day_id, user_id) or option is None or record is None:
                 raise ApiError(404, "NOT_FOUND", "고른 코스가 없어요", {"resource": "course", "day_id": day_id})
             return option_view(option, record)
 
@@ -410,10 +383,11 @@ class TripBook:
         """실제 여행의 날이면 필요한 장소의 Google 영업시간을 부르고(메모리 1시간·동시 2초·상한), 그날 데이터에 반영한다.
 
         planning: 계획 세션 시작 - 그날 후보 전부. now: 여행 중 화면 - 오늘 코스·고정 일정 장소. alternatives: 닫힘 대안 - 닫힌 곳 1.5km 안 후보.
-        늦거나 실패한 곳은 LiveHours·facts의 대체 순서를 따르고, 계획·대안 찾기는 멈추지 않는다."""
+        늦거나 실패한 곳은 LiveHours·facts의 대체 순서를 따르고, 계획·대안 찾기는 멈추지 않는다. 데모 여행(is_demo)은 실제 여행이 아니라 부르지 않는다."""
         with self._lock:
             record = self.planning.get_day(day_id)
-            if record is None or day_id not in self._store.day_trip:
+            trip = self.store.trip_of_day(day_id)
+            if record is None or trip is None or trip.is_demo:
                 return
             ids = self._hour_targets(kind, day_id, record, place_id)
             now = self.clock()
@@ -455,5 +429,5 @@ class TripBook:
         ]
 
 
-def _fixed_view(f: _Fixed) -> FixedEvent:
+def _fixed_view(f: FixedRow) -> FixedEvent:
     return FixedEvent(fixed_event_id=f.fixed_event_id, trip_day_id=f.trip_day_id, title=f.title, start_at=f.start_at, end_at=f.end_at, place_id=f.place_id)

@@ -394,7 +394,7 @@ def new_state(event_id: str, day_id: str, finding: DelayFinding | ClosedFinding)
     return TripState(event_id=event_id, day_id=day_id, dedupe_key=finding.dedupe_key, k=finding.k).model_dump()
 
 
-def build_trip_graph(trip: TripRepo, planning: PlanningRepo):
+def build_trip_graph(trip: TripRepo, planning: PlanningRepo, checkpointer: Any | None = None):
     def run_of(config: RunnableConfig) -> _Run:
         return _Run(trip, planning, config["configurable"]["outbox"])
 
@@ -435,4 +435,4 @@ def build_trip_graph(trip: TripRepo, planning: PlanningRepo):
     builder.add_node("awaiting", wait_node("awaiting"), destinations=("awaiting", "resolved"))
     builder.add_node("resolved", wait_node("resolved"), destinations=("resolved",))
     builder.add_edge(START, "start")
-    return builder.compile(checkpointer=MemorySaver())
+    return builder.compile(checkpointer=checkpointer if checkpointer is not None else MemorySaver())

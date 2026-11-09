@@ -17,13 +17,20 @@ from catalog import get_catalog
 from deciders import JevDecider, RuleDecider
 from api.now import router as now_router
 from api.trip import router as trip_router
-from api.trips import DeviceHeader, device, api_error_handler, router as trips_router, trip_validation_handler
-from api.planning import drop_default_422, http_error_response, is_planning_path, is_trip_path, planning_error_handler, planning_validation_handler, router as planning_router
+from api.access import UserId
+from api.auth import JwksCache
+from api.gate import Gate, UnitOfWork
+from api.trips import api_error_handler, router as trips_router, trip_validation_handler
+from api.planning import _doc, drop_default_422, http_error_response, is_planning_path, is_trip_path, planning_error_handler, planning_validation_handler, router as planning_router
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
 from planning.repo import MemoryPlanningRepo
 from trip.repo import MemoryTripRepo
 from trip.service import TripService
+from trip.store import MemoryTripStore
+from langgraph.checkpoint.memory import MemorySaver
+import psycopg
+from store.unit import SaverParticipant, StorageUnavailable
 from trip.trips import ApiError, TripBook
 from places.city import open_city
 from planning.schemas import ErrorResponse, SeedChosenResult, SeedRequest, SeedResult
@@ -64,25 +71,49 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     예열은 뒤에서 돌고 서버 시작은 기다리지 않는다 (§9-3). 예열 중 요청도 판단 시간 제한(0.8초)을 따른다.
     """
-    # TASK-003: 저장소·그래프(MemorySaver)는 서버 시작 때 한 번 만들고 요청 사이에 이어 쓴다 (AC-16)
+    # TASK-003: 저장소·그래프는 서버 시작 때 한 번 만들고 요청 사이에 이어 쓴다 (AC-16)
     # TASK-003 §10-11 R13: R1은 추적(langsmith) 전송을 강제로 끈다. 켜진 값이 있어도 덮어쓴다 (켜는 것은 나중에 ADR로 결정)
     for name in ("LANGSMITH_TRACING", "LANGSMITH_TRACING_V2", "LANGCHAIN_TRACING_V2"):
         os.environ[name] = "false"
-    app.state.planning_repo = MemoryPlanningRepo()
-    app.state.planning_graph = build_planning_graph(app.state.planning_repo)
-    app.state.planning_service = PlanningService(app.state.planning_repo, app.state.planning_graph)
-    app.state.trip_repo = MemoryTripRepo()  # TASK-007: 사건·제안
-    app.state.trip_service = TripService(app.state.trip_repo, app.state.planning_repo)
-    app.state.trip_graph = app.state.trip_service.graph  # G2, 스레드 ID = 사건 ID
-    _mask_access_log()
     # TASK-010: 도시 데이터(가짜 또는 실제 오사카 팩)와 여행 저장. 시계는 요청 때마다 읽는다 (테스트가 서버 시작 뒤 바꿔 넣는다)
     app.state.clock = lambda: datetime.now(UTC)
     app.state.city, _fake = open_city()
     app.state.places_provider = app.state.city.provider
-    app.state.trip_book = TripBook(app.state.planning_repo, app.state.city, lambda: app.state.clock())
+    # TASK-012 A2: DATABASE_URL이 있으면 Postgres 저장소·체크포인터, 없으면 지금처럼 메모리. 연결은 요청이 처음 DB를 쓸 때 연다
+    # (DB가 닿지 않아도 서버는 켜지고, 저장소를 쓰는 요청만 503 STORAGE_UNAVAILABLE)
+    database_url = os.environ.get("DATABASE_URL") or None
+    if database_url:
+        from store.postgres import PostgresCheckpointer, PostgresPlanningRepo, PostgresTripRepo, PostgresTripStore
+
+        app.state.planning_repo = PostgresPlanningRepo(database_url, app.state.city, lambda: app.state.clock())
+        app.state.trip_repo = PostgresTripRepo(database_url)
+        app.state.trip_store = PostgresTripStore(database_url)
+        planning_saver: Any = PostgresCheckpointer(database_url)  # A4: 서버를 다시 켜도 계획 대화가 그 자리에서 이어진다
+        trip_saver: Any = PostgresCheckpointer(database_url)
+    else:
+        app.state.planning_repo = MemoryPlanningRepo()
+        app.state.trip_repo = MemoryTripRepo()  # TASK-007: 사건·제안
+        app.state.trip_store = MemoryTripStore()
+        planning_saver, trip_saver = MemorySaver(), MemorySaver()
+    app.state.planning_graph = build_planning_graph(app.state.planning_repo, planning_saver)
+    app.state.planning_service = PlanningService(app.state.planning_repo, app.state.planning_graph)
+    app.state.trip_service = TripService(app.state.trip_repo, app.state.planning_repo, checkpointer=trip_saver)
+    app.state.trip_graph = app.state.trip_service.graph  # G2, 스레드 ID = 사건 ID
+    _mask_access_log()
+    app.state.trip_book = TripBook(app.state.planning_repo, app.state.city, lambda: app.state.clock(), app.state.trip_store)
     app.state.planning_service.before_start = lambda day_id: app.state.trip_book.refresh_hours("planning", day_id)  # §11 H3 ①
     app.state.trip_service.refresh_hours = app.state.trip_book.refresh_hours  # H3 ② ③
     app.state.trip_service.map_id = lambda our_id: (app.state.city.row(our_id) or {}).get("place_id")  # 지도 링크: 실제 여행은 place_id (PM 답 3)
+    # TASK-012 A3: 요청 하나 = 트랜잭션 하나. 메모리 저장소는 실패하면 되돌릴 수 있게 상태를 떠 둔다 (§10 Q8)
+    app.state.unit = UnitOfWork(
+        [app.state.planning_repo, app.state.trip_repo, app.state.trip_store, SaverParticipant(planning_saver), SaverParticipant(trip_saver)],
+        memory=database_url is None,
+    )
+    # TASK-012 B2: 로그인 토큰의 공개 키는 SUPABASE_URL의 JWKS에서 받아 캐시한다. 없으면 모든 인증 길이 401 (닫힌 채로 실패)
+    supabase_url = os.environ.get("SUPABASE_URL")
+    app.state.jwks = JwksCache(supabase_url) if supabase_url else None
+    if app.state.jwks is None:
+        log.warning("SUPABASE_URL이 없어 로그인 토큰을 확인할 수 없음: 인증이 필요한 요청은 모두 401")
     app.state.jev = None
     if os.environ.get("AI_GATEWAY_API_KEY"):
         # Jev가 답하지 못하면 되묻기 (SCREEN-001 §4-3 5번)
@@ -94,6 +125,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Tripfriends", lifespan=lifespan)
 app.add_exception_handler(PlanningError, planning_error_handler)  # type: ignore[arg-type]
 app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
+app.add_middleware(Gate)  # TASK-012 B2·A3: Bearer 확인 + 요청 하나 = 트랜잭션 하나
+
+
+@app.exception_handler(StorageUnavailable)
+@app.exception_handler(psycopg.OperationalError)
+async def storage_unavailable_handler(_request: Request, exc: Exception):
+    """TASK-012 §6: DB에 못 붙으면 503 STORAGE_UNAVAILABLE. 응답에 연결 주소·원문을 담지 않는다 (원인은 로그에 종류만)."""
+    log.warning("저장소 사용 불가: %s", type(exc).__name__)
+    return http_error_response(503, "STORAGE_UNAVAILABLE", "지금 저장소에 못 붙었어요. 잠시 뒤 다시 해 주세요")
 
 
 @app.exception_handler(RequestValidationError)
@@ -186,14 +226,20 @@ if os.environ.get("APP_ENV", "development") != "production":
         return compose_screen(snapshot)
 
 
-    @app.post("/debug/seed-demo", status_code=201, response_model_exclude_unset=True)
-    def debug_seed_demo(request: Request, body: SeedRequest | None = None, x_device_id: DeviceHeader = None) -> SeedResult | SeedChosenResult:
+    @app.post("/debug/seed-demo", status_code=201, response_model_exclude_unset=True, responses=_doc())
+    def debug_seed_demo(request: Request, user: UserId, body: SeedRequest | None = None) -> SeedResult | SeedChosenResult:
         """개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.
-        `{"chosen": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다."""
+        `{"chosen": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다.
+        TASK-012 §11: 토큰이 필요하고, 데모는 그 사용자 소유(is_demo)다. 지금 여행은 바꾸지 않는다 —
+        `{"as_current": true}`일 때만 그 사용자의 지금 여행으로 붙인다 (점검 전용, 이전 여행은 archived)."""
         past_days = body.past_days if body and "past_days" in body.model_fields_set else None
         result = request.app.state.planning_service.seed(chosen=bool(body and body.chosen), past_days=past_days)
-        if x_device_id is not None:  # 점검 전용: 그 기기의 지금 여행으로 붙인다 (이전 여행은 archived)
-            request.app.state.trip_book.attach_demo(
-                device(x_device_id), result.trip_id, result.day_ids, list(DEMO_DATES), DEMO_DATES[0] + timedelta(days=past_days or 0)
-            )
+        request.app.state.trip_book.attach_demo(
+            user,
+            result.trip_id,
+            result.day_ids,
+            list(DEMO_DATES),
+            DEMO_DATES[0] + timedelta(days=past_days or 0),
+            as_current=bool(body and body.as_current),
+        )
         return result

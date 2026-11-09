@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from api.access import UserId, require_day, require_option, require_session
 from planning.schemas import (
     AdjustRequest,
     AnswerRequest,
@@ -68,7 +69,8 @@ def is_trip_path(path: str) -> bool:
 
 
 def _doc(*codes: int) -> dict[int | str, dict]:
-    return {code: {"model": ErrorResponse} for code in codes}
+    """문서에 적는 오류 응답. 401(토큰 없음·틀림)·503(저장소에 못 붙음)은 모든 길에 있을 수 있어 늘 더한다 (TASK-012, API-001 §1)."""
+    return {code: {"model": ErrorResponse} for code in sorted({*codes, 401, 503})}
 
 
 router = APIRouter()
@@ -80,7 +82,8 @@ router = APIRouter()
     responses=_doc(400, 404, 422),
     summary="계획 대화 시작 (mode=auto면 바로 코스)",
 )
-def start_planning(day_id: str, body: StartRequest, service: Service) -> PlanningSession | CourseResult:
+def start_planning(day_id: str, body: StartRequest, service: Service, request: Request, user: UserId) -> PlanningSession | CourseResult:
+    require_day(request, user, day_id)
     return service.start(day_id, body.mode)
 
 
@@ -89,42 +92,50 @@ def start_planning(day_id: str, body: StartRequest, service: Service) -> Plannin
     responses=_doc(404),
     summary="지금 stage의 응답을 다시 받기 (상태를 바꾸지 않음)",
 )
-def current_planning(session_id: str, service: Service) -> PlanningSession | CandidateBatch | CourseResult | PlanningDone:
+def current_planning(session_id: str, service: Service, request: Request, user: UserId) -> PlanningSession | CandidateBatch | CourseResult | PlanningDone:
+    require_session(request, user, session_id)
     return service.current(session_id)
 
 
 @router.post("/planning/{session_id}/answer", responses=_doc(400, 404, 409, 422), summary="첫 질문의 답 또는 알아서 짜 줘")
-def answer(session_id: str, body: AnswerRequest, service: Service) -> CandidateBatch | CourseResult:
+def answer(session_id: str, body: AnswerRequest, service: Service, request: Request, user: UserId) -> CandidateBatch | CourseResult:
+    require_session(request, user, session_id)
     return service.answer(session_id, body)
 
 
 @router.post("/planning/{session_id}/reactions", responses=_doc(400, 404, 409), summary="좋아·넘김·취소")
-def reactions(session_id: str, body: ReactionRequest, service: Service) -> Picks:
+def reactions(session_id: str, body: ReactionRequest, service: Service, request: Request, user: UserId) -> Picks:
+    require_session(request, user, session_id)
     return service.react(session_id, body)
 
 
 @router.post("/planning/{session_id}/next", responses=_doc(400, 404, 409), summary="다음 묶음 (방향 버튼·직접 입력·빈 요청)")
-def next_batch(session_id: str, service: Service, body: NextRequest | None = None) -> CandidateBatch:
+def next_batch(session_id: str, service: Service, request: Request, user: UserId, body: NextRequest | None = None) -> CandidateBatch:
+    require_session(request, user, session_id)
     return service.next(session_id, body or NextRequest())
 
 
 @router.post("/planning/{session_id}/compose", responses=_doc(404, 409, 422), summary="코스 짜기")
-def compose(session_id: str, service: Service) -> CourseResult:
+def compose(session_id: str, service: Service, request: Request, user: UserId) -> CourseResult:
+    require_session(request, user, session_id)
     return service.compose(session_id)
 
 
 @router.post("/planning/{session_id}/adjust", responses=_doc(400, 404, 409, 422), summary="머무는 시간 ±15분")
-def adjust(session_id: str, body: AdjustRequest, service: Service) -> CourseResult:
+def adjust(session_id: str, body: AdjustRequest, service: Service, request: Request, user: UserId) -> CourseResult:
+    require_session(request, user, session_id)
     return service.adjust(session_id, body)
 
 
 @router.post("/planning/{session_id}/back", responses=_doc(404, 409), summary="더 고를래")
-def back(session_id: str, service: Service) -> CandidateBatch:
+def back(session_id: str, service: Service, request: Request, user: UserId) -> CandidateBatch:
+    require_session(request, user, session_id)
     return service.back(session_id)
 
 
 @router.post("/course-options/{option_id}/select", responses=_doc(404, 409), summary="코스안 고르기")
-def select(option_id: str, service: Service) -> SelectResult:
+def select(option_id: str, service: Service, request: Request, user: UserId) -> SelectResult:
+    require_option(request, user, option_id)
     return service.select(option_id)
 
 

@@ -29,10 +29,10 @@ def _internal() -> PlanningError:
 
 
 class TripService:
-    def __init__(self, trip: TripRepo, planning: PlanningRepo, graph: Any | None = None):
+    def __init__(self, trip: TripRepo, planning: PlanningRepo, graph: Any | None = None, checkpointer: Any | None = None):
         self.trip = trip
         self.planning = planning
-        self.graph = graph if graph is not None else build_trip_graph(trip, planning)
+        self.graph = graph if graph is not None else build_trip_graph(trip, planning, checkpointer)
         self._lock = threading.RLock()
         # 그날 마지막 check의 at (§11 Q7). 시각 하나일 뿐 위치가 아니고 사건 데이터도 아니라 저장소 밖에 둔다
         self._last_check: dict[str, datetime] = {}
