@@ -9,6 +9,9 @@ export const SIGNIN_DOWN = '지금 연결이 안 돼. 잠시 뒤에 다시 해 �
 export function authNotice(failure: Failure): string | null {
   if (failure.kind === 'storage') return STORAGE_DOWN;
   if (failure.kind === 'unauthorized') return AUTH_FAILED;
-  if (failure.kind === 'auth_unavailable') return SIGNIN_DOWN;
+  if (failure.kind === 'auth_unavailable' || failure.kind === 'auth_down') return SIGNIN_DOWN;
   return null;
 }
+
+/** 모든 화면 같은 안내 (§12-1): 로그인·저장소 문장이 있으면 그것, 아니면 fallback */
+export const failureText = (failure: Failure, fallback: string): string => authNotice(failure) ?? fallback;

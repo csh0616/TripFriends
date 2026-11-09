@@ -40,6 +40,7 @@ export type Failure =
   | { kind: 'infeasible'; reason: string; blocking: string[] }
   | { kind: 'unauthorized' } // 401: 토큰을 새로 받고 다시 해 봐도 안 됨 (TASK-012 §10 Q6)
   | { kind: 'auth_unavailable' } // 익명 로그인이 안 됨. 요청은 보내지 않았다 (§10 Q7)
+  | { kind: 'auth_down' } // 503 AUTH_UNAVAILABLE: 로그인 확인 서버 장애 (§12-6)
   | { kind: 'storage' } // 503 STORAGE_UNAVAILABLE (§6)
   | { kind: 'server' };
 
@@ -68,6 +69,7 @@ function classify(status: number, body: unknown): Failure {
     return { kind: 'infeasible', reason: detail.reason, blocking };
   }
   if (status === 401) return { kind: 'unauthorized' };
+  if (status === 503 && isRecord(body) && isRecord(body.error) && body.error.code === 'AUTH_UNAVAILABLE') return { kind: 'auth_down' };
   if (status === 503 && isRecord(body) && isRecord(body.error) && body.error.code === 'STORAGE_UNAVAILABLE') return { kind: 'storage' };
   // 500, 503, 403, JSON이 아닌 응답, 모르는 오류는 모두 "잠깐 문제가 생겼어" 줄 (Q18)
   return { kind: 'server' };

@@ -22,6 +22,7 @@ import {
   type SeedResult,
   type StageResponse,
 } from '@/lib/planning-api';
+import { authNotice } from '@/lib/auth-messages';
 import { initialPlanningState, planningReducer } from '@/lib/planning-reducer';
 import { responseChanged } from '@/lib/response-changed';
 import { screenFor } from '@/lib/screen-for';
@@ -324,7 +325,10 @@ function Session({
         break;
       case 'unauthorized':
       case 'auth_unavailable':
+      case 'auth_down':
       case 'storage':
+        fail(authNotice(failure) ?? OOPS, { tone: 'plain', retry: same });
+        return false;
       case 'server':
         // Q35·Q42 500은 [다시]가 같은 요청 (GET이면 GET)
         fail(OOPS, { tone: 'plain', retry: same });
@@ -389,6 +393,7 @@ function Session({
     const stop = (failure: Failure) => {
       const again = () => void startDemo();
       if (failure.kind === 'network') fail(OFFLINE, { tone: 'plain', retry: again });
+      else if (authNotice(failure)) fail(authNotice(failure) as string, { tone: 'plain', retry: again });
       else if (failure.kind === 'invalid') {
         console.warn('INVALID_REQUEST', 'S0');
         fail(INVALID, { tone: 'plain', retry: null });
@@ -447,6 +452,7 @@ function Session({
     const stop = (failure: Failure) => {
       const again = () => void startNowDemo();
       if (failure.kind === 'network') fail(OFFLINE, { tone: 'plain', retry: again });
+      else if (authNotice(failure)) fail(authNotice(failure) as string, { tone: 'plain', retry: again });
       else if (failure.kind === 'invalid') {
         console.warn('INVALID_REQUEST', 'S0');
         fail(INVALID, { tone: 'plain', retry: null });

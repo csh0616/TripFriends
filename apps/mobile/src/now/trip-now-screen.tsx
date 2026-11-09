@@ -19,6 +19,7 @@ import { RouteDiagram } from '@/components/planning/route-diagram';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { SosButton } from '@/components/planning/sos-button';
 import { SosSheet } from '@/components/planning/sos-sheet';
+import { failureText } from '@/lib/auth-messages';
 import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBOUNCE_MS, toMinutes } from '@/lib/demo-clock';
 import { cityClock } from '@/lib/calendar';
 import { delayedPosition } from '@/lib/fake-position';
@@ -130,6 +131,7 @@ export function TripNowScreen({
 
   const [minutes, setMinutes] = useState(() => Math.min(endMin, Math.max(startMin, minutesOfAt(record.at) ?? startMin)));
   const [problem, setProblem] = useState<Problem | null>(null);
+  const [oopsText, setOopsText] = useState(OOPS_BAND);
   const [demoOpen, setDemoOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [mapFailed, setMapFailed] = useState(() => !hasMapKey());
@@ -199,7 +201,10 @@ export function TripNowScreen({
       }
       if (failure.kind === 'network') setProblem('offline');
       else if (failure.kind === 'not_found' && failure.resource === 'course') setProblem('no_course');
-      else setProblem('oops'); // 500, 400, course가 아닌 404, 409 (§11 Q22)
+      else {
+        setOopsText(failureText(failure, OOPS_BAND));
+        setProblem('oops'); // 500, 400, course가 아닌 404, 409 (§11 Q22)
+      }
       return false;
     }
     if (!isNowView(result.data)) {
@@ -430,7 +435,7 @@ export function TripNowScreen({
           ) : null}
           {problem === 'oops' ? (
             <View testID="now-band">
-              <Notice message={OOPS_BAND} tone="problem" onRetry={retry} />
+              <Notice message={oopsText} tone="problem" onRetry={retry} />
             </View>
           ) : null}
           {problem === 'no_course' ? (
