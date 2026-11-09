@@ -13,7 +13,7 @@
 | 사실 값 표시 | 장소 정보는 항상 `facts` 배열로: `{field, value, status, source_type, source_url, checked_at}`. 앱은 status에 따라 "확인됨/미확인/모름"을 표시 |
 | 오류 형식 | `{ "error": { "code": "COURSE_INFEASIBLE", "message": "사람이 읽을 문장", "detail": {...} } }` |
 | 상태 코드 | 200 성공, 201 생성, 400 입력 오류, 404 없음, 409 상태 충돌(예: 이미 선택된 대안), 422 계산 불가, 429 사용 한도 |
-| 인증·저장소 오류 (TASK-012) | 401 `UNAUTHORIZED`(토큰 없음·틀림·만료) · 503 `STORAGE_UNAVAILABLE`(DB 못 붙음, 응답에 DB 주소 없음) · 503 `PROVIDER_UNAVAILABLE`(숙소 검색 등 외부 공급자). Bearer가 필요한 것: 사용자 데이터 API 전부 + 장소·숙소 검색. 필요 없는 것: `/health`, `/catalog`, `/debug/seed-demo`(토큰 있으면 그 사용자에 붙임) |
+| 인증·저장소 오류 (TASK-012) | 401 `UNAUTHORIZED`(토큰 없음·틀림·만료) · 503 `STORAGE_UNAVAILABLE`(DB 못 붙음, 응답에 DB 주소 없음) · 503 `PROVIDER_UNAVAILABLE`(숙소 검색 등 외부 공급자). Bearer가 필요한 것: 사용자 데이터 API 전부 + 장소·숙소 검색. 필요 없는 것: `/health`, `/catalog`, 개발 환경의 API 문서 길(운영에선 끔). **`/debug/seed-demo`도 토큰 필요**(TASK-012 §11: 데모는 그 사용자 소유, 지금 여행을 바꾸지 않음, `as_current: true`는 점검 전용). 503 `AUTH_UNAVAILABLE` = 로그인 확인 서버(JWKS)에 못 붙음 |
 | 비밀값 | 앱은 Jev·LLM을 직접 부르지 않는다. 모든 AI 호출은 서버 안에서 |
 | 측정 | 판단이 일어나는 요청은 서버가 decision_logs에 기록 (앱은 신경 쓰지 않음) |
 
@@ -35,7 +35,7 @@
 | GET `/places/lodging-search?city_code&q` | 숙소 검색 (Google 실시간, TASK-010 §B5) | `{place_id, name, address_short}[]` | FR-01 |
 | GET `/trips/current` | 이 기기의 지금 여행 (R1은 하나) | `Trip` 또는 404 | FR-33 (TASK-010) |
 | GET `/days/{day_id}/course` | 그날 고른 코스 (코스안 카드와 같은 모양, 읽기만) | `CourseOption` 또는 404 | FR-03 (TASK-010 §12) |
-| POST `/debug/seed-demo` 선택값 | `chosen`, `past_days`(데모 시계를 그만큼 뒤로), 헤더 `X-Device-Id`(그 기기 여행으로 붙임, 점검 전용) — 운영 404 | — | TASK-010 §14·§15 |
+| POST `/debug/seed-demo` 선택값 | `chosen`, `past_days`(데모 시계를 그만큼 뒤로), `as_current`(지금 여행으로 붙임, 점검 전용). Bearer 필요 — 운영 404 | — | TASK-010 §14·§15, TASK-012 §11 |
 
 ### 2-2. 계획 대화 (FR-02~03)
 > **11-05**: 계획 API의 경로·요청·응답·오류는 **TASK-003 §5·§6·§10이 정본**이다. 아래와 다르면 TASK-003을 따른다
