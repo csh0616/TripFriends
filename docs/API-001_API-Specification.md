@@ -5,7 +5,7 @@
 | 상태 | **초안** — PM 작성 2026-11-02. 계획 대화 부분은 TASK-003 §5·§6이 정본 (11-05) |
 | 서버 | Python FastAPI (`apps/server`). 이 문서가 기준이고, 구현 후 서버의 OpenAPI가 자동 생성되어 앱 타입(`packages/api-types`)이 된다 (ADR-013) |
 | 입력 | SRS-001 · DATA-001 |
-| 공통 | JSON. 시간은 ISO 8601(도시 현지 시간대 포함). 인증: R1은 `X-Device-Id` 헤더, 로그인 후 `Authorization: Bearer <Supabase JWT>` |
+| 공통 | JSON. 시간은 ISO 8601(도시 현지 시간대 포함). 인증: **`Authorization: Bearer <Supabase JWT>`** — 처음엔 익명 계정, 원하면 Google·이메일로 연결 (ADR-016, TASK-012). `X-Device-Id`는 TASK-012에서 폐기 |
 
 ## 1. 공통 규칙
 | 규칙 | 내용 |
