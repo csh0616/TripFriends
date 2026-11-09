@@ -13,7 +13,7 @@
 //       §9 Q5: title "오사카 2박 3일"(하루면 "오사카 당일 여행", 끝난 뒤에도 그대로)
 //              dots = 날 순서대로 한 자리씩, 그날 고른 코스(chosen_option_id)가 있으면 ●, 없으면 ○ (오늘·지난 날 포함)
 //              line = "{오른쪽 말} · N일 중 K일 계획 완료", K = 고른 코스가 있는 날 수. 오른쪽 말 = 여행 전 "D-35" · 여행 중 "여행 중"
-//       §10 E2·§11 Q3: 여행 끝 = ● 전부 + line "여행 끝"만 (계획 완료 수 없음)
+//       §10 E2·§11 Q3·§15 Q2: 여행 끝 = line "여행 끝"만 (계획 완료 수 없음). 점은 여행 끝에도 같은 규칙(고른 코스가 있는 날만 ●)
 //   src/planning/format.ts (화면 글자 함수가 모인 곳. dayName이 이미 여기 있다)
 //     dayName(n): "N일째" (n = 1부터 세는 날 번호, 서버 day_number와 같다)
 //     timeRange(a, b): "a–b" (엔 대시 U+2013)
@@ -283,18 +283,40 @@ describe('A0 tripHeader: 머리 (task-011-review §2 5번 줄)', () => {
     expect(header(three(['past', 'past', 'today']), '2026-12-13').line).toMatch(/^여행 중 · 3일 중 \d일 계획 완료$/);
   });
 
-  test('T11_E2_경계_마지막_날_다음_날은_여행_끝_점_전부_제목은_그대로', () => {
-    const found = header(three(['past', 'past', 'past']), '2026-12-14');
+  test('T11_E2_경계_마지막_날_다음_날은_여행_끝_모두_코스_있으면_점_전부_제목은_그대로', () => {
+    const found = header(three(['past', 'past', 'past']), '2026-12-14'); // 세 날 모두 고른 코스 있음
     expect(found.title).toBe('오사카 2박 3일');
     expect(found.dots).toBe('●●●');
     expect(found.line).toBe('여행 끝');
   });
 
-  test('T11_E2_고른_코스가_없던_날이_있어도_여행_끝이면_점_전부', () => {
+  // §15 Q2: 여행 끝에도 예외 없음. 코스 없이 지난 날은 빈 점
+  test('T11_S15_Q2_여행_끝_코스_없는_지난_날이_섞이면_그_날은_빈_점', () => {
     const list = [day(1, 'past', true), day(2, 'past', false), day(3, 'past', false)];
     const found = header(trip(list), '2027-03-01');
-    expect(found.dots).toBe('●●●');
+    expect(found.dots).toBe('●○○');
     expect(found.line).toBe('여행 끝');
+  });
+
+  test('T11_S15_Q2_여행_끝_가운데_날만_코스_없으면_가운데만_빈_점', () => {
+    const list = [day(1, 'past', true), day(2, 'past', false), day(3, 'past', true)];
+    expect(header(trip(list), '2026-12-14').dots).toBe('●○●');
+  });
+
+  test('T11_S15_Q2_여행_끝_모든_날_코스_없으면_점_모두_빈_점', () => {
+    const list = [day(1, 'past', false), day(2, 'past', false), day(3, 'past', false)];
+    expect(header(trip(list), '2026-12-14')).toEqual({ title: '오사카 2박 3일', dots: '○○○', line: '여행 끝' });
+  });
+
+  test('T11_S15_Q2_속성_여행_끝_점은_고른_코스가_있는_날만', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: 7 }), fc.integer({ min: 1, max: 200 }), fc.array(fc.boolean(), { minLength: 7, maxLength: 7 }), (count, after, plans) => {
+        const list = Array.from({ length: count }, (_, i) => day(i + 1, 'past', plans[i]));
+        const found = header(trip(list), addDays(list[count - 1].date, after));
+        expect(found.line).toBe('여행 끝');
+        expect(found.dots).toBe(list.map((one) => (one.chosen_option_id ? '●' : '○')).join(''));
+      }),
+    );
   });
 
   test('T11_Q5_하루_여행_제목은_오사카_당일_여행', () => {
