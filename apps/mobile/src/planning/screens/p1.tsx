@@ -15,7 +15,7 @@ import { requests, type PlanningSession } from '@/lib/planning-api';
 
 import { useDraw } from '../draw';
 
-import { dayName, daySubtitle, mustVisitLine, timeToMinutes } from '../format';
+import { dayName, daySubtitle, mustVisitLine, timeRange, timeToMinutes } from '../format';
 import { layout } from '../layout';
 import { color, radius, space, text } from '../theme';
 import type { NoticeData, Send } from './types';
@@ -139,7 +139,7 @@ export function P1Screen({
 
       <View testID="timetable" style={styles.timetable}>
         <Text style={text('caption', 'muted')}>오늘 시간표</Text>
-        <Text style={text('num-md')}>{`${day.start}~${day.end}`}</Text>
+        <Text style={text('num-md')}>{timeRange(day.start, day.end)}</Text>
         {free ? <Text style={text('caption', 'muted')}>{free}</Text> : null}
         {day.fixed.length > 0 ? (
           <View testID="timetable-bar" style={styles.track}>

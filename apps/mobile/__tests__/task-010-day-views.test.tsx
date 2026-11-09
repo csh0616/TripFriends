@@ -6,7 +6,7 @@
 //   planned·past 날 줄을 누르면 GET /days/{day_id}/course (헤더 X-Device-Id). 응답 = 코스안 카드와 같은 모양 (CourseResultOption)
 //     읽기만 화면 testID `course-readonly`: 코스 줄은 코스안 카드와 같은 `course-row-{seq}`.
 //     없는 것: 머무는 시간 조정(`stay-minus-*`·`stay-plus-*`), 확정(`select-confirm`, "이걸로 할래"), "다시 계획할래", 다른 안 탭(`option-*`)
-//   계획 대화 머리 뒤로 = 기존 머리 뒤로 단추 `header-back`, 글자 "‹ 날짜" (보조, 주황 아님 -> 모습은 디자인 검수)
+//   계획 대화 머리 뒤로 = 기존 머리 뒤로 단추 `header-back`, 글자 "날짜" (TASK-011 back-day: ‹는 아이콘 20, 글자는 "날짜". 주황 아님)
 //     누르면 날짜 목록. 같은 날을 다시 누르면 새 세션을 만들지 않고 GET /planning/{session_id}로 이어 간다
 import { act, render, screen, waitFor, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -128,7 +128,7 @@ describe('§12 답 3 계획 대화에서 나가기', () => {
     await startHome();
     await tap(await screen.findByTestId('day-row-day-t4'));
     const back = await screen.findByTestId('header-back');
-    expect(within(back).getByText(/‹\s*날짜/)).toBeTruthy();
+    expect(within(back).getByText('날짜')).toBeTruthy(); // TASK-011 back-day: ‹는 아이콘
   });
 
   test('T10_S12_‹_날짜를_누르면_날짜_목록', async () => {
@@ -162,7 +162,7 @@ describe('§13 코스안에서 나가기', () => {
     await tap(await screen.findByTestId('day-row-day-t4'));
     await screen.findByTestId('option-relaxed');
     const back = await screen.findByTestId('header-back');
-    expect(within(back).getByText(/‹\s*날짜/)).toBeTruthy();
+    expect(within(back).getByText('날짜')).toBeTruthy(); // TASK-011 back-day: ‹는 아이콘
     await tap(back);
     expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
   });

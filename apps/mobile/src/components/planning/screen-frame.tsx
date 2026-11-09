@@ -19,23 +19,29 @@ export function ScreenFrame({
   title,
   subtitle,
   onBack,
+  backLabel,
   backDisabled,
   input,
   footer,
   action,
   listBottomSpace,
+  contentTop,
   children,
 }: {
   title?: string;
   subtitle?: string;
   onBack?: () => void;
+  /** "‹ 날짜" 뒤로의 글자 (읽기만 화면). 실제 여행의 계획 대화는 아래 LeaveContext가 항상 "날짜" */
+  backLabel?: string;
   backDisabled?: boolean;
   input?: FrameInput;
   footer?: React.ReactNode;
   /** TASK-010: 스크롤 밖 맨 아래에 고정되는 주 버튼 자리 (입력창이 없는 화면) */
   action?: React.ReactNode;
-  /** 후보 카드 목록처럼 아래 고정 줄에 가려질 수 있는 본문: action-bar 높이 + 안전 영역만큼 아래 여백 (P2만 켠다) */
+  /** 후보 카드 목록처럼 아래 고정 줄에 가려질 수 있는 본문: action-bar 높이 + 안전 영역, 적어도 떠 있는 줄 72 + 12만큼 아래 여백 (P2만 켠다, §14 N13) */
   listBottomSpace?: boolean;
+  /** 본문 위 여백을 틀 기본(화면 여백 20) 대신 쓴다. 후보 화면(P2)만 머리 → 말풍선 8 (§16) */
+  contentTop?: number;
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -44,11 +50,15 @@ export function ScreenFrame({
   // 실제 여행의 계획 대화는 어느 단계(코스안 포함)에서든 머리 뒤로가 "‹ 날짜" (TASK-010 §12·§13 답 2). 단계 사이 뒤로는 화면의 단추가 맡는다
   return (
     <View style={styles.root}>
-      <Header title={title} subtitle={subtitle} onBack={leave ?? onBack} backLabel={leave ? '‹ 날짜' : undefined} backDisabled={backDisabled} onSos={() => setSosOpen(true)} />
+      <Header title={title} subtitle={subtitle} onBack={leave ?? onBack} backLabel={leave ? '날짜' : backLabel} backDisabled={backDisabled} onSos={() => setSosOpen(true)} />
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.body}
-          contentContainerStyle={listBottomSpace ? [styles.content, { paddingBottom: layout.actionBar + insets.bottom }] : styles.content}
+          contentContainerStyle={[
+            styles.content,
+            contentTop !== undefined && { paddingTop: contentTop },
+            listBottomSpace && { paddingBottom: Math.max(layout.actionBar + insets.bottom, layout.floatingBar + space['space-3']) },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

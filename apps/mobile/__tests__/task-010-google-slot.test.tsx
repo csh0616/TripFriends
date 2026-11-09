@@ -41,7 +41,7 @@ test('T10_S14_PM2_Google_영업시간이_보이면_미확인이어도_g_slot이_
   happyServer().on(R.answer, json(200, batch({ candidates: places.map((p) => ({ place: p, why: `이유 ${p.id}` })) })));
   await toP2();
   const card = await screen.findByTestId('candidate-card-D02');
-  expect(within(card).getByText('11:00-14:00,17:00-22:00')).toBeTruthy();
+  expect(within(card).getByText('11:00–14:00 · 17:00–22:00')).toBeTruthy(); // TASK-011 §9 Q7·Q8 (승인)
   expect(within(card).getByTestId('g-slot')).toBeTruthy();
 });
 
@@ -70,6 +70,6 @@ test('T10_S13_O4_우리가_정한_시간대_후보_카드는_시각과_Tripfrien
   happyServer().on(R.answer, json(200, batch({ candidates: places.map((p) => ({ place: p, why: `이유 ${p.id}` })) })));
   await toP2();
   const card = await screen.findByTestId('candidate-card-D01');
-  expect(within(card).getByText(/17:00-24:00/)).toBeTruthy();
+  expect(within(card).getByText(/17:00–24:00/)).toBeTruthy(); // TASK-011 review 20번 줄: 엔 대시
   expect(within(card).getByText(/Tripfriends/)).toBeTruthy();
 });

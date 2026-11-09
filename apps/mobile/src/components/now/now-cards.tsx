@@ -5,18 +5,30 @@ import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { SecondaryButton } from '@/components/planning/secondary-button';
-import { StatusChip } from '@/components/planning/status-chip';
+import { HoursChipView, StatusChip } from '@/components/planning/status-chip';
 import { minutesOfAt, toMinutes } from '@/lib/demo-clock';
 import { withParticle } from '@/lib/particle';
 import { sourceLabel } from '@/lib/source-label';
 import type { NowCard, NowCourseItem, NowFact, NowProposal, NowT06Proposal } from '@/lib/now-api';
-import { todayHoursText } from '@/lib/today-hours-text';
+import { hoursView, todayHoursText } from '@/lib/today-hours-text';
+import { hoursRangeText, timeRange } from '@/planning/format';
 import { layout } from '@/planning/layout';
 import { color, googleText, radius, space, text } from '@/planning/theme';
 
+const ALWAYS_OPEN_TEXT = '늘 열려 있어';
+
+/** 영업시간 칩 자리 (TASK-011 §9 Q10, §14 N9): 확인 상태 칩 / curated 시간대는 "추천 시간대" / 늘 열림은 그 status 칩(보통 확인됨) + "늘 열려 있어" */
 function FactChip({ facts }: { facts: NowCourseItem['facts'] }) {
   if (facts.length === 0) return null;
-  return <StatusChip status={todayHoursText(facts).chip} />;
+  const view = hoursView(facts);
+  if (view.text === ALWAYS_OPEN_TEXT)
+    return (
+      <View style={styles.alwaysOpen}>
+        <HoursChipView chip={view.chip} />
+        <Text style={text('caption', 'muted')}>{ALWAYS_OPEN_TEXT}</Text>
+      </View>
+    );
+  return <HoursChipView chip={view.chip} />;
 }
 
 /** 직선거리 m를 "350m" / "1.0km"로 (10m 단위 반올림, 995m부터 km) */
@@ -34,7 +46,7 @@ function FactLine({ fact }: { fact: NowFact }) {
   return (
     <View style={styles.titleRow}>
       <StatusChip status={fact.status} />
-      <Text style={text('body')}>{shown.text}</Text>
+      <Text style={text('body')}>{hoursRangeText(shown.text)}</Text>
       {/* §11 G1: Google 출처 글자는 Roboto 400 (src-google). 번역하지 않는다 */}
       <Text style={fact.source_type === 'google' ? googleText : text('caption', 'muted')}>
         {`${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`}
@@ -288,8 +300,8 @@ export function NowCardView({
         <Shell id="card-T-07" main={main}>
           <Text style={text('label', 'muted')}>고정 일정이 곧이야</Text>
           <View style={styles.titleRow}>
-            {/* §14: 고정 일정 제목 + 시작~끝 시각 ("저녁 예약 · 18:30~19:30") */}
-            <Text style={[text('title'), styles.grow]}>{`${card.fixed.title} · ${card.fixed.start}~${card.fixed.end}`}</Text>
+            {/* §14: 고정 일정 제목 + 시작~끝 시각 ("저녁 예약 · 18:30–19:30") */}
+            <Text style={[text('title'), styles.grow]}>{`${card.fixed.title} \u00b7 ${timeRange(card.fixed.start, card.fixed.end)}`}</Text>
             <FactChip facts={card.fixed.facts} />
           </View>
           <Text style={text('body')}>{`${card.leave_by}까지 출발해야 해`}</Text>
@@ -347,6 +359,7 @@ const styles = StyleSheet.create({
   thumb: { width: layout.thumbSm, height: layout.thumbSm, borderRadius: radius['r-sm'], overflow: 'hidden' },
   pair: { flexDirection: 'row', gap: space['space-2'] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['space-2'] },
+  alwaysOpen: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },
   big: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },
   restRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], minHeight: layout.courseRow },

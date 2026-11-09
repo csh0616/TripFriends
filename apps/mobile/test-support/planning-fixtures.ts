@@ -105,6 +105,16 @@ export const batch = (over: Partial<CandidateBatch> = {}): CandidateBatch => ({
 
 export const picks = (ids: string[], count = ids.length): Picks => ({ picks: ids, picks_count: count });
 
+/** TASK-011 §9 Q10: 코스 줄 영업시간 fact (여행 중 NowCourseItem.facts와 같은 Fact 모양). 데모 출처 */
+export const hoursFact = (status: 'confirmed' | 'unverified' | 'unknown', over: object = {}) => ({
+  field: 'opening_hours',
+  value: status === 'unknown' ? null : '10:00-18:00',
+  status,
+  source_type: 'demo',
+  checked_at: null,
+  ...over,
+});
+
 export const relaxed = (id = 'opt-relaxed', over: object = {}) => ({
   option_id: id,
   label: 'relaxed' as const,
@@ -122,6 +132,7 @@ export const relaxed = (id = 'opt-relaxed', over: object = {}) => ({
       wait_min: 0,
       is_fixed: false,
       hours_status: 'confirmed' as const,
+      facts: [hoursFact('confirmed')], // TASK-011 §9 Q10: 코스 줄 영업시간 출처 (backend가 더함)
     },
     {
       seq: 2,
@@ -136,6 +147,7 @@ export const relaxed = (id = 'opt-relaxed', over: object = {}) => ({
       wait_min: 0,
       is_fixed: false,
       hours_status: 'unverified' as const,
+      facts: [hoursFact('unverified')], // TASK-011 §9 Q10: 코스 줄 영업시간 출처 (backend가 더함)
     },
     {
       seq: 3,
@@ -150,6 +162,7 @@ export const relaxed = (id = 'opt-relaxed', over: object = {}) => ({
       wait_min: 0,
       is_fixed: true,
       hours_status: 'confirmed' as const,
+      facts: [hoursFact('confirmed')], // TASK-011 §9 Q10: 코스 줄 영업시간 출처 (backend가 더함)
     },
   ],
   dropped: [
@@ -179,6 +192,7 @@ export const packed = (id = 'opt-packed') => ({
       wait_min: 0,
       is_fixed: false,
       hours_status: 'confirmed' as const,
+      facts: [hoursFact('confirmed')], // TASK-011 §9 Q10: 코스 줄 영업시간 출처 (backend가 더함)
     },
   ],
   dropped: [],

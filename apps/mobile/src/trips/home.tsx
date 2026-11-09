@@ -34,7 +34,7 @@ type View_ =
   | { name: 'demo'; start?: 'demo' | 'now' }
   | { name: 'create' }
   | { name: 'days' }
-  | { name: 'planning'; dayId: string }
+  | { name: 'planning'; dayId: string; mode?: 'conversation' | 'auto' }
   | { name: 'course'; day: TripDay }
   | { name: 'now'; record: NowRecord };
 
@@ -90,8 +90,11 @@ export default function Home() {
     void load();
   }, [load]);
 
-  const open = (day: TripDay, destination: DayDestination) => {
-    if (destination === 'planning') setView({ name: 'planning', dayId: day.day_id });
+  const open = (day: TripDay, destination: DayDestination, mode?: 'auto') => {
+    if (destination === 'planning') {
+      if (mode === 'auto') delete sessions.current[day.day_id]; // [알아서 짜 줘]는 이어 가던 대화가 아니라 새로 자동 계획
+      setView({ name: 'planning', dayId: day.day_id, mode });
+    }
     else if (destination === 'course' || destination === 'review') setView({ name: 'course', day });
     else if (destination === 'now' && trip) setView({ name: 'now', record: liveRecord(day, trip.trip_days.indexOf(day)) });
   };
@@ -123,13 +126,14 @@ export default function Home() {
         />
       );
     case 'course':
-      return <CourseReadonly dayId={view.day.day_id} date={view.day.date} onBack={() => setView({ name: 'days' })} />;
+      return <CourseReadonly dayId={view.day.day_id} date={view.day.date} number={(trip ? trip.trip_days.indexOf(view.day) : 0) + 1} onBack={() => setView({ name: 'days' })} />;
     case 'planning': {
       // 끝나면(코스 고름·세션 없음) 날짜 목록을 다시 받아 "계획 완료"를 보여 준다. ‹ 날짜로 나가면 대화는 그대로 남고, 다시 들어가면 GET으로 이어 간다
       const dayId = view.dayId;
       return (
         <PlanningFlow
           dayId={dayId}
+          startMode={view.mode}
           resumeSessionId={sessions.current[dayId]}
           onSession={(sid) => (sessions.current[dayId] = sid)}
           onBackToList={() => setView({ name: 'days' })}

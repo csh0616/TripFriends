@@ -138,6 +138,125 @@ export const PILLS: Record<string, { bg: string; fg: string; border?: string; do
   'pill-past': { bg: '#D1D5DB', fg: '#333333', border: '#666C7A' },
 };
 
+// §4-11 디자인 맞추기 (TASK-011 B1). 한 토큰에 값이 여럿이라 묶음으로 둔다. 필드 이름은 이 테스트가 정한 이름(승인 대기).
+// 색은 §4-11 표의 값 그대로(별명이 아니라 실제 값). 문서에 없는 칸은 키도 없다.
+//   bg 바탕 · fg 글자 · border 테두리 색 · borderWidth 테두리 굵기 · height 높이 · minHeight 최소 높이 · hit 누르는 높이 · radius 모서리
+//   size/lineHeight/weight/family 글자 · icon 아이콘 크기 · paddingVertical/paddingHorizontal 안쪽 ("안쪽 6/12" = 위아래 6, 좌우 12)
+export const FIT: Record<string, Record<string, unknown>> = {
+  // 투명 · 높이 44 · 안쪽 6/12 · 아이콘 20 + "날짜" 15/22·600 ink-strong · 비활성 bg-2 + muted · 머리 칸 [84 | 1fr | 84]
+  'back-day': {
+    bg: 'transparent',
+    height: 44,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    icon: 20,
+    size: 15,
+    lineHeight: 22,
+    weight: 600,
+    fg: '#1A1A1A',
+    disabledBg: '#F3F4F6',
+    disabledFg: '#666C7A',
+    side: 84, // 머리 양옆 칸 폭 (가운데는 나머지)
+  },
+  // 높이 52 이상 · 번호 원 28 · 이름 15/22·600 · 보조 13/18 muted 한 줄(…)
+  'row-read': {
+    minHeight: 52,
+    badge: 28,
+    name: { size: 15, lineHeight: 22, weight: 600 },
+    sub: { size: 13, lineHeight: 18, weight: 500 }, // TASK-011 §9 Q14
+    subFg: '#666C7A',
+    subLines: 1,
+  },
+  // 12/16 · 500 · muted
+  'read-note': { size: 12, lineHeight: 16, weight: 500, fg: '#666C7A' },
+  // 높이 36 (누르는 44) · 흰 바탕 · 테두리 1px #666C7A · 13/18·600 ink-strong · r999 · + 16
+  'btn-add-event': {
+    height: 36,
+    hit: 44,
+    bg: '#FFFFFF',
+    borderWidth: 1,
+    border: '#666C7A',
+    size: 13,
+    lineHeight: 18,
+    weight: 600,
+    fg: '#1A1A1A',
+    radius: 999,
+    icon: 16,
+  },
+  // 350(화면 − 40) × 52 · bg-2 · 15/22·600 ink-strong · r16 · 내용이 짧으면 화면 맨 아래(아래 34)까지 (TASK-011 §10 E3)
+  // 너비는 "화면 − 40"이라 고정 값으로 두지 않는다. bottom = 맨 아래 여백
+  'btn-new-trip': { height: 52, bottom: 34, bg: '#F3F4F6', size: 15, lineHeight: 22, weight: 600, fg: '#1A1A1A', radius: 16 },
+  // scrim 40% · r-sheet 28 · 손잡이 36×4 · 글 17/24·700 · 한 줄 14/20·500 #333333 (글 아래 4) · 버튼 52 + 52 세로 (한 줄 아래 16), 사이 8 · 아래 34 · 높이 234
+  'sheet-confirm': {
+    scrim: 'rgba(26,26,26,0.40)', // §4-1 scrim과 같은 값
+    radius: 28,
+    handle: [36, 4],
+    size: 17,
+    lineHeight: 24,
+    weight: 700,
+    note: { size: 14, lineHeight: 20, weight: 500, fg: '#333333', top: 4 }, // TASK-011 §10 E4 (muted 아님)
+    button: 52,
+    buttonTop: 16, // 한 줄 아래
+    gap: 8,
+    bottom: 34,
+    height: 234,
+  },
+  // TASK-011 §12 Q1: 28/36 · 700 · ink-strong · 왼쪽 정렬 (날짜 목록 머리 제목 "오사카 2박 3일")
+  'title-trip': { size: 28, lineHeight: 36, weight: 700, fg: '#1A1A1A', align: 'left' },
+  // TASK-011 §10 E1·E6: 원 40 bg-2 + 체크 20 · 제목 17/24·700 · 설명 14/20·500 #333333 폭 300 · 가운데 · 마지막 날 줄 아래 20
+  'end-note': {
+    circle: 40,
+    circleBg: '#F3F4F6',
+    icon: 20,
+    title: { size: 17, lineHeight: 24, weight: 700 },
+    body: { size: 14, lineHeight: 20, weight: 500, fg: '#333333' },
+    width: 300,
+    top: 20,
+  },
+  // 칩 · 값 · 거리 한 줄(24) + 출처 줄 4px 아래(19) · 값 자리 "늘 열려 있어" 14/20·500 · 시각 범위 엔 대시
+  'fact-line': {
+    height: 24,
+    sourceGap: 4,
+    sourceHeight: 19,
+    value: { size: 14, lineHeight: 20, weight: 500 },
+    rangeDash: '–',
+  },
+  // 흰 바탕 · 테두리 1px #666C7A · 큰 [같이 고르기] 52 17/24·700 · [알아서 짜 줘] 52 15/22·600 · 작은 [같이 고르기] 44
+  'btn-card-secondary': {
+    bg: '#FFFFFF',
+    borderWidth: 1,
+    border: '#666C7A',
+    large: { height: 52, size: 17, lineHeight: 24, weight: 700 },
+    auto: { height: 52, size: 15, lineHeight: 22, weight: 600 },
+    small: { height: 44, size: 15, lineHeight: 22, weight: 600 }, // TASK-011 §9 Q14
+  },
+  // 주황 #FF5A00 · 52 · 17/24·700 on-brand #1A1A1A · 밑 한 줄 12/16·500 muted
+  'bottom-primary': {
+    bg: '#FF5A00',
+    height: 52,
+    size: 17,
+    lineHeight: 24,
+    weight: 700,
+    fg: '#1A1A1A',
+    sub: { size: 12, lineHeight: 16, weight: 500, fg: '#666C7A' },
+  },
+  // 높이 24 · 흰 바탕 · 테두리 1px #666C7A · 글자 #333333 12/16·600 · 시계 14 · r999
+  'chip-hint': {
+    height: 24,
+    bg: '#FFFFFF',
+    borderWidth: 1,
+    border: '#666C7A',
+    fg: '#333333',
+    size: 12,
+    lineHeight: 16,
+    weight: 600,
+    icon: 14,
+    radius: 999,
+  },
+  // 높이 24 · 안쪽 10 · 흰 바탕 · 글자 #1A1A1A · DM Mono 12 · r999 ("안쪽 10"은 높이 24라 좌우로 읽음)
+  'pill-count': { height: 24, paddingHorizontal: 10, bg: '#FFFFFF', fg: '#1A1A1A', family: 'DM Mono', size: 12, radius: 999 },
+};
+
 // §4-3 글자 값
 export const STRINGS: Record<string, string> = {
   'sh-0': 'none', // Q15

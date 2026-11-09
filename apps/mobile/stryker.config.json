@@ -17,7 +17,8 @@
     "src/lib/source-label.ts",
     "src/lib/calendar.ts",
     "src/lib/create-trip.ts",
-    "src/lib/day-list.ts"
+    "src/lib/day-list.ts",
+    "src/planning/format.ts"
   ],
   "reporters": [
     "clear-text",
@@ -45,7 +46,9 @@
         "<rootDir>/__tests__/trip-delay.test.tsx",
         "<rootDir>/__tests__/particle.test.ts",
         "<rootDir>/__tests__/task-009-select.test.tsx",
-        "<rootDir>/__tests__/task-010-lib.test.ts"
+        "<rootDir>/__tests__/task-010-lib.test.ts",
+        "<rootDir>/__tests__/task-011-lib.test.ts",
+        "<rootDir>/__tests__/task-011-day-list.test.tsx"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",

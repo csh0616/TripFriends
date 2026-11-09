@@ -44,10 +44,12 @@ function waves(unitsWide: number): { alpha: number; d: string }[] {
   });
 }
 
-export function CityCover({ size, style }: { size: CoverSize; style?: StyleProp<ViewStyle> }) {
+/** width를 넘기면 그 너비로 그린다 (날짜 목록 표지: 화면 - 40. TASK-011 review 7번 줄). 높이·그림 크기는 그대로 */
+export function CityCover({ size, width: wide, style }: { size: CoverSize; width?: number; style?: StyleProp<ViewStyle> }) {
   const id = `city-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const [from, to] = placeholderFor('landmark');
-  const { width, height, glyph, line } = SPEC[size];
+  const { width: baseWidth, height, glyph, line } = SPEC[size];
+  const width = wide ?? baseWidth;
   const k = Math.min(width, height) / layout.coverUnit; // 160칸 좌표 -> 화면
   const glyphScale = glyph / layout.iconGrid;
   return (

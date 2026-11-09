@@ -33,6 +33,8 @@
 | GET `/places/search?city_code&q` | 장소 이름 검색 (꼭 갈 곳, 도시 팩 안) | `Place[]` | FR-01 |
 | GET `/places/lodging-search?city_code&q` | 숙소 검색 (Google 실시간, TASK-010 §B5) | `{place_id, name, address_short}[]` | FR-01 |
 | GET `/trips/current` | 이 기기의 지금 여행 (R1은 하나) | `Trip` 또는 404 | FR-33 (TASK-010) |
+| GET `/days/{day_id}/course` | 그날 고른 코스 (코스안 카드와 같은 모양, 읽기만) | `CourseOption` 또는 404 | FR-03 (TASK-010 §12) |
+| POST `/debug/seed-demo` 선택값 | `chosen`, `past_days`(데모 시계를 그만큼 뒤로), 헤더 `X-Device-Id`(그 기기 여행으로 붙임, 점검 전용) — 운영 404 | — | TASK-010 §14·§15 |
 
 ### 2-2. 계획 대화 (FR-02~03)
 > **11-05**: 계획 API의 경로·요청·응답·오류는 **TASK-003 §5·§6·§10이 정본**이다. 아래와 다르면 TASK-003을 따른다

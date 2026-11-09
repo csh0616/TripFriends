@@ -1956,6 +1956,13 @@
               }
             ],
             "title": "Lng"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            },
+            "type": "array",
+            "title": "Facts"
           }
         },
         "type": "object",
@@ -1972,7 +1979,8 @@
           "hours_status",
           "name",
           "lat",
-          "lng"
+          "lng",
+          "facts"
         ],
         "title": "CourseItemView",
         "description": "TASK-004 A3: 앱이 장소 이름을 다시 찾지 않게 `name`을 더한 응답용 CourseItem. 엔진의 CourseItem은 그대로 둔다.\nname = 장소 이름, 장소가 없는 고정 일정이면 저장된 title (§12-1 Q1)."
@@ -2068,6 +2076,30 @@
         ],
         "title": "CourseResultOption"
       },
+      "DayBrief": {
+        "properties": {
+          "end_time": {
+            "type": "string",
+            "title": "End Time"
+          },
+          "place_count": {
+            "type": "integer",
+            "title": "Place Count"
+          },
+          "move_min": {
+            "type": "integer",
+            "title": "Move Min"
+          }
+        },
+        "type": "object",
+        "required": [
+          "end_time",
+          "place_count",
+          "move_min"
+        ],
+        "title": "DayBrief",
+        "description": "날짜 목록의 날 요약 (TASK-011 §9 Q2). 고른 코스의 마지막 줄 끝 · 장소가 있는 줄 수 · 이동 합계(분)."
+      },
       "DayFixed": {
         "properties": {
           "place_id": {
@@ -2102,6 +2134,24 @@
           "end"
         ],
         "title": "DayFixed"
+      },
+      "DayMust": {
+        "properties": {
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "place_id",
+          "name"
+        ],
+        "title": "DayMust"
       },
       "DayMustVisit": {
         "properties": {
@@ -4341,6 +4391,24 @@
             },
             "type": "array",
             "title": "Fixed Events"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DayBrief"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "must_visits": {
+            "items": {
+              "$ref": "#/components/schemas/DayMust"
+            },
+            "type": "array",
+            "title": "Must Visits",
+            "default": []
           }
         },
         "type": "object",

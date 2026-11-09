@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { COLORS, FONTS, LISTS, NUMBERS, PILLS, STRINGS, TYPE } from '../test-support/design-table';
+import { COLORS, FIT, FONTS, LISTS, NUMBERS, PILLS, STRINGS, TYPE } from '../test-support/design-table';
 import { REPO_ROOT } from '../test-support/source-files';
 
 const PACKAGE = join(REPO_ROOT, 'packages', 'design-tokens');
@@ -16,6 +16,7 @@ const KNOWN = new Set([
   ...Object.keys(STRINGS),
   ...Object.keys(LISTS), // TASK-006 §13 E2, DESIGN-001 §4-6
   ...Object.keys(PILLS), // TASK-010 §14 답 2, DESIGN-001 §4-9
+  ...Object.keys(FIT), // TASK-011 B1, DESIGN-001 §4-11
 ]);
 
 type Found = Map<string, unknown[]>;
@@ -90,6 +91,35 @@ test.each(Object.entries(PILLS))('T18_S4_9_알약_색_%s', (name, value) => {
   const found = one(name) as Record<string, unknown>;
   const upper = Object.fromEntries(Object.entries(found ?? {}).map(([key, v]) => [key, String(v).toUpperCase()]));
   expect(upper).toEqual(value);
+});
+
+// TASK-011 B1: §4-11 새 값 11개. 색 글자는 대소문자를 가리지 않는다. 문서에 없는 칸은 키도 없다 (toEqual)
+const upperColors = (value: unknown): unknown => {
+  if (typeof value === 'string') return value.startsWith('#') ? value.toUpperCase() : value;
+  if (Array.isArray(value)) return value.map(upperColors);
+  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, upperColors(v)]));
+  return value;
+};
+
+test.each(Object.entries(FIT))('T19_S4_11_디자인_맞추기_%s', (name, value) => {
+  expect(upperColors(one(name))).toEqual(value);
+});
+
+test('T19_S4_11_새_토큰은_정확히_13개(TASK_011_S10_E6_S12_Q1)', () => {
+  expect(Object.keys(FIT).sort()).toEqual(
+    ['title-trip', 'end-note', 'back-day', 'row-read', 'read-note', 'btn-add-event', 'btn-new-trip', 'sheet-confirm', 'fact-line', 'btn-card-secondary', 'bottom-primary', 'chip-hint', 'pill-count'].sort(),
+  );
+});
+
+test('T19_S4_11_bottom_primary_바탕은_brand_글자는_on_brand와_같은_값', () => {
+  expect(String((one('bottom-primary') as { bg?: unknown }).bg).toUpperCase()).toBe(COLORS.brand);
+  expect(String((one('bottom-primary') as { fg?: unknown }).fg).toUpperCase()).toBe(COLORS['on-brand']);
+});
+
+test('T19_S4_11_카드_안_버튼·추천_칩·일정_버튼에_주황이_없다', () => {
+  for (const name of ['btn-card-secondary', 'chip-hint', 'btn-add-event', 'btn-new-trip', 'back-day', 'pill-count', 'end-note', 'title-trip']) {
+    expect(JSON.stringify(one(name)).toUpperCase()).not.toContain(COLORS.brand);
+  }
 });
 
 test('T18_S4_9_새_값_D1D5DB는_pill_past_한_곳에만', () => {

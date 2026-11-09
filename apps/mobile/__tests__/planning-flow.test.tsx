@@ -222,7 +222,7 @@ describe('P1 첫 질문', () => {
   test('W16_B4_Q32_오늘_시간표는_day의_시작과_끝', async () => {
     happyServer();
     await toP1();
-    expect(within(screen.getByTestId('timetable')).getByText(/^10:00\s*~\s*20:00$/)).toBeTruthy();
+    expect(within(screen.getByTestId('timetable')).getByText('10:00–20:00')).toBeTruthy(); // TASK-011 §9 Q8·§12 Q2 (승인)
   });
 
   test('W17_Q6_꼭_갈_곳_줄은_이름만_시각_없음', async () => {
@@ -265,11 +265,12 @@ describe('P1 첫 질문', () => {
   });
 
   test.each([
-    [1, '첫째 날 계획'],
-    [2, '둘째 날 계획'],
-    [3, '셋째 날 계획'],
-    [4, '넷째 날 계획'],
-    [5, '다섯째 날 계획'],
+    // TASK-011 (DESIGN-001 §4-11): 모든 화면 "N일째" ("첫째 날" 쓰지 않음)
+    [1, '1일째 계획'],
+    [2, '2일째 계획'],
+    [3, '3일째 계획'],
+    [4, '4일째 계획'],
+    [5, '5일째 계획'],
     [6, '6일째 계획'],
     [10, '10일째 계획'],
   ])('W74_Q10_Q32_P1_머리_제목_%d일차는_%s', async (number, title) => {
@@ -281,11 +282,12 @@ describe('P1 첫 질문', () => {
   });
 
   test.each([
-    ['2026-12-02', '10:00', '20:00', '12월 2일 수요일 · 10:00~20:00'],
-    ['2027-01-05', '09:30', '21:15', '1월 5일 화요일 · 09:30~21:15'],
-    ['2026-12-05', '10:00', '20:00', '12월 5일 토요일 · 10:00~20:00'],
-    ['2026-12-06', '10:00', '20:00', '12월 6일 일요일 · 10:00~20:00'],
-    ['2026-12-31', '10:00', '20:00', '12월 31일 목요일 · 10:00~20:00'],
+    // TASK-011 (DESIGN-001 §4-11): 부제는 요일 한 글자, 시각 범위는 엔 대시
+    ['2026-12-02', '10:00', '20:00', '12월 2일 수 · 10:00–20:00'],
+    ['2027-01-05', '09:30', '21:15', '1월 5일 화 · 09:30–21:15'],
+    ['2026-12-05', '10:00', '20:00', '12월 5일 토 · 10:00–20:00'],
+    ['2026-12-06', '10:00', '20:00', '12월 6일 일 · 10:00–20:00'],
+    ['2026-12-31', '10:00', '20:00', '12월 31일 목 · 10:00–20:00'],
   ])('W75_Q32_P1_부제_%s', async (date, start, end, subtitle) => {
     const server = happyServer();
     server.on(R.start, json(201, { ...session, day: { ...day, date, start, end } }));
@@ -327,7 +329,7 @@ describe('P2 후보 고르기', () => {
     expect(card.getByText('01 / 06')).toBeTruthy();
     expect(card.getByText('장소 D01')).toBeTruthy();
     expect(card.getByText('이유 D01')).toBeTruthy();
-    expect(card.getByText('10:00-18:00')).toBeTruthy(); // Q32: 서버 글자 그대로
+    expect(card.getByText('10:00–18:00')).toBeTruthy(); // Q32: 서버 값 그대로, 시각 범위만 엔 대시 (TASK-011 review 20번 줄)
     expect(card.getByText('확인됨')).toBeTruthy();
     expect(card.getByText('숙소에서 650m')).toBeTruthy();
     expect(within(screen.getByTestId('candidate-card-D03')).getByText('03 / 06')).toBeTruthy();
@@ -566,9 +568,10 @@ describe('P2 후보 고르기', () => {
   });
 
   test.each([
-    [1, '첫째 날 고르는 중'],
-    [2, '둘째 날 고르는 중'],
-    [5, '다섯째 날 고르는 중'],
+    // TASK-011 (DESIGN-001 §4-11): "1일째 고르는 중"
+    [1, '1일째 고르는 중'],
+    [2, '2일째 고르는 중'],
+    [5, '5일째 고르는 중'],
     [6, '6일째 고르는 중'],
   ])('W82_Q10_Q32_P2_머리_제목_%d일차는_%s', async (number, title) => {
     const server = happyServer();
@@ -580,7 +583,7 @@ describe('P2 후보 고르기', () => {
   test('W83_Q32_P2_부제', async () => {
     happyServer();
     await toP2();
-    expect(screen.getByText('12월 2일 수요일 · 10:00~20:00')).toBeTruthy();
+    expect(screen.getByText('12월 2일 수 · 10:00–20:00')).toBeTruthy(); // TASK-011 §4-11
   });
 });
 
@@ -597,7 +600,7 @@ describe('P3 코스안', () => {
   test('W40_S13_Q33_P3_부제', async () => {
     happyServer();
     await toP3();
-    expect(screen.getByText('둘째 날 · 3곳')).toBeTruthy();
+    expect(screen.getByText('2일째 · 3곳')).toBeTruthy(); // TASK-011 §4-11 날 이름
   });
 
   test('W41_B4_요약_줄은_곳_수와_이동_분', async () => {
@@ -972,7 +975,7 @@ describe('§13-1 A8 P3 동선 그림', () => {
     expect(String(prop('route-line').points)).not.toMatch(/NaN|undefined|null/);
     expect(within(screen.getByTestId('course-row-9')).getByText('저녁 약속')).toBeTruthy();
     expect(screen.getByText('4곳 · 이동 80분')).toBeTruthy();
-    expect(screen.getByText('둘째 날 · 4곳')).toBeTruthy();
+    expect(screen.getByText('2일째 · 4곳')).toBeTruthy(); // TASK-011 §4-11 날 이름
   });
 
   test('W103_A8_모두_좌표가_없으면_숙소만_그리고_목록은_그대로', async () => {

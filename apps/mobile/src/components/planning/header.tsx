@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/app-text';
 import { layout } from '@/planning/layout';
-import { color, control, radius, space, text } from '@/planning/theme';
+import { color, control, fit, fitText, radius, space, text } from '@/planning/theme';
 
 import { BackIcon } from './icons';
 import { SosButton } from './sos-button';
@@ -20,30 +20,47 @@ export function Header({
   title?: string;
   subtitle?: string;
   onBack?: () => void;
-  /** 있으면 아이콘 대신 이 글자의 뒤로 (보조 모양, 주황 아님) */
+  /** 있으면 "‹ 글자" 뒤로 (back-day: 투명 바탕, 아이콘 + 글자. TASK-011) */
   backLabel?: string;
   backDisabled?: boolean;
   onSos: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const day = fit['back-day'];
+  const sideStyle = backLabel ? { width: day.side } : styles.side; // back-day 화면의 머리 칸 [84 | 1fr | 84]
+  const ink = backDisabled ? day.disabledFg : day.fg;
   return (
     <View style={[styles.wrap, { paddingTop: insets.top }]}>
       <View style={styles.row}>
-        <View style={styles.side}>
+        <View style={sideStyle}>
           {onBack ? (
-            <Pressable
-              testID="header-back"
-              accessibilityRole="button"
-              accessibilityLabel="뒤로"
-              disabled={backDisabled}
-              onPress={onBack}
-              style={[backLabel ? styles.backLabel : styles.back, backDisabled && styles.backOff]}
-            >
-              {backLabel ? <Text style={text('caption', backDisabled ? 'muted' : 'ink')}>{backLabel}</Text> : <BackIcon color={backDisabled ? color.muted : color.ink} />}
-            </Pressable>
+            backLabel ? (
+              <Pressable
+                testID="header-back"
+                accessibilityRole="button"
+                accessibilityLabel="뒤로"
+                disabled={backDisabled}
+                onPress={onBack}
+                style={[styles.backDay, { backgroundColor: backDisabled ? day.disabledBg : day.bg }]}
+              >
+                <BackIcon color={ink} size={day.icon} />
+                <Text style={fitText({ size: day.size, lineHeight: day.lineHeight, weight: day.weight, fg: ink })}>{backLabel}</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                testID="header-back"
+                accessibilityRole="button"
+                accessibilityLabel="뒤로"
+                disabled={backDisabled}
+                onPress={onBack}
+                style={[styles.back, backDisabled && styles.backOff]}
+              >
+                <BackIcon color={backDisabled ? color.muted : color.ink} />
+              </Pressable>
+            )
           ) : null}
         </View>
-        <View style={styles.center}>
+        <View style={backLabel ? styles.centerFlex : styles.center}>
           {title ? (
             <Text numberOfLines={1} style={styles.centerText}>
               {title}
@@ -55,7 +72,7 @@ export function Header({
             </Text>
           ) : null}
         </View>
-        <View style={[styles.side, styles.right]}>
+        <View style={[sideStyle, styles.right]}>
           <SosButton onPress={onSos} />
         </View>
       </View>
@@ -72,8 +89,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: layout.screenMargin,
   },
   side: { flex: 1, justifyContent: 'center' },
-  right: { alignItems: 'flex-end' },
+  right: { alignItems: 'flex-end', justifyContent: 'center' },
   center: { flex: 3, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space['space-2'] },
+  centerFlex: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space['space-2'] },
   centerText: { ...text('heading'), textAlign: 'center' },
   subtitle: { ...text('caption', 'muted'), textAlign: 'center' },
   back: {
@@ -83,15 +101,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  backLabel: {
-    minHeight: control['touch-min'],
-    minWidth: control['touch-min'],
-    paddingHorizontal: space['space-3'],
+  // back-day: 투명 · 높이 44 · 안쪽 6/12 · 아이콘 20 + 글자. 왼쪽 끝은 머리 칸에 맞춘다
+  backDay: {
+    height: fit['back-day'].height,
+    paddingVertical: fit['back-day'].paddingVertical,
+    paddingHorizontal: fit['back-day'].paddingHorizontal,
     borderRadius: radius['r-full'],
     alignSelf: 'flex-start',
-    backgroundColor: color['bg-2'],
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: space['space-1'],
   },
   backOff: { backgroundColor: color['bg-2'] }, // 요청 중 비활성 규칙 (TASK-005 §9 Q19)
 });
