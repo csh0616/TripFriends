@@ -90,6 +90,7 @@ export function P2Screen({
   return (
     <ScreenFrame
       listBottomSpace
+      contentTop={space['space-2']}
       title={`${dayName(day.day_number)} 고르는 중`}
       subtitle={daySubtitle(day)}
       input={{ onSend: (value) => next({ text: value }), disabled: busy }}

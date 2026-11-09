@@ -307,7 +307,7 @@ function DayRow({
       accessible={false} // 알약·고정 일정·버튼을 따로 읽히게 한다
       accessibilityRole="button"
       onPress={onOpen}
-      style={[styles.card, focus && styles.cardFocus, today && styles.rowToday]}
+      style={[styles.card, focus && styles.cardFocus, today && styles.rowToday, today && styles.cardToday]}
     >
       <View style={styles.top}>
         <View style={styles.grow}>
@@ -416,6 +416,8 @@ const styles = StyleSheet.create({
     borderWidth: layout.selRing,
     borderColor: color.brand,
   },
+  // 링(테두리 2)이 안쪽을 밀지 않게 그만큼 안쪽 여백을 줄인다 (§16 N18): 안쪽 차지 = 16 그대로
+  cardToday: { padding: space['space-4'] - layout.selRing },
   top: { flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
   event: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   time: { minWidth: layout.timeColumn },

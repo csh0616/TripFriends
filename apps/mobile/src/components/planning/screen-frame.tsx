@@ -25,6 +25,7 @@ export function ScreenFrame({
   footer,
   action,
   listBottomSpace,
+  contentTop,
   children,
 }: {
   title?: string;
@@ -39,6 +40,8 @@ export function ScreenFrame({
   action?: React.ReactNode;
   /** 후보 카드 목록처럼 아래 고정 줄에 가려질 수 있는 본문: action-bar 높이 + 안전 영역, 적어도 떠 있는 줄 72 + 12만큼 아래 여백 (P2만 켠다, §14 N13) */
   listBottomSpace?: boolean;
+  /** 본문 위 여백을 틀 기본(화면 여백 20) 대신 쓴다. 후보 화면(P2)만 머리 → 말풍선 8 (§16) */
+  contentTop?: number;
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -51,7 +54,11 @@ export function ScreenFrame({
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.body}
-          contentContainerStyle={listBottomSpace ? [styles.content, { paddingBottom: Math.max(layout.actionBar + insets.bottom, layout.floatingBar + space['space-3']) }] : styles.content}
+          contentContainerStyle={[
+            styles.content,
+            contentTop !== undefined && { paddingTop: contentTop },
+            listBottomSpace && { paddingBottom: Math.max(layout.actionBar + insets.bottom, layout.floatingBar + space['space-3']) },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
