@@ -59,7 +59,10 @@ export function TripDays({
   const finished = trip.trip_days.every((day) => day.state === 'past');
 
   const change = (dayId: string, edit: (events: FixedEvent[]) => FixedEvent[]) =>
-    onTripChange({ ...trip, trip_days: trip.trip_days.map((day) => (day.day_id === dayId ? { ...day, fixed_events: edit(day.fixed_events) } : day)) });
+    onTripChange({
+      ...trip,
+      trip_days: trip.trip_days.map((day) => (day.day_id === dayId ? { ...day, fixed_events: edit(day.fixed_events) } : day)),
+    });
 
   const open = (day: TripDay, mode?: 'auto') => {
     setHint(null);
@@ -97,6 +100,7 @@ export function TripDays({
           ) : undefined
         }
       >
+        <CityCover size="banner" width={width - layout.coverMargin} style={styles.banner} />
         <View style={styles.head}>
           <Text style={text('caption', 'muted')}>{periodLabel(trip.start_date, trip.end_date)}</Text>
           <Text style={fitText(fit['title-trip'])}>{header.title}</Text>
@@ -109,32 +113,40 @@ export function TripDays({
             <Text style={text('caption', 'muted')}>{header.line}</Text>
           </View>
         </View>
-        <CityCover size="banner" width={width - layout.coverMargin} style={styles.banner} />
-        {trip.trip_days.map((day, index) => {
-          const card = day.state === 'planning' || (day.state === 'today' && day.chosen_option_id === null);
-          return (
-            <DayRow
-              key={day.day_id}
-              day={day}
-              index={index}
-              card={card}
-              focus={card && primary?.dayId === day.day_id}
-              onOpen={() => open(day)}
-              onPlan={() => plan(day)}
-              onAuto={() => plan(day, 'auto')}
-              onAdd={() => setSheetDay(day)}
-              onRemove={(event) => void remove(day, event)}
-            />
-          );
-        })}
+        <View style={styles.days}>
+          {trip.trip_days.map((day, index) => {
+            const card = day.state === 'planning' || (day.state === 'today' && day.chosen_option_id === null);
+            return (
+              <DayRow
+                key={day.day_id}
+                day={day}
+                index={index}
+                card={card}
+                focus={card && primary?.dayId === day.day_id}
+                onOpen={() => open(day)}
+                onPlan={() => plan(day)}
+                onAuto={() => plan(day, 'auto')}
+                onAdd={() => setSheetDay(day)}
+                onRemove={(event) => void remove(day, event)}
+              />
+            );
+          })}
+        </View>
         {hint ? (
           <Text testID="day-list-hint" style={text('caption', 'muted')}>
             {hint}
           </Text>
         ) : null}
         {busy ? <ActivityIndicator color={color.muted} /> : null}
-        {primary === null ? <EndNote finished={finished} count={trip.trip_days.length} /> : null}
-        <View style={[styles.newTripSlot, primary === null && { marginBottom: fit['btn-new-trip'].bottom - layout.screenMargin }]}>
+        {primary === null ? <EndNote finished={finished} count={trip.trip_days.length} anyCourse={trip.trip_days.some((day) => day.chosen_option_id !== null)} /> : null}
+        <View
+          style={[
+            styles.newTripSlot,
+            primary === null && {
+              marginBottom: fit['btn-new-trip'].bottom - layout.screenMargin,
+            },
+          ]}
+        >
           <Pressable testID="new-trip" accessibilityRole="button" onPress={() => setConfirming(true)} style={styles.newTrip}>
             <Text style={fitText(fit['btn-new-trip'])}>새 여행 만들기</Text>
           </Pressable>
@@ -166,7 +178,7 @@ export function TripDays({
 }
 
 /** 주 버튼이 없을 때 끝맺음 글: 왜 버튼이 없는지 한 줄로 알려 준다 (E1) */
-function EndNote({ finished, count }: { finished: boolean; count: number }) {
+function EndNote({ finished, count, anyCourse }: { finished: boolean; count: number; anyCourse: boolean }) {
   const note = fit['end-note'];
   return (
     <View testID="end-note" style={styles.endNote}>
@@ -174,9 +186,12 @@ function EndNote({ finished, count }: { finished: boolean; count: number }) {
         <CheckIcon color={color['ink-strong']} size={note.icon} />
       </View>
       <Text style={[fitText(note.title), styles.center]}>{finished ? '여행이 끝났어' : `${count}일 모두 정했어`}</Text>
-      <Text style={[fitText(note.body), styles.center, styles.endBody]}>
-        {finished ? '날짜를 누르면 고른 코스를 볼 수 있어' : '여행 첫날부터 아래에 ‘오늘 여행 보기’ 버튼이 나와'}
-      </Text>
+      {/* 지난 날이 모두 "고른 코스 없음"이면 설명 줄은 거짓이 되므로 뺀다 (§14 9-5) */}
+      {finished && !anyCourse ? null : (
+        <Text style={[fitText(note.body), styles.center, styles.endBody]}>
+          {finished ? '날짜를 누르면 고른 코스를 볼 수 있어' : '여행 첫날부터 아래에 ‘오늘 여행 보기’ 버튼이 나와'}
+        </Text>
+      )}
     </View>
   );
 }
@@ -197,9 +212,7 @@ function DayTitle({ index, date, small }: { index: number; date: string; small?:
 
 function DayCircle({ past }: { past: boolean }) {
   const size = past ? layout.dayCirclePast : layout.dayCircle;
-  return (
-    <PhotoPlaceholder category="landmark" glyph={past ? layout.dayGlyphPast : layout.dayGlyph} style={{ width: size, height: size, borderRadius: radius['r-full'] }} />
-  );
+  return <PhotoPlaceholder category="landmark" glyph={past ? layout.dayGlyphPast : layout.dayGlyph} style={{ width: size, height: size, borderRadius: radius['r-full'] }} />;
 }
 
 function DayRow({
@@ -267,10 +280,26 @@ function DayRow({
           ) : null}
         </View>
         <DayPill dayId={day.day_id} state={day.state} />
-        <NextIcon color={color.muted} size={layout.dayChevron} />
+        <View testID={`day-chevron-${day.day_id}`}>
+          <NextIcon color={color.muted} size={layout.dayChevron} />
+        </View>
       </Pressable>
     );
   }
+
+  const addButton = (
+    <Pressable
+      testID={`add-fixed-${day.day_id}`}
+      accessibilityRole="button"
+      accessibilityLabel="일정 추가"
+      onPress={onAdd}
+      hitSlop={{ top: addSlop, bottom: addSlop }}
+      style={styles.addEvent}
+    >
+      <PlusIcon color={fit['btn-add-event'].fg} size={fit['btn-add-event'].icon} />
+      <Text style={fitText(fit['btn-add-event'])}>일정</Text>
+    </Pressable>
+  );
 
   return (
     <Pressable
@@ -278,7 +307,7 @@ function DayRow({
       accessible={false} // 알약·고정 일정·버튼을 따로 읽히게 한다
       accessibilityRole="button"
       onPress={onOpen}
-      style={[styles.card, today && styles.rowToday]}
+      style={[styles.card, focus && styles.cardFocus, today && styles.rowToday]}
     >
       <View style={styles.top}>
         <View style={styles.grow}>
@@ -286,39 +315,33 @@ function DayRow({
         </View>
         <DayPill dayId={day.day_id} state={day.state} />
       </View>
-      {must.length > 0 ? (
-        <Text numberOfLines={1} style={text('caption', 'muted')}>{`꼭 갈 곳 · ${must.map((one) => one.name).join(', ')}`}</Text>
-      ) : null}
-      {day.fixed_events.map((event) => (
-        <View key={event.fixed_event_id} style={styles.event}>
-          <Text style={[text('num-md'), styles.time]}>{timeRange(clockOf(event.start_at), clockOf(event.end_at))}</Text>
-          <Text style={[text('body'), styles.grow]} numberOfLines={1}>
-            {event.title}
-          </Text>
-          <Pressable
-            testID={`fixed-remove-${event.fixed_event_id}`}
-            accessibilityRole="button"
-            accessibilityLabel={`${event.title} 일정 지우기`}
-            onPress={() => onRemove(event)}
-            style={styles.remove}
-          >
-            <CloseIcon color={color.muted} size={layout.checkSmall} />
-          </Pressable>
+      {must.length > 0 ? <Text numberOfLines={1} style={text('caption', 'muted')}>{`꼭 갈 곳 · ${must.map((one) => one.name).join(', ')}`}</Text> : null}
+      {/* 고정 일정이 없으면 "고정 일정 없음" + [+ 일정] 한 줄. 있으면 마지막 고정 일정 줄 오른쪽에 [+ 일정] (§14 N3, §15) */}
+      {day.fixed_events.length === 0 ? (
+        <View style={styles.event}>
+          <Text style={[text('caption', 'muted'), styles.grow]}>고정 일정 없음</Text>
+          {addButton}
         </View>
-      ))}
-      <View style={styles.addRow}>
-        <Pressable
-          testID={`add-fixed-${day.day_id}`}
-          accessibilityRole="button"
-          accessibilityLabel="일정 추가"
-          onPress={onAdd}
-          hitSlop={{ top: addSlop, bottom: addSlop }}
-          style={styles.addEvent}
-        >
-          <PlusIcon color={fit['btn-add-event'].fg} size={fit['btn-add-event'].icon} />
-          <Text style={fitText(fit['btn-add-event'])}>일정</Text>
-        </Pressable>
-      </View>
+      ) : (
+        day.fixed_events.map((event, at) => (
+          <View key={event.fixed_event_id} style={styles.event}>
+            <Text style={[text('num-md'), styles.time]}>{timeRange(clockOf(event.start_at), clockOf(event.end_at))}</Text>
+            <Text style={[text('body'), styles.grow]} numberOfLines={1}>
+              {event.title}
+            </Text>
+            <Pressable
+              testID={`fixed-remove-${event.fixed_event_id}`}
+              accessibilityRole="button"
+              accessibilityLabel={`${event.title} 일정 지우기`}
+              onPress={() => onRemove(event)}
+              style={styles.remove}
+            >
+              <CloseIcon color={color.muted} size={layout.checkSmall} />
+            </Pressable>
+            {at === day.fixed_events.length - 1 ? addButton : null}
+          </View>
+        ))
+      )}
       {focus ? (
         <View style={styles.pair}>
           <View style={styles.grow}>
@@ -342,24 +365,66 @@ const addSlop = (fit['btn-add-event'].hit - fit['btn-add-event'].height) / 2;
 const styles = StyleSheet.create({
   banner: { borderRadius: radius['r-xl'], alignSelf: 'center' },
   grow: { flex: 1 },
-  lockedBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
-  title: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },
+  days: { gap: space['space-3'] }, // 날 카드 사이 12 (§14 8)
+  lockedBody: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['space-3'],
+  },
+  title: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: space['space-2'],
+  },
   center: { textAlign: 'center' },
   head: { gap: space['space-1'] },
-  progress: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  progress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['space-2'],
+  },
   dots: { flexDirection: 'row', alignItems: 'center', gap: space['space-1'] },
-  dotMark: { width: layout.progressDot, height: layout.progressDot, borderRadius: radius['r-full'], borderWidth: layout.pillBorder, borderColor: color.ink },
+  dotMark: {
+    width: layout.progressDot,
+    height: layout.progressDot,
+    borderRadius: radius['r-full'],
+    borderWidth: layout.pillBorder,
+    borderColor: color.ink,
+  },
   dotFilled: { backgroundColor: color.ink },
   dotEmpty: { backgroundColor: color.surface },
-  row: { borderRadius: radius['r-lg'], backgroundColor: color['bg-2'], paddingHorizontal: space['space-4'], flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
+  row: {
+    borderRadius: radius['r-lg'],
+    backgroundColor: color['bg-2'],
+    paddingHorizontal: space['space-4'],
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space['space-3'],
+  },
   rowPast: { minHeight: layout.rowPast },
   rowPlanned: { minHeight: layout.rowPlanned },
-  card: { borderRadius: radius['r-lg'], backgroundColor: color['bg-2'], padding: space['space-4'], gap: space['space-2'] },
-  rowToday: { backgroundColor: color['brand-soft'], borderWidth: layout.selRing, borderColor: color.brand },
+  card: {
+    borderRadius: radius['r-lg'],
+    backgroundColor: color['bg-2'],
+    padding: space['space-4'],
+    gap: space['space-2'],
+  },
+  cardFocus: { backgroundColor: color['brand-soft'] }, // 지금 할 날 카드 = 연주황 (링은 오늘만, §14 N2)
+  rowToday: {
+    backgroundColor: color['brand-soft'],
+    borderWidth: layout.selRing,
+    borderColor: color.brand,
+  },
   top: { flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
   event: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   time: { minWidth: layout.timeColumn },
-  remove: { width: control['touch-min'], height: control['touch-min'], alignItems: 'center', justifyContent: 'center' },
+  remove: {
+    width: control['touch-min'],
+    height: control['touch-min'],
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   addRow: { flexDirection: 'row' },
   addEvent: {
     height: fit['btn-add-event'].height,
@@ -382,8 +447,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  endNote: { marginTop: fit['end-note'].top - space['space-4'], alignItems: 'center', gap: space['space-2'] },
-  endCircle: { width: fit['end-note'].circle, height: fit['end-note'].circle, borderRadius: radius['r-full'], backgroundColor: fit['end-note'].circleBg, alignItems: 'center', justifyContent: 'center' },
+  endNote: {
+    marginTop: fit['end-note'].top - space['space-4'],
+    alignItems: 'center',
+    gap: space['space-2'],
+  },
+  endCircle: {
+    width: fit['end-note'].circle,
+    height: fit['end-note'].circle,
+    borderRadius: radius['r-full'],
+    backgroundColor: fit['end-note'].circleBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   endBody: { width: fit['end-note'].width },
   newTripSlot: { marginTop: 'auto' },
   newTrip: {

@@ -37,7 +37,7 @@ export function ScreenFrame({
   footer?: React.ReactNode;
   /** TASK-010: 스크롤 밖 맨 아래에 고정되는 주 버튼 자리 (입력창이 없는 화면) */
   action?: React.ReactNode;
-  /** 후보 카드 목록처럼 아래 고정 줄에 가려질 수 있는 본문: action-bar 높이 + 안전 영역만큼 아래 여백 (P2만 켠다) */
+  /** 후보 카드 목록처럼 아래 고정 줄에 가려질 수 있는 본문: action-bar 높이 + 안전 영역, 적어도 떠 있는 줄 72 + 12만큼 아래 여백 (P2만 켠다, §14 N13) */
   listBottomSpace?: boolean;
   children: React.ReactNode;
 }) {
@@ -51,7 +51,7 @@ export function ScreenFrame({
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.body}
-          contentContainerStyle={listBottomSpace ? [styles.content, { paddingBottom: layout.actionBar + insets.bottom }] : styles.content}
+          contentContainerStyle={listBottomSpace ? [styles.content, { paddingBottom: Math.max(layout.actionBar + insets.bottom, layout.floatingBar + space['space-3']) }] : styles.content}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >

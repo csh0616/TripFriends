@@ -17,7 +17,7 @@ export function NewTripSheet({ onConfirm, onKeep }: { onConfirm: () => void; onK
     <View style={styles.overlay}>
       {/* 바깥을 누르면 [그대로 둘게]와 같다 */}
       <Pressable testID="new-trip-sheet-scrim" accessibilityLabel="그대로 둘게" accessibilityRole="button" onPress={onKeep} style={styles.scrim} />
-      <View testID="new-trip-sheet" style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, SHEET.bottom) }]}>
+      <View testID="new-trip-sheet" style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, SHEET.bottom), height: SHEET.height + Math.max(0, insets.bottom - SHEET.bottom) }]}>
         <View style={styles.handle} />
         <Text style={fitText(SHEET)}>지금 여행은 보관돼. 새로 만들까?</Text>
         <Text style={[fitText(SHEET.note), styles.note]}>보관한 여행은 지금은 다시 열 수 없어</Text>
@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     borderRadius: radius['r-full'],
     backgroundColor: color.line,
     marginTop: space['space-2'],
-    marginBottom: space['space-4'],
+    marginBottom: space['space-3'], // 손잡이 8 + 4 + 12 -> 글 24 + 한 줄 24 + 16 + 버튼 112 + 아래 34 = 높이 234 (§14 N6)
   },
   note: { marginTop: SHEET.note.top },
   buttons: { marginTop: SHEET.buttonTop, gap: SHEET.gap },

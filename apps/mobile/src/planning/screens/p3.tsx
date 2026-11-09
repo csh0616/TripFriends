@@ -178,7 +178,7 @@ function hoursOf(item: CourseItem): { chip: HoursChip; always: boolean } {
   const status = item.hours_status ?? null;
   if (status === null) return { chip: null, always: false };
   const view = hoursView(item.facts);
-  if (view.text === ALWAYS_OPEN_TEXT) return { chip: null, always: true };
+  if (view.text === ALWAYS_OPEN_TEXT) return { chip: status, always: true }; // 늘 열림도 확인 상태 칩 (§14 N9). 읽기만 줄은 확인됨만 생략 (§15 Q1)
   return { chip: view.chip === 'hint' ? 'hint' : status, always: false };
 }
 

@@ -21,12 +21,12 @@ export type HoursChip = ChipKind | 'hint' | null;
 
 /**
  * 화면용 영업시간. 내부 status는 todayHoursText 그대로이고 화면 칩만 바뀐다 (A5):
- * 우리가 정한 시간대(curated) -> "추천 시간대" 칩, 늘 열림 -> 칩 없이 "늘 열려 있어". 시각 범위는 엔 대시, 두 구간은 가운데 점
+ * 우리가 정한 시간대(curated) -> "추천 시간대" 칩, 늘 열림 -> 그 status 칩(보통 "확인됨") + "늘 열려 있어" (§14 N9, §15). 시각 범위는 엔 대시, 두 구간은 가운데 점
  */
 export function hoursView(facts: readonly HoursFact[]): { text: string; chip: HoursChip } {
   const base = todayHoursText(facts);
   const hours = facts.find((fact) => fact.field === 'opening_hours');
-  if (hours?.source_type === 'curated' && hours.value === ALWAYS_OPEN) return { text: base.text, chip: null };
+  if (hours?.source_type === 'curated' && hours.value === ALWAYS_OPEN) return { text: base.text, chip: base.chip };
   if (hours?.source_type === 'curated' && hours.value !== null) return { text: hoursRangeText(base.text), chip: 'hint' };
   return { text: hoursRangeText(base.text), chip: base.chip };
 }

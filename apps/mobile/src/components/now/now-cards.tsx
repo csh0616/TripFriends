@@ -17,11 +17,17 @@ import { color, googleText, radius, space, text } from '@/planning/theme';
 
 const ALWAYS_OPEN_TEXT = '늘 열려 있어';
 
-/** 영업시간 칩 자리 (TASK-011 §9 Q10): 확인 상태 칩 / curated 시간대는 "추천 시간대" / 늘 열림은 칩 없이 글자 */
+/** 영업시간 칩 자리 (TASK-011 §9 Q10, §14 N9): 확인 상태 칩 / curated 시간대는 "추천 시간대" / 늘 열림은 그 status 칩(보통 확인됨) + "늘 열려 있어" */
 function FactChip({ facts }: { facts: NowCourseItem['facts'] }) {
   if (facts.length === 0) return null;
   const view = hoursView(facts);
-  if (view.chip === null && view.text === ALWAYS_OPEN_TEXT) return <Text style={text('caption', 'muted')}>{ALWAYS_OPEN_TEXT}</Text>;
+  if (view.text === ALWAYS_OPEN_TEXT)
+    return (
+      <View style={styles.alwaysOpen}>
+        <HoursChipView chip={view.chip} />
+        <Text style={text('caption', 'muted')}>{ALWAYS_OPEN_TEXT}</Text>
+      </View>
+    );
   return <HoursChipView chip={view.chip} />;
 }
 
@@ -353,6 +359,7 @@ const styles = StyleSheet.create({
   thumb: { width: layout.thumbSm, height: layout.thumbSm, borderRadius: radius['r-sm'], overflow: 'hidden' },
   pair: { flexDirection: 'row', gap: space['space-2'] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['space-2'] },
+  alwaysOpen: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },
   big: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },
   restRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], minHeight: layout.courseRow },

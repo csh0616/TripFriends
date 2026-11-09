@@ -169,9 +169,17 @@ export function P2Screen({
                   </View>
                 ) : null}
               </PhotoPlaceholder>
-              <Text style={styles.name}>{place.name}</Text>
-              <Text style={text('body')}>{why}</Text>
-              <View style={styles.actions}>
+              {/* §14 N13: 이름·이유(한 줄씩, 넘치면 …)와 [패스]·[담기]가 같은 띠. 띠 높이 = 24 + 22 = 46 */}
+              <View style={styles.band}>
+                <View style={styles.nameWhy}>
+                  <Text numberOfLines={1} style={styles.name}>
+                    {place.name}
+                  </Text>
+                  <Text numberOfLines={1} style={text('body')}>
+                    {why}
+                  </Text>
+                </View>
+                <View style={styles.actions}>
                 <Pressable
                   testID={`skip-${place.id}`}
                   accessibilityRole="button"
@@ -198,6 +206,7 @@ export function P2Screen({
                     <PlusIcon color={busy ? color.muted : color.surface} />
                   )}
                 </Pressable>
+                </View>
               </View>
               {/* TASK-011 fact-line: 칩 · 값 · 거리 한 줄 + 4px 아래 출처 한 줄 (Google·Tripfriends 같은 자리). Google 값도 상자 없이 출처 줄만 (A4) */}
               <View testID={`fact-line-${place.id}`} style={styles.facts}>
@@ -311,11 +320,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  name: { ...text('heading'), marginBottom: space['space-1'] },
+  band: { flexDirection: 'row', alignItems: 'center', gap: space['space-3'] },
+  nameWhy: { flex: 1 },
+  name: text('heading'),
   actions: {
     flexDirection: 'row',
-    gap: space['space-3'],
-    marginTop: space['space-3'],
+    gap: space['space-2'],
   },
   round: {
     width: control['btn-sm'],
@@ -329,7 +339,6 @@ const styles = StyleSheet.create({
   facts: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: space['space-2'],
     marginTop: space['space-3'],
     minHeight: fit['fact-line'].height,

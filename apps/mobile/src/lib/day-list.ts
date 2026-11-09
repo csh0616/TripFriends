@@ -71,9 +71,10 @@ export function tripHeader(trip: TripLike, today: string): TripHeader {
   const city = CITY_NAME[trip.city_code] ?? trip.city_code;
   const title = count === 1 ? `${city} 당일 여행` : `${city} ${count - 1}박 ${count}일`;
   // 여행 중·여행 끝은 기기 시계가 아니라 서버가 계산한 날 상태를 따른다 (TASK-011 §13 3). 기기 시계는 D-숫자에만
-  if (count > 0 && trip.trip_days.every((day) => day.state === 'past')) return { title, dots: '\u25cf'.repeat(count), line: '여행 끝' };
+  // 점은 "계획했나"라서 여행 끝에도 고른 코스가 있는 날만 채운다 (§15 Q2)
   const planned = trip.trip_days.filter((day) => day.chosen_option_id !== null).length;
   const dots = trip.trip_days.map((day) => (day.chosen_option_id !== null ? '\u25cf' : '\u25cb')).join('');
+  if (count > 0 && trip.trip_days.every((day) => day.state === 'past')) return { title, dots, line: '여행 끝' };
   const during = trip.trip_days.some((day) => day.state === 'today');
   const when = during ? '여행 중' : `D-${dayIndex(trip.start_date) - dayIndex(today)}`;
   return { title, dots, line: `${when} \u00b7 ${count}일 중 ${planned}일 계획 완료` };
