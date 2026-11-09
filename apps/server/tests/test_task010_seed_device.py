@@ -1,10 +1,10 @@
 """TASK-010 데모 시드를 기기 여행으로 붙이기 (승현 결정 11-09, 점검 Maestro·reviewer 전용).
 근거: 승현 결정(11-09) "개발에서만, 운영 404 그대로 / 앱의 기존 데모 버튼 동작은 바꾸지 마 /
-X-Device-Id로 기기 여행에 붙이는 건 점검에서만 / 붙일 때 그 기기의 이전 여행은 B2처럼 archived (지우지 않음)",
+X-Device-Id로 기기 여행에 붙이는 건 점검에서만 (TASK-012 B2: X-Device-Id 대신 Authorization: Bearer의 사용자에게 붙인다) / 붙일 때 그 기기의 이전 여행은 B2처럼 archived (지우지 않음)",
 TASK-010 §B2(여행 하나만, archived), §13 질문 답 1·§14 답 1(past_days = 데모 시계를 n일 뒤로 -> 첫날 state=past).
 
 계약 (이 테스트가 정한 것, 승인 대기):
-    POST /debug/seed-demo + 헤더 X-Device-Id -> 그 기기의 GET /trips/current = 시드 응답의 trip_id (status active),
+    POST /debug/seed-demo + 헤더 Authorization: Bearer (이전 X-Device-Id) -> 그 기기의 GET /trips/current = 시드 응답의 trip_id (status active),
         trip_days의 day_id 순서 = 시드 응답 day_ids, 날 상태는 그 여행의 데모 시계(past_days만큼 뒤)로 계산
     헤더가 없으면 지금과 같다: 본문 없으면 응답 키 {trip_id, day_ids}, 어떤 기기의 지금 여행도 바뀌지 않는다
 """
@@ -13,6 +13,7 @@ import importlib
 
 from fastapi.testclient import TestClient
 
+from auth_helpers import bearer
 from test_task010_trips import osaka, states  # noqa: F401  (osaka = 가짜 오사카 서버 fixture)
 
 DEVICE = "device-A"
@@ -20,7 +21,7 @@ OTHER = "device-B"
 
 
 def seed(osaka, body: dict | None = None, device: str | None = None):
-    headers = {"X-Device-Id": device} if device else {}
+    headers = bearer(device) if device else {}
     if body is None:
         return osaka.client.post("/debug/seed-demo", headers=headers)
     return osaka.client.post("/debug/seed-demo", json=body, headers=headers)
@@ -119,9 +120,9 @@ def test_T10_시드_운영에서는_헤더가_있어도_404(monkeypatch):
         with TestClient(importlib.reload(api.main).app) as client:
             for body in (None, {"past_days": 1}):
                 kwargs = {"json": body} if body is not None else {}
-                response = client.post("/debug/seed-demo", headers={"X-Device-Id": DEVICE}, **kwargs)
+                response = client.post("/debug/seed-demo", headers=bearer(DEVICE), **kwargs)
                 assert response.status_code == 404
-            assert client.get("/trips/current", headers={"X-Device-Id": DEVICE}).status_code != 200
+            assert client.get("/trips/current", headers=bearer(DEVICE)).status_code != 200
     finally:
         monkeypatch.delenv("APP_ENV", raising=False)
         importlib.reload(api.main)

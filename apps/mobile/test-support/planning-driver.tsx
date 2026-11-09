@@ -6,6 +6,7 @@ import PlanningFlow from '@/planning/planning-flow';
 
 import { memoryStorage } from './async-storage-mock';
 import { apiError, FakeServer, json, type Reply } from './fake-server';
+import { authFake } from './supabase-mock';
 import { batch, course, picks, seed, selected, session, SID } from './planning-fixtures';
 
 export const R = {
@@ -110,7 +111,11 @@ export async function toS9() {
 }
 
 export const storedValues = () => memoryStorage.values();
-export const resetDevice = () => memoryStorage.clear();
+// TASK-012: 기기를 비우면 로그인 세션도 없다 (세션은 기기 저장소에, B1)
+export const resetDevice = () => {
+  memoryStorage.clear();
+  authFake.reset();
+};
 export const hasStoredSession = () => storedValues().some((value) => value.includes(SID));
 
 /** 앱을 껐다 켠다. 기기 저장소는 그대로. */

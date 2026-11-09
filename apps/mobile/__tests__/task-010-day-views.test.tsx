@@ -3,7 +3,7 @@
 // 근거: TASK-010 §12 답 3, §C3, DESIGN-001 §4-9(지난 날 = 읽기만), TASK-004(GET 이어 가기). 모습(색·간격)은 시험하지 않는다.
 //
 // 계약 (이 테스트가 정한 이름, 승인 대기):
-//   planned·past 날 줄을 누르면 GET /days/{day_id}/course (헤더 X-Device-Id). 응답 = 코스안 카드와 같은 모양 (CourseResultOption)
+//   planned·past 날 줄을 누르면 GET /days/{day_id}/course (헤더 Authorization: Bearer, TASK-012 B2. 이전 X-Device-Id). 응답 = 코스안 카드와 같은 모양 (CourseResultOption)
 //     읽기만 화면 testID `course-readonly`: 코스 줄은 코스안 카드와 같은 `course-row-{seq}`.
 //     없는 것: 머무는 시간 조정(`stay-minus-*`·`stay-plus-*`), 확정(`select-confirm`, "이걸로 할래"), "다시 계획할래", 다른 안 탭(`option-*`)
 //   계획 대화 머리 뒤로 = 기존 머리 뒤로 단추 `header-back`, 글자 "날짜" (TASK-011 back-day: ‹는 아이콘 20, 글자는 "날짜". 주황 아님)
@@ -90,7 +90,7 @@ describe('§12 답 3 고른 코스 읽기만', () => {
     const view = await screen.findByTestId('course-readonly');
     const sent = server.sent(`GET /days/${dayId}/course`);
     expect(sent).toHaveLength(1);
-    expect((server.headers(sent[0])['x-device-id'] ?? '').length).toBeGreaterThan(0);
+    expect(server.headers(sent[0]).authorization ?? '').toMatch(/^Bearer \S+$/); // TASK-012 B2 (이전 X-Device-Id)
     for (const item of CHOSEN.items as { seq: number }[]) expect(within(view).getByTestId(`course-row-${item.seq}`)).toBeTruthy();
   });
 

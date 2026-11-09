@@ -38,3 +38,8 @@ jest.mock('expo-font', () => ({
 jest.mock('react-native-maps', () => require('./test-support/maps-mock'), { virtual: true });
 jest.mock('@gorhom/bottom-sheet', () => require('./test-support/bottom-sheet-mock'), { virtual: true });
 jest.mock('expo-dev-client', () => ({}), { virtual: true });
+
+// TASK-012 B1·B4: Supabase 클라이언트는 가짜 (실제 Supabase·네트워크 0). 설치 전에도 돌고, 설치 뒤에도 가짜를 쓴다 (virtual).
+// 세션은 가짜가 createClient에 넘긴 기기 저장소(AsyncStorage 가짜)에 둔다. 손잡이는 test-support/supabase-mock의 authFake.
+jest.mock('@supabase/supabase-js', () => require('./test-support/supabase-mock'), { virtual: true });
+jest.mock('react-native-url-polyfill/auto', () => ({}), { virtual: true });

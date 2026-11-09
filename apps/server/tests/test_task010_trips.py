@@ -22,6 +22,8 @@ from fastapi.testclient import TestClient
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
+from auth_helpers import FAKE_JWT_SECRET, JWT_SECRET_ENV, bearer  # TASK-012 B2: X-Device-Id 대신 Bearer (사용자 이름 -> 늘 같은 user_id)
+
 # 2026-12-01 12:00 JST (도시 시간대 오늘 = 12-01)
 NOON = datetime(2026, 12, 1, 3, 0, tzinfo=UTC)
 TODAY = date(2026, 12, 1)
@@ -46,7 +48,7 @@ class Osaka:
         self.app.state.clock = lambda: when
 
     def post_trip(self, body: dict, device: str = DEVICE):
-        return self.client.post("/trips", json=body, headers={"X-Device-Id": device})
+        return self.client.post("/trips", json=body, headers=bearer(device))
 
     def make_trip(self, days: int = 3, offset: int = 10, device: str = DEVICE, **extra) -> dict:
         response = self.post_trip(trip_body(days, offset, **extra), device)
@@ -54,15 +56,15 @@ class Osaka:
         return response.json()
 
     def current(self, device: str = DEVICE):
-        return self.client.get("/trips/current", headers={"X-Device-Id": device})
+        return self.client.get("/trips/current", headers=bearer(device))
 
     def trip(self, trip_id: str, device: str = DEVICE):
-        return self.client.get(f"/trips/{trip_id}", headers={"X-Device-Id": device})
+        return self.client.get(f"/trips/{trip_id}", headers=bearer(device))
 
     def add_fixed(self, trip: dict, day_index: int, start: str, end: str, title: str = "저녁 예약", **extra):
         day = trip["trip_days"][day_index]
         body = {"trip_day_id": day["day_id"], "title": title, "start_at": at(day["date"], start), "end_at": at(day["date"], end), **extra}
-        return self.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers={"X-Device-Id": DEVICE})
+        return self.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers=bearer(DEVICE))
 
     def plan_and_select(self, day_id: str) -> None:
         """계획을 고른 날로 만든다: 자동 모드로 코스안 -> 첫 안 고르기 (TASK-003 §5)."""
@@ -80,6 +82,8 @@ def osaka(monkeypatch):
     for name in ("AI_GATEWAY_API_KEY", "APP_ENV", "GOOGLE_PLACES_API_KEY", "SERPER_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("PLACES_PROVIDER", "fake")
+    monkeypatch.delenv("DATABASE_URL", raising=False)  # TASK-012: 기본은 메모리 저장소 (DB 쪽은 test_task012_*의 db 테스트)
+    monkeypatch.setenv(JWT_SECRET_ENV, FAKE_JWT_SECRET)  # TASK-012 B2: 테스트 안에서 만든 가짜 비밀값
     with TestClient(app) as client:
         yield Osaka(client, app)
 
@@ -233,12 +237,15 @@ def test_T10_B1_속성_기간과_시작일이_둘_다_맞을_때만_201(osaka, d
 
 
 @pytest.mark.parametrize("call", ["post", "current"], ids=["POST_trips", "GET_current"])
-def test_T10_B2_Q16_X_Device_Id가_없으면_400(osaka, call):
+def test_T12_B2_토큰이_없으면_401(osaka, call):
+    # TASK-012 B2로 바뀜 (이전: TASK-010 §9 Q16 X-Device-Id 없으면 400). 없는 토큰은 401 공통 형식
     if call == "post":
         response = osaka.client.post("/trips", json=trip_body())
     else:
         response = osaka.client.get("/trips/current")
-    assert_400(response, "X-Device-Id")
+    assert response.status_code == 401, response.text
+    error = response.json()["error"]
+    assert isinstance(error["code"], str) and error["code"] and error["message"]
 
 
 def test_T10_B2_여행이_없으면_current_404(osaka):
@@ -309,7 +316,7 @@ def test_T10_B3_AC4_끝은_시작보다_뒤(osaka, start, end, ok):
 
 def fixed_at(osaka, trip: dict, start_at: str, end_at: str):
     body = {"trip_day_id": trip["trip_days"][0]["day_id"], "title": "경계", "start_at": start_at, "end_at": end_at}
-    return osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers={"X-Device-Id": DEVICE})
+    return osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers=bearer(DEVICE))
 
 
 def test_T10_B3_Q15_그날_00시부터_24시까지는_된다(osaka):
@@ -341,7 +348,7 @@ def test_T10_B3_그날_밖의_시각은_400(osaka):
     day = trip["trip_days"][0]
     other = trip["trip_days"][1]["date"]
     body = {"trip_day_id": day["day_id"], "title": "다른 날", "start_at": at(other, "12:00"), "end_at": at(other, "13:00")}
-    assert_400(osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers={"X-Device-Id": DEVICE}), "start_at", "end_at")
+    assert_400(osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers=bearer(DEVICE)), "start_at", "end_at")
 
 
 @pytest.mark.parametrize(
@@ -403,7 +410,7 @@ def test_T10_B3_계획_고르지_않은_다른_날은_고정_일정을_넣을_�
 def test_T10_B3_지우면_사라지고_같은_시각에_다시_넣을_수_있다(osaka):
     trip = osaka.make_trip()
     made = osaka.add_fixed(trip, 0, "12:00", "13:00").json()
-    deleted = osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers={"X-Device-Id": DEVICE})
+    deleted = osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers=bearer(DEVICE))
     assert deleted.status_code == 204, deleted.text  # §9 Q15
     assert osaka.trip(trip["trip_id"]).json()["trip_days"][0]["fixed_events"] == []
     assert osaka.add_fixed(trip, 0, "12:00", "13:00").status_code == 201
@@ -414,14 +421,14 @@ def test_T10_B3_Q15_계획을_고른_날의_고정_일정_지우기도_409(osaka
     made = osaka.add_fixed(trip, 0, "12:00", "13:00").json()
     osaka.plan_and_select(trip["trip_days"][0]["day_id"])
     before = osaka.trip(trip["trip_id"]).json()
-    deleted = osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers={"X-Device-Id": DEVICE})
+    deleted = osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers=bearer(DEVICE))
     assert deleted.status_code == 409, deleted.text
     assert deleted.json()["error"]["code"] == "PLAN_EXISTS"
     assert osaka.trip(trip["trip_id"]).json() == before
 
 
 def test_T10_B3_없는_고정_일정_지우기는_404(osaka):
-    assert osaka.client.delete("/fixed-events/없는_id", headers={"X-Device-Id": DEVICE}).status_code == 404
+    assert osaka.client.delete("/fixed-events/없는_id", headers=bearer(DEVICE)).status_code == 404
 
 
 # ---------- B4 장소 검색 (꼭 갈 곳, 팩 안) ----------
