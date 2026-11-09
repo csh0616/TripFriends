@@ -122,7 +122,18 @@ def test_T12_S11_Q1_Q2_데모_여행은_그_사용자_소유_is_demo_true_남에
     got = osaka.trip(seeded["trip_id"], DEVICE)
     assert got.status_code == 200, got.text
     assert got.json()["is_demo"] is True
+    assert got.json()["status"] == "active"  # §12 3: 데모는 archived가 아니라 active + is_demo (archived = 사용자가 보관한 여행)
     assert osaka.trip(seeded["trip_id"], OTHER).status_code == 404
+
+
+def test_T12_S12_3_데모를_시드해도_지금_여행은_is_demo가_아닌_active_그대로(osaka):
+    mine = osaka.make_trip(device=DEVICE)
+    for body in (None, {"chosen": True}, {"past_days": 1}):
+        demo = seed(osaka, body, DEVICE, as_current=False).json()
+        assert osaka.trip(demo["trip_id"], DEVICE).json()["status"] == "active"
+    current = osaka.current(DEVICE).json()
+    assert current["trip_id"] == mine["trip_id"] and current["is_demo"] is False
+    assert osaka.trip(mine["trip_id"], DEVICE).json()["status"] == "active"
 
 
 def test_T12_S11_Q1_토큰_없이_시드하면_401(osaka):

@@ -169,14 +169,17 @@ class PlanningEnv:
         return day_id
 
     def _own(self, day_id: str, day) -> None:
-        """TASK-012 §11 Q3: 남의 날은 404라, 저장소에 바로 심은 날도 이 환경의 사용자(TESTER) 것으로 둔다.
-        계약 (승인 대기): TripBook.own_days(user_id, day_ids) — 테스트·점검 전용. 지금 여행·보관·영업시간 다시 부르기에 영향 없음.
-        아직 없으면(구현 전) 건너뛴다: 그때는 서버도 주인을 보지 않는다."""
-        from auth_helpers import TESTER, user_id
+        """TASK-012 §11 Q3·§12 5: 남의 날은 404라, 저장소에 바로 심은 날도 이 환경의 사용자(TESTER) 것으로 둔다.
+        제품 코드에 테스트 전용 길을 두지 않으므로(§12 5) 여행 저장소의 공개 메서드 add_trip으로 테스트 쪽에서 넣는다:
+        심은 날 하나 = 데모 여행 하나(active + is_demo, archive_active=False). 데모라 지금 여행(/trips/current)에 나오지 않고
+        Google 영업시간도 다시 부르지 않는다 (trip/trips.py refresh_hours) -> 심은 장소 그대로."""
+        import uuid
 
-        own = getattr(self.app.state.trip_book, "own_days", None)
-        if own is not None:
-            own(user_id(TESTER), [day_id])
+        from auth_helpers import TESTER, user_id
+        from trip.store import TripRow
+
+        row = TripRow(str(uuid.uuid4()), user_id(TESTER), "osaka", day, day, None, [day_id], status="active", is_demo=True, demo_today=day)
+        self.app.state.trip_book.store.add_trip(row, archive_active=False)
 
     def seed(self) -> dict:
         response = self.client.post("/debug/seed-demo")

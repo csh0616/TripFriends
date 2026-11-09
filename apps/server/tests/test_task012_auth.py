@@ -143,16 +143,50 @@ def test_T12_Q4_health·catalog는_토큰_없이_된다(osaka, path):  # noqa: F
 
 
 PUBLIC = {("GET", "/health"), ("GET", "/catalog")}
+DOCS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}  # §12 2: 개발에서만 열린 API 문서 길
 
 
-def test_T12_S11_Q1_토큰_없이_열린_길은_health·catalog_둘뿐(osaka):  # noqa: F811
-    # app의 모든 길(메서드마다)을 토큰 없이 부른다. 경로 칸은 없는 ID, 본문은 빈 JSON. 인증이 먼저라 401이어야 한다
+def all_routes(routes):
+    """app.routes를 펼친다. include_router로 넣은 묶음(_IncludedRouter)은 안쪽 길까지 (api/main.py는 prefix 없이 넣는다)."""
+    for route in routes:
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            yield from all_routes(inner.routes)
+        else:
+            yield route
+
+
+def opened_without_token(app, client) -> list[str]:
+    """app의 모든 길(메서드마다, 문서 길 포함)을 토큰 없이 부른다. 경로 칸은 없는 ID, 본문은 빈 JSON. 200대·300대로 열린 것을 모은다."""
+    import re
+
+    found = []
+    for route in all_routes(app.routes):
+        methods = getattr(route, "methods", None) or {"GET"}
+        path = re.sub(r"\{[^}]+\}", ID, route.path)
+        for method in sorted(set(methods) - {"HEAD", "OPTIONS"}):
+            if (method, route.path) in PUBLIC:
+                continue
+            kwargs = {} if method in ("GET", "DELETE") else {"json": {}}
+            response = client.request(method, path, **kwargs)
+            if response.status_code < 400:
+                found.append(f"{method} {route.path}")
+    return found
+
+
+def test_T12_S11_Q1_S12_개발에서_토큰_없이_열린_길은_health·catalog와_API_문서뿐(osaka):  # noqa: F811
+    opened = opened_without_token(osaka.app, osaka.anon)
+    assert [name for name in opened if name.split(" ", 1)[1] not in DOCS] == []
+
+
+def test_T12_S11_Q1_개발에서_사용자_길은_토큰_없으면_401(osaka):  # noqa: F811
+    # 문서 길·health·catalog를 뺀 API 길은 모두 401 (404·400이 아니라 인증이 먼저)
     import re
 
     from fastapi.routing import APIRoute
 
-    opened = []
-    for route in osaka.app.routes:
+    wrong = []
+    for route in all_routes(osaka.app.routes):
         if not isinstance(route, APIRoute) or not route.include_in_schema:
             continue
         path = re.sub(r"\{[^}]+\}", ID, route.path)
@@ -162,8 +196,8 @@ def test_T12_S11_Q1_토큰_없이_열린_길은_health·catalog_둘뿐(osaka):  
             kwargs = {} if method in ("GET", "DELETE") else {"json": {}}
             response = osaka.anon.request(method, path, **kwargs)
             if response.status_code != 401:
-                opened.append(f"{method} {route.path} -> {response.status_code}")
-    assert opened == []
+                wrong.append(f"{method} {route.path} -> {response.status_code}")
+    assert wrong == []
 
 
 def test_T12_B2_틀린_토큰으로는_아무것도_만들지_않는다(osaka):  # noqa: F811
