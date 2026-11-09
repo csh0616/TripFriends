@@ -492,10 +492,25 @@ describe('G7', () => {
 
 // ---------- §9 ----------
 
-// TASK-010 PM 답(11-09): 점검 전용 서버 주소(EXPO_PUBLIC_CHECK_API_URL)도 주소다. 그 밖의 EXPO_PUBLIC_ 변수(키 등)는 여전히 금지
-test('G30_S9_EXPO_PUBLIC_변수는_API_주소만', () => {
-  const names = sourceFiles().flatMap((f) => f.text.match(/EXPO_PUBLIC_\w+/g) ?? []);
-  expect([...new Set(names)].sort()).toEqual(['EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_CHECK_API_URL']);
+// TASK-010 PM 답(11-09): 점검 전용 서버 주소(EXPO_PUBLIC_CHECK_API_URL)도 주소다.
+// TASK-012 §10 승인(apps/mobile/CLAUDE.md): Supabase 프로젝트 URL·공개 키(+ 점검용 CHECK_ 둘)를 더한다. 그 밖의 EXPO_PUBLIC_ 변수는 여전히 금지
+const ALLOWED_PUBLIC = [
+  'EXPO_PUBLIC_API_URL',
+  'EXPO_PUBLIC_CHECK_API_URL',
+  'EXPO_PUBLIC_CHECK_SUPABASE_KEY',
+  'EXPO_PUBLIC_CHECK_SUPABASE_URL',
+  'EXPO_PUBLIC_SUPABASE_KEY',
+  'EXPO_PUBLIC_SUPABASE_URL',
+];
+test('G30_S9_T12_EXPO_PUBLIC_변수는_허용_목록_안에서만', () => {
+  const names = [...new Set(sourceFiles().flatMap((f) => f.text.match(/EXPO_PUBLIC_\w+/g) ?? []))];
+  expect(names.filter((name) => !ALLOWED_PUBLIC.includes(name))).toEqual([]);
+});
+
+test('G30_S9_T12_비밀_키_이름은_앱에_0', () => {
+  // ADR-016 §3-3: 앱에 들어가는 키는 공개 키뿐. secret·service_role 이름은 EXPO_PUBLIC_이든 아니든 0
+  const names = sourceFiles().flatMap((f) => f.text.match(/\w*(SECRET|SERVICE_ROLE|service_role|sb_secret_)\w*/g) ?? []);
+  expect(names).toEqual([]);
 });
 
 // ---------- §13 ----------
