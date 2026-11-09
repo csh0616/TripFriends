@@ -322,6 +322,9 @@ function Session({
         break;
       case 'conflict':
         break;
+      case 'unauthorized':
+      case 'auth_unavailable':
+      case 'storage':
       case 'server':
         // Q35·Q42 500은 [다시]가 같은 요청 (GET이면 GET)
         fail(OOPS, { tone: 'plain', retry: same });

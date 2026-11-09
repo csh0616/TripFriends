@@ -11,7 +11,6 @@ import { layout } from '@/planning/layout';
 import { color, radius, shadow, space, text } from '@/planning/theme';
 
 import { tripRequests, type FixedEvent } from './api';
-import { getDeviceId } from './device-id';
 import { FieldBox } from '@/components/trips/parts';
 import { dayLabel } from './format';
 
@@ -60,7 +59,7 @@ export function FixedEventSheet({
     if (Object.keys(found).length > 0) return;
     setBusy(true);
     const result = await send(
-      tripRequests.addFixedEvent(await getDeviceId(), tripId, {
+      tripRequests.addFixedEvent(tripId, {
         trip_day_id: dayId,
         title: trimmed,
         start_at: isoOf(date, start.trim()),
