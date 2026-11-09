@@ -524,7 +524,7 @@ class PostgresTripStore(TripStore):
     def _trip(row: dict[str, Any], day_ids: list[str]) -> TripRow:
         return TripRow(
             str(row["id"]), str(row["owner_id"]), row["city_code"], row["start_date"], row["end_date"], row["lodging_place_id"],
-            day_ids, row["status"], row["is_demo"], row["demo_today"],
+            day_ids, row["status"], row["is_demo"], row["demo_current"], row["demo_today"],
         )
 
     def _load(self, cur: Any, row: dict[str, Any] | None) -> TripRow | None:
@@ -537,11 +537,11 @@ class PostgresTripStore(TripStore):
         with self._db.cursor() as cur:
             cur.execute("insert into profiles (id) values (%s) on conflict (id) do nothing", (_uid(row.owner_id),))
             if archive_active:
-                cur.execute("update trips set status = 'archived' where owner_id = %s and status = 'active'", (_uid(row.owner_id),))
+                cur.execute("update trips set status = 'archived' where owner_id = %s and status = 'active' and (not is_demo or demo_current)", (_uid(row.owner_id),))
             cur.execute(
-                """insert into trips (id, owner_id, city_code, start_date, end_date, lodging_place_id, status, is_demo, demo_today)
-                   values (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (_uid(row.trip_id), _uid(row.owner_id), row.city_code, row.start_date, row.end_date, row.lodging_place_id, row.status, row.is_demo, row.demo_today),
+                """insert into trips (id, owner_id, city_code, start_date, end_date, lodging_place_id, status, is_demo, demo_current, demo_today)
+                   values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (_uid(row.trip_id), _uid(row.owner_id), row.city_code, row.start_date, row.end_date, row.lodging_place_id, row.status, row.is_demo, row.demo_current, row.demo_today),
             )
             ids = [_uid(d) for d in row.day_ids]
             cur.execute("update trip_days set trip_id = %s where id = any(%s::uuid[])", (_uid(row.trip_id), ids))
@@ -568,7 +568,7 @@ class PostgresTripStore(TripStore):
         if oid is None:
             return None
         with self._db.cursor() as cur:
-            cur.execute("select * from trips where owner_id = %s and status = 'active' order by seq desc limit 1", (oid,))
+            cur.execute("select * from trips where owner_id = %s and status = 'active' and (not is_demo or demo_current) order by seq desc limit 1", (oid,))
             return self._load(cur, cur.fetchone())
 
     def day_owner(self, day_id: str) -> str | None:
@@ -579,18 +579,6 @@ class PostgresTripStore(TripStore):
             cur.execute("select t.owner_id from trips t join trip_days d on d.trip_id = t.id where d.id = %s", (did,))
             row = cur.fetchone()
         return str(row["owner_id"]) if row else None
-
-    def own_days(self, owner_id: str, day_ids: list[str]) -> None:
-        """테스트·점검 전용: 날을 담은 보관된 데모 여행 하나를 만들어 이 사용자 것으로 둔다 (지금 여행에 끼지 않음)."""
-        ids = [d for d in (_uid(x) for x in day_ids) if d is not None]
-        if not ids:
-            return
-        with self._db.cursor() as cur:
-            cur.execute("select min(day) as first, max(day) as last from trip_days where id = any(%s::uuid[])", (ids,))
-            span = cur.fetchone()
-        if span is None or span["first"] is None:
-            return
-        self.add_trip(TripRow(str(uuid.uuid4()), owner_id, "osaka", span["first"], span["last"], None, ids, "archived", True), archive_active=False)
 
     @staticmethod
     def _fixed(row: dict[str, Any]) -> FixedRow:

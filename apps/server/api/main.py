@@ -122,7 +122,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Tripfriends", lifespan=lifespan)
+_PRODUCTION = os.environ.get("APP_ENV", "development") == "production"
+# §12 2: 운영이면 API 문서 길을 끈다 (공개 서버에 API 지도를 내놓지 않음). app.openapi() 직접 호출(타입 생성)은 그대로 된다
+app = FastAPI(
+    title="Tripfriends",
+    lifespan=lifespan,
+    docs_url=None if _PRODUCTION else "/docs",
+    redoc_url=None if _PRODUCTION else "/redoc",
+    openapi_url=None if _PRODUCTION else "/openapi.json",
+)
 app.add_exception_handler(PlanningError, planning_error_handler)  # type: ignore[arg-type]
 app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
 app.add_middleware(Gate)  # TASK-012 B2·A3: Bearer 확인 + 요청 하나 = 트랜잭션 하나

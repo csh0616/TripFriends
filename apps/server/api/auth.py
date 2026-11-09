@@ -7,6 +7,7 @@ X-Device-Id를 대체한다 (ADR-016 §3-3). §10 Q2: 비대칭 키(ES256, ECC P
 
 import threading
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -16,6 +17,7 @@ JWKS_PATH = "/auth/v1/.well-known/jwks.json"
 AUDIENCE = "authenticated"
 LEEWAY_SECONDS = 10
 ALGORITHM = "ES256"
+REFETCH_MIN_SECONDS = 60.0  # 같은 모르는 kid로 계속 두드려도 Supabase를 이 간격보다 자주 부르지 않는다
 FETCH_TIMEOUT = 5.0  # 초: JWKS를 받는 시간 제한. 넘으면 이번 요청은 확인하지 못한 것(401)이다
 
 
@@ -64,13 +66,17 @@ def verify_token(token: str, jwks: dict, now: float | None = None) -> str:
     return sub
 
 
+class AuthUnavailable(Exception):
+    """공개 키(JWKS)를 못 받음 -> 503 AUTH_UNAVAILABLE. Supabase 장애를 '로그인 틀림'(401)으로 보이지 않게 한다 (§12 6). 원인 주소는 담지 않는다."""
+
+
 class JwksCache:
-    """공개 키를 받아 두고 쓴다 (요청마다 부르지 않음). 모르는 kid가 나오면 한 번 다시 받는다 (키 교체 대비, 최소 간격 있음)."""
+    """공개 키를 받아 두고 쓴다 (요청마다 부르지 않음). 모르는 kid가 나오면 마지막으로 받은 뒤 60초가 지났을 때만 다시 받는다 (키 교체 대비, §12 6).
+    처음 받기·다시 받기가 실패하면 AuthUnavailable (받아 둔 키가 있어도 다시 받기 실패는 같다: 장애를 로그인 틀림으로 보이지 않게, 진행 담당 판단)."""
 
-    REFETCH_MIN_SECONDS = 60.0  # 같은 모르는 kid로 계속 두드려도 Supabase를 이 간격보다 자주 부르지 않는다
-
-    def __init__(self, supabase_url: str):
+    def __init__(self, supabase_url: str, clock: Callable[[], float] = time.monotonic):
         self.url = supabase_url.rstrip("/") + JWKS_PATH
+        self._clock = clock
         self._jwks: dict[str, Any] | None = None
         self._fetched_at = 0.0
         self._lock = threading.Lock()
@@ -80,9 +86,9 @@ class JwksCache:
         try:
             return verify_token(token, jwks)
         except AuthError:
-            if not self._known_kid(token, jwks) and self._refresh_allowed():
-                return verify_token(token, self._get(force=True))
-            raise
+            if self._known_kid(token, jwks) or not self._refresh_allowed():
+                raise
+            return verify_token(token, self._get(force=True))
 
     @staticmethod
     def _known_kid(token: str, jwks: dict) -> bool:
@@ -93,7 +99,7 @@ class JwksCache:
         return any(k.get("kid") == kid for k in jwks.get("keys", []))
 
     def _refresh_allowed(self) -> bool:
-        return time.monotonic() - self._fetched_at >= self.REFETCH_MIN_SECONDS
+        return self._clock() - self._fetched_at >= REFETCH_MIN_SECONDS
 
     def _get(self, force: bool = False) -> dict:
         with self._lock:
@@ -101,7 +107,6 @@ class JwksCache:
                 try:
                     self._jwks = fetch_jwks(self.url)
                 except Exception as error:
-                    if self._jwks is None:
-                        raise AuthError("공개 키를 받지 못했어요") from error
-                self._fetched_at = time.monotonic()
+                    raise AuthUnavailable("공개 키를 받지 못했어요") from error
+                self._fetched_at = self._clock()
             return self._jwks

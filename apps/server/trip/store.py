@@ -22,6 +22,7 @@ class TripRow:
     day_ids: list[str]
     status: Literal["active", "archived"] = "active"
     is_demo: bool = False  # A5: 개발용 데모 여행
+    demo_current: bool = False  # 데모가 지금 여행으로 붙었나 (as_current, 점검 전용). 지금 여행 = active이면서 데모가 아닌 것(또는 붙은 데모)
     demo_today: date | None = None  # 데모 시드 전용: 이 여행의 날 상태를 계산하는 시계 (없으면 진짜 오늘)
 
 
@@ -49,15 +50,11 @@ class TripStore(ABC):
 
     @abstractmethod
     def active_trip(self, owner_id: str) -> TripRow | None:
-        """그 사용자의 지금 여행: 만든 순서로 마지막 active."""
+        """그 사용자의 지금 여행: 만든 순서로 마지막 active (데모는 as_current로 붙은 것만)."""
 
     @abstractmethod
     def day_owner(self, day_id: str) -> str | None:
         """날의 주인 user_id. 없는 날이거나 주인을 모르면 None."""
-
-    @abstractmethod
-    def own_days(self, owner_id: str, day_ids: list[str]) -> None:
-        """테스트·점검 전용: 저장소에 바로 심은 날을 이 사용자 것으로 둔다. 여행 목록·지금 여행·영업시간 다시 부르기에 끼지 않는다."""
 
     @abstractmethod
     def fixed_for_day(self, day_id: str) -> list[FixedRow]:
@@ -76,12 +73,16 @@ class TripStore(ABC):
     def snapshot(self) -> dict[str, Any]: ...
 
 
+def _is_current(trip: TripRow) -> bool:
+    """지금 여행 후보: 데모가 아니거나, as_current로 붙은 데모 (§12 3)."""
+    return not trip.is_demo or trip.demo_current
+
+
 @dataclass
 class _Data:
     trips: dict[str, TripRow] = field(default_factory=dict)
     fixed: dict[str, FixedRow] = field(default_factory=dict)
     day_trip: dict[str, str] = field(default_factory=dict)  # day_id -> trip_id
-    owned_days: dict[str, str] = field(default_factory=dict)  # 심은 날 -> 주인 (여행 없이)
 
 
 class MemoryTripStore(TripStore):
@@ -93,7 +94,7 @@ class MemoryTripStore(TripStore):
         with self._lock:
             if archive_active:
                 for old in self._data.trips.values():
-                    if old.owner_id == row.owner_id and old.status == "active":
+                    if old.owner_id == row.owner_id and old.status == "active" and _is_current(old):
                         old.status = "archived"
             for day_id in row.day_ids:
                 self._data.day_trip[day_id] = row.trip_id
@@ -110,18 +111,13 @@ class MemoryTripStore(TripStore):
 
     def active_trip(self, owner_id: str) -> TripRow | None:
         with self._lock:
-            active = [t for t in self._data.trips.values() if t.owner_id == owner_id and t.status == "active"]
+            active = [t for t in self._data.trips.values() if t.owner_id == owner_id and t.status == "active" and _is_current(t)]
             return active[-1] if active else None
 
     def day_owner(self, day_id: str) -> str | None:
         with self._lock:
             trip = self.trip_of_day(day_id)
-            return trip.owner_id if trip else self._data.owned_days.get(day_id)
-
-    def own_days(self, owner_id: str, day_ids: list[str]) -> None:
-        with self._lock:
-            for day_id in day_ids:
-                self._data.owned_days[day_id] = owner_id
+            return trip.owner_id if trip else None
 
     def fixed_for_day(self, day_id: str) -> list[FixedRow]:
         with self._lock:
@@ -145,7 +141,7 @@ class MemoryTripStore(TripStore):
         with self._lock:
             d = self._data
             return _Data(
-                {k: replace(v, day_ids=list(v.day_ids)) for k, v in d.trips.items()}, dict(d.fixed), dict(d.day_trip), dict(d.owned_days)
+                {k: replace(v, day_ids=list(v.day_ids)) for k, v in d.trips.items()}, dict(d.fixed), dict(d.day_trip)
             )
 
     def restore(self, saved: _Data) -> None:

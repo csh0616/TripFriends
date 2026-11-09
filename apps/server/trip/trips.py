@@ -181,10 +181,6 @@ class TripBook:
     def owns_day(self, day_id: str, user_id: str) -> bool:
         return self.store.day_owner(day_id) == user_id
 
-    def own_days(self, user_id: str, day_ids: list[str]) -> None:
-        """테스트·점검 전용: 저장소에 바로 심은 날을 이 사용자 것으로 둔다. 지금 여행·보관·영업시간 다시 부르기에 영향 없음."""
-        self.store.own_days(user_id, day_ids)
-
     def _view(self, trip: TripRow) -> Trip:
         today = trip.demo_today or self._today()
         days: list[TripDay] = []
@@ -272,12 +268,12 @@ class TripBook:
     def attach_demo(
         self, user_id: str, trip_id: str, day_ids: list[str], dates: list[date], demo_today: date, as_current: bool = False
     ) -> None:
-        """데모 시드 여행을 이 사용자 소유로 둔다 (§11 Q2, is_demo). 지금 여행은 바꾸지 않는다: as_current(개발 점검 전용, 승현 11-09)일 때만
-        그 사용자의 지금 여행으로 붙이고 이전 여행은 B2처럼 archived. 아니면 보관 상태(archived)로 둬서 /trips/current에 나오지 않는다."""
+        """데모 시드 여행을 이 사용자 소유로 둔다 (§11 Q2, is_demo). 지금 여행은 바꾸지 않는다: 데모는 active + is_demo (§12 3).
+        as_current(개발 점검 전용, 승현 11-09)일 때만 그 사용자의 지금 여행으로 붙이고 이전 여행은 B2처럼 archived."""
         with self._lock:
             row = TripRow(
                 trip_id, user_id, CITY_CODE, dates[0], dates[-1], None, day_ids,
-                status="active" if as_current else "archived", is_demo=True, demo_today=demo_today,
+                is_demo=True, demo_current=as_current, demo_today=demo_today,
             )
             self.store.add_trip(row, archive_active=as_current)
 

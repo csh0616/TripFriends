@@ -26,7 +26,8 @@ create table trips (
     end_date date not null,
     lodging_place_id text,
     status text not null default 'active' check (status in ('active', 'archived')),
-    is_demo boolean not null default false,                  -- A5: 개발용 데모 여행
+    is_demo boolean not null default false,                  -- A5: 개발용 데모 여행 (status는 active, 지금 여행에는 안 나옴)
+    demo_current boolean not null default false,             -- 데모가 지금 여행으로 붙었나 (as_current, 점검 전용)
     demo_today date,                                         -- 데모 여행의 날 상태 시계 (데모만)
     created_at timestamptz not null default now(),
     check (end_date >= start_date)
