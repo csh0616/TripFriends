@@ -126,22 +126,25 @@ async function showP2(bottom: number) {
   );
 }
 
+// TASK-011 §14 N13 + (a)로 바뀜 (승인된 테스트 수정): 목록 맨 아래 여백 ≥ 막대 72 + 12. 옛 값(68 + 안전 영역 아래)도 아래 한계로 남긴다.
+// 정확한 값은 문서에 없어 "이상"으로만 본다 (질문)
+const BAR_CLEAR = 72 + 12; // task-011-review.md §9-4 (a) 2번
+
 describe('§14 PM 답 4 후보 카드 목록 아래 여백', () => {
-  test.each([
-    [34, ACTION_BAR + 34],
-    [0, ACTION_BAR],
-  ])('T10_S14_PM4_안전_영역_아래_%i이면_목록_아래_여백은_%i', async (bottom, expected) => {
+  test.each([[34], [0], [21]])('T10_S14_PM4_안전_영역_아래_%i이면_목록_아래_여백은_84_이상이고_68_+_안전_영역_이상', async (bottom) => {
     await showP2(bottom);
     const card = (await screen.findByTestId('candidate-card-D01')) as unknown as Node;
-    expect(bottomPad(verticalListOf(card))).toBe(expected);
+    const pad = Number(bottomPad(verticalListOf(card)));
+    expect(pad).toBeGreaterThanOrEqual(BAR_CLEAR);
+    expect(pad).toBeGreaterThanOrEqual(ACTION_BAR + bottom);
   });
 
-  test('T10_S14_PM4_목록_아래_여백은_안전_영역이_늘어난_만큼_늘어난다', async () => {
+  test('T10_S14_PM4_목록_아래_여백은_안전_영역이_늘어나도_줄지_않는다', async () => {
     const view = await showP2(0);
-    const before = bottomPad(verticalListOf((await screen.findByTestId('candidate-card-D01')) as unknown as Node));
+    const before = Number(bottomPad(verticalListOf((await screen.findByTestId('candidate-card-D01')) as unknown as Node)));
     await view.unmount();
     await showP2(21);
-    const after = bottomPad(verticalListOf((await screen.findByTestId('candidate-card-D01')) as unknown as Node));
-    expect([before, after]).toEqual([ACTION_BAR, ACTION_BAR + 21]);
+    const after = Number(bottomPad(verticalListOf((await screen.findByTestId('candidate-card-D01')) as unknown as Node)));
+    expect(after).toBeGreaterThanOrEqual(before);
   });
 });

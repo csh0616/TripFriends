@@ -22,7 +22,17 @@
 //   §12 Q1 머리 제목 = title-trip 값 · Q3 코스 없는 지난 날 = 누를 수 없는 줄 testID `row-locked`(또는 `row-locked-{day_id}`):
 //     요약 자리 "고른 코스 없음", › 없음, 누를 수 없음 표시, 눌러도 onOpen·GET course 없음
 //   §10 E1: 주 버튼이 없으면(모든 날 계획 완료·지난 날) 마지막 날 줄 아래 `end-note` 끝맺음 글, 그 아래 맨 끝 [새 여행 만들기]
+//   §14 (재검수, 승인 대기):
+//     8  이웃한 날 줄 사이 간격 = 둘을 담은 상자의 gap(rowGap) + 앞 줄 아래 여백 + 뒷 줄 위 여백 = 12
+//     N1 화면 나무 순서: 표지(accessibilityLabel "오사카 표지") -> 머리 글(제목·진행 줄) -> 첫 날 줄
+//     N2 지금 할 날 카드(아래 큰 버튼이 가리키는 계획 전 카드) 바탕 = brand-soft. 주황 링(테두리 굵기 > 0 + brand)은 state 'today' 줄에만.
+//        다른 계획 전 카드 바탕 = bg-2. 바탕·링은 day-row-{id}의 눌리는 상자 스타일
+//     N3 계획 전 카드: 고정 일정이 없으면 글자 "고정 일정 없음"과 [+ 일정] `add-fixed-{id}`가 같은 가로 줄(가장 가까운 공통 상자 flexDirection row), 글자가 앞(왼쪽).
+//        고정 일정이 하나 있으면 "고정 일정 없음" 대신 그 시각(엔 대시)·제목이 [+ 일정]과 같은 가로 줄
+//     9-5 모든 지난 날이 "고른 코스 없음"이면 end-note는 제목 "여행이 끝났어"만 (설명 줄 없음)
+//         › 아이콘 `day-chevron-{id}`: 코스가 있는 계획 완료·지난 날 줄에만, row-locked에는 없음
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { TripDays } from '@/trips/trip-days';
@@ -31,7 +41,7 @@ import { COLORS, FIT } from '../test-support/design-table';
 import { apiError, FakeServer, json, networkDown } from '../test-support/fake-server';
 import { resetDevice, tap } from '../test-support/planning-driver';
 import { course, SID } from '../test-support/planning-fixtures';
-import { filledWith, isInside, pressableOf, styleOf, type Host } from '../test-support/screen-tree';
+import { childOn, commonAncestor, filledWith, isInside, pressableOf, same, styleOf, treeIndex, type Host } from '../test-support/screen-tree';
 
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
@@ -570,5 +580,223 @@ describe('§13 3 머리는 날 상태와 같은 시계', () => {
     expect(screen.getByText('여행 끝')).toBeTruthy();
     expect(screen.queryByText(/D-\d+/)).toBeNull();
     expect(within(screen.getByTestId('end-note')).getByText('여행이 끝났어'));
+  });
+});
+
+// ---------- §14 재검수 (task-011-review.md §9) ----------
+
+/** 날 줄의 눌리는 상자(바탕·테두리가 있는 곳) */
+const rowBox = (dayId: string) => pressableOf(byId(`day-row-${dayId}`));
+const hasRing = (host: Host) => {
+  const style = styleOf(host);
+  return typeof style.borderWidth === 'number' && style.borderWidth > 0 && same(style.borderColor, COLORS.brand);
+};
+const num = (value: unknown) => (typeof value === 'number' ? value : 0);
+/** 날 줄 testID의 가장 바깥 상자 (row-locked이면 그것) */
+const outerRow = (dayId: string) => (screen.queryByTestId(`row-locked-${dayId}`) ?? screen.getByTestId(`day-row-${dayId}`)) as unknown as Host;
+
+describe('§14 8 날 카드 사이 간격 12', () => {
+  const gapBetween = (a: string, b: string) => {
+    const first = outerRow(a);
+    const second = outerRow(b);
+    const parent = commonAncestor(first, second);
+    const prev = styleOf(childOn(parent, first));
+    const next = styleOf(childOn(parent, second));
+    // 테스트 환경의 ScrollView: 안쪽 상자(View)는 스타일이 없고, 바깥 RCTScrollView가 contentContainerStyle을 prop으로 들고 있다
+    const scroll = parent.props.style === undefined ? parent.parent : null;
+    const own = { ...styleOf(parent), ...(StyleSheet.flatten(parent.props.contentContainerStyle ?? scroll?.props.contentContainerStyle) ?? {}) } as Record<string, unknown>;
+    return num(own.rowGap ?? own.gap) + num(prev.marginBottom ?? prev.marginVertical ?? prev.margin) + num(next.marginTop ?? next.marginVertical ?? next.margin);
+  };
+
+  test.each([
+    ['여행 전 섞임(줄 → 카드 → 카드)', MIXED, AT.before],
+    ['오늘 여행 중(지난 날 → 오늘 → 카드)', TODAY_WITH_COURSE, AT.day2],
+    ['지난 날만(코스 없는 지난 날 포함)', ALL_PAST, AT.after],
+  ])('T11_S14_8_%s_이웃한_날_사이는_12', async (_name, value, at) => {
+    await show(value, at);
+    expect(gapBetween('d1', 'd2')).toBe(12);
+    expect(gapBetween('d2', 'd3')).toBe(12);
+  });
+});
+
+describe('§14 N1 머리 순서: 표지 → 글 → 날 줄', () => {
+  test.each([
+    ['여행 전', MIXED, AT.before, 'D-35 · 3일 중 1일 계획 완료'],
+    ['여행 끝', ALL_PAST, AT.after, '여행 끝'],
+  ])('T11_S14_N1_%s_표지가_제목·진행_줄보다_먼저', async (_name, value, at, line) => {
+    await show(value, at);
+    const cover = screen.getByLabelText('오사카 표지') as unknown as Host;
+    const title = screen.getByText('오사카 2박 3일') as unknown as Host;
+    const progress = screen.getByText(line) as unknown as Host;
+    const firstDay = outerRow('d1');
+    expect(treeIndex(cover)).toBeLessThan(treeIndex(title));
+    expect(treeIndex(title)).toBeLessThan(treeIndex(progress));
+    expect(treeIndex(progress)).toBeLessThan(treeIndex(firstDay));
+  });
+});
+
+describe('§14 N2 지금 할 날 카드 = 연주황, 링은 오늘만', () => {
+  test('T11_S14_N2_여행_전에도_지금_할_날_카드는_연주황_링_없음', async () => {
+    await show(MIXED, AT.before);
+    expect(String(styleOf(rowBox('d2')).backgroundColor).toUpperCase()).toBe(COLORS['brand-soft']);
+    expect(hasRing(rowBox('d2'))).toBe(false);
+  });
+
+  test('T11_S14_N2_다른_계획_전_카드는_회색(bg_2)_링_없음', async () => {
+    await show(MIXED, AT.before);
+    expect(String(styleOf(rowBox('d3')).backgroundColor).toUpperCase()).toBe(COLORS['bg-2']);
+    expect(hasRing(rowBox('d3'))).toBe(false);
+  });
+
+  test('T11_S14_N2_모두_계획_전이면_첫_날만_연주황', async () => {
+    await show(trip(tripDay(1, 'planning'), tripDay(2, 'planning'), tripDay(3, 'planning')), AT.before);
+    expect(String(styleOf(rowBox('d1')).backgroundColor).toUpperCase()).toBe(COLORS['brand-soft']);
+    for (const id of ['d2', 'd3']) expect(String(styleOf(rowBox(id)).backgroundColor).toUpperCase()).toBe(COLORS['bg-2']);
+  });
+
+  test('T11_S14_N2_오늘인데_코스_없는_카드는_연주황_+_주황_링(오늘_알약과_함께)', async () => {
+    await show(TODAY_NO_COURSE, AT.day2);
+    expect(String(styleOf(rowBox('d2')).backgroundColor).toUpperCase()).toBe(COLORS['brand-soft']);
+    expect(hasRing(rowBox('d2'))).toBe(true);
+    expect(within(screen.getByTestId('day-pill-d2')).getByText('오늘 · 여행 중')).toBeTruthy();
+  });
+
+  test('T11_S14_N2_오늘_여행_중이면_뒤의_계획_전_카드는_회색', async () => {
+    await show(TODAY_WITH_COURSE, AT.day2);
+    expect(String(styleOf(rowBox('d3')).backgroundColor).toUpperCase()).toBe(COLORS['bg-2']);
+    expect(hasRing(rowBox('d3'))).toBe(false);
+  });
+
+  test.each([
+    ['여행 전 섞임', MIXED, AT.before],
+    ['오늘 여행 중', TODAY_WITH_COURSE, AT.day2],
+    ['오늘인데 코스 없음', TODAY_NO_COURSE, AT.day2],
+    ['모두 계획 완료', ALL_PLANNED, AT.before],
+    ['지난 날만', ALL_PAST, AT.after],
+  ])('T11_S14_N2_%s_주황_링은_오늘_줄에만', async (_name, value, at) => {
+    await show(value, at);
+    const days = (value as { trip_days: { day_id: string; state: string }[] }).trip_days;
+    for (const day of days) {
+      const box = pressableOf(outerRow(day.day_id));
+      const ringed = [box, ...box.queryAll(() => true)].some(hasRing) || hasRing(outerRow(day.day_id));
+      expect(ringed).toBe(day.state === 'today');
+    }
+  });
+});
+
+describe('§14 N3 카드 안 "고정 일정 없음" + [+ 일정] 한 줄', () => {
+  const sameRow = (a: Host, b: Host) => styleOf(commonAncestor(a, b)).flexDirection === 'row';
+
+  test.each(['d2', 'd3'])('T11_S14_N3_고정_일정이_없으면_%s_카드에_고정_일정_없음(왼쪽)_+_일정(오른쪽)', async (dayId) => {
+    await show(MIXED, AT.before);
+    const label = within(screen.getByTestId(`day-row-${dayId}`)).getByText('고정 일정 없음') as unknown as Host;
+    const add = byId(`add-fixed-${dayId}`);
+    expect(sameRow(label, add)).toBe(true);
+    expect(treeIndex(label)).toBeLessThan(treeIndex(add));
+  });
+
+  test('T11_S14_N3_오늘인데_코스_없는_카드도_같은_줄', async () => {
+    await show(TODAY_NO_COURSE, AT.day2);
+    const label = within(screen.getByTestId('day-row-d2')).getByText('고정 일정 없음') as unknown as Host;
+    expect(sameRow(label, byId('add-fixed-d2'))).toBe(true);
+  });
+
+  test('T11_S14_N3_고정_일정이_있으면_그_시각·제목이_+_일정과_같은_줄', async () => {
+    const event = { fixed_event_id: 'fe-1', trip_day_id: 'd2', title: '저녁 예약', start_at: '2026-12-12T12:00:00+09:00', end_at: '2026-12-12T13:00:00+09:00', place_id: null };
+    await show(trip(tripDay(1, 'planned'), { ...tripDay(2, 'planning'), fixed_events: [event] }, tripDay(3, 'planning')), AT.before);
+    const row = within(screen.getByTestId('day-row-d2'));
+    expect(row.queryByText('고정 일정 없음')).toBeNull();
+    const time = row.getByText('12:00–13:00') as unknown as Host;
+    const title = row.getByText('저녁 예약') as unknown as Host;
+    const add = byId('add-fixed-d2');
+    expect(sameRow(time, add)).toBe(true);
+    expect(sameRow(title, add)).toBe(true);
+    expect(treeIndex(time)).toBeLessThan(treeIndex(add));
+    expect(within(screen.getByTestId('day-row-d3')).getByText('고정 일정 없음')).toBeTruthy(); // 다른 날은 그대로
+  });
+
+  test.each([
+    ['계획 완료', MIXED, AT.before, 'd1'],
+    ['지난 날', ALL_PAST, AT.after, 'd1'],
+    ['오늘(코스 있음)', TODAY_WITH_COURSE, AT.day2, 'd2'],
+  ])('T11_S14_N3_%s_줄에는_고정_일정_없음_글자가_없다(+_일정이_없는_줄)', async (_name, value, at, dayId) => {
+    await show(value, at);
+    expect(within(outerRow(dayId) as never).queryByText('고정 일정 없음')).toBeNull();
+  });
+});
+
+describe('§14 9-5 모든 지난 날이 고른 코스 없음이면 끝맺음 글은 제목만', () => {
+  const NONE_PAST = trip(tripDay(1, 'past', false), tripDay(2, 'past', false), tripDay(3, 'past', false));
+  const textsIn = (host: Host) =>
+    host
+      .queryAll((h) => h.type === 'Text')
+      .map((h) => (h.children ?? []).filter((c): c is string => typeof c === 'string').join(''))
+      .filter((value) => value.trim() !== '');
+
+  test('T11_S14_9-5_모두_고른_코스_없음이면_여행이_끝났어만', async () => {
+    await show(NONE_PAST, AT.after);
+    const note = byId('end-note');
+    expect(within(screen.getByTestId('end-note')).getByText('여행이 끝났어')).toBeTruthy();
+    expect(screen.queryByText('날짜를 누르면 고른 코스를 볼 수 있어')).toBeNull();
+    expect(textsIn(note)).toEqual(['여행이 끝났어']);
+  });
+
+  test('T11_S14_9-5_경계_코스가_있는_지난_날이_하나라도_있으면_설명_줄도', async () => {
+    await show(trip(tripDay(1, 'past', true), tripDay(2, 'past', false), tripDay(3, 'past', false)), AT.after);
+    expect(within(screen.getByTestId('end-note')).getByText('날짜를 누르면 고른 코스를 볼 수 있어')).toBeTruthy();
+  });
+
+  test('T11_S14_9-5_모두_고른_코스_없음이어도_맨_아래_새_여행_만들기·주황_0', async () => {
+    await show(NONE_PAST, AT.after);
+    expect(screen.getByTestId('new-trip')).toBeTruthy();
+    expect(screen.queryByTestId('bottom-primary')).toBeNull();
+    expect(filledWith(COLORS.brand)).toEqual([]);
+  });
+
+  test('T11_S14_9-5_여행_전_모두_정했어는_그대로_설명_줄_있음', async () => {
+    await show(ALL_PLANNED, AT.before);
+    expect(textsIn(byId('end-note'))).toHaveLength(2);
+  });
+});
+
+// ---------- §14 04: 리뷰 §9-5 표(지난 날만 남은 날짜 목록)에서 기존 테스트가 안 보던 것 ----------
+// 이미 있는 것: 주 버튼 없음(T11_A1_지난_날만), 주황 0(T11_AC3_지난_날만), 끝맺음 글 글자·순서(T11_E1), 여행 끝(T11_S13_3·lib E2),
+//               코스 없는 줄 "고른 코스 없음"·잠김(T11_S12_Q3), 코스 있는 지난 날 요약(T11_S12_Q3), 지난 날 알약 아이콘(B2)
+// 크기(68·28·40·300·34)는 모습 값이라 쓰지 않는다
+
+describe('§14 04 지난 날만 남은 날짜 목록 (리뷰 §9-5 표)', () => {
+  test('T11_S14_04_머리는_제목_그대로와_여행_끝', async () => {
+    await show(ALL_PAST, AT.after);
+    expect(screen.getByText('오사카 2박 3일')).toBeTruthy();
+    expect(screen.getByText('여행 끝')).toBeTruthy();
+  });
+
+  test.each(['d1', 'd2', 'd3'])('T11_S14_04_%s_지난_날_줄은_N일째와_날짜·지난_날_알약', async (dayId) => {
+    await show(ALL_PAST, AT.after);
+    const n = Number(dayId.slice(1));
+    const row = within(outerRow(dayId) as never);
+    expect(row.getByText(`${n}일째`)).toBeTruthy();
+    expect(row.getByText(['12/11 금', '12/12 토', '12/13 일'][n - 1])).toBeTruthy();
+    expect(within(screen.getByTestId(`day-pill-${dayId}`)).getByText('지난 날')).toBeTruthy();
+  });
+
+  test('T11_S14_04_›는_코스가_있는_지난_날_줄에만', async () => {
+    await show(ALL_PAST, AT.after);
+    expect(within(screen.getByTestId('day-row-d1')).getByTestId('day-chevron-d1')).toBeTruthy();
+    expect(within(screen.getByTestId('day-row-d2')).getByTestId('day-chevron-d2')).toBeTruthy();
+    expect(screen.queryByTestId('day-chevron-d3')).toBeNull();
+  });
+
+  test('T11_S14_04_계획_완료_줄에도_›', async () => {
+    await show(MIXED, AT.before);
+    expect(within(screen.getByTestId('day-row-d1')).getByTestId('day-chevron-d1')).toBeTruthy();
+    expect(screen.queryByTestId('day-chevron-d2')).toBeNull(); // 계획 전 카드에는 없다
+  });
+
+  test('T11_S14_04_새_여행_만들기는_btn_new_trip(bg_2·52_이상)', async () => {
+    await show(ALL_PAST, AT.after);
+    const style = styleOf(pressableOf(byId('new-trip')));
+    expect(String(style.backgroundColor).toUpperCase()).toBe(COLORS['bg-2']);
+    expect(Math.max(...[style.height, style.minHeight].filter((v): v is number => typeof v === 'number'))).toBeGreaterThanOrEqual(52);
   });
 });

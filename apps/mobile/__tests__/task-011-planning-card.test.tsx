@@ -15,7 +15,13 @@
 //   A2 큰 카드 그림: 후보 카드 그림 안에 무늬 `place-pattern`
 //   §9 v1.1:
 //     Q7 두 구간 "11:00–14:00 · 17:00–22:00" · Q9 끝 카드 [다른 곳 보여 줘]는 주황 아님, 주황은 [코스 짜기]만
-//     Q10 늘 열림 -> 칩 없이 "늘 열려 있어". 코스 줄(P3)도 같은 칩 규칙 (코스 줄 facts, test-support hoursFact)
+//     Q10 늘 열림 -> ~~칩 없이~~ "확인됨" 칩 + "늘 열려 있어" (§14 N9로 바뀜). 코스 줄(P3)도 같은 칩 규칙 (코스 줄 facts, test-support hoursFact)
+//   §14 N13 + (a) (이 테스트가 정한 것, 승인 대기):
+//     [패스] `skip-{id}`·[담기] `like-{id}`는 이름·이유와 같은 띠: 이름 글자와 버튼을 함께 담은 가장 가까운 상자가 가로(flexDirection row),
+//       이름·이유는 그 띠 안에서 버튼보다 앞(왼쪽), 이름·이유 글자는 numberOfLines 1
+//     카드 렌더 값이 candidateCardParts()를 쓴다: 그림 높이·아래 여백, 이름·이유 줄 높이 합, 사실 줄 위 여백·최소 높이, 출처 줄 위 여백
+//     사실 줄은 한 줄(flexWrap 'wrap' 아님) — §4-11 fact-line "칩 · 값 · 거리 한 줄(24)"
+//     목록 맨 아래 여백 ≥ 막대 72 + 12 -> task-010-s14-pm-answers T10_S14_PM4에서 본다
 //     Q13 무늬는 docs/design/place-images/{종류}.svg 파일이 정본 -> 앱 assets 안에 같은 내용의 파일이 있다
 import { screen, within } from '@testing-library/react-native';
 
@@ -23,7 +29,7 @@ import { COLORS } from '../test-support/design-table';
 import { json } from '../test-support/fake-server';
 import { happyServer, R, resetDevice, toP1, toP2, toP3 } from '../test-support/planning-driver';
 import { batch, course, day, hoursFact, packed, PLACES, relaxed } from '../test-support/planning-fixtures';
-import { buttonsFilledWith, filledWith, isInside, rootHost, styleOf, type Host } from '../test-support/screen-tree';
+import { buttonsFilledWith, chain, commonAncestor, filledWith, isInside, rootHost, styleOf, treeIndex, type Host } from '../test-support/screen-tree';
 
 const EN_DASH = '–';
 
@@ -179,12 +185,16 @@ describe('A5 curated 시간대는 추천 시간대 칩', () => {
     expect(todayHoursText([{ field: 'opening_hours', value: '17:00-24:00', status: 'confirmed', source_type: 'curated' }]).chip).toBe('confirmed');
   });
 
-  test('T11_Q10_늘_열림(O1)은_칩_없이_늘_열려_있어', async () => {
+  // §14 N9 (§9 Q10 고침): 늘 열림에도 "확인됨" 칩. 옛 "칩 없이" 테스트를 바꿈
+  test('T11_S14_N9_늘_열림(O1)은_확인됨_칩과_늘_열려_있어', async () => {
     serve(withHours('D01', ALWAYS));
     await toP2();
+    const line = within(screen.getByTestId('fact-line-D01'));
+    expect(line.getByText('확인됨')).toBeTruthy(); // 칩은 사실 줄 안 (칩 자리)
+    expect(line.getByText('늘 열려 있어')).toBeTruthy();
     const inCard = within(screen.getByTestId('candidate-card-D01'));
-    for (const chip of ['확인됨', '미확인', '모름', '추천 시간대']) expect(inCard.queryByText(chip)).toBeNull();
-    expect(inCard.getByText('늘 열려 있어')).toBeTruthy();
+    for (const chip of ['미확인', '모름', '추천 시간대']) expect(inCard.queryByText(chip)).toBeNull();
+    expect(inCard.getAllByText('확인됨')).toHaveLength(1);
   });
 
   test('T11_A5_Google·데모_영업시간은_추천_시간대가_아니다', async () => {
@@ -270,11 +280,13 @@ describe('§9 Q10 코스안 줄의 칩', () => {
     expect(row.queryByText('확인됨')).toBeNull();
   });
 
-  test('T11_Q10_P3_늘_열림_줄은_칩_없이_늘_열려_있어', async () => {
+  // §14 N9: 코스 줄도 늘 열림에 "확인됨" 칩. 옛 "칩 없이" 테스트를 바꿈
+  test('T11_S14_N9_P3_늘_열림_줄은_확인됨_칩과_늘_열려_있어', async () => {
     happyServer().on(R.compose, json(200, withItemHours(ALWAYS)));
     await toP3();
     const row = within(screen.getByTestId('course-row-1'));
-    for (const chip of ['확인됨', '미확인', '모름', '추천 시간대']) expect(row.queryByText(chip)).toBeNull();
+    expect(row.getByText('확인됨')).toBeTruthy();
+    for (const chip of ['미확인', '모름', '추천 시간대']) expect(row.queryByText(chip)).toBeNull();
     expect(row.getByText(/늘 열려 있어/)).toBeTruthy();
   });
 
@@ -300,3 +312,101 @@ describe('§9 Q13 무늬는 docs 그림 파일이 정본', () => {
     expect(appFiles().some((text) => text.trim() === original || text.includes(original))).toBe(true);
   });
 });
+
+// ---------- §14 N13 + (a): [패스]·[담기]는 이름·이유 오른쪽 같은 띠, 카드 높이 433, 목록 끝 여백 ----------
+// 근거: TASK-011 §14 N13 + (a), task-011-review.md §9-3 N13·§9-4 (a) 표 1~3, DESIGN-001 §4-11 재검수로 정한 것, §4-11 fact-line.
+// 한계: Jest는 실제 레이아웃(출처 줄 아랫변·막대 윗변)을 재지 못한다. 그래서 (1) 자리 계산은 candidate-fit 함수(task-011-lib),
+//       (2) 여기서는 렌더 트리의 스타일 값이 그 함수의 값을 쓰는지, (3) 버튼이 이름·이유 아래 따로 한 줄을 먹지 않는지만 본다.
+
+describe('§14 N13 후보 카드 버튼 자리와 높이', () => {
+  const fit = () => require('@/planning/candidate-fit');
+  const num = (value: unknown) => (typeof value === 'number' ? value : 0);
+  const textHost = (cardId: string, value: string) => within(screen.getByTestId(`candidate-card-${cardId}`)).getByText(value) as unknown as Host;
+
+  test.each(['skip', 'like'])('T11_S14_N13_%s_버튼은_이름과_같은_가로_띠', async (kind) => {
+    happyServer();
+    await toP2();
+    for (const place of PLACES) {
+      const name = textHost(place.id, place.name);
+      const band = commonAncestor(name, byId(`${kind}-${place.id}`));
+      expect(isInside(band, card(place.id))).toBe(true);
+      expect(band === card(place.id)).toBe(false); // 카드 자체(세로)가 아니라 그 안의 띠
+      expect(styleOf(band).flexDirection).toBe('row');
+    }
+  });
+
+  test('T11_S14_N13_이름·이유는_띠_안에서_버튼보다_앞(왼쪽)', async () => {
+    happyServer();
+    await toP2();
+    const name = textHost('D01', PLACES[0].name);
+    const why = textHost('D01', '이유 D01');
+    const skip = byId('skip-D01');
+    expect(commonAncestor(name, skip)).toBe(commonAncestor(why, skip));
+    expect(treeIndex(name)).toBeLessThan(treeIndex(skip));
+    expect(treeIndex(why)).toBeLessThan(treeIndex(skip));
+  });
+
+  test('T11_S14_N13_이름·이유는_한_줄씩(넘치면_…)', async () => {
+    happyServer();
+    await toP2();
+    for (const place of PLACES) {
+      expect(textHost(place.id, place.name).props.numberOfLines).toBe(1);
+      expect(textHost(place.id, `이유 ${place.id}`).props.numberOfLines).toBe(1);
+    }
+  });
+
+  test('T11_S14_a_그림은_316이고_아래_12', async () => {
+    happyServer();
+    await toP2();
+    const parts = fit().candidateCardParts();
+    const photo = within(screen.getByTestId('candidate-card-D01')).getByTestId('place-pattern') as unknown as Host;
+    const box = chain(photo).find((host) => styleOf(host).height === parts.photo && isInside(host, card('D01')));
+    expect(box).toBeDefined();
+    expect(num(styleOf(box!).marginBottom)).toBe(parts.photoGap);
+  });
+
+  test('T11_S14_a_이름·이유_띠는_46(이름_줄_높이_+_이유_줄_높이_+_사이_여백)', async () => {
+    happyServer();
+    await toP2();
+    const name = styleOf(textHost('D01', PLACES[0].name));
+    const why = styleOf(textHost('D01', '이유 D01'));
+    const between = num(name.marginBottom) + num(why.marginTop);
+    expect(num(name.lineHeight) + num(why.lineHeight) + between).toBe(fit().candidateCardParts().nameWhy);
+  });
+
+  test('T11_S14_a_사실_줄은_띠_아래_12·최소_높이_24·한_줄', async () => {
+    happyServer();
+    await toP2();
+    const parts = fit().candidateCardParts();
+    const line = styleOf(byId('fact-line-D01'));
+    expect(num(line.marginTop)).toBe(parts.factGap);
+    expect(Math.max(num(line.height), num(line.minHeight))).toBe(parts.factLine);
+    expect(line.flexWrap).not.toBe('wrap');
+  });
+
+  test('T11_S14_a_출처_줄은_사실_줄_아래_4·높이_19_이하', async () => {
+    serve(withHours('D01', GOOGLE));
+    await toP2();
+    const parts = fit().candidateCardParts();
+    const source = byId('fact-source-D01');
+    expect(num(styleOf(source).marginTop)).toBe(parts.sourceGap);
+    const slot = within(screen.getByTestId('fact-source-D01')).getByTestId('g-slot') as unknown as Host;
+    expect(num(styleOf(slot).height)).toBeLessThanOrEqual(parts.source);
+  });
+
+  test('T11_S14_a_버튼은_이름·이유_아래_따로_한_줄을_먹지_않는다(사실_줄_앞_띠_하나)', async () => {
+    happyServer();
+    await toP2();
+    const name = textHost('D01', PLACES[0].name);
+    const band = commonAncestor(name, byId('skip-D01'));
+    const line = byId('fact-line-D01');
+    // 카드 안 세로 순서: 그림 -> 띠(이름·이유·버튼) -> 사실 줄. 띠와 사실 줄 사이에 다른 상자가 없다
+    const column = commonAncestor(band, line);
+    const items = column.children.filter((c): c is Host => typeof c !== 'string');
+    const bandAt = items.findIndex((c) => isInside(band, c));
+    const lineAt = items.findIndex((c) => isInside(line, c));
+    expect(lineAt - bandAt).toBe(1);
+  });
+});
+
+// 목록 맨 아래 여백 ≥ 막대 72 + 12 는 task-010-s14-pm-answers.test.tsx T10_S14_PM4 (§14로 고친 승인 테스트)

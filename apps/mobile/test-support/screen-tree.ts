@@ -33,6 +33,24 @@ export const buttonsFilledWith = (colour: string, under: Host = rootHost()) =>
 
 export const isInside = (host: Host, outer: Host) => chain(host).includes(outer);
 
+/** 두 상자를 함께 담은 가장 가까운 상자 */
+export const commonAncestor = (a: Host, b: Host): Host => {
+  const outer = chain(b);
+  const found = chain(a).find((host) => outer.includes(host));
+  if (!found) throw new Error('같은 화면 나무가 아니다');
+  return found;
+};
+
+/** ancestor 바로 아래 자식 중 host를 담은 것 */
+export const childOn = (ancestor: Host, host: Host): Host => {
+  const found = chain(host).find((h) => h.parent === ancestor);
+  if (!found) throw new Error('ancestor 아래에 없다');
+  return found;
+};
+
+/** 화면 나무 앞에서부터의 순서 (깊이 우선) */
+export const treeIndex = (host: Host, root: Host = rootHost()): number => [root, ...root.queryAll(() => true)].indexOf(host);
+
 /** 바탕색이 없다 (미지정·transparent·알파 0) */
 export const noFill = (value: unknown) =>
   value === undefined || value === null || value === 'transparent' || /^(#0000|#00000000|rgba\(.*,\s*0\))$/i.test(String(value));

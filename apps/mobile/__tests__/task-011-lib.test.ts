@@ -374,3 +374,100 @@ describe('§13 3 tripHeader·dayListPrimary는 날 상태를 따른다', () => {
     );
   });
 });
+
+// ---------- §14 N9: "늘 열려 있어"에도 "확인됨" 칩 (§9 Q10 고침) ----------
+// 근거: TASK-011 §14 N9·§9 Q10(고친 줄), DESIGN-001 §4-11 재검수로 정한 것, task-011-review.md §9-3 N9.
+// 계약: hoursView(facts).chip = 화면 칩. curated 늘 열림("00:00-24:00")은 데이터 status 그대로(여기서는 'confirmed' -> "확인됨"), 밤거리(curated 시간대)는 그대로 'hint'
+
+describe('§14 N9 hoursView 늘 열림 칩', () => {
+  const view = (over: object) => require('@/lib/today-hours-text').hoursView([{ field: 'opening_hours', status: 'confirmed', ...over }]);
+
+  test('T11_S14_N9_늘_열림은_확인됨_칩과_늘_열려_있어', () => {
+    expect(view({ source_type: 'curated', value: '00:00-24:00' })).toEqual({ text: '늘 열려 있어', chip: 'confirmed' });
+  });
+
+  test('T11_S14_N9_밤거리_curated_시간대는_그대로_추천_시간대', () => {
+    expect(view({ source_type: 'curated', value: '17:00-24:00' })).toEqual({ text: `17:00${EN_DASH}24:00`, chip: 'hint' });
+  });
+
+  test('T11_S14_N9_경계_24시간이_아닌_00:00-23:59는_늘_열림이_아니라_추천_시간대', () => {
+    expect(view({ source_type: 'curated', value: '00:00-23:59' }).chip).toBe('hint');
+  });
+});
+
+// ---------- §14 N13 + (a): 후보 카드 출처 줄 아랫변 ≤ [코스 짜기] 막대 윗변 − 12 ----------
+// 근거: TASK-011 §14 N13 + (a), task-011-review.md §9-4 (a) 표 1~3과 "남는 자리" 식, DESIGN-001 §4-11 재검수로 정한 것.
+// 계약 (이 테스트가 정한 이름, 승인 대기): src/planning/candidate-fit.ts
+//   candidateCardParts() = { photo 316, photoGap 12, nameWhy 46, factGap 12, factLine 24, sourceGap 4, source 19 }
+//   candidateCardHeight() = 합 = 433
+//   candidateRoom(화면 높이, 위 안전 영역) = 처음 화면에서 막대 윗변까지 남는 자리 ≈ 화면 높이 − 위 여백 − 776 (홈 바 있는 기기)
+//   sourceClearsBar(room) = room ≥ 12
+// 한계: 776이 무엇의 합인지는 문서에 없어 렌더 값과 잇지 못한다 (질문). Jest는 실제 레이아웃을 재지 못한다.
+
+describe('§14 N13 (a) 후보 카드 자리 규칙', () => {
+  const fit = () => require('@/planning/candidate-fit');
+  const { FIT, LISTS, NUMBERS } = require('../test-support/design-table');
+
+  test('T11_S14_a_카드_높이를_이루는_값은_리뷰_9-4_그대로', () => {
+    expect(fit().candidateCardParts()).toEqual({ photo: 316, photoGap: 12, nameWhy: 46, factGap: 12, factLine: 24, sourceGap: 4, source: 19 });
+  });
+
+  test('T11_S14_a_값은_토큰과_같다(큰_카드_316·space-3·fact-line)', () => {
+    const parts = fit().candidateCardParts();
+    expect(parts.photo).toBe(LISTS['cover-lg'][1]);
+    expect(parts.photoGap).toBe(NUMBERS['space-3']);
+    expect(parts.factGap).toBe(NUMBERS['space-3']);
+    expect(parts.factLine).toBe(FIT['fact-line'].height);
+    expect(parts.sourceGap).toBe(FIT['fact-line'].sourceGap);
+    expect(parts.source).toBe(FIT['fact-line'].sourceHeight);
+  });
+
+  test('T11_S14_a_카드_높이는_433이고_값들의_합', () => {
+    const parts = fit().candidateCardParts();
+    const sum = Object.values(parts as Record<string, number>).reduce((a, b) => a + b, 0);
+    expect(fit().candidateCardHeight()).toBe(433);
+    expect(fit().candidateCardHeight()).toBe(sum);
+  });
+
+  test.each([
+    ['iPhone 17 (874 · 위 62)', 874, 62, 36],
+    ['iPhone 13 mini급 (812 · 위 50)', 812, 50, -14],
+  ])('T11_S14_a_남는_자리_%s', (_name, height, top, room) => {
+    expect(fit().candidateRoom(height, top)).toBe(room);
+  });
+
+  test('T11_S14_a_처음_화면_iPhone_17에서_출처_줄은_막대_윗변_−_12_위', () => {
+    expect(fit().sourceClearsBar(fit().candidateRoom(874, 62))).toBe(true);
+  });
+
+  test('T11_S14_a_작은_기기(mini급)는_처음_화면에서_걸린다(그래서_스크롤_끝_여백이_안전장치)', () => {
+    expect(fit().sourceClearsBar(fit().candidateRoom(812, 50))).toBe(false);
+  });
+
+  test.each([
+    [12, true],
+    [11, false],
+    [13, true],
+    [0, false],
+    [-14, false],
+  ])('T11_S14_a_경계_남는_자리_%i이면_%s', (room, ok) => {
+    expect(fit().sourceClearsBar(room)).toBe(ok);
+  });
+
+  test('T11_S14_a_속성_남는_자리는_화면_높이_−_위_여백_−_776', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 500, max: 1400 }), fc.integer({ min: 0, max: 80 }), (height, top) => {
+        expect(fit().candidateRoom(height, top)).toBe(height - top - 776);
+      }),
+    );
+  });
+
+  test('T11_S14_a_속성_화면이_1pt_커지면_남는_자리도_1pt', () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 500, max: 1400 }), fc.integer({ min: 0, max: 80 }), (height, top) => {
+        expect(fit().candidateRoom(height + 1, top) - fit().candidateRoom(height, top)).toBe(1);
+        expect(fit().candidateRoom(height, top + 1) - fit().candidateRoom(height, top)).toBe(-1);
+      }),
+    );
+  });
+});

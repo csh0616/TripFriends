@@ -17,7 +17,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { control } from '@/planning/theme';
 import { TripDays } from '@/trips/trip-days';
 
-import { COLORS } from '../test-support/design-table';
+import { COLORS, FIT } from '../test-support/design-table';
 import { apiError, FakeServer, json } from '../test-support/fake-server';
 import { resetDevice } from '../test-support/planning-driver';
 import { buttonsFilledWith, pressableOf, styleOf, type Host } from '../test-support/screen-tree';
@@ -206,6 +206,19 @@ describe('§9 Q12 주 버튼과 바깥', () => {
     expect(onNewTrip).not.toHaveBeenCalled();
     expect(screen.queryByTestId('new-trip-sheet')).toBeNull();
     expect(screen.getByTestId('day-row-day-t1')).toBeTruthy();
+  });
+});
+
+// ---------- §14 N6: 시트 높이 234 (지금 238.7) ----------
+// 근거: TASK-011 §14 N6, task-011-review.md §9-3 N6, DESIGN-001 §4-11 sheet-confirm "높이 234".
+// 계약 (승인 대기): `new-trip-sheet` 상자의 style.height = 234 (iPhone 17, 홈 바 34). 실제 그려진 높이는 Jest가 재지 못한다 -> 스크린샷 재검수 몫
+describe('§14 N6 확인 시트 높이', () => {
+  test('T11_S14_N6_시트_높이는_234', async () => {
+    await showDays(() => {});
+    await press('new-trip');
+    const sheet = screen.getByTestId('new-trip-sheet') as unknown as Host;
+    expect(styleOf(sheet).height).toBe((FIT['sheet-confirm'] as { height: number }).height);
+    expect(styleOf(sheet).height).toBe(234);
   });
 });
 

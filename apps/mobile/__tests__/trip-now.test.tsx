@@ -337,7 +337,7 @@ describe('B6 카드 부품', () => {
     expect(cardWords('card-T-07')).toContain('서버_예약_제목 · 15:00–16:00'); // TASK-011 §9 Q8: 앱 전체 timeRange (승인)
   });
 
-  // TASK-011 §9 Q10: 영업시간을 보여 주는 모든 곳(여행 중 카드 포함). curated 시간대 -> "추천 시간대", 늘 열림 -> 칩 없이 "늘 열려 있어"
+  // TASK-011 §9 Q10: 영업시간을 보여 주는 모든 곳(여행 중 카드 포함). curated 시간대 -> "추천 시간대", 늘 열림 -> "확인됨" 칩 + "늘 열려 있어" (§14 N9로 바뀜)
   const withHours = (over: object) => ({ ...second, facts: [{ ...second.facts[0], ...over }] });
   test('T11_Q10_여행_중_카드_curated_시간대는_추천_시간대', async () => {
     await shows(t01({ item: withHours({ source_type: 'curated', value: '17:00-24:00', status: 'confirmed' }) }));
@@ -345,9 +345,11 @@ describe('B6 카드 부품', () => {
     expect(inCard('card-T-01').queryByText('확인됨')).toBeNull();
   });
 
-  test('T11_Q10_여행_중_카드_늘_열림은_칩_없이_늘_열려_있어', async () => {
+  // TASK-011 §14 N9 (§9 Q10 고침): 늘 열림에도 "확인됨" 칩. 옛 "칩 없이" 테스트를 바꿈
+  test('T11_S14_N9_여행_중_카드_늘_열림은_확인됨_칩과_늘_열려_있어', async () => {
     await shows(t01({ item: withHours({ source_type: 'curated', value: '00:00-24:00', status: 'confirmed' }) }));
-    for (const chip of ['확인됨', '미확인', '모름', '추천 시간대']) expect(inCard('card-T-01').queryByText(chip)).toBeNull();
+    expect(inCard('card-T-01').getByText('확인됨')).toBeTruthy();
+    for (const chip of ['미확인', '모름', '추천 시간대']) expect(inCard('card-T-01').queryByText(chip)).toBeNull();
     expect(inCard('card-T-01').getByText(/늘 열려 있어/)).toBeTruthy();
   });
 
