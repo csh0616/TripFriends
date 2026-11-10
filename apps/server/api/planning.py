@@ -88,6 +88,16 @@ def start_planning(day_id: str, body: StartRequest, service: Service, request: R
 
 
 @router.get(
+    "/days/{day_id}/planning",
+    responses=_doc(404),
+    summary="그날 진행 중인 계획 세션의 지금 응답 (없으면 404 resource=session, 앱은 그때만 새로 시작)",
+)
+def planning_of_day(day_id: str, service: Service, request: Request, user: UserId) -> PlanningSession | CandidateBatch | CourseResult:
+    require_day(request, user, day_id)
+    return service.current_for_day(day_id)
+
+
+@router.get(
     "/planning/{session_id}",
     responses=_doc(404),
     summary="지금 stage의 응답을 다시 받기 (상태를 바꾸지 않음)",

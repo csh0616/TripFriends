@@ -11,7 +11,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** 그날 진행 중인 계획 세션의 지금 응답 (없으면 404 resource=session, 앱은 그때만 새로 시작) */
+        get: operations["planning_of_day_days__day_id__planning_get"];
         put?: never;
         /** 계획 대화 시작 (mode=auto면 바로 코스) */
         post: operations["start_planning_days__day_id__planning_post"];
@@ -1602,6 +1603,55 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    planning_of_day_days__day_id__planning_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                day_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanningSession"] | components["schemas"]["CandidateBatch"] | components["schemas"]["CourseResult"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     start_planning_days__day_id__planning_post: {
         parameters: {
             query?: never;

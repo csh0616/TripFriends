@@ -188,6 +188,14 @@ class PostgresPlanningRepo(PlanningRepo):
             row = cur.fetchone()
         return str(row["trip_day_id"]) if row else None
 
+    def day_sessions(self, day_id: str) -> list[str]:
+        did = _uid(day_id)
+        if did is None:
+            return []
+        with self._db.cursor() as cur:
+            cur.execute("select id from planning_sessions where trip_day_id = %s order by seq", (did,))
+            return [str(r["id"]) for r in cur.fetchall()]
+
     # ---- 반응 ----
 
     def _lists(self, session_id: str) -> tuple[list[PlaceId], list[PlaceId], list[PlaceId]]:

@@ -105,6 +105,79 @@
             "description": "Service Unavailable"
           }
         }
+      },
+      "get": {
+        "summary": "그날 진행 중인 계획 세션의 지금 응답 (없으면 404 resource=session, 앱은 그때만 새로 시작)",
+        "operationId": "planning_of_day_days__day_id__planning_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "day_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Day Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PlanningSession"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CandidateBatch"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CourseResult"
+                    }
+                  ],
+                  "title": "Response Planning Of Day Days  Day Id  Planning Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
       }
     },
     "/planning/{session_id}": {

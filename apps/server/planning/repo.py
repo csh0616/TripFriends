@@ -64,6 +64,10 @@ class PlanningRepo(ABC):
     def session_day(self, session_id: str) -> str | None:
         """세션이 속한 day_id. 없는 세션이면 None."""
 
+    @abstractmethod
+    def day_sessions(self, day_id: str) -> list[str]:
+        """그날에 만든 세션 id들, 시작한 순서(가장 나중이 마지막). TASK-012 §13 1: 앱이 세션 ID를 기기에 두지 않고 날로 찾는다."""
+
     # ---- 반응 ----
     @abstractmethod
     def reactions(self, session_id: str) -> Reactions: ...
@@ -198,6 +202,10 @@ class MemoryPlanningRepo(PlanningRepo):
     def session_day(self, session_id: str) -> str | None:
         with self._lock:
             return self._sessions.get(session_id)
+
+    def day_sessions(self, day_id: str) -> list[str]:
+        with self._lock:
+            return [sid for sid, did in self._sessions.items() if did == day_id]
 
     def reactions(self, session_id: str) -> Reactions:
         with self._lock:

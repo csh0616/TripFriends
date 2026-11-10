@@ -81,6 +81,7 @@ create table must_visits (
 
 create table planning_sessions (
     id uuid primary key,
+    seq bigint generated always as identity,                -- 시작한 순서 (그날 가장 나중 세션 찾기, §13 1)
     trip_day_id uuid not null references trip_days (id),
     mode text check (mode in ('conversation', 'auto')),      -- 그래프 상태에 있는 값. 저장소는 몰라 비워 둔다
     state text check (state in ('asking', 'browsing', 'composing', 'done')),

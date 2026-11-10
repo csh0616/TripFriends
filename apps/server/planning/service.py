@@ -150,6 +150,15 @@ class PlanningService:
                 self.graph.checkpointer.delete_thread(session_id)
             return self._response(outcome)  # type: ignore[return-value]
 
+    def current_for_day(self, day_id: str) -> PlanningSession | CandidateBatch | CourseResult:
+        """TASK-012 §13 1: 그날 진행 중(asking·browsing·composing)인 계획 세션의 현재 응답 (`current`와 같다, 읽기만).
+        여럿이면 가장 나중에 시작한 것. 끝난 세션(done)은 진행 중이 아니다(문서 질문 중). 없으면 404 resource=session."""
+        with self._lock:
+            for session_id in reversed(self.repo.day_sessions(day_id)):
+                if self._state(session_id).stage != "done":
+                    return self.current(session_id)  # type: ignore[return-value]
+            raise PlanningError("NOT_FOUND", "진행 중인 계획이 없어요", {"resource": "session", "day_id": day_id})
+
     def current(self, session_id: str) -> PlanningSession | CandidateBatch | CourseResult | PlanningDone:
         """TASK-004 A1: GET. 지금 stage의 응답을 **지금 상태로 다시 계산**해서 준다.
 
