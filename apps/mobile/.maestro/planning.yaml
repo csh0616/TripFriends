@@ -1,5 +1,5 @@
 # TASK-006 C2: 계획 흐름 S0 -> P1 -> P2 -> P3 -> S9, 화면마다 스크린샷.
-# 전제: 서버 실행 중 + 개발 빌드가 시뮬레이터에 설치됨 + Metro 실행 중. 개발 서버 주소는 흐름에 박지 않고 -e로 받는다
+# 전제: 로컬 Supabase + 그것을 가리키는 점검 서버 실행 중(supabase/README.md, TASK-012 B5. 데모도 익명 로그인 뒤 Bearer로 시드) + 개발 빌드가 시뮬레이터에 설치됨 + Metro 실행 중. 개발 서버 주소는 흐름에 박지 않고 -e로 받는다
 # (흐름 안의 env: 블록은 -e보다 우선해서 쓰지 않는다. Maestro 2.12.1에서 확인).
 # 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로):
 #   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \

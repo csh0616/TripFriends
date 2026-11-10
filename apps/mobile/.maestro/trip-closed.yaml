@@ -1,7 +1,7 @@
 # TASK-008 §D AC-8: 영업 확인(T-05)과 닫힘 대안(T-06). S0 [여행 중 데모 바로 보기] -> 데모 시계를 시나리오 장소 D02 출발 30분 전(11:30)으로
 #   -> T-05 -> [닫혔어] -> T-06(대안 D31 "골목 카페 E") -> [이걸로] -> 바뀐 동선.
 # 전제와 우회는 trip-delay.yaml과 같다 (개발 서버 주소는 -e METRO_URL, 흐름 안 env: 블록 없음, 첫 탭 우회, 탭 retry).
-# 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로. 서버는 새로 띄운 상태, 데모 시드는 매번 새로 만든다):
+# 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로. 로컬 Supabase + 점검 서버, supabase/README.md. clearState로 매번 새 익명 사용자, 데모 시드는 매번 그 사용자 것으로 새로 만든다):
 #   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --device <UDID> test -e METRO_URL=http://127.0.0.1:8083 \
 #     --test-output-dir=.maestro/screenshots/trip-closed .maestro/trip-closed.yaml
 # 스크린샷은 --test-output-dir 아래에 쌓이고 저장소에는 올리지 않는다.
