@@ -193,3 +193,28 @@ def test_T12_A5_데모_시드도_DB에_저장되고_다시_켜도_그_사용자�
         current = osaka.current(ME).json()
         assert current["trip_id"] == trip_id
         assert current["is_demo"] is True  # §10 Q11
+
+
+@pytest.mark.db
+def test_T12_S13_1_서버와_앱을_둘_다_다시_켜도_그날_계획_대화를_날로_찾아_이어_간다(monkeypatch):
+    # §13 1: 앱은 세션 ID를 기기에 두지 않는다 -> 다시 켠 앱은 날 ID만 안다. 서버도 다시 켠 뒤 GET /days/{day_id}/planning으로 같은 대화
+    from api.main import app
+
+    server_env(monkeypatch, "postgres")
+    with open_server(app) as client:
+        osaka = Osaka(client, app)
+        trip = osaka.make_trip(days=2, device=ME)
+        day_id = trip["trip_days"][0]["day_id"]
+        session = client.post(f"/days/{day_id}/planning", json={"mode": "conversation"}).json()
+        sid = session["session_id"]
+        batch = client.post(f"/planning/{sid}/answer", json={"choice_ids": [session["question"]["choices"][0]["id"]]}).json()
+        client.post(f"/planning/{sid}/reactions", json={"place_id": batch["candidates"][0]["place"]["id"], "action": "like"})
+        before = client.get(f"/planning/{sid}").json()
+
+    with open_server(app) as client:  # 서버를 다시 켠다
+        app.state.clock = lambda: NOON
+        found = client.get(f"/days/{day_id}/planning")
+        assert found.status_code == 200, found.text
+        assert found.json()["session_id"] == sid
+        assert without_google(found.json()) == without_google(before)
+        assert found.json()["picks_count"] == 1

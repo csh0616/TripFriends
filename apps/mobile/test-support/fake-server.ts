@@ -89,6 +89,10 @@ export class FakeServer {
       this.queue(route).shift() ??
       this.routes.get(route) ??
       (matcher ? { promise: Promise.resolve(matcher.reply(this.last())), resolve: () => undefined } : undefined);
+    if (next === undefined && DAY_PLANNING.test(route)) {
+      // TASK-012 §13 1: 앱은 그날 계획에 들어갈 때 진행 중인 세션을 먼저 묻는다. 테스트가 정하지 않았으면 "없음"(새로 시작)
+      return respond({ status: 404, body: { error: { code: 'NOT_FOUND', message: '진행 중인 계획이 없어요', detail: { resource: 'session' } } } });
+    }
     if (next === undefined) {
       this.unexpected.push(route);
       throw new TypeError(`가짜 서버에 없는 경로: ${route}`);
@@ -107,14 +111,20 @@ export class FakeServer {
         headers: { get: () => 'text/html' },
       } as unknown as Response;
     }
-    return {
-      ok: reply.status >= 200 && reply.status < 300,
-      status: reply.status,
-      json: async () => reply.body,
-      text: async () => JSON.stringify(reply.body),
-      headers: { get: () => 'application/json' },
-    } as unknown as Response;
+    return respond(reply);
   }
+}
+
+const DAY_PLANNING = /^GET \/days\/[^/?]+\/planning$/;
+
+function respond(reply: { status: number; body: unknown }): Response {
+  return {
+    ok: reply.status >= 200 && reply.status < 300,
+    status: reply.status,
+    json: async () => reply.body,
+    text: async () => JSON.stringify(reply.body),
+    headers: { get: () => 'application/json' },
+  } as unknown as Response;
 }
 
 function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal | null): Promise<T> {

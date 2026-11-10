@@ -62,7 +62,20 @@ const notify = (event: string, session: FakeSession | null) => state.listeners.f
 
 const auth = {
   async getSession() {
-    return { data: { session: await read() }, error: null };
+    // supabase-js v2와 같게: 저장된 세션의 access token이 만료됐으면 refresh token으로 새로 받아 돌려준다 (autoRefreshToken과 상관없이)
+    const stored = await read();
+    if (stored && stored.expires_at * 1000 <= Date.now()) {
+      state.refreshes += 1;
+      if (state.refreshFails > 0) {
+        state.refreshFails -= 1;
+        return { data: { session: null }, error: failure() };
+      }
+      const session = issue(stored.user);
+      await write(session);
+      notify('TOKEN_REFRESHED', session);
+      return { data: { session }, error: null };
+    }
+    return { data: { session: stored }, error: null };
   },
   async getUser() {
     const session = await read();
@@ -127,8 +140,9 @@ export const authFake = {
     state.listeners = [];
   },
   /** 이미 이 기기에 세션이 있는 것처럼 (앱을 전에 연 적 있음) */
-  async keepSession(): Promise<FakeSession> {
-    const session = issue(newUser());
+  async keepSession(options: { expired?: boolean } = {}): Promise<FakeSession> {
+    const made = issue(newUser());
+    const session = options.expired ? { ...made, expires_at: Math.floor(Date.now() / 1000) - 3600 } : made; // 오래 백그라운드에 있다 돌아온 것처럼
     await write(session);
     return session;
   },
