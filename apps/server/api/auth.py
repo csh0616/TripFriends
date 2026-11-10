@@ -18,7 +18,7 @@ AUDIENCE = "authenticated"
 LEEWAY_SECONDS = 10
 ALGORITHM = "ES256"
 REFETCH_MIN_SECONDS = 60.0  # 같은 모르는 kid로 계속 두드려도 Supabase를 이 간격보다 자주 부르지 않는다
-FETCH_TIMEOUT = 5.0  # 초: JWKS를 받는 시간 제한. 넘으면 이번 요청은 확인하지 못한 것(401)이다
+FETCH_TIMEOUT = 5.0  # 초: JWKS를 받는 시간 제한. 넘으면 받기 실패 -> 503 AUTH_UNAVAILABLE (§12 6)
 
 
 class AuthError(Exception):
