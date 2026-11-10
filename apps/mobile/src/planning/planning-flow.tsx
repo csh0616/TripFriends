@@ -411,6 +411,23 @@ function Session({
         if (typeof dayId !== 'string') return stop({ kind: 'server' });
         seedDay.current = dayId;
       }
+      // TASK-012 §13: 실제 여행의 날은 먼저 진행 중인 세션을 묻는다. 있으면 이어 가고, 404 session일 때만 새로 시작 ([알아서 짜 줘]는 그대로 새로 시작)
+      if (tripDay && startMode !== 'auto') {
+        const found = await send(requests.byDay(seedDay.current), signals.current);
+        if (!alive.current) return;
+        if (found.ok) {
+          const data = found.data as { session_id?: unknown; day?: PlanningSession['day'] } | null;
+          if (typeof data?.session_id === 'string') {
+            sid.current = data.session_id;
+            setSessionId(data.session_id);
+            onSession?.(data.session_id);
+            accept(requests.byDay(seedDay.current), 'stage', found.data, false, false);
+            return;
+          }
+          return stop({ kind: 'server' });
+        }
+        if (!(found.failure.kind === 'not_found' && found.failure.resource === 'session')) return stop(found.failure);
+      }
       const started = await send(requests.start(seedDay.current, tripDay ? startMode : undefined), signals.current);
       if (!alive.current) return;
       if (!started.ok) return stop(started.failure);

@@ -149,6 +149,8 @@ export const requests = {
     path: `/days/${dayId}/planning`,
     body: { mode } satisfies StartBody,
   }),
+  // TASK-012 §13: 그날 진행 중인 계획 세션 (없으면 404 resource session)
+  byDay: (dayId: string): Request => ({ method: 'GET', path: `/days/${dayId}/planning` }),
   current: (sessionId: string): Request => ({ method: 'GET', path: `/planning/${sessionId}` }),
   answer: (sessionId: string, body: AnswerBody): Request => ({
     method: 'POST',
