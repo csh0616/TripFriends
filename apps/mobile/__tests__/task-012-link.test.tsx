@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// TASK-012 2단계 앱: 계정 연결. 로직·가드레일만 본다 (색·간격은 design-tokens·리뷰 몫).
+// TASK-012 2단계 앱: 계정 연결 + §15 보안 규칙(S1 PKCE·S4 값 안 남김). 로직·가드레일만 본다 (색·간격은 design-tokens·리뷰 몫).
 // 근거: TASK-012 §C C1·C2·C4·C5·C6·§6 "Google 연결 실패·취소"·§7 AC-5·AC-8·§8 "여행 삭제(보관만)"·§9 답 1~9,
 //   ADR-016 §3-1(연결 규칙)·§3-2(권하는 때)·§3-3(앱은 Supabase를 로그인에만), docs/design/reviews/task-012-design.md §1(문구)·§4·§8,
 //   DESIGN-001 §4-12, PM 안(결정권자 전달 11-11: linkIdentity + expo-web-browser + code 교환, redirect tripfriends://auth/callback,
@@ -103,6 +103,7 @@ const CHOICES = {
 };
 
 let server: FakeServer;
+const realDev = (globalThis as { __DEV__?: boolean }).__DEV__;
 
 function startHome() {
   const Index = require('@/app/index').default;
@@ -198,6 +199,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  (globalThis as { __DEV__?: boolean }).__DEV__ = realDev;
   jest.useRealTimers();
   jest.restoreAllMocks();
 });
@@ -586,5 +588,44 @@ describe('C6 · §9 1', () => {
     expect(screen.getAllByText(SAVE.google)).toHaveLength(1);
     expect(screen.queryByText('Google로 저장')).toBeNull();
     expect(screen.queryByText(/^Google$/)).toBeNull();
+  });
+});
+
+// ---------- TASK-012 §15 2단계 보안 규칙 ----------
+
+describe('§15 보안', () => {
+  /** console에 나간 모든 글자 (개발 경고 포함) */
+  function captureConsole() {
+    const said: string[] = [];
+    for (const name of ['log', 'warn', 'error', 'info', 'debug'] as const) {
+      jest.spyOn(console, name).mockImplementation((...args: unknown[]) => {
+        said.push(args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg) ?? String(arg))).join(' '));
+      });
+    }
+    return said;
+  }
+
+  test.each([
+    ['코드_교환_실패', () => authFake.failExchange(1), null],
+    ['공급자_오류', () => authFake.browser('error'), null],
+    ['claim_500', () => authFake.googleAccount({ existing: true }), apiError(500, 'INTERNAL_ERROR')],
+  ] as const)('T12_S15_S4_연결이_실패해도(%s)_토큰·code·이메일을_console에_남기지_않는다', async (_name, arrange, claimReply) => {
+    (globalThis as { __DEV__?: boolean }).__DEV__ = true; // 개발 경고가 켜진 상태에서도 값이 없어야 한다
+    const said = captureConsole();
+    arrange();
+    if (claimReply) server.on(CLAIM, claimReply);
+    await toSaveSheetFromMenu();
+    const anon = await session();
+    await pressGoogle();
+    await screen.findByText(FAILED);
+    const secrets = [anon?.access_token, anon?.refresh_token, 'fake-code-', 'fake-access-', 'fake-refresh-', 'seunghyun@gmail.com'].filter(Boolean) as string[];
+    expect(said.filter((line) => secrets.some((secret) => line.includes(secret)))).toEqual([]);
+  });
+
+  test('T12_S15_S1_code_교환은_PKCE_클라이언트로', async () => {
+    // 앱 주소(tripfriends://)는 다른 앱도 등록할 수 있다: code만으로는 세션을 못 만들게 pkce (§15 S1). 설정 값은 lib 테스트도 본다
+    await toList();
+    const { createClientCalls } = require('../test-support/supabase-mock');
+    expect(createClientCalls.at(-1)?.options?.auth?.flowType).toBe('pkce');
   });
 });

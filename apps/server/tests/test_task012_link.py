@@ -18,6 +18,8 @@ PM 안(결정권자 전달 11-11: 이미 있는 계정은 그 Google 계정으�
     본문 토큰이 틀림·만료·모르는 키 = 401 UNAUTHORIZED (API-001). 거절된 요청은 아무것도 바꾸지 않는다
     A3: 요청 하나 = 트랜잭션 하나 -> claim/choose 중간에 예외면 500 INTERNAL_ERROR, 두 사용자의 여행이 요청 전과 같다
     메모리·Postgres 두 구현에 같은 테스트 (Postgres는 `db` 표시, TEST_DATABASE_URL 없으면 건너뜀)
+    §15 S3: 옮김(moved)·고르기(choose 완료)로 처리된 익명 사용자는 다시 claim·choose 하면 409 (code는 질문). "choose"만 돌려받은 것은 처리 아님
+    §15 S4: 토큰은 로그·오류 응답에 남지 않는다 · S6: 계정 이메일은 서버 저장소에 복사하지 않는다
 """
 
 import inspect
@@ -433,3 +435,74 @@ def test_T12_AC5_속성_어떤_조합이든_연결_뒤_모든_여행이_남고_�
         assert len(actives) <= 1  # R1은 지금 여행 하나
         snapshot = app.state.trip_store.snapshot()
         assert set(mine + theirs) <= set(snapshot["trips"])  # 메모리 저장소에도 그대로
+
+
+# ---------- §15 2단계 보안 규칙 (11-11) ----------
+
+
+def test_T12_S15_S3_옮긴_익명_사용자는_다시_claim하면_409_아무것도_안_바뀜(world):
+    client, osaka, anon, account = world
+    trip = make_trip(osaka, anon)
+    assert claim(client, anon, account).json()["result"] == "moved"
+    before = picture(client, anon, account, [trip["trip_id"]])
+    assert_common(claim(client, anon, account), 409)  # code는 질문 (API-001에 없음)
+    other, _ = names()
+    assert_common(claim(client, anon, other), 409)  # 다른 계정으로도 다시 못 가져간다
+    assert picture(client, anon, account, [trip["trip_id"]]) == before
+
+
+def test_T12_S15_S3_고르기를_마친_익명_사용자는_claim·choose_모두_409(world):
+    client, osaka, anon, account = world
+    mine = make_trip(osaka, anon)
+    theirs = make_trip(osaka, account, offset=40)
+    assert claim(client, anon, account).json()["result"] == "choose"
+    assert choose(client, anon, account, mine["trip_id"]).status_code == 200
+    ids = [mine["trip_id"], theirs["trip_id"]]
+    before = picture(client, anon, account, ids)
+    assert_common(claim(client, anon, account), 409)
+    assert_common(choose(client, anon, account, theirs["trip_id"]), 409)
+    assert picture(client, anon, account, ids) == before
+
+
+def test_T12_S15_S3_choose를_돌려받기만_한_것은_처리가_아니다_choose는_된다(world):
+    # claim이 "choose"만 돌려주면 아무것도 바뀌지 않았다 -> 같은 claim을 다시 해도 같은 choose, 그 뒤 고르기도 된다
+    client, osaka, anon, account = world
+    mine = make_trip(osaka, anon)
+    make_trip(osaka, account, offset=40)
+    assert claim(client, anon, account).json()["result"] == "choose"
+    assert claim(client, anon, account).json()["result"] == "choose"
+    assert choose(client, anon, account, mine["trip_id"]).status_code == 200
+
+
+def test_T12_S15_S4_토큰은_로그·오류_응답에_남지_않는다(world, caplog):
+    client, osaka, anon, account = world
+    make_trip(osaka, anon)
+    good = anon_token(anon)
+    bad = anon_token(anon, key=OTHER_KEY)
+    header = account_headers(account)
+    caplog.set_level("DEBUG")
+    rejected = claim(client, anon, account, token=bad, headers=header)
+    accepted = claim(client, anon, account, token=good, headers=header)
+    assert rejected.status_code == 401 and accepted.status_code == 200
+    secrets = [good, bad, header["Authorization"].split(" ", 1)[1]]
+    for text in [rejected.text, accepted.text, *(record.getMessage() for record in caplog.records)]:
+        for secret in secrets:
+            for piece in secret.split("."):  # 토큰 전체도, 머리·몸·서명 한 조각도
+                assert piece not in text
+
+
+def test_T12_S15_S6_계정_이메일은_저장소에_복사하지_않는다(monkeypatch):
+    # Supabase Auth에만 있다. 서버 저장소(메모리) 어디에도 이메일 글자가 없다
+    from api.main import app
+
+    from trip_helpers import stores
+
+    server_env(monkeypatch, "memory")
+    with open_server(app) as client:
+        osaka = Osaka(client, app)
+        anon, account = names()
+        mine = make_trip(osaka, anon)
+        make_trip(osaka, account, offset=40)
+        assert claim(client, anon, account).json()["result"] == "choose"
+        assert choose(client, anon, account, mine["trip_id"]).status_code == 200
+        assert EMAIL not in repr(stores(osaka))
