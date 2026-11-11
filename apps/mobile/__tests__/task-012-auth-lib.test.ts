@@ -252,3 +252,79 @@ describe('기기 저장 실패', () => {
     expect(fake.authFake.signIns()).toBe(1);
   });
 });
+
+// ---------- 결정권자 지시 (11-11, PR 전): 익명 로그인·토큰 갱신 실패 이유를 개발 빌드에서만 console.warn (키·토큰 값은 찍지 않기) ----------
+// 계약 (승인 대기): 실패 한 번에 console.warn 한 번, 인자 어딘가에 Supabase 오류 code 글자. __DEV__가 false면 이 경고 없음. 실패 동작(null·다시 시도)은 그대로
+
+describe('실패 이유 경고 (개발 빌드만)', () => {
+  const realDev = (globalThis as { __DEV__?: boolean }).__DEV__;
+  const setDev = (value: boolean) => ((globalThis as { __DEV__?: boolean }).__DEV__ = value);
+  afterEach(() => setDev(realDev as boolean));
+
+  const text = (calls: unknown[][]) =>
+    calls
+      .flat()
+      .map((arg) => {
+        if (typeof arg === 'string') return arg;
+        try {
+          return JSON.stringify(arg, Object.getOwnPropertyNames(arg ?? {}));
+        } catch {
+          return String(arg);
+        }
+      })
+      .join(' ');
+
+  const PUBLIC_KEY = 'public-test-key'; // load()의 기본 공개 키 값
+
+  test.each([true, false])('T12_익명_로그인_실패_개발=%s', async (dev) => {
+    setDev(dev);
+    const { auth, fake } = load();
+    fake.authFake.failSignIn(1, 'anonymous_provider_disabled');
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await auth.ensureToken()).toBeNull(); // 동작 그대로
+    if (dev) {
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(text(warn.mock.calls)).toContain('anonymous_provider_disabled');
+    } else {
+      expect(text(warn.mock.calls)).not.toContain('anonymous_provider_disabled');
+      expect(warn).not.toHaveBeenCalled();
+    }
+    expect(text(warn.mock.calls)).not.toContain(PUBLIC_KEY);
+    warn.mockRestore();
+    expect(await auth.ensureToken()).toBeTruthy(); // 다음 부름에서 다시 한다 (그대로)
+    expect(fake.authFake.signIns()).toBe(2);
+  });
+
+  test.each([true, false])('T12_토큰_갱신_실패_개발=%s', async (dev) => {
+    setDev(dev);
+    const { auth, fake } = load();
+    const used = (await auth.ensureToken()) as string;
+    const stored = (await fake.authFake.session())!;
+    fake.authFake.failRefresh(1, 'refresh_token_not_found');
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(await auth.renewToken(used)).toBeNull(); // 동작 그대로
+    if (dev) {
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(text(warn.mock.calls)).toContain('refresh_token_not_found');
+    } else {
+      expect(text(warn.mock.calls)).not.toContain('refresh_token_not_found');
+      expect(warn).not.toHaveBeenCalled();
+    }
+    const said = text(warn.mock.calls);
+    for (const secret of [used, stored.access_token, stored.refresh_token, PUBLIC_KEY]) expect(said).not.toContain(secret);
+    warn.mockRestore();
+    expect(fake.authFake.signIns()).toBe(1); // 새 익명 계정 없음 (Q6, 그대로)
+    expect(await auth.renewToken(used)).toBeTruthy(); // 다음에는 다시 받는다 (그대로)
+  });
+
+  test('T12_만료_세션_갱신_실패도_개발_빌드에서_이유_경고_토큰_값_없음', async () => {
+    setDev(true);
+    const { auth, fake } = load();
+    const stale = await fake.authFake.keepSession({ expired: true });
+    fake.authFake.failRefresh(1, 'refresh_token_already_used');
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await auth.ensureToken();
+    expect(text(warn.mock.calls)).toContain('refresh_token_already_used');
+    for (const secret of [stale.access_token, stale.refresh_token, PUBLIC_KEY]) expect(text(warn.mock.calls)).not.toContain(secret);
+  });
+});

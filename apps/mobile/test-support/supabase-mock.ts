@@ -8,7 +8,9 @@ type Storage = { getItem: (key: string) => Promise<string | null> | string | nul
 type Listener = (event: string, session: FakeSession | null) => void;
 
 const DEFAULT_KEY = 'sb-fake-auth-token';
-const failure = () => ({ name: 'AuthRetryableFetchError', message: 'Failed to fetch', status: 0 });
+// 오류 code가 있으면 supabase-js의 AuthApiError 모양 (예: anonymous_provider_disabled), 없으면 네트워크 실패 모양
+const failure = (code?: string) =>
+  code ? { name: 'AuthApiError', message: `fake auth error: ${code}`, status: 422, code } : { name: 'AuthRetryableFetchError', message: 'Failed to fetch', status: 0 };
 
 const state = {
   memory: null as FakeSession | null, // storage가 없을 때만
@@ -16,6 +18,8 @@ const state = {
   users: 0,
   signInFails: 0,
   refreshFails: 0,
+  signInCode: undefined as string | undefined,
+  refreshCode: undefined as string | undefined,
   signIns: 0,
   refreshes: 0,
   listeners: [] as Listener[],
@@ -68,7 +72,7 @@ const auth = {
       state.refreshes += 1;
       if (state.refreshFails > 0) {
         state.refreshFails -= 1;
-        return { data: { session: null }, error: failure() };
+        return { data: { session: null }, error: failure(state.refreshCode) };
       }
       const session = issue(stored.user);
       await write(session);
@@ -85,7 +89,7 @@ const auth = {
     state.signIns += 1;
     if (state.signInFails > 0) {
       state.signInFails -= 1;
-      return { data: { session: null, user: null }, error: failure() };
+      return { data: { session: null, user: null }, error: failure(state.signInCode) };
     }
     const session = issue(newUser());
     await write(session);
@@ -97,7 +101,7 @@ const auth = {
     const current = await read();
     if (state.refreshFails > 0 || !current) {
       state.refreshFails = Math.max(0, state.refreshFails - 1);
-      return { data: { session: null, user: null }, error: failure() };
+      return { data: { session: null, user: null }, error: failure(state.refreshCode) };
     }
     const session = issue(current.user); // 같은 사용자, 새 토큰
     await write(session);
@@ -135,6 +139,8 @@ export const authFake = {
     state.memory = null;
     state.signInFails = 0;
     state.refreshFails = 0;
+    state.signInCode = undefined;
+    state.refreshCode = undefined;
     state.signIns = 0;
     state.refreshes = 0;
     state.listeners = [];
@@ -147,11 +153,13 @@ export const authFake = {
     return session;
   },
   /** 다음 n번 익명 로그인이 네트워크로 실패 */
-  failSignIn(times = 1) {
+  failSignIn(times = 1, code?: string) {
     state.signInFails = times;
+    state.signInCode = code;
   },
-  failRefresh(times = 1) {
+  failRefresh(times = 1, code?: string) {
     state.refreshFails = times;
+    state.refreshCode = code;
   },
   signIns: () => state.signIns,
   refreshes: () => state.refreshes,
