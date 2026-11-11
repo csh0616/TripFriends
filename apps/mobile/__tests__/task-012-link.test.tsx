@@ -12,17 +12,21 @@
 //     돌아온 주소에 error_code=identity_already_exists면 C4: auth.signInWithOAuth(같은 options) -> 브라우저 -> code 교환 (그 계정 세션)
 //     -> POST /account/claim (헤더 Bearer = 그 계정 토큰, 본문 { anonymous_token: 연결 전 익명 세션의 access token })
 //        { result: 'moved' } -> 지금 여행을 다시 묻는다 / { result: 'choose', choices: [기기 칸, 계정 칸] } -> 어느 여행 시트
-//        칸 = { origin: 'device'|'account', trip_id, title, start_date, end_date, day_count, planned_count } (서버 테스트와 같은 이름)
+//        칸 = { origin: 'device'|'account', trip_id, name, start_date, end_date, planned_days, total_days } (API-001 §2-1)
 //     [이걸로 할래] -> POST /account/claim/choose { anonymous_token, trip_id } -> 응답 Trip으로 날짜 목록
 //   §9 3 [연결 취소]: 서버 호출 없이 연결 전 익명 세션으로 돌아간다 (새 익명 계정 만들지 않음). 알림 없음
-//   §9 9 실패: role="alert" 한 줄 "연결하지 못했어. 지금 여행은 그대로야", 6초 뒤 사라짐·누르면 닫힘, 저장 권유 시트 닫힘. 취소면 알림 없음
+//   §9 9 실패: role="alert" 한 줄 "연결하지 못했어. 지금 여행은 그대로야", 6초 뒤 사라짐·누르면 닫힘, 저장 권유 시트 닫힘.
+//     §16 Q7 브라우저 취소면 알림 없고 저장 권유 시트 그대로 · 스크림 = [나중에] · 실제 여행에서 코스를 고른 그 순간에만(데모 뒤 없음, 이미 계획한 여행을 열 때 없음)
+//   §16 Q6 기기에 익명 세션 전체를 보관, claim·choose 직전 만료 60초 안이면 먼저 갱신, moved·choose 성공 뒤 보관본을 지운다
+//   §16 Q13 claim 실패(409 포함): 계정 세션 로그아웃 -> 보관한 익명 세션으로 -> 실패 알림
+//   §16 Q8 실제 여행 [처음부터 다시] -> ①-28 확인 -> [새로 만들기] -> 첫 화면(S0)
 //   §9 4 날짜 목록 머리 왼쪽 아바타: 역할 button, 접근성 이름 '내 프로필' (지도 위 아바타는 기존 '프로필' 그대로)
 //   문구는 모두 리뷰 파일 §1·§8 그대로. 화면 이름(testID)은 정하지 않고 글자·역할로 찾는다
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { apiError, FakeServer, json, networkDown, type Sent } from '../test-support/fake-server';
-import { resetDevice, tap } from '../test-support/planning-driver';
+import { happyServer, resetDevice, storedValues, tap } from '../test-support/planning-driver';
 import { course, SID } from '../test-support/planning-fixtures';
 import { treeIndex, type Host } from '../test-support/screen-tree';
 import { authFake, EXISTING_USER_ID } from '../test-support/supabase-mock';
@@ -97,8 +101,8 @@ const ACCOUNT_TRIP = {
 const CHOICES = {
   result: 'choose',
   choices: [
-    { origin: 'device', trip_id: TRIP_PLANNED.trip_id, title: '오사카 2박 3일', start_date: DATES[0], end_date: DATES[2], day_count: 3, planned_count: 1 },
-    { origin: 'account', trip_id: ACCOUNT_TRIP.trip_id, title: '오사카 3박 4일', start_date: ACCOUNT_DATES[0], end_date: ACCOUNT_DATES[3], day_count: 4, planned_count: 3 },
+    { origin: 'device', trip_id: TRIP_PLANNED.trip_id, name: '오사카 2박 3일', start_date: DATES[0], end_date: DATES[2], planned_days: 1, total_days: 3 },
+    { origin: 'account', trip_id: ACCOUNT_TRIP.trip_id, name: '오사카 3박 4일', start_date: ACCOUNT_DATES[0], end_date: ACCOUNT_DATES[3], planned_days: 3, total_days: 4 },
   ],
 };
 
@@ -239,6 +243,46 @@ describe('C1 저장 권유 시트', () => {
     expect(screen.queryByText(SAVE.title)).toBeNull();
   });
 
+  test('T12_S16_Q7_이미_계획을_마친_여행을_열면_자동으로_띄우지_않는다', async () => {
+    await toList(TRIP_PLANNED); // 처음 연 기기, 묻지 않았음
+    await settleAll();
+    expect(screen.queryByText(SAVE.title)).toBeNull();
+  });
+
+  test('T12_S16_Q7_스크림을_누르면_나중에와_같다', async () => {
+    await toSaveSheet();
+    const scrim = screen
+      .getAllByRole('button', { name: SAVE.later })
+      .find((host) => (host as unknown as Host).queryAll((child) => child.type === 'Text').length === 0);
+    expect(scrim).toBeDefined();
+    await tap(scrim!);
+    expect(screen.queryByText(SAVE.title)).toBeNull();
+    screen.unmount();
+    await startHome();
+    await screen.findByTestId('day-row-day-t1');
+    await settleAll();
+    expect(screen.queryByText(SAVE.title)).toBeNull();
+    expect(authFake.linkCalls()).toEqual([]);
+  });
+
+  test('T12_S16_Q7_데모에서_코스를_골라도_시트가_없다', async () => {
+    (globalThis as { __DEV__?: boolean }).__DEV__ = true;
+    server = happyServer().on(CURRENT, NO_TRIP);
+    await startHome();
+    await tap(await screen.findByTestId('home-demo'));
+    await tap(await screen.findByText('아무거나 찾아 줘'));
+    await screen.findByTestId('candidate-card-D01');
+    await tap(screen.getByTestId('compose-button'));
+    await screen.findByText('코스 짜 봤어');
+    await tap(screen.getByText('이걸로 할래'));
+    await screen.findByText('코스 저장했어'); // 데모 S9 = 코스를 고른 그 순간 (데모라 시트 없음)
+    await settleAll();
+    expect(screen.queryByText(SAVE.title)).toBeNull();
+    await tap(screen.getByText('처음부터'));
+    await settleAll();
+    expect(screen.queryByText(SAVE.title)).toBeNull();
+  });
+
   test('T12_C1_이미_Google에_연결된_기기는_첫_계획_뒤에도_시트가_없다', async () => {
     await authFake.keepSession({ email: 'seunghyun@gmail.com' });
     server.on(CURRENT, json(200, TRIP));
@@ -284,7 +328,7 @@ describe('C2 새 Google 계정에 연결', () => {
     expect(screen.queryByText('seunghyun@gmail.com')).toBeNull(); // 이메일 일부만 (C5)
   });
 
-  test.each([['cancel'], ['dismiss']] as const)('T12_S6_Q9_브라우저를_닫으면(%s)_알림_없이_익명·여행_그대로', async (step) => {
+  test.each([['cancel'], ['dismiss']] as const)('T12_S6_Q9_S16_Q7_브라우저를_닫으면(%s)_알림_없이_시트·익명·여행_그대로', async (step) => {
     authFake.browser(step);
     await toSaveSheet();
     const before = await session();
@@ -293,6 +337,7 @@ describe('C2 새 Google 계정에 연결', () => {
     expect(authFake.browserCalls()).toHaveLength(1);
     expect(screen.queryByText(FAILED)).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText(SAVE.title)).toBeTruthy(); // §16 Q7: 취소면 시트 그대로 (다시 누르거나 [나중에])
     expect((await session())?.user).toEqual(before?.user);
     expect(authFake.exchangeCalls()).toEqual([]);
     expect(accountPaths()).toEqual([]);
@@ -463,7 +508,8 @@ describe('C4 이미 있는 Google 계정', () => {
     ['서버_500', apiError(500, 'INTERNAL_ERROR')],
     ['저장소_503', apiError(503, 'STORAGE_UNAVAILABLE')],
     ['네트워크', networkDown],
-  ])('T12_S6_C4_claim이_실패하면(%s)_익명으로_돌아가고_한_줄_알림', async (_name, reply) => {
+    ['이미_처리됨_409', apiError(409, 'ALREADY_CLAIMED')],
+  ])('T12_S6_S16_Q13_claim이_실패하면(%s)_계정_로그아웃·익명으로_돌아가고_한_줄_알림', async (_name, reply) => {
     jest.spyOn(console, 'warn').mockImplementation(() => {});
     server.on(CLAIM, reply);
     await toSaveSheetFromMenu();
@@ -471,6 +517,7 @@ describe('C4 이미 있는 Google 계정', () => {
     await pressGoogle();
     expect(await screen.findByText(FAILED)).toBeTruthy();
     expect((await session())?.user).toEqual(anon?.user);
+    expect(authFake.signOuts()).toBeGreaterThanOrEqual(1); // 계정 세션을 로그아웃
     expect(authFake.signIns()).toBe(1);
     expect(server.sent(CHOOSE)).toEqual([]);
     expect(screen.getByTestId('day-row-day-t1')).toBeTruthy();
@@ -487,6 +534,47 @@ describe('C4 이미 있는 Google 계정', () => {
     expect((await session())?.user).toEqual(anon?.user);
     expect(accountPaths()).toEqual([]);
     expect(screen.queryByText(FAILED)).toBeNull();
+    expect(screen.getByText(SAVE.title)).toBeTruthy(); // §16 Q7
+  });
+
+  test('T12_S16_Q6_moved_뒤에는_기기에_보관한_익명_세션을_지운다', async () => {
+    server.on(CLAIM, json(200, { result: 'moved' }));
+    await toSaveSheetFromMenu();
+    const anon = await session();
+    await pressGoogle();
+    await waitFor(() => expect(server.sent(CLAIM)).toHaveLength(1));
+    await screen.findByTestId('day-row-day-t1');
+    await settleAll();
+    expect(storedValues().filter((value) => value.includes(anon!.refresh_token))).toEqual([]);
+  });
+
+  test('T12_S16_Q6_choose_성공_뒤에는_기기에_보관한_익명_세션을_지운다', async () => {
+    server.on(CLAIM, json(200, CHOICES)).on(CHOOSE, json(200, TRIP_PLANNED));
+    await toSaveSheetFromMenu();
+    const anon = await session();
+    await pressGoogle();
+    await screen.findByText(PICK.title);
+    await tap(screen.getByText(PICK.device));
+    await tap(screen.getByRole('button', { name: PICK.confirm }));
+    await waitFor(() => expect(server.sent(CHOOSE)).toHaveLength(1));
+    await waitFor(() => expect(screen.queryByText(PICK.title)).toBeNull());
+    await settleAll();
+    expect(storedValues().filter((value) => value.includes(anon!.refresh_token))).toEqual([]);
+  });
+
+  test.each([
+    ['59초_뒤_만료면_먼저_갱신', 59, true],
+    ['61초_뒤_만료면_그대로', 61, false],
+  ])('T12_S16_Q6_claim_직전_익명_토큰이_%s', async (_name, seconds, renewed) => {
+    const kept = await authFake.keepSession({ expiresIn: seconds });
+    server.on(CLAIM, json(200, { result: 'moved' }));
+    await toSaveSheetFromMenu();
+    await pressGoogle();
+    await waitFor(() => expect(server.sent(CLAIM)).toHaveLength(1));
+    const sentToken = (server.sent(CLAIM)[0].body as { anonymous_token?: string }).anonymous_token;
+    expect(authFake.userOfAccess(sentToken)?.id).toBe(kept.user.id); // 늘 익명 사용자의 토큰
+    if (renewed) expect(sentToken).not.toBe(kept.access_token);
+    else expect(sentToken).toBe(kept.access_token);
   });
 });
 
@@ -569,14 +657,15 @@ describe('C5 프로필 메뉴', () => {
     expect(server.requests).toHaveLength(before);
   });
 
-  test('T12_S9_5_확인에서_새로_만들기면_날짜_목록을_떠나고_여행을_지우지_않는다', async () => {
+  test('T12_S9_5_S16_Q8_확인에서_새로_만들기면_첫_화면(S0)·여행을_지우지_않는다', async () => {
     await toList();
     await openMenu();
     await tap(screen.getByText(MENU.restart));
+    server.on(CURRENT, NO_TRIP); // §16 Q8: 지금 여행은 archived -> 지금 여행 없음 (보관하는 길은 질문)
     await tap(await screen.findByText(RESTART_CONFIRM.yes));
-    await waitFor(() => expect(screen.queryByTestId('day-row-day-t1')).toBeNull());
+    expect(await screen.findByText('여행 만들기')).toBeTruthy();
+    expect(screen.queryByTestId('day-row-day-t1')).toBeNull();
     expectNoTripDeletion();
-    expect(server.sent('POST /trips')).toEqual([]); // 보관은 새 여행을 만들 때 서버가 한다 (TASK-010 B2)
   });
 });
 

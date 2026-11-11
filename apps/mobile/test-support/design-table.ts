@@ -307,7 +307,7 @@ export const REJECTED_PAIRS: [string, string, number][] = [
 //   paddingLeft/paddingRight/paddingVertical/paddingHorizontal 안쪽 ("안쪽 14/16" = 위아래 14, 좌우 16) · 문서에 없는 칸은 키도 없다
 export const ACCOUNT: Record<string, Record<string, unknown>> = {
   // 리뷰 §2: 밝은 모양 흰 바탕 · 테두리 #747775 1px · 글자 #1F1F1F 14/20 Medium(500) · G 20 · iOS 안쪽 왼쪽 16 · G 오른쪽 12 · 글자 오른쪽 16
-  //          높이 52 · 모서리 16 (문구는 화면 테스트가 본다). 글꼴 이름은 문서끼리 달라(Roboto / Google Sans) 넣지 않는다 (질문)
+  //          높이 52 · 모서리 16 (문구는 화면 테스트가 본다). 글꼴은 기기 기본 (TASK-012 §16 Q10) -> family 칸 없음
   'google-btn': {
     bg: '#FFFFFF',
     border: '#747775',

@@ -8,7 +8,10 @@
 //   app.json expo.scheme = 'tripfriends'. Supabase 클라이언트는 code 교환을 쓰므로 createClient(..., { auth: { flowType: 'pkce' } })
 //   개발용 가짜 로그인 공급자 = src/lib/dev-login.ts (안에 표시 글자 DEV_FAKE_LOGIN). 다른 파일은 이 모듈을
 //     `__DEV__`가 같은 줄에 있는 require로만 부른다 (`import` 금지) -> 릴리스 번들(__DEV__ = false)에서 죽은 코드로 빠진다
-//   G 로고: docs/design/google/에 공식 G 로고 파일이 생기면(K7) 앱 assets/google/에 같은 바이트로 들어 있어야 한다. 그 전엔 건너뜀
+//   §16 Q11: 가짜 공급자는 __DEV__ 그리고 EXPO_PUBLIC_DEV_LOGIN=1일 때만 (그 값을 읽는 줄도 __DEV__와 같은 줄)
+//   §16 Q12 G 로고: docs/design/google/g-logo.svg -> 앱 assets/google/g-logo.svg 같은 바이트. 파일이 아직 없으면 건너뜀
+//   §16 Q9: 날짜 기간은 날짜 목록 머리와 같은 함수 periodLabel (src/trips/format.ts)
+//   §16 Q10: Google 버튼 글꼴은 기기 기본 -> 글꼴 파일을 넣지 않는다 (Google Sans 0)
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -88,17 +91,50 @@ describe('AC-6 가짜 로그인 공급자', () => {
     expect(uses.length).toBeGreaterThan(0);
     expect(uses.filter((line) => !/__DEV__/.test(line))).toEqual([]);
   });
+
+  test('T12_S16_Q11_EXPO_PUBLIC_DEV_LOGIN은_DEV_가드와_같은_줄에서만_읽는다', () => {
+    const reads = hits(files, /EXPO_PUBLIC_DEV_LOGIN/);
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.filter((line) => !/__DEV__/.test(line))).toEqual([]);
+  });
 });
 
 // ---------- §9 1·K7 G 로고는 공식 파일 그대로 ----------
 
-const OFFICIAL_DIR = join(REPO_ROOT, 'docs', 'design', 'google');
-// 지금 docs/design/google/에는 Google Maps 로고만 있다. 로그인 버튼용 G 로고 파일 이름은 아직 모른다 -> Maps 로고가 아닌 svg·png를 G 로고로 본다
-const officialG = existsSync(OFFICIAL_DIR) ? readdirSync(OFFICIAL_DIR).filter((name) => /\.(svg|png)$/i.test(name) && !/^GoogleMaps_/i.test(name)) : [];
+const OFFICIAL_G = join(REPO_ROOT, 'docs', 'design', 'google', 'g-logo.svg'); // §16 Q12
+const APP_G = join(MOBILE_ROOT, 'assets', 'google', 'g-logo.svg');
 
-(officialG.length > 0 ? test : test.skip)('T12_S9_1_K7_공식_G_로고_파일이_앱_assets에_같은_바이트로_있다', () => {
-  const assets = join(MOBILE_ROOT, 'assets', 'google');
-  const copies = existsSync(assets) ? readdirSync(assets).map((name) => readFileSync(join(assets, name))) : [];
-  const matched = officialG.filter((name) => copies.some((copy) => copy.equals(readFileSync(join(OFFICIAL_DIR, name)))));
-  expect(matched.length).toBeGreaterThan(0);
+(existsSync(OFFICIAL_G) ? test : test.skip)('T12_S9_1_S16_Q12_공식_G_로고가_앱_assets_google_g_logo_svg에_같은_바이트로_있다', () => {
+  expect(existsSync(APP_G)).toBe(true);
+  expect(readFileSync(APP_G).equals(readFileSync(OFFICIAL_G))).toBe(true);
+});
+
+(existsSync(OFFICIAL_G) ? test : test.skip)('T12_S9_1_S16_Q12_G_로고는_그_파일을_그대로_쓴다', () => {
+  expect(hits(files, /assets\/google\/g-logo\.svg/).length).toBeGreaterThan(0);
+});
+
+// ---------- §16 Q9 날짜 기간 (날짜 목록 머리와 같은 함수) ----------
+
+describe('§16 Q9 periodLabel', () => {
+  const { periodLabel } = require('@/trips/format') as { periodLabel: (start: string, end: string) => string };
+  // 띄어쓰기는 지금 함수·리뷰 §1("12월 11일 ~ 13일") 그대로. §16 Q9 표의 붙여 쓴 모양("11월 20일~23일")과 다른지 질문
+  test.each([
+    ['같은_달', '2026-11-20', '2026-11-23', '11월 20일 ~ 23일'],
+    ['달_넘김', '2026-11-30', '2026-12-02', '11월 30일 ~ 12월 2일'],
+    ['하루', '2026-11-20', '2026-11-20', '11월 20일'],
+  ])('T12_S16_Q9_%s', (_name, start, end, label) => {
+    expect(periodLabel(start, end)).toBe(label);
+  });
+
+  test('T12_S16_Q9_어느_여행_칸은_periodLabel을_쓴다', () => {
+    const users = files.filter(({ path, text }) => path !== 'trips/format.ts' && text.includes('periodLabel')).map(({ path }) => path);
+    expect(users.filter((path) => path !== 'trips/trip-days.tsx').length).toBeGreaterThan(0);
+  });
+});
+
+// ---------- §16 Q10 기기 기본 글꼴 ----------
+
+test('T12_S16_Q10_Google_Sans_글꼴을_넣지_않는다', () => {
+  expect(hits(files, /Google\s?Sans|GoogleSans|google-sans/i)).toEqual([]);
+  expect(existsSync(join(MOBILE_ROOT, 'assets', 'fonts')) ? readdirSync(join(MOBILE_ROOT, 'assets', 'fonts')).filter((name) => /google.?sans/i.test(name)) : []).toEqual([]);
 });

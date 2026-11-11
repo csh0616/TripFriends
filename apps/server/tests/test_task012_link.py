@@ -8,17 +8,21 @@ PM 안(결정권자 전달 11-11: 이미 있는 계정은 그 Google 계정으�
         토큰으로 익명 때 여행이 그대로 보인다
     POST /account/claim   헤더 Bearer = 이미 있던 계정(Google로 로그인한 쪽)의 토큰, 본문 {"anonymous_token": 연결 전 익명 세션의 access token}
         서버는 두 토큰을 모두 확인한다 (같은 JWKS·ES256·aud·만료 10초). 본문 토큰은 is_anonymous가 true여야 한다
-        200 {"result": "moved"}  : 계정 쪽에 지금 여행이 없다 -> 익명 쪽 여행을 계정으로 옮긴다 (보관된 여행도, 상태 그대로)
+        §16: "여행이 있음" = 보관·데모가 아닌 여행(지금 여행)이 있음
+        200 {"result": "moved"}  : 계정 쪽에 지금 여행이 없다 -> 익명 쪽 여행을 계정으로 옮긴다 (보관 여행도 상태 그대로, 데모는 익명에 남김, §16 Q1)
+            익명 쪽에 옮길 것이 없어도 "moved" (§16 Q4)
         200 {"result": "choose", "choices": [기기 칸, 계정 칸]} : 양쪽 모두 지금 여행이 있다 -> 아무것도 바꾸지 않고 두 요약만 준다
-            칸 = {"origin": "device"|"account", "trip_id", "title", "start_date", "end_date", "day_count", "planned_count"}
-            title은 날짜 목록 머리와 같은 계산 ("오사카 2박 3일", 하루면 "오사카 당일 여행"), planned_count = 고른 코스가 있는 날 수 (§9 6)
-        익명 쪽에 여행이 없으면 계정은 그대로 ("choose" 아님)
+            칸 = {"origin": "device"|"account", "trip_id", "name", "start_date", "end_date", "planned_days", "total_days"} (API-001 §2-1)
+            name은 날짜 목록 머리와 같은 계산 ("오사카 2박 3일", 하루면 "오사카 당일 여행"), planned_days = 고른 코스가 있는 날 수 (§9 6)
     POST /account/claim/choose  같은 헤더, 본문 {"anonymous_token", "trip_id": 고른 여행}
-        200 Trip (고른 여행, active) -> 계정의 지금 여행. 고르지 않은 쪽은 archived (지우지 않음). 두 토큰을 다시 확인한다
-    본문 토큰이 틀림·만료·모르는 키 = 401 UNAUTHORIZED (API-001). 거절된 요청은 아무것도 바꾸지 않는다
+        200 Trip (고른 여행, active) -> 계정의 지금 여행. 고르지 않은 쪽은 archived (지우지 않음). 기기 여행이 고르지 않은 쪽이면
+            계정으로 옮겨 archived (§16 Q2). 두 토큰을 다시 확인한다. 두 여행이 아닌 trip_id = 404 NOT_FOUND (§16 Q3)
+    본문 토큰이 틀림·만료·모르는 키 = 401 UNAUTHORIZED (API-001). 익명이 아닌 본문 토큰 = 400 NOT_ANONYMOUS_TOKEN,
+    헤더 토큰이 익명 = 400 ACCOUNT_REQUIRED, 두 토큰이 같은 사용자 = 400 SAME_USER (§16 Q3·Q5). 거절된 요청은 아무것도 바꾸지 않는다
     A3: 요청 하나 = 트랜잭션 하나 -> claim/choose 중간에 예외면 500 INTERNAL_ERROR, 두 사용자의 여행이 요청 전과 같다
     메모리·Postgres 두 구현에 같은 테스트 (Postgres는 `db` 표시, TEST_DATABASE_URL 없으면 건너뜀)
-    §15 S3: 옮김(moved)·고르기(choose 완료)로 처리된 익명 사용자는 다시 claim·choose 하면 409 (code는 질문). "choose"만 돌려받은 것은 처리 아님
+    §15 S3·§16 Q4: 옮김(moved, 옮길 것이 없었어도)·고르기(choose 완료)로 처리된 익명 사용자는 다시 claim·choose 하면 409 ALREADY_CLAIMED.
+        "choose"만 돌려받은 것은 처리 아님 (다시 부르면 같은 choose)
     §15 S4: 토큰은 로그·오류 응답에 남지 않는다 · S6: 계정 이메일은 서버 저장소에 복사하지 않는다
 """
 
@@ -200,12 +204,12 @@ def test_T12_Q6_어느_여행_칸_요약은_이름·날짜·n일_중_k일(world)
     theirs = make_trip(osaka, account, days=1, offset=40)  # 하루 = "당일 여행" (날짜 목록 머리와 같은 계산)
     device, acct = claim(client, anon, account).json()["choices"]
     assert device == {
-        "origin": "device", "trip_id": mine["trip_id"], "title": "오사카 2박 3일",
-        "start_date": mine["start_date"], "end_date": mine["end_date"], "day_count": 3, "planned_count": 1,
+        "origin": "device", "trip_id": mine["trip_id"], "name": "오사카 2박 3일",
+        "start_date": mine["start_date"], "end_date": mine["end_date"], "planned_days": 1, "total_days": 3,
     }
     assert acct == {
-        "origin": "account", "trip_id": theirs["trip_id"], "title": "오사카 당일 여행",
-        "start_date": theirs["start_date"], "end_date": theirs["end_date"], "day_count": 1, "planned_count": 0,
+        "origin": "account", "trip_id": theirs["trip_id"], "name": "오사카 당일 여행",
+        "start_date": theirs["start_date"], "end_date": theirs["end_date"], "planned_days": 0, "total_days": 1,
     }
 
 
@@ -229,8 +233,9 @@ def test_T12_C4_계정_여행을_고르면_기기_여행은_archived로_남는�
     assert response.status_code == 200, response.text
     assert response.json()["trip_id"] == theirs["trip_id"]
     assert current_id(client, account_headers(account)) == theirs["trip_id"]
-    kept = read_trip(client, mine["trip_id"], account_headers(account), anon_headers(anon))
-    assert kept is not None and kept["status"] == "archived"  # 어느 쪽이 갖든 지워지지 않는다 (누가 갖는지는 Q)
+    kept = read_trip(client, mine["trip_id"], account_headers(account))
+    assert kept is not None and kept["status"] == "archived"  # §16 Q2: 계정으로 옮겨 보관 (익명 사용자는 다시 닿을 수 없다)
+    assert client.get(f"/trips/{mine['trip_id']}", headers=anon_headers(anon)).status_code == 404
 
 
 def test_T12_C4_익명_쪽에_여행이_없으면_계정은_그대로(world):
@@ -238,7 +243,7 @@ def test_T12_C4_익명_쪽에_여행이_없으면_계정은_그대로(world):
     theirs = make_trip(osaka, account, offset=40)
     response = claim(client, anon, account)
     assert response.status_code == 200, response.text
-    assert response.json()["result"] != "choose"
+    assert response.json()["result"] == "moved"  # §16 Q4: 옮길 것이 없어도 moved
     assert current_id(client, account_headers(account)) == theirs["trip_id"]
     assert read_trip(client, theirs["trip_id"], account_headers(account))["status"] == "active"
 
@@ -253,8 +258,7 @@ def test_T12_C4_choose의_trip_id가_두_여행이_아니면_거절하고_아무
     before = picture(client, anon, account, [mine["trip_id"], theirs["trip_id"], other["trip_id"]])
     for wrong in (other["trip_id"], str(uuid.uuid4()), "not-a-uuid"):
         response = choose(client, anon, account, wrong)
-        assert 400 <= response.status_code < 500, response.text  # 정확한 code는 질문 (API-001에 없음)
-        assert response.json()["error"]["code"]
+        assert_common(response, 404, "NOT_FOUND")  # §16 Q3: 남의 것 규칙과 같게
     assert picture(client, anon, account, [mine["trip_id"], theirs["trip_id"], other["trip_id"]]) == before
     assert current_id(client, anon_headers(stranger)) == other["trip_id"]
 
@@ -304,8 +308,7 @@ def test_T12_C4_본문_토큰이_익명_계정이_아니면_거절_아무것도_
     before = picture(client, anon, account, [mine["trip_id"], theirs["trip_id"]])
     token = make_token(user_id(anon), is_anonymous=value, email=EMAIL)
     for response in (claim(client, anon, account, token=token), choose(client, anon, account, mine["trip_id"], token=token)):
-        assert 400 <= response.status_code < 500 and response.status_code != 404, response.text  # 정확한 status·code는 질문
-        assert response.json()["error"]["code"]
+        assert_common(response, 400, "NOT_ANONYMOUS_TOKEN")  # §16 Q3
     assert picture(client, anon, account, [mine["trip_id"], theirs["trip_id"]]) == before
 
 
@@ -429,6 +432,8 @@ def test_T12_AC5_속성_어떤_조합이든_연결_뒤_모든_여행이_남고_�
 
         found = {tid: read_trip(client, tid, *everyone) for tid in mine + theirs}
         assert [tid for tid, trip in found.items() if trip is None] == []  # 삭제 0건
+        if device_trips > 0:  # §16 Q1·Q2: 익명 여행은 고르든 안 고르든 모두 계정으로 (데모 아님)
+            assert [tid for tid in mine if read_trip(client, tid, account_headers(account)) is None] == []
         if device_trips + account_trips > 0:
             assert current_id(client, account_headers(account)) is not None
         actives = [tid for tid, trip in found.items() if trip["status"] == "active" and read_trip(client, tid, account_headers(account))]
@@ -445,9 +450,9 @@ def test_T12_S15_S3_옮긴_익명_사용자는_다시_claim하면_409_아무것�
     trip = make_trip(osaka, anon)
     assert claim(client, anon, account).json()["result"] == "moved"
     before = picture(client, anon, account, [trip["trip_id"]])
-    assert_common(claim(client, anon, account), 409)  # code는 질문 (API-001에 없음)
+    assert_common(claim(client, anon, account), 409, "ALREADY_CLAIMED")
     other, _ = names()
-    assert_common(claim(client, anon, other), 409)  # 다른 계정으로도 다시 못 가져간다
+    assert_common(claim(client, anon, other), 409, "ALREADY_CLAIMED")  # 다른 계정으로도 다시 못 가져간다
     assert picture(client, anon, account, [trip["trip_id"]]) == before
 
 
@@ -459,8 +464,8 @@ def test_T12_S15_S3_고르기를_마친_익명_사용자는_claim·choose_모두
     assert choose(client, anon, account, mine["trip_id"]).status_code == 200
     ids = [mine["trip_id"], theirs["trip_id"]]
     before = picture(client, anon, account, ids)
-    assert_common(claim(client, anon, account), 409)
-    assert_common(choose(client, anon, account, theirs["trip_id"]), 409)
+    assert_common(claim(client, anon, account), 409, "ALREADY_CLAIMED")
+    assert_common(choose(client, anon, account, theirs["trip_id"]), 409, "ALREADY_CLAIMED")
     assert picture(client, anon, account, ids) == before
 
 
@@ -506,3 +511,73 @@ def test_T12_S15_S6_계정_이메일은_저장소에_복사하지_않는다(monk
         assert claim(client, anon, account).json()["result"] == "choose"
         assert choose(client, anon, account, mine["trip_id"]).status_code == 200
         assert EMAIL not in repr(stores(osaka))
+
+
+# ---------- §16 답 (11-11) ----------
+
+
+def seed_demo(client: TestClient, name: str) -> str:
+    seeded = client.post("/debug/seed-demo", json={}, headers=anon_headers(name))  # 지금 여행을 바꾸지 않는 데모 (§11 Q2)
+    assert seeded.status_code == 201, seeded.text
+    return seeded.json()["trip_id"]
+
+
+def test_T12_S16_Q1_데모_여행은_옮기지_않고_익명_사용자에게_남긴다(world):
+    client, osaka, anon, account = world
+    trip = make_trip(osaka, anon)
+    demo = seed_demo(client, anon)
+    assert claim(client, anon, account).json()["result"] == "moved"
+    assert current_id(client, account_headers(account)) == trip["trip_id"]
+    assert client.get(f"/trips/{demo}", headers=anon_headers(anon)).status_code == 200
+    assert client.get(f"/trips/{demo}", headers=account_headers(account)).status_code == 404
+
+
+def test_T12_S16_Q1_계정_쪽에_데모만_있으면_여행_없음_익명_여행을_옮겨_지금_여행으로(world):
+    # "보관 여행만" 있는 계정은 API로 만들 길이 없다 (보관은 새 여행을 만들 때만) -> 계약 테스트 몫 (보고의 질문)
+    client, osaka, anon, account = world
+    mine = make_trip(osaka, anon)
+    demo = seed_demo(client, account)
+    assert current_id(client, account_headers(account)) is None
+    response = claim(client, anon, account)
+    assert response.status_code == 200, response.text
+    assert response.json()["result"] == "moved"
+    assert current_id(client, account_headers(account)) == mine["trip_id"]
+    assert read_trip(client, demo, account_headers(account)) is not None  # 계정 쪽 데모도 그대로
+
+
+def test_T12_S16_Q3_본문이_빠지면_400_공통_형식(world):
+    client, _, _, account = world
+    for path in (CLAIM, CHOOSE):
+        response = client.post(path, json={}, headers=account_headers(account))
+        error = assert_common(response, 400)
+        assert error["code"] in {"VALIDATION_ERROR", "INVALID_REQUEST"}  # "서버에 이미 있는 본문 검증 오류 code 그대로"
+
+
+def test_T12_S16_Q5_헤더_토큰이_익명이면_400_ACCOUNT_REQUIRED_아무것도_안_바뀜(world):
+    client, osaka, anon, account = world
+    mine = make_trip(osaka, anon)
+    theirs = make_trip(osaka, account, offset=40)
+    ids = [mine["trip_id"], theirs["trip_id"]]
+    before = picture(client, anon, account, ids)
+    anonymous_header = {"Authorization": f"Bearer {anon_token(account)}"}
+    assert_common(claim(client, anon, account, headers=anonymous_header), 400, "ACCOUNT_REQUIRED")
+    body = {"anonymous_token": anon_token(anon), "trip_id": mine["trip_id"]}
+    assert_common(client.post(CHOOSE, json=body, headers=anonymous_header), 400, "ACCOUNT_REQUIRED")
+    assert picture(client, anon, account, ids) == before
+
+
+def test_T12_S16_Q5_두_토큰이_같은_사용자면_400_SAME_USER(world):
+    client, osaka, anon, _ = world
+    mine = make_trip(osaka, anon)
+    linked = account_headers(anon)  # 같은 sub, 연결된 토큰 (앱이 연결 성공 뒤 claim을 부르면 버그)
+    assert_common(claim(client, anon, anon, headers=linked), 400, "SAME_USER")
+    body = {"anonymous_token": anon_token(anon), "trip_id": mine["trip_id"]}
+    assert_common(client.post(CHOOSE, json=body, headers=linked), 400, "SAME_USER")
+    assert current_id(client, linked) == mine["trip_id"]
+
+
+def test_T12_S16_Q4_옮길_것이_없던_moved도_처리됨_다시_claim하면_409(world):
+    client, osaka, anon, account = world
+    make_trip(osaka, account, offset=40)
+    assert claim(client, anon, account).json()["result"] == "moved"
+    assert_common(claim(client, anon, account), 409, "ALREADY_CLAIMED")

@@ -32,6 +32,9 @@ const state = {
   listeners: [] as Listener[],
   // TASK-012 2단계: Google 연결 (linkIdentity -> 앱 안 브라우저 -> 돌아온 code -> exchangeCodeForSession)
   byRefresh: new Map<string, User>(), // 발급한 refresh token -> 사용자 (setSession으로 되돌릴 때)
+  byAccess: new Map<string, User>(), // 발급한 access token -> 사용자 (claim 본문 토큰이 누구 것인지 테스트가 본다)
+  passwordCalls: [] as any[],
+  updateUserCalls: [] as any[],
   codes: new Map<string, User>(), // 브라우저가 돌려준 code -> 그 code로 받을 세션의 사용자
   google: { existing: false, email: GOOGLE_EMAIL } as { existing: boolean; email: string },
   browserSteps: [] as BrowserStep[],
@@ -69,6 +72,7 @@ async function write(session: FakeSession | null) {
 function issue(user: User): FakeSession {
   state.issued += 1;
   state.byRefresh.set(`fake-refresh-${state.issued}`, user);
+  state.byAccess.set(`fake-access-${state.issued}`, user);
   return {
     access_token: `fake-access-${state.issued}`,
     refresh_token: `fake-refresh-${state.issued}`,
@@ -120,9 +124,12 @@ const auth = {
     notify('SIGNED_IN', session);
     return { data: { session, user: session.user }, error: null };
   },
-  async refreshSession() {
+  async refreshSession(given?: { refresh_token?: string }) {
+    // supabase-js와 같게: refresh_token을 주면 그 세션을 새로 받아 지금 세션으로 둔다 (없으면 지금 세션)
     state.refreshes += 1;
-    const current = await read();
+    const stored = await read();
+    const givenUser = given?.refresh_token ? state.byRefresh.get(given.refresh_token) : undefined;
+    const current = given?.refresh_token ? (givenUser ? ({ ...(stored ?? issue(givenUser)), user: givenUser } as FakeSession) : null) : stored;
     if (state.refreshFails > 0 || !current) {
       state.refreshFails = Math.max(0, state.refreshFails - 1);
       return { data: { session: null, user: null }, error: failure(state.refreshCode) };
@@ -185,6 +192,27 @@ const auth = {
     await write(session);
     notify('SIGNED_IN', session);
     return { data: { session, user }, error: null };
+  },
+  /** §16 Q11 개발용 가짜 공급자 "새 계정": 익명 사용자에 테스트 이메일·비밀번호를 붙인다 (같은 user_id) */
+  async updateUser(attributes: any) {
+    state.updateUserCalls.push(attributes);
+    const current = await read();
+    if (!current) return { data: { user: null }, error: failure('session_not_found') };
+    const user: User = { ...current.user, ...(attributes?.email ? { email: attributes.email, is_anonymous: false } : {}) };
+    const session = { ...current, user };
+    state.byRefresh.set(session.refresh_token, user);
+    state.byAccess.set(session.access_token, user);
+    await write(session);
+    notify('USER_UPDATED', session);
+    return { data: { user }, error: null };
+  },
+  /** §16 Q11 개발용 가짜 공급자 "이미 있는 계정": 시드된 테스트 계정으로 로그인 */
+  async signInWithPassword(credentials: any) {
+    state.passwordCalls.push(credentials);
+    const session = issue({ id: EXISTING_USER_ID, is_anonymous: false, email: String(credentials?.email) });
+    await write(session);
+    notify('SIGNED_IN', session);
+    return { data: { session, user: session.user }, error: null };
   },
   async startAutoRefresh() {},
   async stopAutoRefresh() {},
@@ -271,11 +299,15 @@ export const authFake = {
     state.setSessionCalls = [];
     state.browserCalls = [];
     state.signOuts = 0;
+    state.passwordCalls = [];
+    state.updateUserCalls = [];
   },
   /** 이미 이 기기에 세션이 있는 것처럼 (앱을 전에 연 적 있음) */
-  async keepSession(options: { expired?: boolean; email?: string } = {}): Promise<FakeSession> {
+  async keepSession(options: { expired?: boolean; email?: string; expiresIn?: number } = {}): Promise<FakeSession> {
     const made = issue(options.email ? newUser(false, options.email) : newUser()); // email이 있으면 이미 Google에 연결된 기기
-    const session = options.expired ? { ...made, expires_at: Math.floor(Date.now() / 1000) - 3600 } : made; // 오래 백그라운드에 있다 돌아온 것처럼
+    const nowSec = Math.floor(Date.now() / 1000);
+    // expired: 오래 백그라운드에 있다 돌아온 것처럼 · expiresIn: 그만큼(초) 뒤 만료 (§16 Q6 "만료 60초 안이면 먼저 갱신")
+    const session = options.expired ? { ...made, expires_at: nowSec - 3600 } : options.expiresIn !== undefined ? { ...made, expires_in: options.expiresIn, expires_at: nowSec + options.expiresIn } : made;
     await write(session);
     return session;
   },
@@ -307,6 +339,10 @@ export const authFake = {
     state.exchangeFails = times;
   },
   linkCalls: () => state.linkCalls,
+  passwordCalls: () => state.passwordCalls,
+  updateUserCalls: () => state.updateUserCalls,
+  /** 이 access token을 받은 사용자 (모르면 undefined) */
+  userOfAccess: (token: unknown) => (typeof token === 'string' ? state.byAccess.get(token) : undefined),
   oauthCalls: () => state.oauthCalls,
   exchangeCalls: () => state.exchangeCalls,
   setSessionCalls: () => state.setSessionCalls,
