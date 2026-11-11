@@ -20,6 +20,7 @@ const state = {
   refreshFails: 0,
   signInCode: undefined as string | undefined,
   refreshCode: undefined as string | undefined,
+  refreshClears: false, // 갱신 실패 때 저장된 세션도 지운다 (supabase-js가 되돌릴 수 없는 오류에서 그렇게 하는 경우)
   signIns: 0,
   refreshes: 0,
   listeners: [] as Listener[],
@@ -72,6 +73,7 @@ const auth = {
       state.refreshes += 1;
       if (state.refreshFails > 0) {
         state.refreshFails -= 1;
+        if (state.refreshClears) await write(null);
         return { data: { session: null }, error: failure(state.refreshCode) };
       }
       const session = issue(stored.user);
@@ -141,6 +143,7 @@ export const authFake = {
     state.refreshFails = 0;
     state.signInCode = undefined;
     state.refreshCode = undefined;
+    state.refreshClears = false;
     state.signIns = 0;
     state.refreshes = 0;
     state.listeners = [];
@@ -157,9 +160,10 @@ export const authFake = {
     state.signInFails = times;
     state.signInCode = code;
   },
-  failRefresh(times = 1, code?: string) {
+  failRefresh(times = 1, code?: string, options: { clears?: boolean } = {}) {
     state.refreshFails = times;
     state.refreshCode = code;
+    state.refreshClears = options.clears ?? false;
   },
   signIns: () => state.signIns,
   refreshes: () => state.refreshes,

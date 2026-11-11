@@ -271,6 +271,37 @@ describe('B4 401', () => {
 
 // ---------- §6 실패 표 ----------
 
+describe('§10 Q6 기기에 만료된 세션이 있고 자동 갱신이 실패', () => {
+  // 진행 담당 답(11-11): Q6 그대로. "기기에 세션이 있었는지"는 갱신 시도 전 저장소 기준 (실패하며 세션이 지워져도 새 익명 계정 없음)
+  test.each([
+    ['세션이_남는_실패', false],
+    ['세션을_지우는_실패', true],
+  ])('T12_Q6_%s_첫_화면은_로그인_정보_안내와_다시_새_익명_로그인_0', async (_name, clears) => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await authFake.keepSession({ expired: true });
+    authFake.failRefresh(1, 'refresh_token_not_found', { clears });
+    server.on(CURRENT, json(200, TRIP));
+    await startHome();
+    expect(await screen.findByText(AUTH_FAILED)).toBeTruthy();
+    expect(screen.getByTestId('retry-button')).toBeTruthy();
+    expect(authFake.signIns()).toBe(0);
+    expect(server.sent(CURRENT).filter((sent) => !server.headers(sent).authorization)).toEqual([]); // 토큰 없이 보내지 않는다
+  });
+
+  test('T12_Q6_다시를_누르고_갱신이_되면_같은_사용자의_날짜_목록', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const stale = await authFake.keepSession({ expired: true });
+    authFake.failRefresh(1);
+    server.on(CURRENT, json(200, TRIP));
+    await startHome();
+    await screen.findByText(AUTH_FAILED);
+    await tap(screen.getByTestId('retry-button'));
+    expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
+    expect((await authFake.session())?.user.id).toBe(stale.user.id);
+    expect(authFake.signIns()).toBe(0);
+  });
+});
+
 describe('§6 익명 로그인 실패', () => {
   test('T12_S6_익명_로그인이_실패해도_첫_화면은_보이고_로딩에_멈추지_않는다', async () => {
     authFake.failSignIn(1);

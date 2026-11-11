@@ -328,3 +328,32 @@ describe('실패 이유 경고 (개발 빌드만)', () => {
     for (const secret of [stale.access_token, stale.refresh_token, PUBLIC_KEY]) expect(text(warn.mock.calls)).not.toContain(secret);
   });
 });
+
+// ---------- §10 Q6 (진행 담당 답 11-11): 기기에 만료된 세션이 있고 자동 갱신이 실패해도 새 익명 계정은 만들지 않는다 ----------
+// "기기에 세션이 있었는지"는 갱신을 시도하기 **전** 기기 저장소 기준이다. supabase-js가 실패하며 저장된 세션을 지워도 같다
+
+describe('§10 Q6 만료 세션 갱신 실패', () => {
+  test.each([
+    ['저장된_세션이_남는_실패', false],
+    ['실패하며_저장된_세션을_지우는_경우', true],
+  ])('T12_Q6_%s도_새_익명_로그인_0_토큰_null', async (_name, clears) => {
+    const { auth, fake } = load();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await fake.authFake.keepSession({ expired: true });
+    fake.authFake.failRefresh(1, 'refresh_token_not_found', { clears });
+    expect(await auth.ensureToken()).toBeNull();
+    expect(fake.authFake.signIns()).toBe(0);
+  });
+
+  test('T12_Q6_갱신이_다시_되면_같은_사용자로_이어_간다', async () => {
+    const { auth, fake } = load();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const stale = await fake.authFake.keepSession({ expired: true });
+    fake.authFake.failRefresh(1);
+    expect(await auth.ensureToken()).toBeNull();
+    const token = await auth.ensureToken();
+    expect(token).toBeTruthy();
+    expect((await fake.authFake.session())?.user.id).toBe(stale.user.id);
+    expect(fake.authFake.signIns()).toBe(0);
+  });
+});
