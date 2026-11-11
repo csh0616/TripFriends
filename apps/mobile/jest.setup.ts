@@ -43,3 +43,5 @@ jest.mock('expo-dev-client', () => ({}), { virtual: true });
 // 세션은 가짜가 createClient에 넘긴 기기 저장소(AsyncStorage 가짜)에 둔다. 손잡이는 test-support/supabase-mock의 authFake.
 jest.mock('@supabase/supabase-js', () => require('./test-support/supabase-mock'), { virtual: true });
 jest.mock('react-native-url-polyfill/auto', () => ({}), { virtual: true });
+// TASK-012 2단계 C2: 앱 안 브라우저(expo-web-browser)도 가짜 (실제 Google·브라우저 0). Supabase 가짜와 상태를 함께 쓴다 (돌아온 code -> 세션)
+jest.mock('expo-web-browser', () => require('./test-support/supabase-mock').webBrowser);

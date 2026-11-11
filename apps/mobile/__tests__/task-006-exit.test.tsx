@@ -98,7 +98,8 @@ describe('X1 프로필 아바타', () => {
     expect(screen.queryByTestId('profile-sheet')).toBeNull();
   });
 
-  test('X1_누르면_시트에_처음부터_다시와_닫기_두_버튼', async () => {
+  // TASK-012 C5·리뷰 §4(①-26): 맨 위에 연결 상태 카드, 익명이면 [저장하기]가 더해져 버튼 세 개 (이전: 두 버튼)
+  test('X1_누르면_시트에_저장하기·처음부터_다시·닫기_세_버튼과_저장_안_됨', async () => {
     await toNow();
     await openProfile();
     const sheet = within(screen.getByTestId('profile-sheet'));
@@ -106,7 +107,9 @@ describe('X1 프로필 아바타', () => {
     expect(sheet.getByText('처음부터 다시')).toBeTruthy();
     expect(sheet.getByTestId('profile-close')).toBeTruthy();
     expect(sheet.getByText('닫기')).toBeTruthy();
-    expect(sheet.getAllByRole('button')).toHaveLength(2);
+    expect(sheet.getByText('저장하기')).toBeTruthy();
+    expect(sheet.getByText('저장 안 됨')).toBeTruthy();
+    expect(sheet.getAllByRole('button')).toHaveLength(3);
   });
 
   test('X1_시트를_열어도_서버_요청_없고_SC_04_그대로', async () => {
