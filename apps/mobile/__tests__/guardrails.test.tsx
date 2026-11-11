@@ -494,11 +494,13 @@ describe('G7', () => {
 
 // TASK-010 PM 답(11-09): 점검 전용 서버 주소(EXPO_PUBLIC_CHECK_API_URL)도 주소다.
 // TASK-012 §10 승인(apps/mobile/CLAUDE.md): Supabase 프로젝트 URL·공개 키(+ 점검용 CHECK_ 둘)를 더한다. 그 밖의 EXPO_PUBLIC_ 변수는 여전히 금지
+// TASK-012 §17 3 승인: 개발용 가짜 로그인 공급자 길 EXPO_PUBLIC_DEV_LOGIN(new|existing, 비밀값 아님, __DEV__가 아니면 무시)
 const ALLOWED_PUBLIC = [
   'EXPO_PUBLIC_API_URL',
   'EXPO_PUBLIC_CHECK_API_URL',
   'EXPO_PUBLIC_CHECK_SUPABASE_KEY',
   'EXPO_PUBLIC_CHECK_SUPABASE_URL',
+  'EXPO_PUBLIC_DEV_LOGIN',
   'EXPO_PUBLIC_SUPABASE_KEY',
   'EXPO_PUBLIC_SUPABASE_URL',
 ];

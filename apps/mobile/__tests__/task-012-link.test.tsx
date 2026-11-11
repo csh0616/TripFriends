@@ -19,7 +19,7 @@
 //     §16 Q7 브라우저 취소면 알림 없고 저장 권유 시트 그대로 · 스크림 = [나중에] · 실제 여행에서 코스를 고른 그 순간에만(데모 뒤 없음, 이미 계획한 여행을 열 때 없음)
 //   §16 Q6 기기에 익명 세션 전체를 보관, claim·choose 직전 만료 60초 안이면 먼저 갱신, moved·choose 성공 뒤 보관본을 지운다
 //   §16 Q13 claim 실패(409 포함): 계정 세션 로그아웃 -> 보관한 익명 세션으로 -> 실패 알림
-//   §16 Q8 실제 여행 [처음부터 다시] -> ①-28 확인 -> [새로 만들기] -> 첫 화면(S0)
+//   §16 Q8·§17 2 실제 여행 [처음부터 다시] -> ①-28 확인 -> [새로 만들기] -> 여행 만들기 화면으로만 (새 API 없음, 보관은 POST /trips 때)
 //   §9 4 날짜 목록 머리 왼쪽 아바타: 역할 button, 접근성 이름 '내 프로필' (지도 위 아바타는 기존 '프로필' 그대로)
 //   문구는 모두 리뷰 파일 §1·§8 그대로. 화면 이름(testID)은 정하지 않고 글자·역할로 찾는다
 import { act, render, screen, waitFor } from '@testing-library/react-native';
@@ -657,15 +657,28 @@ describe('C5 프로필 메뉴', () => {
     expect(server.requests).toHaveLength(before);
   });
 
-  test('T12_S9_5_S16_Q8_확인에서_새로_만들기면_첫_화면(S0)·여행을_지우지_않는다', async () => {
+  test('T12_S9_5_S17_2_확인에서_새로_만들기면_여행_만들기_화면으로만·서버를_바꾸는_요청_없음', async () => {
     await toList();
     await openMenu();
     await tap(screen.getByText(MENU.restart));
-    server.on(CURRENT, NO_TRIP); // §16 Q8: 지금 여행은 archived -> 지금 여행 없음 (보관하는 길은 질문)
+    const before = server.requests.length;
     await tap(await screen.findByText(RESTART_CONFIRM.yes));
-    expect(await screen.findByText('여행 만들기')).toBeTruthy();
+    expect(await screen.findByTestId('create-trip-submit')).toBeTruthy();
     expect(screen.queryByTestId('day-row-day-t1')).toBeNull();
+    // §17 2: 새 API 없음. 보관은 새 여행을 만들 때(POST /trips). 그 전에는 서버를 바꾸는 요청이 없다
+    expect(server.requests.slice(before).filter((r) => r.method !== 'GET')).toEqual([]);
     expectNoTripDeletion();
+  });
+
+  test('T12_S17_2_여행_만들기를_그만두면_이전_여행이_지금_여행으로_남는다', async () => {
+    await toList();
+    await openMenu();
+    await tap(screen.getByText(MENU.restart));
+    await tap(await screen.findByText(RESTART_CONFIRM.yes));
+    await screen.findByTestId('create-trip-submit');
+    await tap(screen.getByTestId('header-back'));
+    expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
+    expect(server.sent('POST /trips')).toEqual([]);
   });
 });
 
