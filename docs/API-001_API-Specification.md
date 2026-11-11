@@ -35,6 +35,7 @@
 | GET `/places/lodging-search?city_code&q` | 숙소 검색 (Google 실시간, TASK-010 §B5) | `{place_id, name, address_short}[]` | FR-01 |
 | GET `/trips/current` | 이 기기의 지금 여행 (R1은 하나) | `Trip` 또는 404 | FR-33 (TASK-010) |
 | GET `/days/{day_id}/course` | 그날 고른 코스 (코스안 카드와 같은 모양, 읽기만) | `CourseOption` 또는 404 | FR-03 (TASK-010 §12) |
+| GET `/days/{day_id}/planning` | 그날 **진행 중** 계획 세션 (앱을 다시 켜도 이어 가기) | `PlanningSession` 또는 404 (끝난 세션은 진행 중 아님) | FR-02 (TASK-012 §13·§14) |
 | POST `/debug/seed-demo` 선택값 | `chosen`, `past_days`(데모 시계를 그만큼 뒤로), `as_current`(지금 여행으로 붙임, 점검 전용). Bearer 필요 — 운영 404 | — | TASK-010 §14·§15, TASK-012 §11 |
 
 ### 2-2. 계획 대화 (FR-02~03)

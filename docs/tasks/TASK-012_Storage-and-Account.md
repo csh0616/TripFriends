@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-09 |
-| 상태 | **v1.7** — §13 reviewer 뒤 답 · §12 1단계 구현 보고 답 · §11 데모·남의 것 답 · §10 test-writer Q1~Q12 답 · §9 디자인 답 · v1.2 — 2단계는 **Google 로그인만**. 이메일 코드·Apple·카카오 검토·도메인+SMTP·계정 삭제는 "파일럿 전 묶음"으로 (결정권자 11-09) |
+| 상태 | **v1.8** — 1단계 완료(PR #14, §14) · §13 reviewer 뒤 답 · §12 1단계 구현 보고 답 · §11 데모·남의 것 답 · §10 test-writer Q1~Q12 답 · §9 디자인 답 · v1.2 — 2단계는 **Google 로그인만**. 이메일 코드·Apple·카카오 검토·도메인+SMTP·계정 삭제는 "파일럿 전 묶음"으로 (결정권자 11-09) |
 | 관련 | ADR-016(계정, **이 TASK의 근거**) · ADR-013(앱 → 서버 → Supabase) · DATA-001 · API-001 · SRS FR-32·33 · TASK-003 R12(저장 트랜잭션) · TASK-011 §17(넘어온 것) |
 | 브랜치 | `feat/task-012-storage-account` |
 | 다음 | TASK-013 실제 여행(위치 + 이 날 미리 걸어 보기) |
@@ -28,7 +28,7 @@
 | K2 | 프로젝트 설정 → API 키: **공개 키**(publishable 또는 anon)와 프로젝트 URL | `apps/mobile/.env.local` (공개 키라 앱에 들어감, 저장소엔 안 올림) |
 | K3 | **비밀 키**(secret 또는 service_role), **DB 연결 주소**(Postgres connection string), JWT 확인용 값 | `apps/server/.env` |
 | K4 | Authentication → **익명 로그인 켜기** (11-09 완료: 서울, Data API 끔, 새 테이블 자동 노출 끔, 자동 RLS 켬) | Supabase 화면 |
-| K5 | Google Cloud에서 OAuth 클라이언트(웹) 만들기 → Supabase Authentication → Google 공급자에 넣기, 앱 되돌아오기 주소(redirect) 등록 | 2단계 전까지 |
+| K5 | Google Cloud에서 OAuth 클라이언트(웹) 만들기 → Supabase Authentication → Google 공급자에 넣기, 앱 되돌아오기 주소(redirect) 등록 | **완료 11-11** (Google Auth Platform: External·Testing·테스트 사용자, Web 클라이언트 → Supabase Google 공급자, manual linking 켬, Redirect URLs `tripfriends://**`) |
 | K6 | **(파일럿 전 묶음으로 옮김)** 도메인 사기 + 메일 서비스(SMTP) 연결: Supabase 기본 메일은 팀원 주소에만·시간당 2통이라 이메일 코드 로그인에 못 씀(공식 문서). 도메인(예: `no-reply@도메인`) → Resend 등에 도메인 등록(DNS 기록) → Supabase Authentication → SMTP 설정. 메일 틀은 한국어로 | 파일럿 전 |
 - 정확한 키 이름은 `backend`가 `.env.example`에 적는다. PM이 단계별 화면 안내를 따로 준다
 
@@ -158,6 +158,15 @@
 | 3 다시 받기 실패 → 503 | 승인. 단 **이미 받아 둔 키 ID로 서명된 토큰은 다시 받지 않고 바로 확인**(다시 받기는 모르는 키 ID일 때만) — 이 경계 테스트 추가 |
 | 4 DATA-001에 없는 열 | 반영한다. backend가 새로 만든 열·표 목록(이름·뜻)을 PR에 표로 → PM이 머지 때 DATA-001에 옮김. `place_facts`는 만들어 두되 1단계엔 안 씀 — 승인 |
 | 5 iPhone 16e 실측 | TASK-013으로 넘김 (기기 추가 뒤) |
+
+## 14. 1단계 머지 기록 (11-11, PR #14)
+- **AC-7 결정권자 폰 통과**(클라우드 Supabase): 여행 만들기 → 계획 중 앱 완전 종료·재시작 → 같은 계획 대화 → 코스 고르기 → 서버 재시작 → 날짜 목록·코스 그대로
+- 서버 3453·앱 2344 통과, DB 테스트 38(로컬 Supabase) 통과. 계약 테스트가 메모리·Postgres 두 구현에서 같음. 돌연변이: `api/auth.py` 98.6%, `trip/trips.py` 87.4%, 앱 `auth.ts` 72.7%
+- 새 길 **`GET /days/{day_id}/planning`**(그날 진행 중 계획 세션, 없으면 404) — 승인. 끝난 세션은 진행 중 아님, 데모는 세션 ID 기기 저장, [알아서 짜 줘]는 새로 시작 — 승인
+- **폰 확인에서 막힌 곳 3가지**(→ `supabase/README.md` "폰 확인 때 막히는 곳"): ① 익명 로그인 설정이 Save 안 됨(`anonymous_provider_disabled`) ② 8000번에 예전 서버 2개가 남아 새 서버가 안 뜸(`Address already in use`) → 폰이 예전 서버와 이야기해 401 ③ `DATABASE_URL` 비밀번호에 `@`·`[ ]` → 503. 원인은 실패 이유를 로그에 남기지 않아서 찾기 어려웠음 → 개발 빌드에서만 `AUTH_FAILED` 경고(값 없음)
+- **찾아서 고친 버그 2개**: 만료 세션 갱신 실패 때 새 익명 계정을 만들어 여행을 잃을 수 있었음(§10 Q6 위반) / 세션 저장 칸 이름이 바뀌어 업데이트 뒤 기존 폰이 여행을 못 찾을 뻔함 → 기본 이름으로 원복
+- 새 열·표 → DATA-001 §6에 옮김
+- **2단계로**: 계정 연결(§C·§D), Google 로그인, 로그아웃. **TASK-013으로**: iPhone 16e 실측
 
 ## 포트폴리오 포인트
 - 저장소 인터페이스 하나에 메모리·Postgres 두 구현, **같은 계약 테스트**로 바꿔 끼움을 증명
