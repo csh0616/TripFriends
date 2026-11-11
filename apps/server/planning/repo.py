@@ -64,6 +64,10 @@ class PlanningRepo(ABC):
     def session_day(self, session_id: str) -> str | None:
         """세션이 속한 day_id. 없는 세션이면 None."""
 
+    @abstractmethod
+    def day_sessions(self, day_id: str) -> list[str]:
+        """그날에 만든 세션 id들, 시작한 순서(가장 나중이 마지막). TASK-012 §13 1: 앱이 세션 ID를 기기에 두지 않고 날로 찾는다."""
+
     # ---- 반응 ----
     @abstractmethod
     def reactions(self, session_id: str) -> Reactions: ...
@@ -199,6 +203,10 @@ class MemoryPlanningRepo(PlanningRepo):
         with self._lock:
             return self._sessions.get(session_id)
 
+    def day_sessions(self, day_id: str) -> list[str]:
+        with self._lock:
+            return [sid for sid, did in self._sessions.items() if did == day_id]
+
     def reactions(self, session_id: str) -> Reactions:
         with self._lock:
             return Reactions(liked=list(self._liked.get(session_id, [])), skipped=list(self._skipped.get(session_id, [])))
@@ -280,6 +288,31 @@ class MemoryPlanningRepo(PlanningRepo):
     def decision_logs(self) -> list[dict[str, Any]]:
         with self._lock:
             return copy.deepcopy(self._logs)
+
+    # ---- TASK-012 A3: 요청이 실패하면 되돌린다 (store.unit.Transaction이 부른다) ----
+
+    def capture(self) -> dict[str, Any]:
+        """지금 상태를 떠 둔다. 기록(DayRecord·OptionRecord·로그)은 바뀌지 않고 갈아 끼우기만 하므로 목록·사전만 복사한다."""
+        with self._lock:
+            return {
+                "_days": dict(self._days),
+                "_trips": {k: list(v) for k, v in self._trips.items()},
+                "_sessions": dict(self._sessions),
+                "_liked": {k: list(v) for k, v in self._liked.items()},
+                "_skipped": {k: list(v) for k, v in self._skipped.items()},
+                "_unliked": {k: list(v) for k, v in self._unliked.items()},
+                "_overrides": {k: dict(v) for k, v in self._overrides.items()},
+                "_relaxed": dict(self._relaxed),
+                "_first": dict(self._first),
+                "_options": dict(self._options),
+                "_chosen": dict(self._chosen),
+                "_logs": list(self._logs),
+            }
+
+    def restore(self, saved: dict[str, Any]) -> None:
+        with self._lock:
+            for name, value in saved.items():
+                setattr(self, name, value)
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:

@@ -1,0 +1,11 @@
+# Supabase
+.branches
+.temp
+
+# dotenvx
+.env.keys
+.env.local
+.env.*.local
+
+# TASK-012: 로컬 점검용 JWT 서명 키(비공개 키). 저장소에 올리지 않는다 (만드는 법: supabase/README.md)
+signing_keys.json

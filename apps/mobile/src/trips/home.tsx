@@ -10,6 +10,7 @@ import { Notice } from '@/components/planning/notice';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
+import { authNotice } from '@/lib/auth-messages';
 import { cityClock } from '@/lib/calendar';
 import type { DayDestination } from '@/lib/day-list';
 import { send } from '@/lib/planning-api';
@@ -22,7 +23,6 @@ import { color, space, text } from '@/planning/theme';
 import { isTrip, tripRequests, type Trip, type TripDay } from './api';
 import { CourseReadonly } from './course-readonly';
 import { CreateTripScreen } from './create-trip-screen';
-import { getDeviceId } from './device-id';
 import { TripDays } from './trip-days';
 
 const OFFLINE = '연결이 안 돼. 다시 해 볼까?';
@@ -65,10 +65,10 @@ export default function Home() {
     };
   }, []);
 
-  /** 서버에 지금 여행을 묻는다 (X-Device-Id). 404 = 빈 첫 화면 */
+  /** 서버에 지금 여행을 묻는다 (Bearer). 404 = 빈 첫 화면 */
   const load = useCallback(async () => {
     setView({ name: 'loading' });
-    const result = await send(tripRequests.current(await getDeviceId()));
+    const result = await send(tripRequests.current());
     if (!alive.current) return;
     if (result.ok && isTrip(result.data)) {
       setTrip(result.data);
@@ -83,7 +83,10 @@ export default function Home() {
       setView(stored.some((value) => value !== null) ? { name: 'demo' } : { name: 'empty', notice: null });
       return;
     }
-    setView({ name: 'empty', notice: !result.ok && result.failure.kind === 'network' ? OFFLINE : OOPS });
+    // 익명 로그인이 안 됐으면 안내 없이 빈 첫 화면 (§6: 여행 만들기에서 다시 로그인). 저장소 503·401은 안내 + [다시]
+    const failure = result.ok ? null : result.failure;
+    if (failure?.kind === 'auth_unavailable') return setView({ name: 'empty', notice: null });
+    setView({ name: 'empty', notice: (failure && authNotice(failure)) ?? (failure?.kind === 'network' ? OFFLINE : OOPS) });
   }, []);
 
   useEffect(() => {

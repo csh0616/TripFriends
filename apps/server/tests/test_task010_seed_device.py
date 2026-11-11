@@ -1,32 +1,37 @@
-"""TASK-010 데모 시드를 기기 여행으로 붙이기 (승현 결정 11-09, 점검 Maestro·reviewer 전용).
-근거: 승현 결정(11-09) "개발에서만, 운영 404 그대로 / 앱의 기존 데모 버튼 동작은 바꾸지 마 /
-X-Device-Id로 기기 여행에 붙이는 건 점검에서만 / 붙일 때 그 기기의 이전 여행은 B2처럼 archived (지우지 않음)",
-TASK-010 §B2(여행 하나만, archived), §13 질문 답 1·§14 답 1(past_days = 데모 시계를 n일 뒤로 -> 첫날 state=past).
+"""TASK-010 데모 시드를 기기 여행으로 붙이기 (승현 결정 11-09, 점검 Maestro·reviewer 전용) + TASK-012 §11 (데모도 Bearer, 붙이기는 as_current일 때만).
+근거: 승현 결정(11-09) "개발에서만, 운영 404 그대로 / 붙일 때 그 기기의 이전 여행은 B2처럼 archived (지우지 않음)",
+TASK-010 §B2(여행 하나만, archived)·§13 답 1·§14 답 1(past_days)·§15(점검 전용 동작),
+TASK-012 B2(X-Device-Id 대신 Bearer)·§11 Q1(토큰 없이 열린 길 0, 주인 없는 여행 없음)·Q2(데모는 그 사용자 소유, 지금 여행을 바꾸지 않음, as_current: true일 때만 붙임).
 
-계약 (이 테스트가 정한 것, 승인 대기):
-    POST /debug/seed-demo + 헤더 X-Device-Id -> 그 기기의 GET /trips/current = 시드 응답의 trip_id (status active),
-        trip_days의 day_id 순서 = 시드 응답 day_ids, 날 상태는 그 여행의 데모 시계(past_days만큼 뒤)로 계산
-    헤더가 없으면 지금과 같다: 본문 없으면 응답 키 {trip_id, day_ids}, 어떤 기기의 지금 여행도 바뀌지 않는다
+계약 (TASK-012 §11로 바뀜, 승인 대기):
+    POST /debug/seed-demo + Bearer + 본문 as_current: true -> 그 사용자의 GET /trips/current = 시드 응답의 trip_id (status active),
+        trip_days의 day_id 순서 = 시드 응답 day_ids, 날 상태는 그 여행의 데모 시계(past_days만큼 뒤)로 계산, 이전 여행은 archived
+    as_current가 없으면: 데모 여행은 그 사용자 소유(GET /trips/{id} 200, is_demo true)지만 /trips/current와 기존 여행 status는 그대로
+    토큰이 없으면 401 UNAUTHORIZED
 """
 
 import importlib
 
 from fastapi.testclient import TestClient
 
+from auth_helpers import bearer, install_fake_jwks
 from test_task010_trips import osaka, states  # noqa: F401  (osaka = 가짜 오사카 서버 fixture)
 
 DEVICE = "device-A"
 OTHER = "device-B"
 
 
-def seed(osaka, body: dict | None = None, device: str | None = None):
-    headers = {"X-Device-Id": device} if device else {}
-    if body is None:
-        return osaka.client.post("/debug/seed-demo", headers=headers)
-    return osaka.client.post("/debug/seed-demo", json=body, headers=headers)
+def seed(osaka, body: dict | None = None, device: str | None = None, as_current: bool = True):
+    """device가 있으면 그 사용자 토큰으로. as_current(기본 True = 점검 전용 붙이기)면 본문에 as_current: true."""
+    client = osaka.client if device else osaka.anon
+    headers = bearer(device) if device else {}
+    payload = {**(body or {}), **({"as_current": True} if as_current else {})}
+    if not payload:
+        return client.post("/debug/seed-demo", headers=headers)
+    return client.post("/debug/seed-demo", json=payload, headers=headers)
 
 
-# ---------- (1) 헤더 + past_days -> 그 기기의 지금 여행 ----------
+# ---------- (1) Bearer + as_current + past_days -> 그 사용자의 지금 여행 ----------
 
 
 def test_T10_시드_헤더와_past_days_1이면_그_기기의_current가_데모_여행이고_첫날이_지난_날(osaka):
@@ -89,22 +94,53 @@ def test_T10_시드_헤더로_붙여도_다른_기기의_여행은_archived가_�
     assert osaka.trip(theirs["trip_id"], OTHER).json()["status"] == "active"
 
 
-# ---------- (3) 헤더 없이 부르면 지금과 같다 ----------
+# ---------- (3) TASK-012 §11 Q2: as_current 없이 토큰과 부르면 데모는 내 것이지만 지금 여행은 그대로 ----------
 
 
-def test_T10_시드_헤더_없이_본문도_없으면_응답_모양은_trip_id_day_ids_그대로(osaka):
-    plain = seed(osaka)
+def test_T12_S11_Q2_as_current_없이_본문도_없으면_응답_모양은_trip_id_day_ids_그대로(osaka):
+    plain = seed(osaka, device=DEVICE, as_current=False)
     assert plain.status_code == 201, plain.text
     assert set(plain.json()) == {"trip_id", "day_ids"}
 
 
-def test_T10_시드_헤더_없이_부르면_어떤_기기의_여행도_바뀌지_않는다(osaka):
+def test_T12_S11_Q2_as_current_없이_부르면_지금_여행과_status가_그대로(osaka):
     mine = osaka.make_trip(device=DEVICE)
-    seed(osaka)
-    seed(osaka, {"past_days": 1})
+    seed(osaka, device=DEVICE, as_current=False)
+    seed(osaka, {"past_days": 1}, DEVICE, as_current=False)
     assert osaka.current(DEVICE).json()["trip_id"] == mine["trip_id"]
     assert osaka.trip(mine["trip_id"], DEVICE).json()["status"] == "active"
     assert osaka.current(OTHER).status_code == 404
+
+
+def test_T12_S11_Q2_as_current_없이_부르면_여행이_없던_사용자의_current도_404(osaka):
+    seed(osaka, {"chosen": True}, DEVICE, as_current=False)
+    assert osaka.current(DEVICE).status_code == 404
+
+
+def test_T12_S11_Q1_Q2_데모_여행은_그_사용자_소유_is_demo_true_남에게는_404(osaka):
+    seeded = seed(osaka, device=DEVICE, as_current=False).json()
+    got = osaka.trip(seeded["trip_id"], DEVICE)
+    assert got.status_code == 200, got.text
+    assert got.json()["is_demo"] is True
+    assert got.json()["status"] == "active"  # §12 3: 데모는 archived가 아니라 active + is_demo (archived = 사용자가 보관한 여행)
+    assert osaka.trip(seeded["trip_id"], OTHER).status_code == 404
+
+
+def test_T12_S12_3_데모를_시드해도_지금_여행은_is_demo가_아닌_active_그대로(osaka):
+    mine = osaka.make_trip(device=DEVICE)
+    for body in (None, {"chosen": True}, {"past_days": 1}):
+        demo = seed(osaka, body, DEVICE, as_current=False).json()
+        assert osaka.trip(demo["trip_id"], DEVICE).json()["status"] == "active"
+    current = osaka.current(DEVICE).json()
+    assert current["trip_id"] == mine["trip_id"] and current["is_demo"] is False
+    assert osaka.trip(mine["trip_id"], DEVICE).json()["status"] == "active"
+
+
+def test_T12_S11_Q1_토큰_없이_시드하면_401(osaka):
+    response = seed(osaka, as_current=False)
+    assert response.status_code == 401, response.text
+    assert response.json()["error"]["code"] == "UNAUTHORIZED"
+    assert seed(osaka, {"past_days": 1}).status_code == 401  # as_current가 있어도
 
 
 # ---------- (4) 운영은 헤더가 있어도 404 ----------
@@ -115,13 +151,14 @@ def test_T10_시드_운영에서는_헤더가_있어도_404(monkeypatch):
 
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    install_fake_jwks(monkeypatch)
     try:
         with TestClient(importlib.reload(api.main).app) as client:
-            for body in (None, {"past_days": 1}):
+            for body in (None, {"past_days": 1}, {"as_current": True}):
                 kwargs = {"json": body} if body is not None else {}
-                response = client.post("/debug/seed-demo", headers={"X-Device-Id": DEVICE}, **kwargs)
+                response = client.post("/debug/seed-demo", headers=bearer(DEVICE), **kwargs)
                 assert response.status_code == 404
-            assert client.get("/trips/current", headers={"X-Device-Id": DEVICE}).status_code != 200
+            assert client.get("/trips/current", headers=bearer(DEVICE)).status_code != 200
     finally:
         monkeypatch.delenv("APP_ENV", raising=False)
         importlib.reload(api.main)

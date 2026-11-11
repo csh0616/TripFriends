@@ -9,6 +9,7 @@
     POST /debug/seed-demo {"past_days": N} -> 201, 응답 trip_days[:N].state == "past" (PM 답 11-09: 데모 시계를 N일 뒤로). 선택값이 없으면 N=0과 같다
 """
 
+from auth_helpers import TESTER, bearer, install_fake_jwks  # TASK-012 §11: 시드도 Bearer
 from datetime import date
 
 import pytest
@@ -230,10 +231,11 @@ def test_T10_S13_Q1_운영에서는_past_days를_줘도_404(monkeypatch):
     import api.main
 
     monkeypatch.setenv("APP_ENV", "production")
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 시드도 Bearer (운영은 그래도 404)
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
     try:
         with TestClient(importlib.reload(api.main).app) as client:
-            assert client.post("/debug/seed-demo", json={"past_days": 1}).status_code == 404
+            assert client.post("/debug/seed-demo", json={"past_days": 1}, headers=bearer(TESTER)).status_code == 404  # TASK-012 §11: 토큰이 있어도 운영은 404
     finally:
         monkeypatch.delenv("APP_ENV", raising=False)
         importlib.reload(api.main)

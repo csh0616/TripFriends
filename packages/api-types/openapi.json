@@ -9,6 +9,11 @@
       "post": {
         "summary": "계획 대화 시작 (mode=auto면 바로 코스)",
         "operationId": "start_planning_days__day_id__planning_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "day_id",
@@ -59,6 +64,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -78,6 +93,89 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      },
+      "get": {
+        "summary": "그날 진행 중인 계획 세션의 지금 응답 (없으면 404 resource=session, 앱은 그때만 새로 시작)",
+        "operationId": "planning_of_day_days__day_id__planning_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "day_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Day Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PlanningSession"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CandidateBatch"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CourseResult"
+                    }
+                  ],
+                  "title": "Response Planning Of Day Days  Day Id  Planning Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -86,6 +184,11 @@
       "get": {
         "summary": "지금 stage의 응답을 다시 받기 (상태를 바꾸지 않음)",
         "operationId": "current_planning_planning__session_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -122,6 +225,16 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -131,6 +244,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -139,6 +262,11 @@
       "post": {
         "summary": "첫 질문의 답 또는 알아서 짜 줘",
         "operationId": "answer_planning__session_id__answer_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -189,6 +317,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -218,6 +356,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -226,6 +374,11 @@
       "post": {
         "summary": "좋아·넘김·취소",
         "operationId": "reactions_planning__session_id__reactions_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -268,6 +421,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -287,6 +450,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -295,6 +468,11 @@
       "post": {
         "summary": "다음 묶음 (방향 버튼·직접 입력·빈 요청)",
         "operationId": "next_batch_planning__session_id__next_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -344,6 +522,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -363,6 +551,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -371,6 +569,11 @@
       "post": {
         "summary": "코스 짜기",
         "operationId": "compose_planning__session_id__compose_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -392,6 +595,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
           },
           "404": {
             "content": {
@@ -422,6 +635,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -430,6 +653,11 @@
       "post": {
         "summary": "머무는 시간 ±15분",
         "operationId": "adjust_planning__session_id__adjust_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -472,6 +700,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -501,6 +739,16 @@
               }
             },
             "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -509,6 +757,11 @@
       "post": {
         "summary": "더 고를래",
         "operationId": "back_planning__session_id__back_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "session_id",
@@ -531,6 +784,16 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -550,6 +813,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -558,6 +831,11 @@
       "post": {
         "summary": "코스안 고르기",
         "operationId": "select_course_options__option_id__select_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "option_id",
@@ -580,6 +858,16 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -599,6 +887,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -607,6 +905,11 @@
       "get": {
         "summary": "여행 중 화면: 지금(at) 시각의 카드·지도 (위치는 받지 않음, 위치는 POST /check)",
         "operationId": "get_now_days__day_id__now_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "day_id",
@@ -655,6 +958,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -664,6 +977,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -672,6 +995,11 @@
       "post": {
         "summary": "여행 중 확인: 시각·위치로 늦어짐 감지 (위치는 저장하지 않음)",
         "operationId": "check_days__day_id__check_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "day_id",
@@ -714,6 +1042,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -723,6 +1061,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -731,6 +1079,11 @@
       "post": {
         "summary": "대안 반영",
         "operationId": "accept_proposals__proposal_id__accept_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "proposal_id",
@@ -753,6 +1106,16 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -773,6 +1136,16 @@
             },
             "description": "Conflict"
           },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -790,6 +1163,11 @@
       "post": {
         "summary": "대안 사양: 일정 그대로",
         "operationId": "dismiss_events__event_id__dismiss_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "event_id",
@@ -812,6 +1190,16 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -832,6 +1220,16 @@
             },
             "description": "Conflict"
           },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -849,6 +1247,11 @@
       "post": {
         "summary": "영업 확인 답: 열었어/닫혔어 (그날만 사용자 확인으로 저장, 닫혔어면 대안 계산)",
         "operationId": "visit_check_places__place_id__visit_checks_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "place_id",
@@ -891,6 +1294,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -910,6 +1323,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -918,33 +1341,15 @@
       "post": {
         "summary": "여행 만들기 (이전 여행은 archived)",
         "operationId": "create_trip_trips_post",
-        "parameters": [
-          {
-            "name": "X-Device-Id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Device-Id"
-            }
-          }
-        ],
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/TripCreate"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "201": {
@@ -958,40 +1363,47 @@
             }
           },
           "400": {
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            },
-            "description": "Bad Request"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/trips/current": {
       "get": {
-        "summary": "이 기기의 지금 여행",
+        "summary": "이 사용자의 지금 여행",
         "operationId": "current_trip_trips_current_get",
-        "parameters": [
-          {
-            "name": "X-Device-Id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Device-Id"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1004,32 +1416,62 @@
             }
           },
           "400": {
+            "description": "Bad Request",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            },
-            "description": "Bad Request"
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           },
           "404": {
+            "description": "Not Found",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
-            },
-            "description": "Not Found"
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/trips/{trip_id}": {
       "get": {
         "summary": "여행 하나",
         "operationId": "get_trip_trips__trip_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -1039,22 +1481,6 @@
               "type": "string",
               "title": "Trip Id"
             }
-          },
-          {
-            "name": "X-Device-Id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Device-Id"
-            }
           }
         ],
         "responses": {
@@ -1078,6 +1504,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -1087,6 +1523,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -1095,6 +1541,11 @@
       "post": {
         "summary": "고정 일정 추가",
         "operationId": "add_fixed_event_trips__trip_id__fixed_events_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "trip_id",
@@ -1103,22 +1554,6 @@
             "schema": {
               "type": "string",
               "title": "Trip Id"
-            }
-          },
-          {
-            "name": "X-Device-Id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Device-Id"
             }
           }
         ],
@@ -1153,6 +1588,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -1172,6 +1617,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -1180,6 +1635,11 @@
       "delete": {
         "summary": "고정 일정 지우기",
         "operationId": "delete_fixed_event_fixed_events__fixed_event_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "fixed_event_id",
@@ -1188,22 +1648,6 @@
             "schema": {
               "type": "string",
               "title": "Fixed Event Id"
-            }
-          },
-          {
-            "name": "X-Device-Id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Device-Id"
             }
           }
         ],
@@ -1221,6 +1665,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -1240,6 +1694,16 @@
               }
             },
             "description": "Conflict"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -1248,6 +1712,11 @@
       "get": {
         "summary": "그날 고른 코스 (코스안 카드와 같은 모양, 지난 날도 읽힘)",
         "operationId": "chosen_course_days__day_id__course_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "day_id",
@@ -1256,22 +1725,6 @@
             "schema": {
               "type": "string",
               "title": "Day Id"
-            }
-          },
-          {
-            "name": "X-Device-Id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Device-Id"
             }
           }
         ],
@@ -1296,6 +1749,16 @@
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -1305,6 +1768,16 @@
               }
             },
             "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -1313,6 +1786,11 @@
       "get": {
         "summary": "장소 검색 (꼭 갈 곳, 도시 팩 안)",
         "operationId": "search_places_places_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "city_code",
@@ -1358,6 +1836,26 @@
               }
             },
             "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -1366,6 +1864,11 @@
       "get": {
         "summary": "숙소 검색 (Google 실시간)",
         "operationId": "search_lodging_places_lodging_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "city_code",
@@ -1411,6 +1914,16 @@
               }
             },
             "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
           },
           "503": {
             "content": {
@@ -1506,26 +2019,8 @@
     "/debug/seed-demo": {
       "post": {
         "summary": "Debug Seed Demo",
-        "description": "개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.\n`{\"chosen\": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다.",
+        "description": "개발용 데모 여행 (TASK-003 §5). 운영(APP_ENV=production)에서는 길 자체가 없어 404.\n`{\"chosen\": true}`(TASK-006 A5): 둘째 날을 계획·선택까지 해 둔다.\nTASK-012 §11: 토큰이 필요하고, 데모는 그 사용자 소유(is_demo)다. 지금 여행은 바꾸지 않는다 —\n`{\"as_current\": true}`일 때만 그 사용자의 지금 여행으로 붙인다 (점검 전용, 이전 여행은 archived).",
         "operationId": "debug_seed_demo_debug_seed_demo_post",
-        "parameters": [
-          {
-            "name": "X-Device-Id",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Device-Id"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1562,6 +2057,26 @@
               }
             }
           },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -1572,7 +2087,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     }
   },
@@ -4046,6 +4566,11 @@
             "minimum": 0.0,
             "title": "Past Days",
             "default": 0
+          },
+          "as_current": {
+            "type": "boolean",
+            "title": "As Current",
+            "default": false
           }
         },
         "additionalProperties": false,
@@ -4289,6 +4814,11 @@
             ],
             "title": "Status"
           },
+          "is_demo": {
+            "type": "boolean",
+            "title": "Is Demo",
+            "default": false
+          },
           "trip_days": {
             "items": {
               "$ref": "#/components/schemas/TripDay"
@@ -4484,6 +5014,13 @@
         ],
         "title": "VisitCheckRequest",
         "description": "영업 확인 답 (TASK-008 A5). at은 시간대 없는 그날의 시각."
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "description": "Supabase 로그인 토큰 (익명 계정도 같다)",
+        "scheme": "bearer"
       }
     }
   }

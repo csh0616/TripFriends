@@ -1,5 +1,6 @@
 """완료 기준과 오류. 근거: TASK-003 §4, §5, §10, AC-6·7·10~16·18~20, DATA-001 C·D, TASK-002 §7 Q15·Q16, §8 Q37."""
 
+from auth_helpers import TESTER, bearer, install_fake_jwks  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import ast
 import importlib
 import json
@@ -581,12 +582,12 @@ def test_F34_AC16_요청마다_클라이언트가_달라도_같은_저장소와_
         original(self, *args, **kwargs)
 
     monkeypatch.setattr(MemoryPlanningRepo, "__init__", spy)
-    session = TestClient(env.app).post(f"/days/{day_id}/planning", json={"mode": "conversation"}).json()
+    session = TestClient(env.app, headers=bearer(TESTER)).post(f"/days/{day_id}/planning", json={"mode": "conversation"}).json()
     sid = session["session_id"]
-    assert TestClient(env.app).post(f"/planning/{sid}/answer", json={"choice_ids": []}).status_code == 200
-    response = TestClient(env.app).post(f"/planning/{sid}/reactions", json={"place_id": "P01", "action": "like"})
+    assert TestClient(env.app, headers=bearer(TESTER)).post(f"/planning/{sid}/answer", json={"choice_ids": []}).status_code == 200
+    response = TestClient(env.app, headers=bearer(TESTER)).post(f"/planning/{sid}/reactions", json={"place_id": "P01", "action": "like"})
     assert response.json()["picks"] == ["P01"]
-    second = TestClient(env.app).post(f"/planning/{sid}/next", json={})
+    second = TestClient(env.app, headers=bearer(TESTER)).post(f"/planning/{sid}/next", json={})
     assert second.json()["round"] == 2
     assert created == []
     assert env.repo is repo
@@ -724,7 +725,8 @@ def test_F42_AC19_모든_이벤트에서_Jev와_바깥_HTTP_호출_0회(monkeypa
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", counter("http"))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", counter("async http"))
 
-    with TestClient(app) as client:
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 토큰 없이 열린 길은 health·catalog뿐 (가짜 JWKS라 바깥 HTTP 0)
+    with TestClient(app, headers=bearer(TESTER)) as client:
         run_every_event(PlanningEnv(client, app))
 
     assert calls == []
@@ -755,6 +757,7 @@ def reload_main(monkeypatch):
     import api.main
 
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 시드도 Bearer
 
     def load(value):
         if value is None:
@@ -770,13 +773,13 @@ def reload_main(monkeypatch):
 
 def test_F45_AC20_R2_운영이면_시드는_공통_형식_404(reload_main):
     with TestClient(reload_main("production")) as client:
-        assert_error(client.post("/debug/seed-demo"), 404)
+        assert_error(client.post("/debug/seed-demo", headers=bearer(TESTER)), 404)  # TASK-012 §11: 토큰이 있어도 운영은 404
 
 
 @pytest.mark.parametrize("value", [None, "development", "staging"], ids=["없음", "development", "staging"])
 def test_F46_AC20_운영이_아니면_시드는_201(reload_main, value):
     with TestClient(reload_main(value)) as client:
-        assert client.post("/debug/seed-demo").status_code == 201
+        assert client.post("/debug/seed-demo", headers=bearer(TESTER)).status_code == 201  # TASK-012 §11: 시드도 Bearer
 
 
 def test_F47_S5_시드는_가상_도시_3일_숙소_중심_둘째_날만_꼭_갈_곳(env):
@@ -1091,7 +1094,7 @@ def test_F82_Q41_R5_더_고를래_뒤_옛_ID로_adjust도_select도_404(env):
 
 
 def test_F76_Q24_R3_오류_코드는_5개_값까지(env, monkeypatch):
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     sid, course = env.composing(env.plant_day(city()), likes=("P01",))
     with monkeypatch.context() as patch:
         patch.setattr("graphs.planning.compose_courses", raise_forced)
@@ -1122,7 +1125,7 @@ def test_F85_R2_없는_경로도_공통_형식_404(env, method, path):
 @pytest.fixture
 def quiet_env(env):
     """서버 예외를 테스트로 다시 던지지 않고 500 응답으로 받는다."""
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     return env
 
 

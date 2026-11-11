@@ -1,6 +1,7 @@
 # TASK-010 §D: 빈 첫 화면 -> 날짜(달력 시트, §9 Q17) -> 꼭 갈 곳 1곳 -> [여행 만들기] -> 날짜 목록 -> 첫날 계획 대화 시작. 화면마다 스크린샷 (AC-7).
-# 전제: 서버를 가짜 오사카로 켠다 (결과가 늘 같다). 서버를 새로 켜야 여행이 없는 빈 첫 화면이 나온다 (메모리 저장소, TASK-010 §1 알려진 한계).
-#   cd apps/server && PLACES_PROVIDER=fake uv run fastapi dev api/main.py
+# 전제: 로컬 Supabase(supabase start)와 그것을 가리키는 점검 서버(가짜 오사카, 결과가 늘 같다)를 켠다. 켜는 법은 supabase/README.md "서버·테스트에 연결".
+#   앱은 EXPO_PUBLIC_CHECK_SUPABASE_URL·_KEY로 로컬 Supabase에 익명 로그인한다 (TASK-012 B5, 결정권자 클라우드 프로젝트는 쓰지 않음).
+#   launchApp clearState가 기기 세션을 지워 매번 새 익명 사용자로 시작하므로, 서버를 다시 켜지 않아도 여행이 없는 빈 첫 화면이 나온다 (TASK-012: 여행은 DB에 남지만 다른 사용자 것).
 # + 개발 빌드가 시뮬레이터에 설치됨 + Metro 실행 중. 개발 서버 주소는 -e로 받는다 (planning.yaml과 같음).
 # 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로):
 #   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \

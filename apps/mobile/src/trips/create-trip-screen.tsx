@@ -9,6 +9,7 @@ import { CheckIcon, CloseIcon, HouseIcon } from '@/components/planning/icons';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
+import { SecondaryButton } from '@/components/planning/secondary-button';
 import { CityCover } from '@/components/trips/city-cover';
 import { AddDot, ChipButton, FieldBox, InfoNotice, SearchInput } from '@/components/trips/parts';
 import { cityToday } from '@/lib/calendar';
@@ -24,18 +25,19 @@ import {
   tripDates,
   type TripForm,
 } from '@/lib/create-trip';
+import { AUTH_FAILED, authNotice, SIGNIN_DOWN, STORAGE_DOWN } from '@/lib/auth-messages';
 import { send, type Failure } from '@/lib/planning-api';
 import { layout } from '@/planning/layout';
 import { color, control, radius, space, text } from '@/planning/theme';
 
 import { CalendarSheet } from './calendar-sheet';
-import { getDeviceId } from './device-id';
 import { tripRequests, isTrip, type LodgingHit, type SearchPlace, type Trip } from './api';
 import { AREA_NAME, dayLabel, shortDay } from './format';
 
 const LODGING_DOWN = '지금 숙소 검색을 못 해. 숙소 없이도 만들 수 있어';
 const OFFLINE = '연결이 안 돼. 다시 해 볼까?';
 const OOPS = '잠깐 문제가 생겼어';
+const RETRY_BANNERS = [STORAGE_DOWN, AUTH_FAILED, SIGNIN_DOWN]; // §6·Q7·Q12: 안내 + [다시], 입력값은 그대로
 const NOT_FOUND = '찾는 곳이 없어. 다른 말로 찾아볼래?';
 const FIELD_MESSAGE: Record<string, string> = {
   start_date: '가는 날을 다시 골라 줘',
@@ -157,7 +159,7 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
     if (blocker !== null || submitting) return;
     setSubmitting(true);
     setBanner(null);
-    const result = await send(tripRequests.create(await getDeviceId(), createTripBody(form)));
+    const result = await send(tripRequests.create(createTripBody(form)));
     if (!alive.current) return;
     setSubmitting(false);
     if (result.ok && isTrip(result.data)) {
@@ -174,7 +176,7 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
       const message = failure.field ? FIELD_MESSAGE[failure.field] : undefined;
       if (message) setErrors({ [failure.field as string]: message });
       else setBanner(GENERIC_INVALID);
-    } else setBanner(failure.kind === 'network' ? OFFLINE : OOPS);
+    } else setBanner(authNotice(failure) ?? (failure.kind === 'network' ? OFFLINE : OOPS));
   };
 
   return (
@@ -195,6 +197,7 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
               {banner}
             </Text>
           ) : null}
+          {banner && RETRY_BANNERS.includes(banner) ? <SecondaryButton small testID="retry-button" label="다시" disabled={submitting} onPress={() => void submit()} /> : null}
           <PrimaryButton testID="create-trip-submit" label="여행 만들기" disabled={blocker !== null || submitting} onPress={() => void submit()} />
         </>
         )

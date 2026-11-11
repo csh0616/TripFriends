@@ -209,7 +209,7 @@ erDiagram
 ### A. 사용자·여행
 | 테이블 | 핵심 열 | 규칙 |
 |---|---|---|
-| profiles | id | R1은 기기 ID로 시작, 로그인하면 계정으로 옮김 (FR-32). 전화번호·실명 없음 |
+| profiles | id(= Supabase Auth 사용자 ID) | **익명 계정으로 시작, Google·이메일로 연결해도 같은 ID** (ADR-016). 연결 규칙은 ADR-016 §3-1. 전화번호·실명 없음 |
 | trips | city_code, start_date, end_date, lodging_place_id, status(`active`/`archived`, 11-09 TASK-010 §9 Q2: 날의 진행 상태는 저장하지 않고 매번 계산) | city_code는 지역 팩 키 (NFR-15) |
 | trip_days | day, start_time, end_time, chosen_option_id | 하루 1행. 선택한 코스를 가리킴 |
 | fixed_events | start_at, end_at, place_id(없어도 됨) | **재조합 때 절대 지킴** (AC-05) |

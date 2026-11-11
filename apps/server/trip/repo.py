@@ -161,6 +161,22 @@ class MemoryTripRepo(TripRepo):
             found = [self._proposals[pid] for pid in self._order.get(event_id, [])]
             return [p for p in found if not p.superseded]
 
+    # ---- TASK-012 A3: 요청이 실패하면 되돌린다 (store.unit.Transaction이 부른다). 기록은 바뀌지 않고 갈아 끼우기만 한다 ----
+
+    def capture(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "_events": dict(self._events),
+                "_proposals": dict(self._proposals),
+                "_order": {k: list(v) for k, v in self._order.items()},
+                "_visit_checks": dict(self._visit_checks),
+            }
+
+    def restore(self, saved: dict[str, Any]) -> None:
+        with self._lock:
+            for name, value in saved.items():
+                setattr(self, name, value)
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return copy.deepcopy({"events": self._events, "proposals": self._proposals, "order": self._order, "visit_checks": self._visit_checks})

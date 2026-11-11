@@ -3,6 +3,7 @@
 import type { components } from 'api-types';
 
 import { API_URL } from './api';
+import { acquireToken, isOpenPath, renewToken } from './auth';
 
 type Schemas = components['schemas'];
 export type PlanningSession = Schemas['PlanningSession'];
@@ -24,7 +25,7 @@ export type Request = {
   method: 'GET' | 'POST' | 'DELETE';
   path: string;
   body?: unknown;
-  /** TASK-010 B2: 여행 API는 X-Device-Id를 싣는다 */
+  /** 추가 헤더. Authorization은 send가 싣는다 (TASK-012 B2) */
   headers?: Record<string, string>;
   /** 기본 10초. 숙소 검색은 3초 (TASK-010 §6) */
   timeoutMs?: number;
@@ -37,6 +38,10 @@ export type Failure =
   | { kind: 'not_found'; resource: string | null }
   | { kind: 'conflict'; reason: string | null; code?: string } // code: 공통 오류 코드 (예: PLAN_EXISTS)
   | { kind: 'infeasible'; reason: string; blocking: string[] }
+  | { kind: 'unauthorized' } // 401: 토큰을 새로 받고 다시 해 봐도 안 됨 (TASK-012 §10 Q6)
+  | { kind: 'auth_unavailable' } // 익명 로그인이 안 됨. 요청은 보내지 않았다 (§10 Q7)
+  | { kind: 'auth_down' } // 503 AUTH_UNAVAILABLE: 로그인 확인 서버 장애 (§12-6)
+  | { kind: 'storage' } // 503 STORAGE_UNAVAILABLE (§6)
   | { kind: 'server' };
 
 export type Result = { ok: true; data: unknown } | { ok: false; failure: Failure };
@@ -63,12 +68,15 @@ function classify(status: number, body: unknown): Failure {
     const blocking = Array.isArray(detail.blocking) ? detail.blocking.map(String) : [];
     return { kind: 'infeasible', reason: detail.reason, blocking };
   }
-  // 500, 503, 401, 403, JSON이 아닌 응답, 모르는 오류는 모두 "잠깐 문제가 생겼어" 줄 (Q18)
+  if (status === 401) return { kind: 'unauthorized' };
+  if (status === 503 && isRecord(body) && isRecord(body.error) && body.error.code === 'AUTH_UNAVAILABLE') return { kind: 'auth_down' };
+  if (status === 503 && isRecord(body) && isRecord(body.error) && body.error.code === 'STORAGE_UNAVAILABLE') return { kind: 'storage' };
+  // 500, 503, 403, JSON이 아닌 응답, 모르는 오류는 모두 "잠깐 문제가 생겼어" 줄 (Q18)
   return { kind: 'server' };
 }
 
 /** 한 번 보낸다. 시간 제한을 넘기면 network 실패이고, 그 뒤에 도착한 응답은 버린다 (Q20). */
-export function send(request: Request, signals?: Set<AbortController>): Promise<Result> {
+function sendOnce(request: Request, signals?: Set<AbortController>): Promise<Result> {
   const controller = new AbortController();
   signals?.add(controller);
 
@@ -111,6 +119,21 @@ export function send(request: Request, signals?: Set<AbortController>): Promise<
   });
 }
 
+/** TASK-012 B2·B4: 요청마다 Authorization: Bearer. 401이면 토큰을 한 번 새로 받아 같은 요청을 다시, 그래도 401이면 unauthorized */
+export async function send(request: Request, signals?: Set<AbortController>): Promise<Result> {
+  if (isOpenPath(request.path)) return sendOnce(request, signals);
+  const got = await acquireToken();
+  // 토큰 없이 보내지 않는다. 기기에 세션이 있었는데 갱신이 안 되면 로그인 정보 안내 (Q6), 로그인 자체가 안 되면 연결 안내 (Q7)
+  if (!('token' in got)) return { ok: false, failure: { kind: got.problem === 'unauthorized' ? 'unauthorized' : 'auth_unavailable' } };
+  const token = got.token;
+  const bearer = (value: string): Request => ({ ...request, headers: { ...request.headers, Authorization: `Bearer ${value}` } });
+  const first = await sendOnce(bearer(token), signals);
+  if (first.ok || first.failure.kind !== 'unauthorized') return first;
+  const renewed = await renewToken(token);
+  if (renewed === null) return first;
+  return sendOnce(bearer(renewed), signals);
+}
+
 // ---------- 요청 만들기 (TASK-003 §5) ----------
 type AnswerBody = Schemas['AnswerRequest'];
 type NextBody = Schemas['NextRequest'];
@@ -128,6 +151,8 @@ export const requests = {
     path: `/days/${dayId}/planning`,
     body: { mode } satisfies StartBody,
   }),
+  // TASK-012 §13: 그날 진행 중인 계획 세션 (없으면 404 resource session)
+  byDay: (dayId: string): Request => ({ method: 'GET', path: `/days/${dayId}/planning` }),
   current: (sessionId: string): Request => ({ method: 'GET', path: `/planning/${sessionId}` }),
   answer: (sessionId: string, body: AnswerBody): Request => ({
     method: 'POST',

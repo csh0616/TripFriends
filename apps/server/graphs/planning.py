@@ -324,8 +324,8 @@ def new_state(session_id: str, day_id: str, mode: Literal["conversation", "auto"
     return PlanningState(session_id=session_id, day_id=day_id, mode=mode).model_dump()
 
 
-def build_planning_graph(repo: PlanningRepo):
-    """규칙 노드 그래프를 MemorySaver 체크포인터로 컴파일해 돌려준다."""
+def build_planning_graph(repo: PlanningRepo, checkpointer: Any | None = None):
+    """규칙 노드 그래프를 체크포인터로 컴파일해 돌려준다. 체크포인터가 없으면 MemorySaver (TASK-012 A4: 서버는 DATABASE_URL이 있으면 Postgres 체크포인터를 넘긴다)."""
 
     def run_of(config: RunnableConfig) -> _Run:
         return _Run(repo, config["configurable"]["outbox"])
@@ -385,4 +385,4 @@ def build_planning_graph(repo: PlanningRepo):
     builder.add_node("browse", wait_node("browsing"), destinations=("browse", "course"))
     builder.add_node("course", wait_node("composing"), destinations=("course", "browse", END))
     builder.add_edge(START, "start")
-    return builder.compile(checkpointer=MemorySaver())
+    return builder.compile(checkpointer=checkpointer if checkpointer is not None else MemorySaver())

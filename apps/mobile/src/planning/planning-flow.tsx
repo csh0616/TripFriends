@@ -22,6 +22,7 @@ import {
   type SeedResult,
   type StageResponse,
 } from '@/lib/planning-api';
+import { authNotice } from '@/lib/auth-messages';
 import { initialPlanningState, planningReducer } from '@/lib/planning-reducer';
 import { responseChanged } from '@/lib/response-changed';
 import { screenFor } from '@/lib/screen-for';
@@ -322,6 +323,12 @@ function Session({
         break;
       case 'conflict':
         break;
+      case 'unauthorized':
+      case 'auth_unavailable':
+      case 'auth_down':
+      case 'storage':
+        fail(authNotice(failure) ?? OOPS, { tone: 'plain', retry: same });
+        return false;
       case 'server':
         // Q35·Q42 500은 [다시]가 같은 요청 (GET이면 GET)
         fail(OOPS, { tone: 'plain', retry: same });
@@ -386,6 +393,7 @@ function Session({
     const stop = (failure: Failure) => {
       const again = () => void startDemo();
       if (failure.kind === 'network') fail(OFFLINE, { tone: 'plain', retry: again });
+      else if (authNotice(failure)) fail(authNotice(failure) as string, { tone: 'plain', retry: again });
       else if (failure.kind === 'invalid') {
         console.warn('INVALID_REQUEST', 'S0');
         fail(INVALID, { tone: 'plain', retry: null });
@@ -402,6 +410,23 @@ function Session({
         const dayId = (seeded.data as SeedResult | null)?.day_ids?.[1]; // 둘째 날
         if (typeof dayId !== 'string') return stop({ kind: 'server' });
         seedDay.current = dayId;
+      }
+      // TASK-012 §13: 실제 여행의 날은 먼저 진행 중인 세션을 묻는다. 있으면 이어 가고, 404 session일 때만 새로 시작 ([알아서 짜 줘]는 그대로 새로 시작)
+      if (tripDay && startMode !== 'auto') {
+        const found = await send(requests.byDay(seedDay.current), signals.current);
+        if (!alive.current) return;
+        if (found.ok) {
+          const data = found.data as { session_id?: unknown; day?: PlanningSession['day'] } | null;
+          if (typeof data?.session_id === 'string') {
+            sid.current = data.session_id;
+            setSessionId(data.session_id);
+            onSession?.(data.session_id);
+            accept(requests.byDay(seedDay.current), 'stage', found.data, false, false);
+            return;
+          }
+          return stop({ kind: 'server' });
+        }
+        if (!(found.failure.kind === 'not_found' && found.failure.resource === 'session')) return stop(found.failure);
       }
       const started = await send(requests.start(seedDay.current, tripDay ? startMode : undefined), signals.current);
       if (!alive.current) return;
@@ -444,6 +469,7 @@ function Session({
     const stop = (failure: Failure) => {
       const again = () => void startNowDemo();
       if (failure.kind === 'network') fail(OFFLINE, { tone: 'plain', retry: again });
+      else if (authNotice(failure)) fail(authNotice(failure) as string, { tone: 'plain', retry: again });
       else if (failure.kind === 'invalid') {
         console.warn('INVALID_REQUEST', 'S0');
         fail(INVALID, { tone: 'plain', retry: null });

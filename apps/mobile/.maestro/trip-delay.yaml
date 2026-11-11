@@ -2,7 +2,7 @@
 #   -> 데모 [+10분]으로 13:15(높음, T-04) -> [이걸로] -> 바뀐 동선 -> 같은 장소에서 다시 [+10분 늦게] -> 알림이 다시 안 뜸.
 # 늦은 분 = 지금 시각 - 예정 출발(시드 코스 2번 12:55). 13:00 사건 없음, 13:05 낮음 10분, 13:15 높음 20분.
 # 전제와 우회는 trip-now.yaml과 같다 (개발 서버 주소는 -e METRO_URL, 흐름 안 env: 블록 없음, 첫 탭 우회, 탭 retry).
-# 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로. 서버는 새로 띄운 상태, 데모 시드는 매번 새로 만든다):
+# 실행 (apps/mobile에서, 시뮬레이터 UDID와 Metro 주소는 자기 것으로. 로컬 Supabase + 점검 서버, supabase/README.md. clearState로 매번 새 익명 사용자, 데모 시드는 매번 그 사용자 것으로 새로 만든다):
 #   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
 #     --test-output-dir=.maestro/screenshots/trip-delay -e METRO_URL=http://127.0.0.1:8083 .maestro/trip-delay.yaml
 # 스크린샷은 --test-output-dir 아래 takeScreenshot/ 에 쌓이고 저장소에는 올리지 않는다.

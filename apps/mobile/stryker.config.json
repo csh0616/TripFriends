@@ -18,7 +18,9 @@
     "src/lib/calendar.ts",
     "src/lib/create-trip.ts",
     "src/lib/day-list.ts",
-    "src/planning/format.ts"
+    "src/planning/format.ts",
+    "src/lib/auth.ts",
+    "src/lib/auth-messages.ts"
   ],
   "reporters": [
     "clear-text",
@@ -48,7 +50,11 @@
         "<rootDir>/__tests__/task-009-select.test.tsx",
         "<rootDir>/__tests__/task-010-lib.test.ts",
         "<rootDir>/__tests__/task-011-lib.test.ts",
-        "<rootDir>/__tests__/task-011-day-list.test.tsx"
+        "<rootDir>/__tests__/task-011-day-list.test.tsx",
+        "<rootDir>/__tests__/task-012-auth.test.tsx",
+        "<rootDir>/__tests__/task-012-auth-lib.test.ts",
+        "<rootDir>/__tests__/task-012-s12-messages.test.tsx",
+        "<rootDir>/__tests__/planning-failures.test.tsx"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",

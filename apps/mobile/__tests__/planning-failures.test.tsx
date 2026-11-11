@@ -23,6 +23,7 @@ import {
   typeAndSend,
 } from '../test-support/planning-driver';
 import { batch, course, day, done, packed, picks, relaxed, session, SID } from '../test-support/planning-fixtures';
+import { authFake } from '../test-support/supabase-mock';
 
 const OFFLINE = '연결이 안 돼. 다시 해 볼까?';
 const OOPS = '잠깐 문제가 생겼어';
@@ -1207,7 +1208,6 @@ describe('§7 줄 6 500 INTERNAL_ERROR', () => {
 
   test.each<[string, Reply]>([
     ['503', json(503, { detail: 'x' })],
-    ['401', apiError(401, 'INVALID_REQUEST')],
     ['403', apiError(403, 'INVALID_REQUEST')],
     ['JSON이 아닌 200', notJson(200)],
     ['JSON이 아닌 500', notJson(500)],
@@ -1217,6 +1217,39 @@ describe('§7 줄 6 500 INTERNAL_ERROR', () => {
     await expectRetrySendsSame(server, ATTEMPTS[8], OOPS);
     expect(server.sent(R.get)).toHaveLength(0);
     expect(hasStoredSession()).toBe(true);
+  });
+});
+
+// ---------- TASK-012 B4·§10 Q6: 401 (이전 Y38_Q18의 "401도 500 줄과 같다"를 바꿈) ----------
+// 401 한 번이면 토큰을 새로 받아 같은 요청을 한 번 더 보내 이어 간다. 두 번째도 401이면 안내 + [다시], 새 익명 계정은 만들지 않는다.
+// 계획 화면의 안내 문장은 문서가 정하지 않아(§10 Q6 문장 "로그인 정보를 확인하지 못했어"가 이 화면에도 쓰이는지 질문) 보지 않는다.
+
+describe('TASK-012 B4 401', () => {
+  test('T12_B4_401_한_번이면_토큰을_새로_받아_같은_요청을_다시_보내_이어_간다', async () => {
+    const server = await failOnce(ATTEMPTS[8], apiError(401, 'UNAUTHORIZED'));
+    expect(await screen.findByText('코스 짜 봤어')).toBeTruthy();
+    const [first, second] = server.sent(R.compose);
+    expect(server.sent(R.compose)).toHaveLength(2);
+    expect(second.body).toEqual(first.body);
+    expect(server.headers(second).authorization).not.toBe(server.headers(first).authorization);
+    expect(authFake.refreshes()).toBe(1);
+    expect(screen.queryByText(RETRY)).toBeNull();
+  });
+
+  test('T12_B4_Q6_두_번째도_401이면_안내와_다시_새_익명_로그인_없음_화면_저장값_그대로', async () => {
+    const server = happyServer();
+    await toP2();
+    const signIns = authFake.signIns();
+    server.once(R.compose, apiError(401, 'UNAUTHORIZED')).once(R.compose, apiError(401, 'UNAUTHORIZED'));
+    await pressId('compose-button');
+    expect(await screen.findByText(RETRY)).toBeTruthy();
+    onP2();
+    expect(server.sent(R.compose)).toHaveLength(2);
+    expect(authFake.refreshes()).toBe(1);
+    expect(authFake.signIns()).toBe(signIns);
+    expect(hasStoredSession()).toBe(true);
+    await tap(screen.getByText(RETRY));
+    expect(await screen.findByText('코스 짜 봤어')).toBeTruthy();
   });
 });
 

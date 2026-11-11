@@ -11,8 +11,8 @@ import { dayName, weekdayChar } from '@/planning/format';
 import { ReadRow } from '@/planning/screens/p3';
 import { color, fit, fitText, radius, space, text } from '@/planning/theme';
 
+import { failureText } from '@/lib/auth-messages';
 import { tripRequests, type ChosenCourse } from './api';
-import { getDeviceId } from './device-id';
 
 const OFFLINE = '연결이 안 돼. 다시 해 볼까?';
 const OOPS = '잠깐 문제가 생겼어';
@@ -37,13 +37,13 @@ export function CourseReadonly({ dayId, date, number, onBack }: { dayId: string;
 
   const load = useCallback(async () => {
     setLoaded({ state: 'loading' });
-    const result = await send(tripRequests.course(await getDeviceId(), dayId));
+    const result = await send(tripRequests.course(dayId));
     if (!alive.current) return;
     if (result.ok && isCourse(result.data)) return setLoaded({ state: 'ok', course: result.data });
     if (result.ok) return setLoaded({ state: 'error', message: OOPS, retry: true });
     const kind = result.failure.kind;
     if (kind === 'not_found') setLoaded({ state: 'error', message: NOT_FOUND, retry: false }); // 고른 코스가 없다 (다시 시도해도 같다)
-    else setLoaded({ state: 'error', message: kind === 'network' ? OFFLINE : OOPS, retry: true });
+    else setLoaded({ state: 'error', message: failureText(result.failure, kind === 'network' ? OFFLINE : OOPS), retry: true });
   }, [dayId]);
 
   useEffect(() => {

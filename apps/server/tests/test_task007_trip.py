@@ -14,6 +14,7 @@ Q12(열린 사건이 있는데 다른 장소에서 늦어지면 옛 사건은 �
     고른 코스는 그대로 planning 저장소의 chosen_option / get_option (B-3 "그날의 선택")
 """
 
+from auth_helpers import TESTER, bearer, install_fake_jwks  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import ast
 import logging
 import re
@@ -119,7 +120,7 @@ def assert_view(view: dict) -> None:
 @pytest.fixture
 def quiet_env(env):
     """서버 예외를 테스트로 다시 던지지 않고 500 응답으로 받는다 (TASK-003 R1 재현 방식)."""
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     return env
 
 
@@ -1064,7 +1065,8 @@ def test_AC10_여행_중_모든_이벤트에서_Jev와_바깥_HTTP_호출_0회(m
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", counter("http"))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", counter("async http"))
 
-    with TestClient(app) as client:
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 토큰 없이 열린 길은 health·catalog뿐 (가짜 JWKS라 바깥 HTTP 0)
+    with TestClient(app, headers=bearer(TESTER)) as client:
         run_trip_events(PlanningEnv(client, app))
 
     assert calls == []

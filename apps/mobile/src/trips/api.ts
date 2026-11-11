@@ -1,4 +1,4 @@
-// TASK-010 B1~B5: 여행 API 요청 만들기. 타입은 packages/api-types에서만. 모든 여행 요청에 X-Device-Id (B2).
+// TASK-010 B1~B5: 여행 API 요청 만들기. 타입은 packages/api-types에서만. Authorization은 send가 싣는다 (TASK-012 B2).
 import type { components } from 'api-types';
 
 import type { CreateTripBody } from '@/lib/create-trip';
@@ -15,32 +15,28 @@ export type SearchPlace = Schemas['PlaceHit'];
 
 export const CITY_CODE = 'osaka';
 
-const withDevice = (deviceId: string) => ({ 'X-Device-Id': deviceId });
 const query = (q: string) => `city_code=${CITY_CODE}&q=${encodeURIComponent(q.trim())}`;
 
 export type ChosenCourse = Schemas['CourseResultOption'];
 
 export const tripRequests = {
-  current: (deviceId: string): Request => ({ method: 'GET', path: '/trips/current', headers: withDevice(deviceId) }),
-  create: (deviceId: string, body: CreateTripBody): Request => ({ method: 'POST', path: '/trips', body, headers: withDevice(deviceId) }),
+  current: (): Request => ({ method: 'GET', path: '/trips/current' }),
+  create: (body: CreateTripBody): Request => ({ method: 'POST', path: '/trips', body }),
   /** TASK-010 §12 답 3: 그날 고른 코스 (읽기만) */
-  course: (deviceId: string, dayId: string): Request => ({
+  course: (dayId: string): Request => ({
     method: 'GET',
     path: `/days/${encodeURIComponent(dayId)}/course`,
-    headers: withDevice(deviceId),
   }),
   searchPlaces: (q: string): Request => ({ method: 'GET', path: `/places/search?${query(q)}` }),
   searchLodging: (q: string): Request => ({ method: 'GET', path: `/places/lodging-search?${query(q)}`, timeoutMs: LODGING_TIMEOUT_MS }),
-  addFixedEvent: (deviceId: string, tripId: string, body: FixedEventBody): Request => ({
+  addFixedEvent: (tripId: string, body: FixedEventBody): Request => ({
     method: 'POST',
     path: `/trips/${encodeURIComponent(tripId)}/fixed-events`,
     body,
-    headers: withDevice(deviceId),
   }),
-  removeFixedEvent: (deviceId: string, eventId: string): Request => ({
+  removeFixedEvent: (eventId: string): Request => ({
     method: 'DELETE',
     path: `/fixed-events/${encodeURIComponent(eventId)}`,
-    headers: withDevice(deviceId),
   }),
 };
 

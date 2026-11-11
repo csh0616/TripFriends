@@ -2,7 +2,7 @@
 
 계약 (이 테스트가 정한 이름, 승인 대기):
     GooglePlaces(api_key, client=..., sleep=...)  429면 sleep(1)·sleep(2)·sleep(4) 뒤 다시 (3번까지), 그래도 429면 ProviderAuthError(멈춤)
-    GET /days/{day_id}/course (헤더 X-Device-Id) -> 200 고른 코스안 (POST /days/{id}/planning auto 응답의 options 한 칸과 같은 모양·값) | 404 NOT_FOUND
+    GET /days/{day_id}/course (헤더 Authorization: Bearer, TASK-012 B2. 이전 X-Device-Id) -> 200 고른 코스안 (POST /days/{id}/planning auto 응답의 options 한 칸과 같은 모양·값) | 404 NOT_FOUND
     places.cache.refresh 한 번에 Google 100회까지 (§12 답 5: 서버 시작 때 좌표 다시 부르기 상한)
 """
 
@@ -16,6 +16,7 @@ import pytest
 import yaml
 
 from test_task010_places import NOW, OPTIONAL_SEED_KEYS, SEED_KEYS, CATEGORIES, GOOGLE_KEYS, FakeClock, Recording, Synthetic, SyntheticSerper, build, synthetic_rows
+from auth_helpers import bearer
 from test_task010_trips import DEVICE, at, osaka  # noqa: F401 (픽스처)
 
 REPO = next(d for d in Path(__file__).resolve().parents if (d / "docs" / "tasks").is_dir())
@@ -154,7 +155,7 @@ def test_T10_S12_좌표_다시_부르기는_한_번에_100회까지(count, stopp
 
 
 def course_of(osaka, day_id: str, device: str = DEVICE):  # noqa: F811
-    return osaka.client.get(f"/days/{day_id}/course", headers={"X-Device-Id": device})
+    return osaka.client.get(f"/days/{day_id}/course", headers=bearer(device))
 
 
 def not_found(response) -> None:
@@ -200,7 +201,7 @@ def test_T10_S12_지난_날도_고른_코스를_읽는다(osaka):  # noqa: F811
 
 
 def post_fixed(osaka, trip_id: str, body: dict, device: str = DEVICE):  # noqa: F811
-    return osaka.client.post(f"/trips/{trip_id}/fixed-events", json=body, headers={"X-Device-Id": device})
+    return osaka.client.post(f"/trips/{trip_id}/fixed-events", json=body, headers=bearer(device))
 
 
 def test_T10_S12_팩에_없는_place_id는_400_place_id(osaka):  # noqa: F811

@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from test_task010_places import NOW, FakeClock, Recording, build, fake_places
+from auth_helpers import bearer
 from test_task010_trips import DEVICE, NOON, at, osaka  # noqa: F401 (픽스처)
 
 # ---------- ① 캐시 파일 읽고 쓰기 (§A5) ----------
@@ -132,14 +133,14 @@ def test_T10_Q3_B2_다른_기기의_여행에는_고정_일정을_넣을_수_없
     trip = osaka.make_trip()
     day = trip["trip_days"][0]
     body = {"trip_day_id": day["day_id"], "title": "남의 여행", "start_at": at(day["date"], "12:00"), "end_at": at(day["date"], "13:00")}
-    error_of(osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers={"X-Device-Id": "device-B"}), 404, "NOT_FOUND")
+    error_of(osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers=bearer("device-B")), 404, "NOT_FOUND")
     assert osaka.trip(trip["trip_id"]).json()["trip_days"][0]["fixed_events"] == []
 
 
 def test_T10_Q3_B2_다른_기기는_고정_일정을_지울_수_없다(osaka):  # noqa: F811
     trip = osaka.make_trip()
     made = osaka.add_fixed(trip, 0, "12:00", "13:00").json()
-    error_of(osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers={"X-Device-Id": "device-B"}), 404, "NOT_FOUND")
+    error_of(osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers=bearer("device-B")), 404, "NOT_FOUND")
     assert len(osaka.trip(trip["trip_id"]).json()["trip_days"][0]["fixed_events"]) == 1
 
 
@@ -160,9 +161,11 @@ def test_T10_Q3_Q13_Q30_여행_만들기_400의_detail_field는_틀린_칸_하�
     assert error["detail"] == {"field": field}
 
 
-def test_T10_Q3_Q16_기기_ID가_없으면_detail_field는_X_Device_Id(osaka):  # noqa: F811
-    error = error_of(osaka.client.get("/trips/current"), 400, "VALIDATION_ERROR")
-    assert error["detail"]["field"] == "X-Device-Id"
+def test_T12_B2_토큰이_없으면_400이_아니라_401(osaka):  # noqa: F811
+    # TASK-012 B2로 바뀜 (이전: TASK-010 §9 Q16 기기 ID가 없으면 400 detail.field = X-Device-Id)
+    response = osaka.anon.get("/trips/current")
+    assert response.status_code == 401, response.text
+    assert response.json()["error"]["message"]
 
 
 def test_T10_Q3_Q29_고정_일정_제목_400의_detail_field는_title(osaka):  # noqa: F811
@@ -178,7 +181,7 @@ def test_T10_Q3_B3_PLAN_EXISTS의_상태와_code(osaka, method):  # noqa: F811
     if method == "add":
         response = osaka.add_fixed(trip, 0, "18:00", "19:00")
     else:
-        response = osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers={"X-Device-Id": DEVICE})
+        response = osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers=bearer(DEVICE))
     error_of(response, 409, "PLAN_EXISTS")
 
 
@@ -203,14 +206,14 @@ def test_T10_Q3_B3_Q15_다른_시간대로_적어도_도시_시각으로_지킨�
     trip = osaka.make_trip()
     day = trip["trip_days"][0]
     body = {"trip_day_id": day["day_id"], "title": "UTC로 적음", "start_at": f"{day['date']}T03:00:00+00:00", "end_at": f"{day['date']}T04:00:00+00:00"}
-    assert osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers={"X-Device-Id": DEVICE}).status_code == 201
+    assert osaka.client.post(f"/trips/{trip['trip_id']}/fixed-events", json=body, headers=bearer(DEVICE)).status_code == 201
     assert fixed_items(osaka, day["day_id"]) == [("12:00", "13:00")]  # UTC 03:00 = 도쿄 12:00
 
 
 def test_T10_Q3_B3_지운_고정_일정은_코스에서도_빠진다(osaka):  # noqa: F811
     trip = osaka.make_trip()
     made = osaka.add_fixed(trip, 0, "12:00", "13:00").json()
-    assert osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers={"X-Device-Id": DEVICE}).status_code == 204
+    assert osaka.client.delete(f"/fixed-events/{made['fixed_event_id']}", headers=bearer(DEVICE)).status_code == 204
     assert fixed_items(osaka, trip["trip_days"][0]["day_id"]) == []
 
 

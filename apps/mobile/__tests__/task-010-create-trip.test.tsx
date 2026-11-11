@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 // TASK-010 앱 흐름: 첫 화면 · SC-01 여행 만들기 · 날짜 목록 · 실제 여행의 오늘. 로직·가드레일만 본다 (모습은 Maestro·스크린샷).
-// 근거: TASK-010 §B2(X-Device-Id, 여행 하나)·§C1~§C4·§C7·§6 실패 표·§9(Q6·Q13·Q14·Q16·Q17·Q18), DESIGN-001 §4-7·§4-9,
+// 근거: TASK-010 §B2(여행 하나. TASK-012 B2로 X-Device-Id -> Authorization: Bearer)·§C1~§C4·§C7·§6 실패 표·§9(Q6·Q13·Q14·Q16·Q17·Q18), DESIGN-001 §4-7·§4-9,
 // TASK-006 R10(데모 아닌 날엔 데모 버튼 없음).
 //
 // 계약 (이 테스트가 정한 이름, 승인 대기):
@@ -128,31 +128,33 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BEARER = /^Bearer \S+$/; // TASK-012 B2 (이전 X-Device-Id = UUID)
 
 // ---------- C1 첫 화면 ----------
 
 describe('C1 첫 화면', () => {
-  test('T10_C1_B2_켜면_X_Device_Id로_지금_여행을_묻는다', async () => {
+  // TASK-012 B2로 바뀜 (이전: 켜면 X-Device-Id = 기기 UUID, §9 Q16). 이제 Authorization: Bearer <익명 로그인 토큰>
+  test('T12_C1_B2_켜면_Bearer_토큰으로_지금_여행을_묻는다', async () => {
     server.on(CURRENT, apiError(404, 'NOT_FOUND', { resource: 'trip' }));
     await startHome();
     await screen.findByText('여행 만들기');
     const asked = server.sent(CURRENT);
     expect(asked).toHaveLength(1);
-    const id = server.headers(asked[0])['x-device-id'] ?? '';
-    expect(id).toMatch(UUID); // §9 Q16
-    expect(storedValues().some((value) => value.includes(id))).toBe(true); // 기기 저장소에 둔다
+    expect(server.headers(asked[0]).authorization ?? '').toMatch(BEARER);
+    expect(server.headers(asked[0])['x-device-id']).toBeUndefined();
+    const token = (server.headers(asked[0]).authorization ?? '').slice('Bearer '.length);
+    expect(storedValues().some((value) => value.includes(token))).toBe(true); // 세션은 기기 저장소에 (B1)
   });
 
-  test('T10_C1_B2_기기_ID는_다시_켜도_같다', async () => {
+  test('T12_C1_B1_토큰은_다시_켜도_같다', async () => {
     server.on(CURRENT, apiError(404, 'NOT_FOUND', { resource: 'trip' }));
     const first = await startHome();
     await screen.findByText('여행 만들기');
     await first.unmount();
     await startHome();
     await screen.findByText('여행 만들기');
-    const [a, b] = server.sent(CURRENT).map((r) => server.headers(r)['x-device-id']);
-    expect(a).toBeTruthy();
+    const [a, b] = server.sent(CURRENT).map((r) => server.headers(r).authorization);
+    expect(a).toMatch(BEARER);
     expect(b).toBe(a);
   });
 
@@ -368,7 +370,7 @@ describe('C2 여행 만들기', () => {
       end_date: '2026-12-04',
       must_visits: [{ date: '2026-12-03', place_id: 'osaka-fake-kuromon' }],
     });
-    expect(server.headers(sent)['x-device-id'] ?? '').toMatch(UUID);
+    expect(server.headers(sent).authorization ?? '').toMatch(BEARER); // TASK-012 B2 (이전 X-Device-Id)
     expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
     expect(screen.getAllByText('계획 전')).toHaveLength(2);
   });

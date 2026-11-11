@@ -1,0 +1,220 @@
+"""TASK-012 §A 저장소를 API로 확인: 여행 계약(메모리·Postgres) · A3 트랜잭션 · A4 체크포인터 · AC-2 다시 켜도 그대로 · A5 데모.
+근거: TASK-012 §A A2~A5·§6 "저장 중 예외"·§7 AC-1·AC-2·AC-3·AC-7, TASK-003 §10-11 R11·R12(알려진 한계 -> 여기서 해결),
+TASK-010 §B2(여행 하나, 이전 여행은 archived), API-001 §1 오류 형식, ADR-016 §3-3(Bearer), TASK-012 §11(데모도 Bearer, as_current).
+
+계약 (이 테스트가 정한 이름, 승인 대기):
+    서버는 환경 변수 DATABASE_URL이 있으면 Postgres 저장소·Postgres 체크포인터로, 없으면 지금처럼 메모리로 켠다
+    서버를 다시 켜는 것 = 같은 app으로 TestClient를 한 번 닫고 다시 연다 (lifespan을 다시 돈다)
+    A3: 저장소 메서드(app.state.planning_repo의 클래스)가 저장 중간에 예외 -> 500 INTERNAL_ERROR 공통 형식,
+        app.state의 snapshot() 가진 저장소 전부와 GET 결과가 요청 전과 같다. §10 Q8: **메모리도 되돌린다** (두 구현에 같은 테스트)
+"""
+
+import pytest
+from fastapi.testclient import TestClient
+
+from auth_helpers import bearer
+from storage_helpers import KINDS, server_env
+from test_task010_trips import NOON, Osaka
+from trip_helpers import stores
+
+ME, YOU = "user-A", "user-B"
+
+
+def open_server(app, raise_errors: bool = True, user: str | None = ME):
+    """헤더를 따로 주지 않은 요청은 user의 Bearer (§10 Q4: 계획 API도 Bearer). user=None이면 토큰 없음."""
+    return TestClient(app, raise_server_exceptions=raise_errors, headers=bearer(user) if user else None)
+
+
+def _hours_fact(item) -> bool:
+    return isinstance(item, dict) and "source_type" in item and (item.get("source_type") == "google" or item.get("field") == "opening_hours")
+
+
+def without_google(value):
+    """Google 값에 달린 fact를 뺀 복사본. ADR-015 §3-2·TASK-010 §11·TASK-012 §10 Q1: Google 영업시간은 메모리에 1시간만 두니
+    서버를 다시 켜면 사라지는 게 정상이다. 그러면 그 자리에 대체 순서(H4)의 영업시간 fact(예: curated)가 나올 수 있어
+    영업시간 fact는 출처와 상관없이 뺀다. 그 밖의 값(여행·날·코스·대화 단계·장소 id·다른 fact)은 그대로 비교한다."""
+    if isinstance(value, dict):
+        return {key: without_google(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [without_google(item) for item in value if not _hours_fact(item)]
+    return value
+
+
+def assert_common(response, status: int, code: str | None = None) -> dict:
+    assert response.status_code == status, response.text
+    error = response.json()["error"]
+    assert isinstance(error["code"], str) and error["message"]
+    if code is not None:
+        assert error["code"] == code
+    return error
+
+
+# ---------- A2 여행 저장(TripBook)의 계약: 메모리·Postgres 같은 결과 ----------
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_T12_A2_여행_만들기·읽기·고정_일정·보관이_두_구현에서_같다(monkeypatch, kind):
+    from api.main import app
+
+    server_env(monkeypatch, kind)
+    with open_server(app) as client:
+        osaka = Osaka(client, app)
+        first = osaka.make_trip(days=2, device=ME)
+        assert osaka.current(ME).json()["trip_id"] == first["trip_id"]
+        assert osaka.trip(first["trip_id"], ME).json() == first
+
+        made = osaka.add_fixed(first, 0, "12:00", "13:00", device=ME)
+        assert made.status_code == 201, made.text
+        day = osaka.trip(first["trip_id"], ME).json()["trip_days"][0]
+        assert [e["fixed_event_id"] for e in day["fixed_events"]] == [made.json()["fixed_event_id"]]
+        assert client.delete(f"/fixed-events/{made.json()['fixed_event_id']}", headers=bearer(ME)).status_code == 204
+        assert osaka.trip(first["trip_id"], ME).json()["trip_days"][0]["fixed_events"] == []
+
+        second = osaka.make_trip(days=1, offset=20, device=ME)
+        assert osaka.current(ME).json()["trip_id"] == second["trip_id"]
+        assert osaka.trip(first["trip_id"], ME).json()["status"] == "archived"  # 지우지 않고 보관 (§8)
+
+        assert osaka.current(YOU).status_code == 404
+        assert osaka.trip(second["trip_id"], YOU).status_code == 404
+
+
+# ---------- A3 저장 중간 실패 -> DB가 요청 전과 같다 (AC-3) ----------
+
+
+def boom(*_args, **_kwargs):
+    raise RuntimeError("저장 중간 실패 (테스트가 일부러 낸 예외)")
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_T12_A3_AC3_Q8_여행_만들기_저장_중간에_예외면_500이고_저장소는_요청_전과_같다(monkeypatch, kind):
+    # TripBook.create는 날 저장(save_day) -> 여행 저장(save_trip) -> 이전 여행 보관 순서. 가운데서 실패시킨다
+    from api.main import app
+
+    server_env(monkeypatch, kind)
+    with open_server(app, raise_errors=False) as client:
+        osaka = Osaka(client, app)
+        old = osaka.make_trip(days=2, device=ME)
+        before = stores(osaka)
+        with monkeypatch.context() as patch:
+            patch.setattr(type(app.state.planning_repo), "save_trip", boom)
+            assert_common(osaka.post_trip(_body(offset=30), ME), 500, "INTERNAL_ERROR")
+        assert stores(osaka) == before
+        current = osaka.current(ME).json()
+        assert current["trip_id"] == old["trip_id"] and current["status"] == "active"  # 이전 여행이 보관되지 않았다
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_T12_A3_AC3_Q8_고정_일정_저장_중간에_예외면_500이고_고정_일정이_남지_않는다(monkeypatch, kind):
+    # add_fixed는 고정 일정 저장 -> 그날 계획 다시 저장(save_day) 순서. 뒤쪽에서 실패시킨다
+    from api.main import app
+
+    server_env(monkeypatch, kind)
+    with open_server(app, raise_errors=False) as client:
+        osaka = Osaka(client, app)
+        trip = osaka.make_trip(days=2, device=ME)
+        before = stores(osaka)
+        with monkeypatch.context() as patch:
+            patch.setattr(type(app.state.planning_repo), "save_day", boom)
+            assert_common(osaka.add_fixed(trip, 0, "12:00", "13:00", device=ME), 500, "INTERNAL_ERROR")
+        assert stores(osaka) == before
+        assert osaka.trip(trip["trip_id"], ME).json() == trip
+
+
+def _body(offset: int) -> dict:
+    from test_task010_trips import trip_body
+
+    return trip_body(days=2, offset=offset)
+
+
+# ---------- A4·AC-2·AC-7 서버를 다시 켜도 그대로 ----------
+
+
+@pytest.mark.db
+def test_T12_A4_계획_대화는_서버를_다시_켜도_그_자리에서_이어진다(monkeypatch):
+    from api.main import app
+
+    server_env(monkeypatch, "postgres")
+    with open_server(app) as client:
+        osaka = Osaka(client, app)
+        trip = osaka.make_trip(days=2, device=ME)
+        day_id = trip["trip_days"][0]["day_id"]
+        started = client.post(f"/days/{day_id}/planning", json={"mode": "conversation"}, headers=bearer(ME))
+        assert started.status_code == 201, started.text
+        session = started.json()
+        sid = session["session_id"]
+        first_choice = session["question"]["choices"][0]["id"]
+        answered = client.post(f"/planning/{sid}/answer", json={"choice_ids": [first_choice]}, headers=bearer(ME))
+        assert answered.status_code == 200, answered.text
+        candidate = answered.json()["candidates"][0]["place"]["id"]
+        liked = client.post(f"/planning/{sid}/reactions", json={"place_id": candidate, "action": "like"}, headers=bearer(ME))
+        assert liked.status_code == 200, liked.text
+        before = client.get(f"/planning/{sid}", headers=bearer(ME)).json()
+
+    with open_server(app) as client:  # 서버를 다시 켠다
+        app.state.clock = lambda: NOON
+        again = client.get(f"/planning/{sid}", headers=bearer(ME))
+        assert again.status_code == 200, again.text
+        assert without_google(again.json()) == without_google(before)
+        assert again.json()["picks_count"] == 1
+        more = client.post(f"/planning/{sid}/next", json={}, headers=bearer(ME))  # 멈춘 자리에서 다음 묶음
+        assert more.status_code == 200, more.text
+
+
+@pytest.mark.db
+def test_T12_AC2_AC7_여행·날짜_목록·고른_코스는_서버를_다시_켜도_그대로(monkeypatch):
+    from api.main import app
+
+    server_env(monkeypatch, "postgres")
+    with open_server(app) as client:
+        osaka = Osaka(client, app)
+        trip = osaka.make_trip(days=2, device=ME)
+        day_id = trip["trip_days"][0]["day_id"]
+        osaka.plan_and_select(day_id)
+        listed = osaka.current(ME).json()
+        chosen = client.get(f"/days/{day_id}/course", headers=bearer(ME)).json()
+
+    with open_server(app) as client:
+        osaka = Osaka(client, app)
+        assert without_google(osaka.current(ME).json()) == without_google(listed)
+        assert without_google(client.get(f"/days/{day_id}/course", headers=bearer(ME)).json()) == without_google(chosen)
+
+
+@pytest.mark.db
+def test_T12_A5_데모_시드도_DB에_저장되고_다시_켜도_그_사용자의_지금_여행(monkeypatch):
+    from api.main import app
+
+    server_env(monkeypatch, "postgres")
+    with open_server(app) as client:
+        seeded = client.post("/debug/seed-demo", json={"chosen": True, "as_current": True}, headers=bearer(ME))  # §11 Q2: 점검 전용 붙이기
+        assert seeded.status_code == 201, seeded.text
+        trip_id = seeded.json()["trip_id"]
+    with open_server(app) as client:
+        osaka = Osaka(client, app)
+        current = osaka.current(ME).json()
+        assert current["trip_id"] == trip_id
+        assert current["is_demo"] is True  # §10 Q11
+
+
+@pytest.mark.db
+def test_T12_S13_1_서버와_앱을_둘_다_다시_켜도_그날_계획_대화를_날로_찾아_이어_간다(monkeypatch):
+    # §13 1: 앱은 세션 ID를 기기에 두지 않는다 -> 다시 켠 앱은 날 ID만 안다. 서버도 다시 켠 뒤 GET /days/{day_id}/planning으로 같은 대화
+    from api.main import app
+
+    server_env(monkeypatch, "postgres")
+    with open_server(app) as client:
+        osaka = Osaka(client, app)
+        trip = osaka.make_trip(days=2, device=ME)
+        day_id = trip["trip_days"][0]["day_id"]
+        session = client.post(f"/days/{day_id}/planning", json={"mode": "conversation"}).json()
+        sid = session["session_id"]
+        batch = client.post(f"/planning/{sid}/answer", json={"choice_ids": [session["question"]["choices"][0]["id"]]}).json()
+        client.post(f"/planning/{sid}/reactions", json={"place_id": batch["candidates"][0]["place"]["id"], "action": "like"})
+        before = client.get(f"/planning/{sid}").json()
+
+    with open_server(app) as client:  # 서버를 다시 켠다
+        app.state.clock = lambda: NOON
+        found = client.get(f"/days/{day_id}/planning")
+        assert found.status_code == 200, found.text
+        assert found.json()["session_id"] == sid
+        assert without_google(found.json()) == without_google(before)
+        assert found.json()["picks_count"] == 1

@@ -31,6 +31,7 @@ API 본문은 TASK-008 A5(`{day_id, at, was_open}`)가 정본 (§11 Q1, API-001 
     대안을 반영(accept)하면 그날 꼭 갈 곳 목록이 planning 저장소 get_day(day_id).plan.must_visit에서 바뀐다 (§7)
 """
 
+from auth_helpers import TESTER, bearer, install_fake_jwks  # TASK-012 §10 Q4: 계획·여행 중 API도 Bearer
 import ast
 import logging
 import sys
@@ -89,7 +90,7 @@ def without_logs(found: dict) -> dict:
 
 @pytest.fixture
 def quiet_env(env):
-    env.client = TestClient(env.app, raise_server_exceptions=False)
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     return env
 
 
@@ -1616,7 +1617,8 @@ def test_T8_AC9_영업_확인과_닫힘_대안에서_Jev와_바깥_HTTP_호출_0
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", counter("http"))
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", counter("async http"))
 
-    with TestClient(app) as client:
+    install_fake_jwks(monkeypatch)  # TASK-012 §11: 토큰 없이 열린 길은 health·catalog뿐 (가짜 JWKS라 바깥 HTTP 0)
+    with TestClient(app, headers=bearer(TESTER)) as client:
         run_visit_events(PlanningEnv(client, app))
 
     assert calls == []

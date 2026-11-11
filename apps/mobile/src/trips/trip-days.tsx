@@ -20,7 +20,6 @@ import { layout } from '@/planning/layout';
 import { color, control, fit, fitText, radius, space, text } from '@/planning/theme';
 
 import { tripRequests, type FixedEvent, type Trip, type TripDay } from './api';
-import { getDeviceId } from './device-id';
 import { FixedEventSheet } from './fixed-event-sheet';
 import { periodLabel, summaryLine } from './format';
 import { NewTripSheet } from './new-trip-sheet';
@@ -76,7 +75,7 @@ export function TripDays({
   const remove = async (day: TripDay, event: FixedEvent) => {
     if (busy) return;
     setBusy(true);
-    const result = await send(tripRequests.removeFixedEvent(await getDeviceId(), event.fixed_event_id));
+    const result = await send(tripRequests.removeFixedEvent(event.fixed_event_id));
     setBusy(false);
     if (result.ok) {
       setHint(null);
@@ -268,8 +267,9 @@ function DayRow({
         accessible={false} // 알약을 따로 읽히게 한다
         accessibilityRole="button"
         onPress={onOpen}
-        style={[styles.row, past ? styles.rowPast : styles.rowPlanned, today && styles.rowToday]}
+        style={[styles.row, past ? styles.rowPast : styles.rowPlanned, today && styles.rowTodayFill]}
       >
+        {today ? <View pointerEvents="none" style={styles.rowRing} /> : null}
         <DayCircle past={past} />
         <View style={styles.grow}>
           <DayTitle index={index} date={day.date} small={past} />
@@ -413,6 +413,14 @@ const styles = StyleSheet.create({
   cardFocus: { backgroundColor: color['brand-soft'] }, // 지금 할 날 카드 = 연주황 (링은 오늘만, §14 N2)
   rowToday: {
     backgroundColor: color['brand-soft'],
+    borderWidth: layout.selRing,
+    borderColor: color.brand,
+  },
+  // 줄(84)의 링은 겹쳐 그리는 상자(absolute)라 안쪽 자리를 먹지 않는다 (TASK-012 B6, §16과 같은 결과)
+  rowTodayFill: { backgroundColor: color['brand-soft'] },
+  rowRing: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: radius['r-lg'],
     borderWidth: layout.selRing,
     borderColor: color.brand,
   },

@@ -14,6 +14,7 @@ Q5(고른 코스가 있는 날), DESIGN-001 §4-11(요약 글 "18:30 끝 · 8곳
         영업시간 fact(field "opening_hours")의 status 는 기존 hours_status 와 같다. 장소 없는 고정 일정은 [] (§11 Q1 승인)
 """
 
+from auth_helpers import bearer
 from test_task010_trips import DEVICE, osaka  # noqa: F401 (픽스처)
 
 PARK = "osaka-fake-park"  # O1 늘 열림 (curated · confirmed · "00:00-24:00")
@@ -23,7 +24,7 @@ SUMMARY_KEYS = {"end_time", "place_count", "move_min"}
 
 
 def course_of(osaka, day_id: str) -> dict:  # noqa: F811
-    response = osaka.client.get(f"/days/{day_id}/course", headers={"X-Device-Id": DEVICE})
+    response = osaka.client.get(f"/days/{day_id}/course", headers=bearer(DEVICE))
     assert response.status_code == 200, response.text
     return response.json()
 
