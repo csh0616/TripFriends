@@ -10,7 +10,9 @@ const url = process.env.EXPO_PUBLIC_CHECK_SUPABASE_URL || process.env.EXPO_PUBLI
 const key = process.env.EXPO_PUBLIC_CHECK_SUPABASE_KEY || process.env.EXPO_PUBLIC_SUPABASE_KEY;
 if (!url || !key) console.warn('EXPO_PUBLIC_SUPABASE_URL·EXPO_PUBLIC_SUPABASE_KEY가 없어서 익명 로그인이 안 된다.');
 
-const STORAGE_KEY = 'tripfriends-auth'; // 세션을 두는 기기 저장소 칸 이름
+const SUPABASE_URL = url || 'http://localhost:54321';
+// 세션을 두는 기기 저장소 칸: supabase-js 기본 이름과 같게 `sb-<주소 첫 마디>-auth-token` (이미 설치된 폰의 세션을 그대로 찾는다, Q6)
+const STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
 
 // 기기 저장소가 막혀도 로그인은 되게: 저장·읽기가 실패한 값만 앱이 켜져 있는 동안 메모리에 둔다 (예전 기기 ID 저장과 같은 방식)
 const kept = new Map<string, string>();
@@ -43,7 +45,7 @@ const storage = {
   },
 };
 
-const supabase = createClient(url || 'http://localhost:54321', key || 'missing-key', {
+const supabase = createClient(SUPABASE_URL, key || 'missing-key', {
   auth: { storage, storageKey: STORAGE_KEY, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
 });
 
