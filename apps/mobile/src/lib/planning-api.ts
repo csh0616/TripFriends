@@ -3,7 +3,7 @@
 import type { components } from 'api-types';
 
 import { API_URL } from './api';
-import { ensureToken, isOpenPath, renewToken } from './auth';
+import { acquireToken, isOpenPath, renewToken } from './auth';
 
 type Schemas = components['schemas'];
 export type PlanningSession = Schemas['PlanningSession'];
@@ -122,8 +122,10 @@ function sendOnce(request: Request, signals?: Set<AbortController>): Promise<Res
 /** TASK-012 B2·B4: 요청마다 Authorization: Bearer. 401이면 토큰을 한 번 새로 받아 같은 요청을 다시, 그래도 401이면 unauthorized */
 export async function send(request: Request, signals?: Set<AbortController>): Promise<Result> {
   if (isOpenPath(request.path)) return sendOnce(request, signals);
-  const token = await ensureToken();
-  if (token === null) return { ok: false, failure: { kind: 'auth_unavailable' } }; // 토큰 없이 보내지 않는다
+  const got = await acquireToken();
+  // 토큰 없이 보내지 않는다. 기기에 세션이 있었는데 갱신이 안 되면 로그인 정보 안내 (Q6), 로그인 자체가 안 되면 연결 안내 (Q7)
+  if (!('token' in got)) return { ok: false, failure: { kind: got.problem === 'unauthorized' ? 'unauthorized' : 'auth_unavailable' } };
+  const token = got.token;
   const bearer = (value: string): Request => ({ ...request, headers: { ...request.headers, Authorization: `Bearer ${value}` } });
   const first = await sendOnce(bearer(token), signals);
   if (first.ok || first.failure.kind !== 'unauthorized') return first;
