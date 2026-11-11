@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from catalog import get_catalog
 from deciders import JevDecider, RuleDecider
+from api.account import router as account_router
 from api.now import router as now_router
 from api.trip import router as trip_router
 from api.access import UserId
@@ -25,6 +26,8 @@ from api.planning import _doc, drop_default_422, http_error_response, is_plannin
 from engine.compose import Screen, Snapshot, compose_screen
 from graphs.planning import build_planning_graph
 from planning.repo import MemoryPlanningRepo
+from trip.claims import MemoryClaims
+from trip.link import AccountLink
 from trip.repo import MemoryTripRepo
 from trip.service import TripService
 from trip.store import MemoryTripStore
@@ -83,17 +86,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # (DB가 닿지 않아도 서버는 켜지고, 저장소를 쓰는 요청만 503 STORAGE_UNAVAILABLE)
     database_url = os.environ.get("DATABASE_URL") or None
     if database_url:
-        from store.postgres import PostgresCheckpointer, PostgresPlanningRepo, PostgresTripRepo, PostgresTripStore
+        from store.postgres import PostgresCheckpointer, PostgresClaims, PostgresPlanningRepo, PostgresTripRepo, PostgresTripStore
 
         app.state.planning_repo = PostgresPlanningRepo(database_url, app.state.city, lambda: app.state.clock())
         app.state.trip_repo = PostgresTripRepo(database_url)
         app.state.trip_store = PostgresTripStore(database_url)
+        app.state.claims = PostgresClaims(database_url)
         planning_saver: Any = PostgresCheckpointer(database_url)  # A4: 서버를 다시 켜도 계획 대화가 그 자리에서 이어진다
         trip_saver: Any = PostgresCheckpointer(database_url)
     else:
         app.state.planning_repo = MemoryPlanningRepo()
         app.state.trip_repo = MemoryTripRepo()  # TASK-007: 사건·제안
         app.state.trip_store = MemoryTripStore()
+        app.state.claims = MemoryClaims()  # §15 S3: 처리된 익명 사용자
         planning_saver, trip_saver = MemorySaver(), MemorySaver()
     app.state.planning_graph = build_planning_graph(app.state.planning_repo, planning_saver)
     app.state.planning_service = PlanningService(app.state.planning_repo, app.state.planning_graph)
@@ -101,12 +106,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.trip_graph = app.state.trip_service.graph  # G2, 스레드 ID = 사건 ID
     _mask_access_log()
     app.state.trip_book = TripBook(app.state.planning_repo, app.state.city, lambda: app.state.clock(), app.state.trip_store)
+    app.state.account_link = AccountLink(app.state.trip_book, app.state.trip_store, app.state.claims)
     app.state.planning_service.before_start = lambda day_id: app.state.trip_book.refresh_hours("planning", day_id)  # §11 H3 ①
     app.state.trip_service.refresh_hours = app.state.trip_book.refresh_hours  # H3 ② ③
     app.state.trip_service.map_id = lambda our_id: (app.state.city.row(our_id) or {}).get("place_id")  # 지도 링크: 실제 여행은 place_id (PM 답 3)
     # TASK-012 A3: 요청 하나 = 트랜잭션 하나. 메모리 저장소는 실패하면 되돌릴 수 있게 상태를 떠 둔다 (§10 Q8)
     app.state.unit = UnitOfWork(
-        [app.state.planning_repo, app.state.trip_repo, app.state.trip_store, SaverParticipant(planning_saver), SaverParticipant(trip_saver)],
+        [app.state.planning_repo, app.state.trip_repo, app.state.trip_store, app.state.claims, SaverParticipant(planning_saver), SaverParticipant(trip_saver)],
         memory=database_url is None,
     )
     # TASK-012 B2: 로그인 토큰의 공개 키는 SUPABASE_URL의 JWKS에서 받아 캐시한다. 없으면 모든 인증 길이 401 (닫힌 채로 실패)
@@ -183,6 +189,7 @@ app.include_router(planning_router)
 app.include_router(now_router)
 app.include_router(trip_router)
 app.include_router(trips_router)
+app.include_router(account_router)
 
 _default_openapi = app.openapi
 

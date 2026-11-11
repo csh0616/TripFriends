@@ -36,6 +36,11 @@ def verify_token(token: str, jwks: dict, now: float | None = None) -> str:
     """서명(ES256, kid로 고른 키)·aud·만료(여유 LEEWAY_SECONDS)를 확인하고 user_id(= JWT `sub`)를 돌려준다. 틀리면 AuthError.
 
     now: 확인 시각(유닉스 초). 없으면 지금."""
+    return verify_claims(token, jwks, now)["sub"]
+
+
+def verify_claims(token: str, jwks: dict, now: float | None = None) -> dict[str, Any]:
+    """verify_token과 같은 확인을 하고 확인된 claims 전체를 돌려준다 (계정 연결이 `is_anonymous`를 보려고, §15 S3). 토큰 글자는 담지 않는다."""
     checked_at = time.time() if now is None else now
     try:
         header = jwt.get_unverified_header(token)
@@ -63,7 +68,7 @@ def verify_token(token: str, jwks: dict, now: float | None = None) -> str:
     sub = claims["sub"]
     if not isinstance(sub, str) or not sub:
         raise AuthError("sub가 올바르지 않아요")
-    return sub
+    return claims
 
 
 class AuthUnavailable(Exception):
@@ -82,13 +87,16 @@ class JwksCache:
         self._lock = threading.Lock()
 
     def verify(self, token: str) -> str:
+        return self.verify_claims(token)["sub"]
+
+    def verify_claims(self, token: str) -> dict[str, Any]:
         jwks = self._get()
         try:
-            return verify_token(token, jwks)
+            return verify_claims(token, jwks)
         except AuthError:
             if self._known_kid(token, jwks) or not self._refresh_allowed():
                 raise
-            return verify_token(token, self._get(force=True))
+            return verify_claims(token, self._get(force=True))
 
     @staticmethod
     def _known_kid(token: str, jwks: dict) -> bool:

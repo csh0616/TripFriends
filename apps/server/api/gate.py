@@ -54,7 +54,7 @@ class Gate:
             jwks = getattr(state, "jwks", None)
             if jwks is None:
                 raise AuthError("서버에 SUPABASE_URL이 없어요")
-            user_id = await anyio.to_thread.run_sync(jwks.verify, bearer_token(scope))
+            claims = await anyio.to_thread.run_sync(jwks.verify_claims, bearer_token(scope))
         except AuthUnavailable as error:
             log.warning("공개 키를 받지 못함: %s", type(error.__cause__).__name__)
             await http_error_response(503, "AUTH_UNAVAILABLE", "지금 로그인 확인을 못 해요. 잠시 뒤 다시 해 주세요")(scope, receive, send)
@@ -63,7 +63,9 @@ class Gate:
             log.info("인증 실패: %s", error)
             await http_error_response(401, "UNAUTHORIZED", "로그인 정보를 확인하지 못했어요")(scope, receive, send)
             return
+        user_id = claims["sub"]
         scope.setdefault("state", {})["user_id"] = user_id
+        scope["state"]["is_anonymous"] = claims.get("is_anonymous") is True  # 계정 연결(§15 S3)이 헤더 토큰이 계정인지 본다. 값이 true일 때만 익명
         unit: UnitOfWork | None = getattr(state, "unit", None)
         if unit is None:
             await self.app(scope, receive, send)

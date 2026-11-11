@@ -1938,6 +1938,162 @@
         }
       }
     },
+    "/account/claim": {
+      "post": {
+        "summary": "익명 여행을 로그인한 계정으로 (옮기거나 고르게 하기)",
+        "operationId": "claim_account_claim_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/account/claim/choose": {
+      "post": {
+        "summary": "두 여행 중 하나를 지금 여행으로",
+        "operationId": "claim_choose_account_claim_choose_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChooseBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trip"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/health": {
       "get": {
         "summary": "Health",
@@ -2378,6 +2534,68 @@
           "label"
         ],
         "title": "Choice"
+      },
+      "ChooseBody": {
+        "properties": {
+          "anonymous_token": {
+            "type": "string",
+            "title": "Anonymous Token"
+          },
+          "trip_id": {
+            "type": "string",
+            "title": "Trip Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anonymous_token",
+          "trip_id"
+        ],
+        "title": "ChooseBody"
+      },
+      "ClaimBody": {
+        "properties": {
+          "anonymous_token": {
+            "type": "string",
+            "title": "Anonymous Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "anonymous_token"
+        ],
+        "title": "ClaimBody"
+      },
+      "ClaimResult": {
+        "properties": {
+          "result": {
+            "type": "string",
+            "enum": [
+              "moved",
+              "choose"
+            ],
+            "title": "Result"
+          },
+          "choices": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TripChoice"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choices"
+          }
+        },
+        "type": "object",
+        "required": [
+          "result"
+        ],
+        "title": "ClaimResult"
       },
       "CourseItemView": {
         "properties": {
@@ -4838,6 +5056,53 @@
           "trip_days"
         ],
         "title": "Trip"
+      },
+      "TripChoice": {
+        "properties": {
+          "origin": {
+            "type": "string",
+            "enum": [
+              "device",
+              "account"
+            ],
+            "title": "Origin"
+          },
+          "trip_id": {
+            "type": "string",
+            "title": "Trip Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "start_date": {
+            "type": "string",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "title": "End Date"
+          },
+          "planned_days": {
+            "type": "integer",
+            "title": "Planned Days"
+          },
+          "total_days": {
+            "type": "integer",
+            "title": "Total Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "origin",
+          "trip_id",
+          "name",
+          "start_date",
+          "end_date",
+          "planned_days",
+          "total_days"
+        ],
+        "title": "TripChoice"
       },
       "TripCreate": {
         "properties": {

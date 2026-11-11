@@ -24,6 +24,7 @@ from places.city import CityData
 from planning.repo import DayRecord, OptionRecord, PlanningRepo, ReactionAction, _apply_reaction
 from store.unit import Database
 from trip.repo import ClosedInfo, EventRecord, ProposalRecord, TripRepo
+from trip.claims import ClaimStore
 from trip.store import FixedRow, TripRow, TripStore
 from trip.visit import VisitCheckRecord
 
@@ -563,6 +564,16 @@ class PostgresTripStore(TripStore):
             cur.execute("select * from trips where id = %s", (tid,))
             return self._load(cur, cur.fetchone())
 
+    def move_trips(self, from_owner: str, to_owner: str) -> None:
+        source, target = _uid(from_owner), _uid(to_owner)
+        with self._db.cursor() as cur:
+            cur.execute("insert into profiles (id) values (%s) on conflict (id) do nothing", (target,))
+            cur.execute("update trips set owner_id = %s where owner_id = %s and not is_demo", (target, source))
+
+    def archive_trip(self, trip_id: str) -> None:
+        with self._db.cursor() as cur:
+            cur.execute("update trips set status = 'archived' where id = %s", (_uid(trip_id),))
+
     def trip_of_day(self, day_id: str) -> TripRow | None:
         did = _uid(day_id)
         if did is None:
@@ -623,6 +634,27 @@ class PostgresTripStore(TripStore):
     def snapshot(self) -> dict[str, Any]:
         with self._db.cursor() as cur:
             return {"trips": _dump_table(cur, "trips", "id"), "fixed": _dump_table(cur, "fixed_events", "id"), "profiles": _dump_table(cur, "profiles", "id")}
+
+
+class PostgresClaims(ClaimStore):
+    """처리된 익명 사용자 기록 (account_claims). 사용자 id만 둔다 — 토큰·이메일 없음 (§15 S4·S6)."""
+
+    def __init__(self, url: str) -> None:
+        self._db = Database(url)
+
+    def is_claimed(self, anonymous_id: str) -> bool:
+        uid = _uid(anonymous_id)
+        with self._db.cursor() as cur:
+            cur.execute("select 1 from account_claims where anonymous_user_id = %s", (uid,))
+            return cur.fetchone() is not None
+
+    def mark(self, anonymous_id: str, account_id: str) -> bool:
+        with self._db.cursor() as cur:
+            cur.execute(
+                "insert into account_claims (anonymous_user_id, account_user_id) values (%s, %s) on conflict do nothing",
+                (_uid(anonymous_id), _uid(account_id)),
+            )
+            return cur.rowcount == 1
 
 
 # ---------- A4 계획 그래프 체크포인터 ----------

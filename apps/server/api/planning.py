@@ -61,7 +61,7 @@ def is_planning_path(path: str) -> bool:
 
 
 # TASK-010: 여행 API의 본문 오류는 400 VALIDATION_ERROR (계획 API의 INVALID_REQUEST와 다르다, §9 Q13)
-TRIP_PREFIXES = ("/trips", "/fixed-events", "/places/search", "/places/lodging-search")
+TRIP_PREFIXES = ("/trips", "/fixed-events", "/places/search", "/places/lodging-search", "/account")
 
 
 def is_trip_path(path: str) -> bool:
