@@ -12,3 +12,20 @@ declare module 'node:path' {
   export function relative(from: string, to: string): string;
 }
 declare const __dirname: string;
+// TASK-012 §19 F1: PKCE 테스트와 expo-crypto 가짜가 쓰는 만큼
+interface NodeBuffer extends Uint8Array {
+  toString(encoding?: 'hex' | 'base64' | 'utf8'): string;
+}
+declare const Buffer: {
+  from(data: ArrayBuffer | ArrayBufferLike, byteOffset?: number, length?: number): NodeBuffer;
+};
+declare module 'node:crypto' {
+  interface Hash {
+    update(data: string | Uint8Array, encoding?: 'utf8'): Hash;
+    digest(): NodeBuffer;
+    digest(encoding: 'hex' | 'base64'): string;
+  }
+  export function createHash(algorithm: string): Hash;
+  export function randomBytes(size: number): NodeBuffer;
+  export function randomUUID(): string;
+}

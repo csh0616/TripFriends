@@ -47,3 +47,5 @@ jest.mock('react-native-url-polyfill/auto', () => ({}), { virtual: true });
 jest.mock('expo-web-browser', () => require('./test-support/supabase-mock').webBrowser);
 // TASK-012 §18 빈틈 1: 보관한 익명 세션은 SecureStore에. 설치 전에도 돌고, 설치 뒤에도 가짜를 쓴다 (virtual)
 jest.mock('expo-secure-store', () => require('./test-support/secure-store-mock'), { virtual: true });
+// TASK-012 §19 F1: PKCE SHA-256을 채우는 데 쓸 수 있는 expo-crypto. 설치 전에도 돌고, 설치 뒤에도 가짜(Node crypto)를 쓴다 (virtual)
+jest.mock('expo-crypto', () => require('./test-support/expo-crypto-mock'), { virtual: true });
