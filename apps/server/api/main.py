@@ -154,8 +154,8 @@ async def storage_unavailable_handler(_request: Request, exc: Exception):
 @app.exception_handler(RequestValidationError)
 async def validation_handler(request: Request, exc: RequestValidationError):
     """TASK-003 §10 Q23: 계획 API의 본문 오류는 400 공통 형식. 그 밖의 API는 FastAPI 기본(422) 그대로."""
-    if is_trip_path(request.url.path):
-        return trip_validation_handler(exc)  # TASK-010 §9 Q13: 여행 API는 400 VALIDATION_ERROR
+    if is_trip_path(request.url.path) or any("rehearsal_actions" in str(e["loc"]) or "rehearsal_actions" in str(e["msg"]) for e in exc.errors()):
+        return trip_validation_handler(exc)  # TASK-014 §12: 연습 기록 오류는 400 VALIDATION_ERROR (check 본문의 다른 오류는 그대로)  # TASK-010 §9 Q13: 여행 API는 400 VALIDATION_ERROR
     if is_planning_path(request.url.path):
         return planning_validation_handler(request, exc)
     return await request_validation_exception_handler(request, exc)

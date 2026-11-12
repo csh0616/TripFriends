@@ -2254,6 +2254,30 @@
   },
   "components": {
     "schemas": {
+      "AcceptAction": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "accept",
+            "title": "Type"
+          },
+          "event": {
+            "$ref": "#/components/schemas/NowEvent"
+          },
+          "proposal_id": {
+            "type": "string",
+            "title": "Proposal Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "event",
+          "proposal_id"
+        ],
+        "title": "AcceptAction"
+      },
       "AdjustRequest": {
         "properties": {
           "option_id": {
@@ -2519,6 +2543,38 @@
               }
             ],
             "title": "Rehearsal"
+          },
+          "rehearsal_actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AcceptAction"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DismissAction"
+                    },
+                    {
+                      "$ref": "#/components/schemas/VisitCheckAction"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                      "accept": "#/components/schemas/AcceptAction",
+                      "dismiss": "#/components/schemas/DismissAction",
+                      "visit_check": "#/components/schemas/VisitCheckAction"
+                    }
+                  }
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rehearsal Actions"
           }
         },
         "type": "object",
@@ -3008,6 +3064,25 @@
         ],
         "title": "DirectionChoice"
       },
+      "DismissAction": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "dismiss",
+            "title": "Type"
+          },
+          "event": {
+            "$ref": "#/components/schemas/NowEvent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "event"
+        ],
+        "title": "DismissAction"
+      },
       "DroppedView": {
         "properties": {
           "place_id": {
@@ -3123,6 +3198,7 @@
             "title": "Checked At"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "field",
@@ -3663,6 +3739,7 @@
             "title": "Reordered"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "alternative",
@@ -3736,6 +3813,7 @@
             "title": "Facts"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "seq",
@@ -3762,6 +3840,7 @@
             "title": "Name"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "place_id",
@@ -3820,6 +3899,7 @@
             "title": "Proposals"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "event_id",
@@ -3937,6 +4017,7 @@
             "title": "Name"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "place_id",
@@ -3985,6 +4066,7 @@
             "title": "Items"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "proposal_id",
@@ -4104,6 +4186,7 @@
             "$ref": "#/components/schemas/NowClosedInfo"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "proposal_id",
@@ -5267,6 +5350,41 @@
         ],
         "title": "ValidationError"
       },
+      "VisitCheckAction": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "visit_check",
+            "title": "Type"
+          },
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "was_open": {
+            "type": "boolean",
+            "title": "Was Open"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "place_id",
+          "day_id",
+          "at",
+          "was_open"
+        ],
+        "title": "VisitCheckAction"
+      },
       "VisitCheckRequest": {
         "properties": {
           "day_id": {
@@ -5291,6 +5409,38 @@
               }
             ],
             "title": "Rehearsal"
+          },
+          "rehearsal_actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AcceptAction"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DismissAction"
+                    },
+                    {
+                      "$ref": "#/components/schemas/VisitCheckAction"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                      "accept": "#/components/schemas/AcceptAction",
+                      "dismiss": "#/components/schemas/DismissAction",
+                      "visit_check": "#/components/schemas/VisitCheckAction"
+                    }
+                  }
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rehearsal Actions"
           }
         },
         "type": "object",

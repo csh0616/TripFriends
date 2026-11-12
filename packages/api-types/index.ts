@@ -491,6 +491,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptAction */
+        AcceptAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "accept";
+            event: components["schemas"]["NowEvent"];
+            /** Proposal Id */
+            proposal_id: string;
+        };
         /** AdjustRequest */
         AdjustRequest: {
             /** Option Id */
@@ -580,6 +591,8 @@ export interface components {
             lng?: number | null;
             /** Rehearsal */
             rehearsal?: boolean | null;
+            /** Rehearsal Actions */
+            rehearsal_actions?: (components["schemas"]["AcceptAction"] | components["schemas"]["DismissAction"] | components["schemas"]["VisitCheckAction"])[] | null;
         };
         /** Choice */
         Choice: {
@@ -748,6 +761,15 @@ export interface components {
             id: "quieter" | "closer" | "cheaper" | "different" | "photo" | "indoor" | "food" | "night";
             /** Label */
             label: string;
+        };
+        /** DismissAction */
+        DismissAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "dismiss";
+            event: components["schemas"]["NowEvent"];
         };
         /**
          * DroppedView
@@ -1660,6 +1682,22 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** VisitCheckAction */
+        VisitCheckAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "visit_check";
+            /** Place Id */
+            place_id: string;
+            /** Day Id */
+            day_id: string;
+            /** At */
+            at: string;
+            /** Was Open */
+            was_open: boolean;
+        };
         /**
          * VisitCheckRequest
          * @description 영업 확인 답 (TASK-008 A5). at은 시간대 없는 그날의 시각.
@@ -1673,6 +1711,8 @@ export interface components {
             was_open: boolean;
             /** Rehearsal */
             rehearsal?: boolean | null;
+            /** Rehearsal Actions */
+            rehearsal_actions?: (components["schemas"]["AcceptAction"] | components["schemas"]["DismissAction"] | components["schemas"]["VisitCheckAction"])[] | null;
         };
     };
     responses: never;

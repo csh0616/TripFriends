@@ -12,7 +12,7 @@ from typing import Any
 
 from langgraph.types import Command
 
-from graphs.trip import Outbox, Outcome, Request, build_trip_graph, can_handle, new_state
+from graphs.trip import Outbox, Outcome, Request, TripState, build_trip_graph, can_handle, new_state
 from engine.models import CourseOption
 from planning.repo import DayRecord, PlanningRepo
 from planning.service import PlanningError
@@ -21,6 +21,9 @@ from trip.detect import DelayFinding, detect_delay, is_stale
 from trip.now import build_now_view, event_view, visit_check_target
 from trip.repo import EventRecord, TripRepo
 from trip.schemas import NowEvent, NowView
+from api.now import parse_at
+from trip.rehearsal import rebuild, shape_of
+from trip.trips import invalid
 from trip.visit import ClosedFinding, VisitCheckRecord, closed_key
 
 
@@ -100,18 +103,56 @@ class TripService:
 
     # ---- check ----
 
-    def check(self, day_id: str, when: datetime, position: tuple[float, float] | None, rehearsal: bool = False) -> NowView:
+    def check(self, day_id: str, when: datetime, position: tuple[float, float] | None, rehearsal: bool = False, actions: list[Any] | None = None) -> NowView:
         with self._lock:
             if rehearsal:  # TASK-014 C3: 같은 계산. 저장은 요청 문지기가 되돌린다. 메모리의 '그날 마지막 check'만 여기서 되돌린다
-                had, saved = day_id in self._last_check, self._last_check.get(day_id)
+                saved = dict(self._last_check)
                 try:
+                    self._replay(day_id, when, actions or [])  # §12: 연습 기록을 먼저 적용
                     return self._check(day_id, when, position)
                 finally:
-                    if had:
-                        self._last_check[day_id] = saved  # type: ignore[assignment]
-                    else:
-                        self._last_check.pop(day_id, None)
+                    self._last_check.clear()
+                    self._last_check.update(saved)
             return self._check(day_id, when, position)
+
+    # ---- 연습 기록 (TASK-014 §12) ----
+
+    def _replay(self, day_id: str, when: datetime, actions: list[Any]) -> None:
+        """연습 행동을 적힌 순서대로, 실제 accept·dismiss·visit-checks와 같은 코드로 적용한다. 호출한 쪽이 끝에 되돌린다."""
+        made: list[NowEvent] = []  # 앞선 visit_check [닫혔어]가 이 요청에서 만든 사건
+        for action in actions:
+            if action.type == "visit_check":
+                view = self.visit_check(action.place_id, action.day_id, parse_at(action.at), action.was_open)
+                if view.event is not None and view.event.type == "closed" and not action.was_open:
+                    made.append(view.event)
+                continue
+            event = action.event
+            if event.type == "closed":  # 서버가 방금 만든 사건과 모양이 같아야 한다. 없으면 순서가 뒤집힌 것
+                match = next((m for m in reversed(made) if shape_of(m) == shape_of(event)), None)
+                if match is None:
+                    raise invalid("rehearsal_actions", "그 사건을 만든 영업 확인이 앞에 없어요")
+                if action.type == "accept":
+                    index = [p.proposal_id for p in event.proposals].index(action.proposal_id)
+                    self.accept(match.proposals[index].proposal_id)
+                else:
+                    self.dismiss(match.event_id)
+                continue
+            if self.trip.get_event(event.event_id) is None:  # 이전 연습 요청이 만들고 되돌려진 사건: 지금 코스에 맞춰 다시 놓는다
+                self._install(day_id, when, event)
+            if action.type == "accept":
+                self.accept(action.proposal_id)
+            else:
+                self.dismiss(event.event_id)
+
+    def _install(self, day_id: str, when: datetime, event: NowEvent) -> None:
+        day, course, overrides = self.load(day_id, when)
+        record, proposals = rebuild(day_id, day, course, event, when)
+        request = Request(day_id, day, course, when, self._builder(day_id, day, course, when, None, overrides), preset=(record, proposals))
+        state = TripState(event_id=record.event_id, day_id=day_id, dedupe_key=record.dedupe_key, k=record.k).model_dump()
+        outcome = self._invoke(record.event_id, state, request)
+        if outcome.kind != "ok":
+            self.graph.checkpointer.delete_thread(record.event_id)
+            raise _internal()
 
     def _check(self, day_id: str, when: datetime, position: tuple[float, float] | None) -> NowView:
         self._hours("now", day_id)
@@ -199,9 +240,18 @@ class TripService:
 
     # ---- visit-check ----
 
-    def visit_check(self, place_id: str, day_id: str, when: datetime, was_open: bool) -> NowView:
-        """TASK-008 A5·B1: 영업 확인 답. 대상이 아니면 409. 열었어면 기록만, 닫혔어면 G2 그래프로 대안을 계산한다."""
+    def visit_check(self, place_id: str, day_id: str, when: datetime, was_open: bool, rehearsal: bool = False, actions: list[Any] | None = None) -> NowView:
+        """TASK-008 A5·B1: 영업 확인 답. 대상이 아니면 409. 열었어면 기록만, 닫혔어면 G2 그래프로 대안을 계산한다.
+        rehearsal(TASK-014 §10 Q5): 연습 기록을 먼저 적용하고 같은 계산을 한다 (저장은 문지기가 되돌린다)."""
         with self._lock:
+            if rehearsal:
+                saved = dict(self._last_check)
+                try:
+                    self._replay(day_id, when, actions or [])
+                    return self.visit_check(place_id, day_id, when, was_open)
+                finally:
+                    self._last_check.clear()
+                    self._last_check.update(saved)
             if not was_open:
                 self._hours("alternatives", day_id, place_id)  # 대안이 도착 때 열려 있는지는 최신 값이어야 한다 (H3 ③)
             day, course, overrides = self.load(day_id, when)

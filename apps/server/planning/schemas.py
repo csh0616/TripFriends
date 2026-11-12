@@ -138,6 +138,7 @@ class PlanningSession(BaseModel):
 
 
 class Fact(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # TASK-014 §12: 연습 기록의 사건 안에서도 칸이 더 붙으면 거부
     field: str
     value: str | None
     status: HoursStatus
