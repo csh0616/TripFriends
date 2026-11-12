@@ -237,3 +237,37 @@ test('T12_S18_빈틈2_익명_복원이_실패하면_알림만·계정_세션_유
   expect(authFake.isRevoked(now?.refresh_token)).toBe(false);
   expect(authFake.signIns()).toBe(1); // 새 익명 계정 없음
 });
+
+// ---------- 빈틈 1 + §9 3: 시작 때 다시 뜬 어느 여행 시트의 [연결 취소] (reviewer 11-12) ----------
+
+const ACCOUNT_TRIP = {
+  ...TRIP,
+  trip_id: 'trip-account-1',
+  start_date: '2027-01-08',
+  end_date: '2027-01-08',
+  trip_days: [{ ...TRIP.trip_days[0], day_id: 'day-a1', date: '2027-01-08' }],
+};
+
+test('T12_S18_S9_3_시작_때_다시_뜬_어느_여행_시트에서_연결_취소면_익명_토큰으로_다시_받은_기기_여행', async () => {
+  const anon = await killDuringClaim();
+  // 다시 켠 앱: 지금 여행은 토큰에 따라 다르다 (계정 = 계정 여행, 익명 = 연결 전 기기 여행)
+  server = new FakeServer();
+  installLogout(server);
+  const tripFor = (sent: Sent) => (authFake.userOfAccess(bearerOf(sent)?.replace(/^Bearer /, ''))?.id === anon.user.id ? TRIP : ACCOUNT_TRIP);
+  server.match(CURRENT, (sent) => json(200, tripFor(sent))).on(CLAIM, json(200, CHOICES));
+  await startHome();
+  expect(await screen.findByText(PICK_TITLE)).toBeTruthy();
+  const before = server.sent(CURRENT).length;
+
+  await tap(screen.getByText('연결 취소'));
+  await waitFor(() => expect(screen.queryByText(PICK_TITLE)).toBeNull());
+  await expectLiveAnon(anon.user.id);
+  // 연결 전 기기 여행을 익명 토큰으로 다시 받아 보여 준다. 계정 여행은 보이지 않는다
+  await waitFor(() => expect(server.sent(CURRENT).length).toBeGreaterThan(before));
+  const again = server.sent(CURRENT).slice(before);
+  expect(again.every((sent) => authFake.userOfAccess(bearerOf(sent)?.replace(/^Bearer /, ''))?.id === anon.user.id)).toBe(true);
+  expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
+  expect(screen.queryByTestId('day-row-day-a1')).toBeNull();
+  expect(server.sent('POST /account/claim/choose')).toEqual([]);
+  expect(screen.queryByText(FAILED)).toBeNull();
+});
