@@ -323,6 +323,22 @@ describe('C4 연습 중 행동', () => {
     expect(sentTo('POST /events/')).toEqual([]);
   });
 
+  test('T14_C4_S12_Q2_그대로_갈래는_다음_요청_기록에_dismiss로_든다', async () => {
+    // §12 Q2: {type: "dismiss", event} (at 없음, 실제 dismiss 요청과 같게 — §12 Q5)
+    const view = delayedView({ day: plannedDay });
+    const kept = rehearsalView(); // 실제처럼 다시 알리지 않는 화면
+    nowReply = () => json(200, view);
+    checkReply = (sent) => json(200, { ...(hasAction(sent, 'dismiss') ? kept : view), at: body(sent).at });
+    await toRehearsal();
+    await tap(await screen.findByTestId('event-dismiss'));
+    await plusTen();
+    await waitFor(() => expect(hasAction(checks()[checks().length - 1], 'dismiss')).toBe(true));
+    expect(actionsOf(checks()[checks().length - 1])).toEqual([{ type: 'dismiss', event: view.event }]);
+    expect(sentTo('POST /events/')).toEqual([]);
+    await waitFor(() => expect(screen.queryByTestId('card-T-04')).toBeNull()); // 같은 사건을 다시 띄우지 않는다
+    for (const sent of writes()) expect(body(sent).rehearsal).toBe(true);
+  });
+
   // §11: 고르고 확정하는 행동은 그 자리에서 서버에 보내지 않고 연습 기록에 쌓아, 다음 연습 요청마다 rehearsal_actions로 함께 보낸다.
   // 가짜 서버는 기록을 본 응답(실제처럼 적용된 화면)을 돌려준다: 앱이 화면을 직접 바꾸든 다음 응답으로 바꾸든 같은 결과가 보이게
 

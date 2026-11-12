@@ -16,6 +16,7 @@ B4(앱 기기 저장소)는 앱 테스트(apps/mobile/__tests__/task-014-locatio
 import logging
 import os
 import re
+import uuid
 import warnings
 from datetime import datetime, timedelta
 
@@ -27,10 +28,12 @@ from hypothesis import strategies as st
 from auth_helpers import bearer
 from conftest import TEST_DB_ENV
 from storage_helpers import KINDS, server_env
-from test_task010_trips import Osaka
+from test_task010_trips import PACK_IDS, Osaka
 from trip_helpers import P01, checkpoints_text, plain_day, stores
 
-ME, YOU = "user-A", "user-B"
+# 이 파일만의 사용자 (DB 테스트는 표를 비우지 않는다 -> 다른 파일의 "user-A"·"user-B" 테스트와 섞이지 않게 실행마다 새 이름, storage_helpers와 같은 생각)
+_RUN = uuid.uuid4().hex[:8]
+ME, YOU = f"user-T14-me-{_RUN}", f"user-T14-you-{_RUN}"
 NEAR_OFFSET, FAR_OFFSET = 7, 7 + 7 * 24  # FAR = 같은 요일, 168일 뒤 (만들 수 있는 최대 180일 안)
 # 장소 좌표와 겹치지 않는 자리: 장소에서 북쪽 약 24m·동쪽 약 31m (감지 반경 150m 안, TASK-007 A1). 소수 자리가 장소 좌표와 다르다
 D_LAT, D_LNG = 0.000213, 0.000341
@@ -955,11 +958,12 @@ def test_T14_S11_순서_닫혔어_다음_고른_대안이면_실제로_한_것�
 
 
 def test_T14_S11_순서_고른_대안이_닫혔어보다_먼저면_받지_않고_저장_0(env):
-    # 그 대안을 만든 닫힘 사건이 아직 없다 -> 서버가 만든 것과 같은 모양이 아니다 (400), 또는 그 사건이 없다 (404)
+    # 그 대안을 만든 닫힘 사건이 아직 없다 -> §12 Q4: 400 VALIDATION_ERROR
     day_id, closed, event = closed_event(env)
     before = everything(env, "memory")
     response = env.client.post(f"/days/{day_id}/check", json={"at": "2026-12-02T11:50:00", "rehearsal": True, "rehearsal_actions": [act_accept(event), closed]})
-    assert response.status_code in (400, 404), response.text
+    assert response.status_code == 400, response.text  # §12 Q4: 순서 뒤집힘 = 잘못된 입력 400 (404는 남의 것일 때만)
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert everything(env, "memory") == before
 
 
@@ -1026,16 +1030,124 @@ def test_T14_S11_연습_기록에_남의_사건·제안이면_404이고_저장_0
     assert everything(osaka, kind) == before
 
 
-def test_T14_S11_경계_rehearsal이_아닌_요청의_rehearsal_actions는_받지_않는다_저장_0(mem):
-    # 연습 기록은 연습 요청에만 (실제 check에 실리면 저장 길로 행동이 적용될 수 있다). 문서에 없는 경우라 저장 0만 고정
+@pytest.mark.parametrize("rehearsal", [None, False], ids=["rehearsal_없음", "rehearsal_false"])
+@pytest.mark.parametrize("route", ["check", "visit_checks"])
+def test_T14_S12_Q3_실제_요청에_연습_기록이_실리면_400이고_저장_0(mem, rehearsal, route):
+    # §12 Q3: 조용히 무시하면 앱 버그가 숨는다 -> 400 VALIDATION_ERROR. 빈 목록도 기록이 실린 것으로 본다
     day_id, date = planned_day(mem)
     late, position = late_input(mem.client, day_id, date)
     event = rehearse(mem.client, day_id, late, position)["event"]
     before = everything(mem, "memory")
-    payload = {**body(at_of(date, hhmm_plus(late[11:16], 10)), position), "rehearsal_actions": [act_accept(event)]}
-    response = mem.client.post(f"/days/{day_id}/check", json=payload)
-    if response.status_code == 200:  # 받아들인다면 기록은 무시하고 실제 check만 (사건 하나)
-        assert response.json()["event"] is None or response.json()["event"]["state"] != "resolved"
-    else:
-        assert response.status_code == 400
+    for actions in ([act_accept(event)], []):
+        if route == "check":
+            payload = {**body(at_of(date, hhmm_plus(late[11:16], 10)), position, rehearsal), "rehearsal_actions": actions}
+            response = mem.client.post(f"/days/{day_id}/check", json=payload)
+        else:
+            place_id, hhmm = find_t05(mem.client, day_id, date)
+            payload = {"day_id": day_id, "at": at_of(date, hhmm), "was_open": True, "rehearsal_actions": actions}
+            if rehearsal is not None:
+                payload["rehearsal"] = rehearsal
+            response = mem.client.post(f"/places/{place_id}/visit-checks", json=payload)
+        assert response.status_code == 400, response.text
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
         assert everything(mem, "memory") == before
+
+
+# =====================================================================
+# §12 Q2 [그대로 갈래] = {"type": "dismiss", "event"} (실제처럼 같은 사건을 다시 알리지 않게) · Q1 검사
+# =====================================================================
+
+
+def act_dismiss(event: dict) -> dict:
+    return {"type": "dismiss", "event": event}
+
+
+@WORLDS
+def test_T14_S12_Q2_그대로_갈래_기록_뒤_연습은_실제로_dismiss한_뒤와_같고_다시_알리지_않는다(world):
+    kind, client, osaka = world
+    day_id, date = planned_day(osaka)
+    late, position = late_input(client, day_id, date)
+    later = at_of(date, hhmm_plus(late[11:16], 5))  # 같은 장소에서 계속 늦음 = 같은 사건
+    event = rehearse(client, day_id, late, position)["event"]
+    assert event and event["state"] == "awaiting"  # 시험 자체 확인
+    before = everything(osaka, kind)
+    practiced = ok(rehearse_with(client, day_id, later, position, [act_dismiss(event)]))
+    assert everything(osaka, kind) == before  # 저장 0
+    assert practiced["event"] is None or practiced["event"]["state"] != "awaiting"  # 같은 사건을 다시 알리지 않는다
+    assert practiced["main"]["type"] != "T-04"
+    actual_event = real(client, day_id, late, position)["event"]
+    ok(client.post(f"/events/{actual_event['event_id']}/dismiss"))
+    assert same_shape(practiced) == same_shape(real(client, day_id, later, position))
+
+
+@WORLDS
+def test_T14_S12_Q2_경계_그대로_갈래_기록이_없으면_같은_사건이_계속_떠_있다(world):
+    _kind, client, osaka = world
+    day_id, date = planned_day(osaka)
+    late, position = late_input(client, day_id, date)
+    later = at_of(date, hhmm_plus(late[11:16], 5))
+    rehearse(client, day_id, late, position)
+    without = ok(rehearse_with(client, day_id, later, position, []))
+    assert without["event"] is not None and without["event"]["state"] == "awaiting"
+
+
+@WORLDS
+@pytest.mark.parametrize("bad", ["proposal_id_를_실음", "event_없음", "사건_모양이_아님"])
+def test_T14_S12_Q2_그대로_갈래_기록_모양이_이상하면_400이고_저장_0(world, bad):
+    kind, client, osaka = world
+    day_id, date = planned_day(osaka)
+    late, position = late_input(client, day_id, date)
+    event = rehearse(client, day_id, late, position)["event"]
+    action = {
+        "proposal_id_를_실음": {"type": "dismiss", "event": event, "proposal_id": event["proposals"][0]["proposal_id"]},
+        "event_없음": {"type": "dismiss"},
+        "사건_모양이_아님": {"type": "dismiss", "event": {"event_id": event["event_id"]}},
+    }[bad]
+    before = everything(osaka, kind)
+    response = rehearse_with(client, day_id, at_of(date, hhmm_plus(late[11:16], 5)), position, [action])
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert everything(osaka, kind) == before
+
+
+@WORLDS
+def test_T14_S12_Q2_남의_사건을_그대로_갈래하면_404이고_저장_0(world):
+    kind, client, osaka = world
+    mine, date = planned_day(osaka, user=ME)
+    theirs, _ = planned_day(osaka, user=YOU)
+    late, position = late_input(client, theirs, date, user=YOU)
+    their_event = real(client, theirs, late, position, user=YOU)["event"]
+    before = everything(osaka, kind)
+    response = rehearse_with(client, mine, at_of(date, hhmm_plus(late[11:16], 5)), position, [act_dismiss(their_event)])
+    assert response.status_code == 404, response.text
+    assert everything(osaka, kind) == before
+
+
+@WORLDS
+def test_T14_S12_Q1_사건의_장소가_그날_코스에_없으면_400(world):
+    # §12 Q1 검사: "사건의 장소가 그날 코스(또는 앞선 행동으로 바뀐 코스)에 있는지". 도시 팩에는 있지만 이 날 코스에 없는 장소로 바꾼 사건
+    kind, client, osaka = world
+    day_id, date = planned_day(osaka)
+    late, position = late_input(client, day_id, date)
+    event = rehearse(client, day_id, late, position)["event"]
+    course = {p["place_id"] for p in now_view(client, day_id, date)["pins"]}
+    outsider = next(p for p in sorted(PACK_IDS) if p not in course)
+    moved = {**event, "proposals": [{**proposal, "items": [{**item, "place_id": outsider} for item in proposal["items"]]} for proposal in event["proposals"]]}
+    before = everything(osaka, kind)
+    for action in (act_accept(moved), act_dismiss(moved)):
+        response = rehearse_with(client, day_id, at_of(date, hhmm_plus(late[11:16], 5)), position, [action])
+        assert response.status_code == 400, response.text
+        assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert everything(osaka, kind) == before
+
+
+def test_T14_S12_Q1_앞선_행동으로_바뀐_코스의_장소는_받는다(env):
+    # 닫혔어 -> 대안(A01)을 고르면 코스에 A01이 들어온다. 그 뒤 기록의 장소 검사는 바뀐 코스로 한다 (닫힘 순서 테스트와 같은 길)
+    day_id, closed, event = closed_event(env)
+    alt = next(p for p in event["proposals"] if p["closed"]["alternative"] is not None)
+    response = env.client.post(
+        f"/days/{day_id}/check",
+        json={"at": "2026-12-02T11:50:00", "rehearsal": True, "rehearsal_actions": [closed, act_accept(event, alt["proposal_id"])]},
+    )
+    view = ok(response)
+    assert alt["closed"]["alternative"]["place_id"] in {p["place_id"] for p in view["pins"]}
