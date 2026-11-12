@@ -20,7 +20,7 @@ from api.now import router as now_router
 from api.trip import router as trip_router
 from api.access import UserId
 from api.auth import JwksCache
-from api.gate import Gate, UnitOfWork
+from api.gate import Gate, RejectPositionQuery, UnitOfWork
 from api.trips import api_error_handler, router as trips_router, trip_validation_handler
 from api.planning import _doc, drop_default_422, http_error_response, is_planning_path, is_trip_path, planning_error_handler, planning_validation_handler, router as planning_router
 from engine.compose import Screen, Snapshot, compose_screen
@@ -140,6 +140,7 @@ app = FastAPI(
 app.add_exception_handler(PlanningError, planning_error_handler)  # type: ignore[arg-type]
 app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
 app.add_middleware(Gate)  # TASK-012 B2·A3: Bearer 확인 + 요청 하나 = 트랜잭션 하나
+app.add_middleware(RejectPositionQuery)  # TASK-014 B1: 가장 바깥. 쿼리에 lat·lng면 인증 전에 400
 
 
 @app.exception_handler(StorageUnavailable)

@@ -100,21 +100,33 @@ class TripService:
 
     # ---- check ----
 
-    def check(self, day_id: str, when: datetime, position: tuple[float, float] | None) -> NowView:
+    def check(self, day_id: str, when: datetime, position: tuple[float, float] | None, rehearsal: bool = False) -> NowView:
         with self._lock:
-            self._hours("now", day_id)
-            day, course, overrides = self.load(day_id, when)
-            build = self._builder(day_id, day, course, when, position, overrides)
-            previous = self._last_check.get(day_id)
-            finding = detect_delay(delay_course(day_id, day, course), when, position)
-            current = self.trip.open_event(day_id, "delay")
-            self._refresh_closed(day_id, day, course, when, build, previous)
-            if finding is None:  # 위치 없음·이동 중·문턱 아래: 열린 사건 그대로
-                view = build(None, None)
-            else:
-                view = self._with_finding(day_id, day, course, when, finding, current, build, previous)
-            self._last_check[day_id] = when  # 성공한 check만 (앞 시각으로 돌아가도 그 at)
-            return view
+            if rehearsal:  # TASK-014 C3: 같은 계산. 저장은 요청 문지기가 되돌린다. 메모리의 '그날 마지막 check'만 여기서 되돌린다
+                had, saved = day_id in self._last_check, self._last_check.get(day_id)
+                try:
+                    return self._check(day_id, when, position)
+                finally:
+                    if had:
+                        self._last_check[day_id] = saved  # type: ignore[assignment]
+                    else:
+                        self._last_check.pop(day_id, None)
+            return self._check(day_id, when, position)
+
+    def _check(self, day_id: str, when: datetime, position: tuple[float, float] | None) -> NowView:
+        self._hours("now", day_id)
+        day, course, overrides = self.load(day_id, when)
+        build = self._builder(day_id, day, course, when, position, overrides)
+        previous = self._last_check.get(day_id)
+        finding = detect_delay(delay_course(day_id, day, course), when, position)
+        current = self.trip.open_event(day_id, "delay")
+        self._refresh_closed(day_id, day, course, when, build, previous)
+        if finding is None:  # 위치 없음·이동 중·문턱 아래: 열린 사건 그대로
+            view = build(None, None)
+        else:
+            view = self._with_finding(day_id, day, course, when, finding, current, build, previous)
+        self._last_check[day_id] = when  # 성공한 check만 (앞 시각으로 돌아가도 그 at)
+        return view
 
     def _refresh_closed(self, day_id: str, day: DayRecord, course: CourseOption, when: datetime, build, previous: datetime | None) -> None:
         """오래된 닫힘 제안은 같은 사건 안에서 한 번 새로 계산한다 (TASK-007 B-4와 같음, 새로 알리지 않는다)."""

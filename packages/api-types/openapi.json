@@ -2508,6 +2508,17 @@
               }
             ],
             "title": "Lng"
+          },
+          "rehearsal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rehearsal"
           }
         },
         "type": "object",
@@ -5269,6 +5280,17 @@
           "was_open": {
             "type": "boolean",
             "title": "Was Open"
+          },
+          "rehearsal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rehearsal"
           }
         },
         "type": "object",

@@ -578,6 +578,8 @@ export interface components {
             lat?: number | null;
             /** Lng */
             lng?: number | null;
+            /** Rehearsal */
+            rehearsal?: boolean | null;
         };
         /** Choice */
         Choice: {
@@ -1669,6 +1671,8 @@ export interface components {
             at: string;
             /** Was Open */
             was_open: boolean;
+            /** Rehearsal */
+            rehearsal?: boolean | null;
         };
     };
     responses: never;
