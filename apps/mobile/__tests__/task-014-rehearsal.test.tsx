@@ -17,7 +17,7 @@
 //   [대안 고르기]·[그대로 갈래]·[열었어]/[닫혔어] = 기존 testID proposal-{id}·select-confirm·event-dismiss·visit-open·visit-closed
 //   연습 중 실패 = 글자 "지금 연습을 못 해" + [다시](기존 Notice의 retry-button)
 // §9·§10(v1.2)으로 문구·규칙이 확정돼 [보드] 표시는 뺐다. 누르는 영역 44(E2·task-014-design §2)는 height·minHeight + hitSlop으로 센다.
-import { act, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -27,7 +27,7 @@ import { locationFake } from '../test-support/expo-location-mock';
 import { apiError, FakeServer, json, networkDown, type Reply, type Sent } from '../test-support/fake-server';
 import { resetDevice, storedValues, tap } from '../test-support/planning-driver';
 import { day as demoDay } from '../test-support/planning-fixtures';
-import { delayedView, nowView, PROPOSAL_SPOT, t02 } from '../test-support/trip-now-fixtures';
+import { delayedView, nowView, PROPOSAL_SPOT, t02, t08 } from '../test-support/trip-now-fixtures';
 import { secureStore } from '../test-support/secure-store-mock';
 
 jest.mock('expo-constants', () => {
@@ -528,6 +528,87 @@ describe('§10 Q13 연습 시계 · E2 누르는 영역', () => {
     const last = asked[asked.length - 1];
     const at = last.method === 'GET' ? decodeURIComponent(last.path.split('at=')[1] ?? '') : String(body(last).at);
     expect(at.startsWith(`${PLANNED_DATE}T${plannedDay.start}`)).toBe(true);
+  });
+
+  /** 시각 막대를 비율(0~1) 자리로 누른다 (막대 폭을 먼저 알려 준다) */
+  async function barTo(ratio: number) {
+    const bar = await screen.findByTestId('demo-bar');
+    await act(async () => {
+      fireEvent(bar, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 1000, height: 44 } } });
+    });
+    await act(async () => {
+      fireEvent(bar, 'responderGrant', { nativeEvent: { locationX: ratio * 1000 } });
+    });
+    await settleAll();
+  }
+
+  const lastAt = () => String(body(checks()[checks().length - 1]).at);
+
+  test('T14_S13_11_연습_시계는_하루_끝에서_멈춘다_10분을_더_눌러도', async () => {
+    await toRehearsal();
+    await barTo(1); // 하루 끝 20:00
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T${plannedDay.end}:00`));
+    for (let i = 0; i < 3; i += 1) await plusTen();
+    await settleAll();
+    expect(within(screen.getByTestId('demo-time')).getByText(plannedDay.end)).toBeTruthy();
+    for (const sent of checks()) expect(String(body(sent).at) <= `${PLANNED_DATE}T${plannedDay.end}:00`).toBe(true);
+  });
+
+  test('T14_S13_11_경계_하루_끝_10분_전에서_10분은_하루_끝까지', async () => {
+    await toRehearsal();
+    await barTo((19 * 60 + 50 - 600) / 600); // 19:50
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T19:50:00`));
+    await plusTen();
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T${plannedDay.end}:00`));
+  });
+
+  test('T14_S13_11_재생도_하루_끝에서_멈춘다', async () => {
+    // B7: 재생은 1초 = 5분. 19:50에서 4초 재생하면 20:00에서 멈춘다 (20:05·20:10이 아니다)
+    await toRehearsal();
+    await barTo((19 * 60 + 50 - 600) / 600);
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T19:50:00`));
+    await tap(screen.getByTestId('demo-play'));
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 4500));
+    });
+    await settleAll();
+    expect(within(screen.getByTestId('demo-time')).getByText(plannedDay.end)).toBeTruthy();
+    for (const sent of checks()) expect(String(body(sent).at) <= `${PLANNED_DATE}T${plannedDay.end}:00`).toBe(true);
+  }, 20000);
+
+  test('T14_S13_11_막대를_하루_밖으로_끌어도_시작~끝_안', async () => {
+    await toRehearsal();
+    await barTo(1.5);
+    await waitFor(() => expect(lastAt() <= `${PLANNED_DATE}T${plannedDay.end}:00`).toBe(true));
+    await barTo(-0.5);
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T${plannedDay.start}:00`));
+  });
+
+  test('T14_S13_5_연습_위치는_마지막_장소_뒤_숙소로_돌아간다_TASK_006_Q15', async () => {
+    // 마지막 핀(19:00 끝) 뒤에는 go_home_min(T-08, 25분) 동안 숙소 쪽으로, 그 뒤 숙소. 마지막 장소에 머물지 않는다
+    const withHome = rehearsalView({ subs: [t08()] });
+    nowReply = () => json(200, withHome);
+    checkReply = (sent) => json(200, { ...withHome, at: body(sent).at });
+    await toRehearsal();
+    await barTo((19 * 60 + 30 - 600) / 600); // 19:30 = 마지막 끝 19:00 + 25분 뒤
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T19:30:00`));
+    const sent = body(checks()[checks().length - 1]);
+    expect({ lat: sent.lat, lng: sent.lng }).toEqual({ lat: plannedDay.lodging.lat, lng: plannedDay.lodging.lng });
+    const lastPin = withHome.pins[withHome.pins.length - 1];
+    expect({ lat: sent.lat, lng: sent.lng }).not.toEqual({ lat: lastPin.lat, lng: lastPin.lng });
+  });
+
+  test('T14_S13_5_연습_위치는_마지막_장소_뒤_go_home_min의_절반이면_가운데', async () => {
+    const withHome = rehearsalView({ subs: [t08({ go_home_min: 20 })] });
+    nowReply = () => json(200, withHome);
+    checkReply = (sent) => json(200, { ...withHome, at: body(sent).at });
+    await toRehearsal();
+    await barTo((19 * 60 + 10 - 600) / 600); // 19:10 = 끝 19:00 + 10분 (20분의 절반)
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T19:10:00`));
+    const sent = body(checks()[checks().length - 1]);
+    const lastPin = withHome.pins[withHome.pins.length - 1];
+    expect(sent.lat as number).toBeCloseTo((lastPin.lat + plannedDay.lodging.lat) / 2, 9);
+    expect(sent.lng as number).toBeCloseTo((lastPin.lng + plannedDay.lodging.lng) / 2, 9);
   });
 
   test('T14_E2_미리_걸어_보기의_누르는_높이는_44_이상', async () => {

@@ -633,6 +633,32 @@ describe('§10 Q7 오래된 위치', () => {
     await settleAll();
   };
 
+  test('T14_S13_7_마지막_위치가_120초보다_오래되면_시계_확인은_위치_없이_보낸다', async () => {
+    // §13 7: 30초 확인(시계)에 마지막 위치를 싣되, 120초보다 오래됐으면 위치 없이 (§10 Q7과 같은 기준)
+    await startHome();
+    await openToday();
+    await walk(HERE); // 좋은 위치 한 번 (지금 잰 값)
+    await waitFor(() => expect(checksWith(HERE).length).toBeGreaterThanOrEqual(1)); // 시험 자체 확인
+    locationFake.answerOld(HERE, 10 * 60_000); // 그 뒤 폰은 예전 값만 준다 (새 위치 없음)
+    const sentAt: { ms: number; sent: Sent }[] = [];
+    const t0 = Date.now();
+    let seen = server.requests.length;
+    for (let step = 1; step <= 10; step += 1) {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(30_000);
+      });
+      await settleAll();
+      for (const sent of server.requests.slice(seen)) sentAt.push({ ms: Date.now() - t0, sent });
+      seen = server.requests.length;
+    }
+    const late = sentAt.filter(({ ms, sent }) => ms >= 150_000 && sent.method === 'POST' && sent.path === `/days/${TODAY}/check`);
+    expect(late.length).toBeGreaterThan(0); // 시험 자체 확인: 시계로 계속 묻는다
+    for (const { sent } of late) {
+      expect(field(sent, 'lat')).toBeUndefined();
+      expect(field(sent, 'lng')).toBeUndefined();
+    }
+  });
+
   test('T14_Q7_1분마다_앱이_지금_위치를_직접_다시_잰다', async () => {
     locationFake.stayAt(HERE);
     await startHome();

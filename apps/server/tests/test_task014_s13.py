@@ -129,3 +129,123 @@ def test_T14_S13_5_경계_위치_있는_다음_장소로는_지금처럼_늦어�
     leave = minutes_of(following["start"]) - following["travel_min"]
     view = check(osaka, day_id, date, hhmm(leave + 20), near(here))
     assert view["event"] is not None and view["event"]["delay_min"] == 20
+
+
+# =====================================================================
+# §13 3 인코딩 키: 막는 쪽(400)과 로그(쿼리 통째로 지움)가 키를 다르게 읽지 않게
+# =====================================================================
+
+COORDS = ("34.987654", "135.123457")
+ENCODED = [
+    (f"%6Cat={COORDS[0]}&lng={COORDS[1]}", "lat_퍼센트_인코딩"),
+    (f"lat={COORDS[0]}&%6Cng={COORDS[1]}", "lng_퍼센트_인코딩"),
+    (f"%256Cat={COORDS[0]}", "lat_이중_인코딩"),
+    (f"%256C%2561t={COORDS[0]}", "lat_이중_인코딩_두_글자"),
+    (f"LAT={COORDS[0]}&Lng={COORDS[1]}", "대문자"),
+    (f"%4C%41%54={COORDS[0]}", "대문자_퍼센트_인코딩"),
+]
+
+
+@pytest.mark.parametrize("query", [q for q, _ in ENCODED], ids=[i for _, i in ENCODED])
+@pytest.mark.parametrize("path", ["/health", "/trips/current", "/없는-길"])
+def test_T14_S13_3_인코딩한_lat·lng_키도_400(osaka, query, path):
+    response = osaka.client.get(f"{path}?{query}")
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    assert COORDS[0] not in response.text and COORDS[1] not in response.text
+
+
+ACCESS = [
+    *[(f"/days/d1/now?at=2026-12-08T12:00:00&{q}", i) for q, i in ENCODED],
+    (f"/days/d1/check?lat={COORDS[0]}&lng={COORDS[1]}", "그대로"),
+    (f"/health?x=1&lat={COORDS[0]}#frag", "다른_칸과_조각"),
+    ("/trips/current?at=2026-12-08T12:00:00", "위치_없는_쿼리"),
+]
+
+
+@pytest.mark.parametrize("path", [p for p, _ in ACCESS], ids=[i for _, i in ACCESS])
+@pytest.mark.parametrize("status", [400, 200])
+def test_T14_S13_3_접근_로그_요청_줄에는_길만_남고_쿼리는_통째로_없다(osaka, caplog, path, status):
+    # §13 3: 쿼리 문자열을 통째로 지운다 (가리기 *** 대신). uvicorn 요청 줄 모양 그대로 남겨 서버가 단 거르개를 본다 (TASK-010 E5와 같은 방식)
+    caplog.set_level(logging.DEBUG)
+    method = "POST" if "check" in path else "GET"
+    logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:50000", method, path, "1.1", status)
+    lines = [r.getMessage() for r in caplog.records if r.name == "uvicorn.access"]
+    assert lines, "시험 자체 확인: 요청 줄은 남는다"
+    bare = path.split("?")[0]
+    assert f"{method} {bare} HTTP/1.1" in lines[0], lines[0]  # 길만
+    assert "?" not in lines[0] and "=" not in lines[0].split('"')[1], lines[0]  # 쿼리 통째로 없음
+    assert COORDS[0] not in lines[0] and COORDS[1] not in lines[0]
+
+
+# =====================================================================
+# §12 순서 보강 (backend 보고: _replay의 영업 확인 뒤 continue -> break, 닫힘 짝 조건 and -> or)
+# "연습 기록 적용 = 실제 적용": 영업 확인(열었어) 뒤에 이어지는 행동이 있는 조합
+# =====================================================================
+
+
+def late_check_day(env) -> str:
+    """P02에서 늦는 동안 P03(미확인)의 영업 확인 창이 열려 있는 날.
+    1번 P01 10:12~12:00, 2번 P02 12:20~14:00, 3번 P03 14:30~19:00(이동 30 -> 출발 14:00, 확인 창 13:30 ≤ at < 14:30).
+    P02에서 14:20이면 20분 늦음(높음, 대안) + P03 T-05가 함께 있다."""
+    from test_task008_visit import unverified
+    from trip_helpers import item, plant, spot
+
+    places = {"P01": spot("P01", 1.0), "P02": spot("P02", 2.0), "P03": unverified("P03", km=3.0)}
+    items = [item(1, "P01", "10:12", "12:00", 12), item(2, "P02", "12:20", "14:00", 20), item(3, "P03", "14:30", "19:00", 30)]
+    return plant(env, items, places)
+
+
+def env_check(env, day_id: str, clock: str, position, rehearsal: bool = False, actions=None):
+    from trip_helpers import at_time
+
+    body = {"at": at_time(clock)}
+    if position is not None:
+        body["lat"], body["lng"] = position
+    if rehearsal:
+        body["rehearsal"] = True
+        if actions is not None:
+            body["rehearsal_actions"] = actions
+    return env.client.post(f"/days/{day_id}/check", json=body)
+
+
+@pytest.mark.parametrize("order", ["열었어_다음_고른_대안", "고른_대안_다음_열었어", "열었어_다음_그대로_갈래"])
+def test_T14_S13_순서_열었어가_섞인_기록도_실제로_같은_순서로_한_것과_같다(env, order):
+    from test_task014_location_rehearsal import act_accept, act_dismiss, act_visit, everything, same_shape
+    from trip_helpers import at_place, at_time
+
+    P02 = at_place(2.0)
+
+    day_id = late_check_day(env)
+    first = env_check(env, day_id, "14:20", P02, rehearsal=True)
+    assert first.status_code == 200, first.text
+    view = first.json()
+    assert view["event"] and view["event"]["proposals"]  # 시험 자체 확인: 높음 + 대안
+    event = view["event"]
+    opened = act_visit("P03", day_id, at_time("14:20"), was_open=True)
+    actions = {
+        "열었어_다음_고른_대안": [opened, act_accept(event)],
+        "고른_대안_다음_열었어": [act_accept(event), opened],
+        "열었어_다음_그대로_갈래": [opened, act_dismiss(event)],
+    }[order]
+    before = everything(env, "memory")
+    practiced = env_check(env, day_id, "14:25", P02, rehearsal=True, actions=actions)
+    assert everything(env, "memory") == before
+    # 같은 순서를 실제로
+    real_event = env_check(env, day_id, "14:20", P02).json()["event"]
+    results = []
+    for action in actions:
+        if action["type"] == "visit_check":
+            results.append(env.client.post("/places/P03/visit-checks", json={"day_id": day_id, "at": action["at"], "was_open": True}))
+        elif action["type"] == "accept":
+            results.append(env.client.post(f"/proposals/{real_event['proposals'][0]['proposal_id']}/accept"))
+        else:
+            results.append(env.client.post(f"/events/{real_event['event_id']}/dismiss"))
+    if actions[0]["type"] == "visit_check":
+        assert results[0].status_code == 200, results[0].text  # 시험 자체 확인: 14:20엔 P03이 영업 확인 대상 (T-04 메인이라 카드로는 안 보일 수 있다)
+    failed = next((r for r in results if r.status_code != 200), None)
+    if failed is not None:  # 실제로 중간에 막히면 연습도 같은 이유로 막힌다
+        assert practiced.status_code == failed.status_code, (practiced.text, failed.text)
+        return
+    assert practiced.status_code == 200, practiced.text
+    assert same_shape(practiced.json()) == same_shape(env_check(env, day_id, "14:25", P02).json())

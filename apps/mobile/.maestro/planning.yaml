@@ -11,6 +11,10 @@ appId: com.csh0616.tripfriends
 ---
 - launchApp:
     clearState: true
+    # TASK-014 §13 1: 개발 메뉴의 떠 있는 버튼(톱니)이 화면을 덮지 않게 끈다. expo-dev-menu가 UserDefaults 키
+    # EXDevMenuShowFloatingActionButton(DevMenuPreferences.swift)을 읽고, iOS 실행 인자는 UserDefaults(인자 영역)로 들어간다
+    arguments:
+      EXDevMenuShowFloatingActionButton: false
 # 개발 빌드는 처음에 개발 서버 주소를 물어본다: 링크로 바로 연결한다 (disableOnboarding=1: 처음 안내 시트 없음)
 - openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1
 - tapOn:
