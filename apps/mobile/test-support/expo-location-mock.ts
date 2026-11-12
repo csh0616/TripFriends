@@ -10,7 +10,7 @@
 //   startLocationUpdatesAsync / stopLocationUpdatesAsync / hasStartedLocationUpdatesAsync (백그라운드 위치. 앱이 부르면 안 된다)
 //   Accuracy·PermissionStatus 열거값, useForegroundPermissions 훅
 type Status = 'granted' | 'denied' | 'undetermined';
-type Coords = { latitude: number; longitude: number; accuracy: number | null; altitude: number | null; altitudeAccuracy: number | null; heading: number | null; speed: number | null };
+type Coords = { latitude: number; longitude: number; accuracy: number | null | undefined; altitude: number | null; altitudeAccuracy: number | null; heading: number | null; speed: number | null };
 type LocationObject = { coords: Coords; timestamp: number; mocked?: boolean };
 type Watcher = { callback: (location: LocationObject) => void; onError?: (reason: string) => void; removed: boolean };
 
@@ -21,6 +21,8 @@ const state = {
   services: true,
   last: null as LocationObject | null,
   watchers: [] as Watcher[],
+  // getCurrentPositionAsync가 돌려줄 값 (TASK-014 §10 Q7: 1분마다 앱이 지금 위치를 다시 잰다). null이면 마지막으로 잰 값(없으면 다음 값을 기다림)
+  current: null as null | (() => LocationObject),
   waiting: [] as ((location: LocationObject) => void)[], // 아직 잰 위치가 없을 때 getCurrentPositionAsync는 다음 위치를 기다린다 (실제처럼)
 };
 
@@ -36,8 +38,10 @@ const count = (...names: string[]) => calls.filter((name) => names.includes(name
 
 const answer = (status: Status) => ({ status, granted: status === 'granted', canAskAgain: state.canAskAgain, expires: 'never' as const });
 
-const toLocation = (spot: { lat: number; lng: number; accuracy?: number | null; timestamp?: number }): LocationObject => ({
-  coords: { latitude: spot.lat, longitude: spot.lng, accuracy: spot.accuracy ?? 10, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
+type SpotIn = { lat: number; lng: number; accuracy?: number | null; timestamp?: number };
+/** accuracy 칸을 아예 안 주면 10m. null·undefined를 직접 주면 그대로 (TASK-014 §10 Q7: 정확도 값 없음 = 버림) */
+const toLocation = (spot: SpotIn): LocationObject => ({
+  coords: { latitude: spot.lat, longitude: spot.lng, accuracy: 'accuracy' in spot ? spot.accuracy : 10, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
   timestamp: spot.timestamp ?? Date.now(),
 });
 
@@ -81,6 +85,10 @@ export const watchPositionAsync = tracked('watchPositionAsync', async (_options:
 });
 export const getCurrentPositionAsync = tracked('getCurrentPositionAsync', async (_options?: unknown) => {
   if (!usable()) throw new Error('Current location is unavailable');
+  if (state.current) {
+    state.last = state.current();
+    return state.last;
+  }
   if (state.last) return state.last;
   return new Promise<LocationObject>((resolve) => state.waiting.push(resolve));
 });
@@ -104,6 +112,7 @@ export const locationFake = {
     state.last = null;
     state.watchers = [];
     state.waiting = [];
+    state.current = null;
     calls.length = 0;
   },
   /** 이미 정해진 권한 상태 (앱을 켜기 전 iOS 설정 상태) */
@@ -119,7 +128,16 @@ export const locationFake = {
     state.services = enabled;
   },
   /** 기기가 새 위치를 잰다: 살아 있는 watch 구독마다 알린다 */
-  emit(spot: { lat: number; lng: number; accuracy?: number | null; timestamp?: number }) {
+  /** 가만히 있는 사람: 앱이 지금 위치를 물을 때마다 같은 자리를 **지금 잰 값**(timestamp = 그때의 Date.now())으로 준다 */
+  stayAt(spot: { lat: number; lng: number; accuracy?: number | null }) {
+    state.current = () => toLocation({ ...spot, timestamp: Date.now() });
+  },
+  /** 폰이 예전 값을 돌려준다: 물을 때마다 ageMs만큼 오래된 timestamp */
+  answerOld(spot: { lat: number; lng: number; accuracy?: number | null }, ageMs: number) {
+    state.current = () => toLocation({ ...spot, timestamp: Date.now() - ageMs });
+  },
+  currentCount: () => count('getCurrentPositionAsync'),
+  emit(spot: SpotIn) {
     const location = toLocation(spot);
     state.last = location;
     for (const watcher of state.watchers) if (!watcher.removed) watcher.callback(location);

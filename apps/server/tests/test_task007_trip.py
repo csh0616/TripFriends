@@ -41,6 +41,7 @@ from trip_helpers import (
     chosen,
     dismiss,
     fixed_later_day,
+    get_now,
     infeasible_day,
     item,
     now,
@@ -255,16 +256,18 @@ def test_B4_오류_요청은_아무것도_바꾸지_않는다(env):
     ids=["장소_위치", "먼_위치", "lat만", "lng만", "형식_오류", "범위_밖"],
 )
 @pytest.mark.parametrize("clock", ["12:10", "12:20", "13:20"])
-def test_B4_GET_now의_위치_쿼리는_무시해_없을_때와_같다(env, params, clock):
+def test_B4_GET_now의_위치_쿼리는_400이고_없을_때의_화면은_그대로(env, params, clock):
+    # TASK-014 §10 Q2(B1): 주소창에 lat·lng가 있으면 어느 길이든 400. 전에는 "무시하고 없을 때와 같다"(200)였다 (PM 승인으로 바꿈)
     day_id = plain_day(env)
-    assert now(env, day_id, clock, **params) == now(env, day_id, clock)
+    before = now(env, day_id, clock)
+    assert get_now(env, day_id, clock, **params).status_code == 400
+    assert now(env, day_id, clock) == before
 
 
 def test_B4_GET_now는_위치가_있어도_감지하지_않는다(env):
+    # TASK-014 §10 Q2(B1): 주소창 위치는 200 대신 400 (PM 승인으로 바꿈). 감지·사건도 없다
     day_id = plain_day(env)
-    view = now(env, day_id, "12:20", lat=P01[0], lng=P01[1])
-    assert view["event"] is None
-    assert view["position"] is None
+    assert get_now(env, day_id, "12:20", lat=P01[0], lng=P01[1]).status_code == 400
     assert checked(env, day_id, "12:21")["event"] is None  # 사건이 생기지 않았다
 
 

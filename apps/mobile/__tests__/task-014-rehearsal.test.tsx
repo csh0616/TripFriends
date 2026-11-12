@@ -7,11 +7,15 @@
 //   날짜 목록 계획 완료 줄의 [미리 걸어 보기] = testID `rehearse-{day_id}`, 글자 "미리 걸어 보기". 오늘·지난 날·계획 전 날·데모 여행(is_demo)엔 없다
 //   누르면 여행 중 화면(testID trip-now-screen)과 같은 화면 + 글자 "연습 중" + [연습 끝내기]. 첫 요청은 GET /days/{id}/now (읽기)
 //   연습 중 서버에 묻는 것은 POST /days/{id}/check 본문 {at, lat, lng, rehearsal: true} 뿐 (서버 쓰기 0). 위치는 fakePosition(코스대로)
-//   시계 막대는 데모 시계 재사용 = 기존 testID demo-plus-10([+10분]) · demo-play([재생]). 접힌 채로 열리면 demo-toggle로 연다 ([보드]: 처음부터 펼칠지 모름)
+//   시계 막대는 데모 시계 재사용 = 기존 testID demo-plus-10([+10분]) · demo-play([재생]) · demo-time(시각). §10 Q13: 처음부터 펼쳐져 있고 하루 시작 시각부터
+//   §10 Q5: 계산하는 요청(check, [닫혔어] 뒤 대안 = POST /places/{place_id}/visit-checks 본문 {day_id, at, was_open:false})은 본문에 rehearsal: true.
+//     고르고 확정하는 행동([이걸로 할래] 반영, [그대로 갈래], [열었어] = 영업 확인했어)은 서버 요청 0, 화면에서만 바뀐다
+//     ([이걸로 할래] = 고른 제안의 일정으로 남은 화면, [열었어] = 그 장소 칩이 화면에서만 "확인됨"). 연습 한 번에 첫 행동에만 안내 한 줄
 //   [대안 고르기]·[그대로 갈래]·[열었어]/[닫혔어] = 기존 testID proposal-{id}·select-confirm·event-dismiss·visit-open·visit-closed
 //   연습 중 실패 = 글자 "지금 연습을 못 해" + [다시](기존 Notice의 retry-button)
-// [보드] 표시 줄은 §D 보드가 정해지면 글자 자리·누르는 길이 바뀔 수 있다 (요약표).
+// §9·§10(v1.2)으로 문구·규칙이 확정돼 [보드] 표시는 뺐다. 누르는 영역 44(E2·task-014-design §2)는 height·minHeight + hitSlop으로 센다.
 import { act, render, screen, waitFor, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { fakePosition } from '@/lib/fake-position';
@@ -99,10 +103,24 @@ async function toRehearsal() {
   await settleAll();
 }
 
-/** 시계 막대의 [+10분]. 접힌 채면 [데모]로 편다 ([보드]) */
+/** 시계 막대의 [+10분] (§10 Q13: 처음부터 펼쳐져 있다) */
 async function plusTen() {
-  if (!screen.queryByTestId('demo-plus-10')) await tap(await screen.findByTestId('demo-toggle'));
   await tap(await screen.findByTestId('demo-plus-10'));
+}
+
+type Host = { props: Record<string, any>; parent: Host | null };
+const styleOf = (host: Host) => (StyleSheet.flatten(host.props.style) ?? {}) as Record<string, any>;
+const pressableOf = (host: Host): Host => {
+  for (let now: Host | null = host; now; now = now.parent) if (typeof now.props.onClick === 'function' || typeof now.props.onPress === 'function') return now;
+  return host;
+};
+/** 누를 수 있는 높이: height·minHeight + hitSlop (task-010-new-trip-confirm의 reachHeight와 같은 셈) */
+function reachHeight(host: Host): number {
+  const style = styleOf(host);
+  const slop = host.props.hitSlop ?? {};
+  const extra = typeof slop === 'number' ? 2 * slop : Number(slop.top ?? 0) + Number(slop.bottom ?? 0);
+  const numeric = [style.height, style.minHeight].filter((v): v is number => typeof v === 'number');
+  return (numeric.length ? Math.max(...numeric) : 0) + extra;
 }
 
 const minutesOf = (at: unknown) => {
@@ -132,7 +150,7 @@ afterEach(() => {
 // =====================================================================
 
 describe('C1 들어가는 곳: 계획 완료 날 줄만', () => {
-  test('T14_C1_계획_완료_날에만_미리_걸어_보기가_있다_오늘·지난_날·계획_전엔_없다 [보드]', async () => {
+  test('T14_C1_계획_완료_날에만_미리_걸어_보기가_있다_오늘·지난_날·계획_전엔_없다', async () => {
     await startHome();
     const button = await screen.findByTestId(`rehearse-${PLANNED}`);
     expect(within(button).getByText('미리 걸어 보기')).toBeTruthy();
@@ -179,7 +197,7 @@ describe('C1 들어가는 곳: 계획 완료 날 줄만', () => {
 // =====================================================================
 
 describe('C2·C3 연습 화면', () => {
-  test('T14_C2_여행_중_화면에_연습_중과_연습_끝내기가_보인다 [보드]', async () => {
+  test('T14_C2_여행_중_화면에_연습_중과_연습_끝내기가_보인다', async () => {
     await toRehearsal();
     expect(screen.getByText('연습 중')).toBeTruthy();
     expect(screen.getByText('연습 끝내기')).toBeTruthy();
@@ -237,7 +255,7 @@ describe('C2·C3 연습 화면', () => {
     for (const sent of server.requests) expect(sent.path).not.toMatch(/[?&](lat|lng|rehearsal)=/);
   });
 
-  test('T14_C2_연습_끝내기를_누르면_날짜_목록이_그대로_나온다_AC_5 [보드]', async () => {
+  test('T14_C2_연습_끝내기를_누르면_날짜_목록이_그대로_나온다_AC_5', async () => {
     await toRehearsal();
     await plusTen();
     await tap(await screen.findByText('연습 끝내기'));
@@ -298,15 +316,43 @@ describe('C4 연습 중 행동', () => {
     expect(sentTo('POST /events/')).toEqual([]);
   });
 
-  test.each(['visit-open', 'visit-closed'])('T14_C4_영업_확인_답(%s)도_서버에_보내지_않는다', async (id) => {
-    const view = rehearsalView({ main: t05, subs: [t02()] });
+  test('T14_C4_Q5_열었어(영업_확인했어)는_서버에_보내지_않고_칩만_화면에서_확인됨', async () => {
+    const view = rehearsalView({ main: t05, subs: [t02()] }); // t02의 다음 장소 = D02 (미확인)
     nowReply = () => json(200, view);
     checkReply = (sent) => json(200, { ...view, at: body(sent).at });
     await toRehearsal();
-    await tap(await screen.findByTestId(id));
+    expect(within(screen.getByTestId('card-T-02')).getByText('미확인')).toBeTruthy(); // 시험 자체 확인
+    await tap(await screen.findByTestId('visit-open'));
     expect(await screen.findByText(REHEARSAL_NOTE)).toBeTruthy();
     expect(sentTo('POST /places/')).toEqual([]);
+    await waitFor(() => expect(within(screen.getByTestId('card-T-02')).getByText('확인됨')).toBeTruthy());
     for (const sent of writes()) expect(body(sent).rehearsal).toBe(true);
+  });
+
+  test('T14_C4_Q5_닫혔어는_대안_계산이라_visit_checks를_rehearsal_true로_보낸다', async () => {
+    const view = rehearsalView({ main: t05, subs: [t02()] });
+    nowReply = () => json(200, view);
+    checkReply = (sent) => json(200, { ...view, at: body(sent).at });
+    server.on('POST /places/D02/visit-checks', json(200, rehearsalView()));
+    await toRehearsal();
+    await tap(await screen.findByTestId('visit-closed'));
+    await waitFor(() => expect(sentTo('POST /places/D02/visit-checks')).toHaveLength(1));
+    const sent = body(sentTo('POST /places/D02/visit-checks')[0]);
+    expect(sent).toMatchObject({ day_id: PLANNED, was_open: false, rehearsal: true });
+    expect(String(sent.at).startsWith(PLANNED_DATE)).toBe(true);
+    for (const one of writes()) expect(body(one).rehearsal).toBe(true);
+  });
+
+  test('T14_C4_Q5_고른_대안의_일정으로_남은_연습_화면이_바뀐다', async () => {
+    const view = delayedView({ day: plannedDay });
+    nowReply = () => json(200, view);
+    checkReply = (sent) => json(200, { ...view, at: body(sent).at });
+    await toRehearsal();
+    expect(screen.queryByText('서버_제안_장소')).toBeNull(); // 고르기 전에는 제안 일정이 화면에 없다 (TASK-007 C6)
+    await tap(await screen.findByTestId('proposal-prop-relaxed'));
+    await tap(screen.getByTestId('select-confirm'));
+    expect((await screen.findAllByText('서버_제안_장소')).length).toBeGreaterThan(0);
+    expect(sentTo('POST /proposals/')).toEqual([]);
   });
 
   test('T14_C4_연습에서_고른_뒤_끝내고_실제_오늘이_아닌_그날을_다시_열어도_저장_요청은_0', async () => {
@@ -386,11 +432,51 @@ describe('§9 답 7·4: 안내 한 줄은 연습 한 번에 처음 한 번만, [
 });
 
 // =====================================================================
+// §10 Q13 연습 시계 · E2 누르는 영역
+// =====================================================================
+
+describe('§10 Q13 연습 시계 · E2 누르는 영역', () => {
+  test('T14_Q13_연습_시계는_처음부터_펼쳐져_있다', async () => {
+    await toRehearsal();
+    expect(screen.getByTestId('demo-plus-10')).toBeTruthy();
+    expect(screen.getByTestId('demo-play')).toBeTruthy();
+  });
+
+  test('T14_Q13_연습은_하루_시작_시각부터', async () => {
+    await toRehearsal();
+    await waitFor(() => expect(within(screen.getByTestId('demo-time')).getByText(plannedDay.start)).toBeTruthy());
+    const asked = [...sentTo(`GET /days/${PLANNED}/now`), ...checks()];
+    const last = asked[asked.length - 1];
+    const at = last.method === 'GET' ? decodeURIComponent(last.path.split('at=')[1] ?? '') : String(body(last).at);
+    expect(at.startsWith(`${PLANNED_DATE}T${plannedDay.start}`)).toBe(true);
+  });
+
+  test('T14_E2_미리_걸어_보기의_누르는_높이는_44_이상', async () => {
+    await startHome();
+    const button = pressableOf((await screen.findByTestId(`rehearse-${PLANNED}`)) as unknown as Host);
+    expect(reachHeight(button)).toBeGreaterThanOrEqual(44);
+  });
+
+  test('T14_E2_일정_추가_알약은_보이는_36_그대로_누르는_높이는_44_이상', async () => {
+    await startHome();
+    const add = pressableOf((await screen.findByTestId('add-fixed-day-t4')) as unknown as Host);
+    expect(styleOf(add).height).toBe(36);
+    expect(reachHeight(add)).toBeGreaterThanOrEqual(44);
+  });
+
+  test('T14_E2_연습_끝내기의_누르는_높이는_44_이상', async () => {
+    await toRehearsal();
+    const end = pressableOf(screen.getByText('연습 끝내기') as unknown as Host);
+    expect(reachHeight(end)).toBeGreaterThanOrEqual(44); // task-014-design §2 reh-band: 눌리는 44 · 보이는 36
+  });
+});
+
+// =====================================================================
 // §6 연습 중 서버 실패 -> "지금 연습을 못 해" + [다시], 실제 여행은 그대로
 // =====================================================================
 
 describe('§6 연습 중 실패', () => {
-  test('T14_S6_연습_check가_500이면_지금_연습을_못_해와_다시 [보드]', async () => {
+  test('T14_S6_연습_check가_500이면_지금_연습을_못_해와_다시', async () => {
     checkReply = () => apiError(500, 'INTERNAL_ERROR');
     await toRehearsal();
     await waitFor(() => expect(checks().length).toBeGreaterThanOrEqual(1));
@@ -426,8 +512,8 @@ describe('§6 연습 중 실패', () => {
     for (const sent of writes()) expect(body(sent).rehearsal).toBe(true);
   });
 
-  test('T14_S6_연습_중_연결이_끊겨도_연습_못_함_안내 [보드]', async () => {
-    // 추론: §6 "연습 중 서버 실패"에 연결 끊김도 넣었다 (질문 목록)
+  test('T14_S6_연습_중_연결이_끊겨도_연습_못_함_안내', async () => {
+    // §10 Q12: 연결 끊김도 "지금 연습을 못 해"
     checkReply = () => networkDown;
     await toRehearsal();
     expect(await screen.findByText(REHEARSAL_FAILED)).toBeTruthy();

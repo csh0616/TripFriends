@@ -585,3 +585,166 @@ def test_T14_S6_연습이_만든_제안_id로는_실제_반영할_수_없다(wor
     response = client.post(f"/proposals/{proposal}/accept")
     assert response.status_code == 404, response.text
     assert everything(osaka, kind) == before
+
+
+# =====================================================================
+# §10 Q2 B1 모든 길: 주소창에 lat·lng가 있으면 어느 길이든 400 (서버 앞단 한 곳)
+# =====================================================================
+
+QUERY_COORDS = (34.987654, 135.123457)
+COORD_QUERY = f"lat={QUERY_COORDS[0]}&lng={QUERY_COORDS[1]}"
+BODY_CODES = {"VALIDATION_ERROR", "INVALID_REQUEST"}  # §10 Q3: 서버에 이미 있는 본문 검증 400 code (새 code 없음)
+
+
+def routes(osaka: Osaka) -> list[tuple[str, str, dict | None]]:
+    """(메서드, 경로(쿼리 없이), 본문). 계획 완료 날 하나를 만들어 그 날·여행의 길을 고른다."""
+    day_id, date = planned_day(osaka)
+    trip_id = osaka.client.get("/trips/current").json()["trip_id"]
+    return [
+        ("GET", f"/days/{day_id}/now?at={at_of(date, '12:00')}&", None),
+        ("POST", f"/days/{day_id}/check?", {"at": at_of(date, "12:00")}),
+        ("GET", f"/days/{day_id}/course?", None),
+        ("GET", "/trips/current?", None),
+        ("GET", f"/trips/{trip_id}?", None),
+        ("POST", "/places/osaka-fake-castle/visit-checks?", {"day_id": day_id, "at": at_of(date, "12:00"), "was_open": True}),
+        ("GET", "/health?", None),
+        ("GET", "/없는-길?", None),
+    ]
+
+
+ROUTE_IDS = ["GET_now", "POST_check", "GET_course", "GET_trips_current", "GET_trip", "POST_visit_checks", "GET_health", "없는_경로"]
+
+
+def send(client: TestClient, method: str, path: str, payload):
+    return client.request(method, path, json=payload) if payload is not None else client.request(method, path)
+
+
+@pytest.mark.parametrize("index", range(len(ROUTE_IDS)), ids=ROUTE_IDS)
+@pytest.mark.parametrize("query", [COORD_QUERY, f"lat={QUERY_COORDS[0]}", f"lng={QUERY_COORDS[1]}", "lat=&lng="], ids=["둘_다", "lat만", "lng만", "빈_값"])
+def test_T14_Q2_B1_어느_길이든_주소창에_lat·lng가_있으면_400이고_저장은_0(mem, index, query):
+    method, path, payload = routes(mem)[index]
+    before = everything(mem, "memory")
+    response = send(mem.client, method, path + query, payload)
+    assert response.status_code == 400, response.text
+    error = response.json()["error"]
+    assert error["code"] in BODY_CODES and error["message"]
+    assert not leaks(response.text, QUERY_COORDS)
+    assert everything(mem, "memory") == before
+
+
+def test_T14_Q2_B1_400_code는_모든_길에서_하나다(mem):
+    # "서버 앞단 한 곳에서" (§10 Q2) -> 길마다 다른 code가 나오지 않는다
+    codes = {send(mem.client, m, p + COORD_QUERY, b).json()["error"]["code"] for m, p, b in routes(mem)}
+    assert len(codes) == 1 and codes <= BODY_CODES, codes
+
+
+@pytest.mark.parametrize("index", range(len(ROUTE_IDS) - 1), ids=ROUTE_IDS[:-1])
+def test_T14_Q2_B1_경계_lat·lng가_없으면_같은_길은_400이_아니다(mem, index):
+    method, path, payload = routes(mem)[index]
+    response = send(mem.client, method, path.rstrip("?&"), payload)
+    assert response.status_code != 400, response.text
+
+
+# =====================================================================
+# §10 Q2-1 접근 로그(uvicorn 요청 줄)에 쿼리 좌표 0
+# 고른 방법: TestClient는 uvicorn을 거치지 않아 요청 줄이 찍히지 않는다. uvicorn은 요청 줄을 `uvicorn.access` 로거에
+# '%s - "%s %s HTTP/%s" %d' (클라이언트, 메서드, 경로+쿼리, 판, 상태) 모양으로 남긴다 -> 서버가 켜진 뒤(lifespan) 그 로거에
+# 같은 모양으로 남겨 서버가 단 거르개를 검사한다 (test_task010_carry E5와 같은 방식, 400 응답 줄·여러 모양으로 넓힘).
+# 실제 줄 모양은 test-writer가 8010에 서버를 잠깐 띄워 한 번 확인했다 (커밋하지 않음, 보고서에 적음).
+# =====================================================================
+
+ACCESS_PATHS = [
+    (f"/days/d1/now?at=2026-12-08T12:00:00&{COORD_QUERY}", "GET_now"),
+    (f"/days/d1/check?{COORD_QUERY}", "POST_check_쿼리"),
+    (f"/health?{COORD_QUERY}", "health"),
+    (f"/없는-길?{COORD_QUERY}", "없는_경로"),
+    (f"/trips/current?LAT={QUERY_COORDS[0]}&Lng={QUERY_COORDS[1]}", "대소문자"),
+    (f"/trips/current?lat={QUERY_COORDS[0]}&lat={QUERY_COORDS[0]}&lng={QUERY_COORDS[1]}", "같은_칸_두_번"),
+    (f"/trips/current?x=1&lng={QUERY_COORDS[1]}&lat={QUERY_COORDS[0]}#frag", "순서_바뀜"),
+]
+
+
+@pytest.mark.parametrize("path", [p for p, _ in ACCESS_PATHS], ids=[i for _, i in ACCESS_PATHS])
+@pytest.mark.parametrize("status", [400, 200, 404])
+def test_T14_Q2_1_접근_로그_요청_줄에_쿼리_좌표가_없다(mem, caplog, path, status):
+    caplog.set_level(logging.DEBUG)
+    method = "POST" if "check" in path else "GET"
+    logging.getLogger("uvicorn.access").info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:50000", method, path, "1.1", status)
+    lines = [r.getMessage() for r in caplog.records if r.name == "uvicorn.access"]
+    assert lines, "시험 자체 확인: 요청 줄은 남는다"
+    assert path.split("?")[0] in lines[0]  # 경로는 남고
+    assert not [line for line in lines if leaks(line, QUERY_COORDS)]  # 좌표 값만 없다
+
+
+def test_T14_Q2_1_실제_요청의_400도_서버_로그에_쿼리_좌표가_없다(mem, caplog):
+    # TestClient 길로 갈 수 있는 서버 로그 전부(앱 로거). 테스트 클라이언트 자신의 기록(httpx)은 서버 로그가 아니라 뺀다
+    caplog.set_level(logging.DEBUG)
+    for method, path, payload in routes(mem):
+        send(mem.client, method, path + COORD_QUERY, payload)
+    assert not [t for t in server_messages(caplog) if leaks(t, QUERY_COORDS)]
+
+
+# =====================================================================
+# §10 Q5 [닫혔어] 뒤 대안 계산도 연습이면 되돌린다: POST /places/{place_id}/visit-checks 본문 rehearsal: true
+# =====================================================================
+
+
+def closed_rehearsal(env, rehearsal: bool | None):
+    """닫혔어 한 번 (rehearsal None = 칸 없음)."""
+    from test_task008_visit import ALTS, visit_check, visit_day
+
+    day_id = visit_day(env, extra=ALTS)
+    extra = {} if rehearsal is None else {"rehearsal": rehearsal}
+    return day_id, visit_check(env, day_id, "P02", "11:40", False, **extra)
+
+
+def test_T14_Q5_연습의_닫혔어는_대안을_계산하고_전후_저장소가_같다(env):
+    from test_task008_visit import ALTS, visit_check, visit_day
+
+    day_id = visit_day(env, extra=ALTS)
+    before = everything(env, "memory")
+    response = visit_check(env, day_id, "P02", "11:40", False, rehearsal=True)
+    assert response.status_code == 200, response.text
+    assert response.json()["main"]["type"] == "T-06"  # 같은 계산: 닫힘 대안이 나온다
+    assert everything(env, "memory") == before
+    assert env.app.state.trip_repo.get_visit_check(day_id, "P02") is None  # 사용자 확인(영업 사실)도 남지 않는다
+
+
+def test_T14_Q5_같은_입력이면_연습과_실제의_닫혔어_응답이_같다(env):
+    from test_task008_visit import ALTS, visit_check, visit_day
+
+    day_id = visit_day(env, extra=ALTS)
+    practiced = visit_check(env, day_id, "P02", "11:40", False, rehearsal=True)
+    actual = visit_check(env, day_id, "P02", "11:40", False)
+    assert practiced.status_code == 200 and actual.status_code == 200
+    assert same_shape(practiced.json()) == same_shape(actual.json())
+
+
+def test_T14_Q5_경계_rehearsal_없는_닫혔어는_저장된다(env):
+    day_id, response = closed_rehearsal(env, None)
+    assert response.status_code == 200, response.text
+    assert env.app.state.trip_repo.get_visit_check(day_id, "P02") is not None
+
+
+def test_T14_Q5_연습의_닫혔어_대안_계산이_실패해도_500이고_그대로(quiet_visit_env, monkeypatch):
+    from test_task008_visit import ALTS, visit_check, visit_day
+
+    env = quiet_visit_env
+    day_id = visit_day(env, extra=ALTS)
+    before = everything(env, "memory")
+
+    def boom(*_a, **_k):
+        raise RuntimeError("대안 계산 강제 예외 (시험)")
+
+    monkeypatch.setattr("trip.service.TripService.visit_check", boom)
+    response = visit_check(env, day_id, "P02", "11:40", False, rehearsal=True)
+    assert response.status_code == 500
+    assert everything(env, "memory") == before
+
+
+@pytest.fixture
+def quiet_visit_env(env):
+    from auth_helpers import TESTER
+
+    env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
+    return env

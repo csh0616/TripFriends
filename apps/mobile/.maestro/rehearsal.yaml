@@ -1,7 +1,7 @@
 # TASK-014 §C·AC-5 (초안, test-writer): "이 날 미리 걸어 보기" 한 바퀴.
 #   빈 첫 화면 -> 7일 뒤 1박 2일 여행 만들기 -> 첫날 [알아서 짜 줘] -> [이걸로 할래] -> 날짜 목록(계획 완료)
 #   -> [미리 걸어 보기] -> "연습 중" -> 시계 [+10분] -> [연습 끝내기] -> 날짜 목록 그대로(계획 완료, [미리 걸어 보기] 그대로)
-# !! 보드(§D3·§D4) 확정 전 초안이다: [미리 걸어 보기]의 자리, "연습 중" 띠, 시계 막대가 처음부터 펼쳐지는지, [연습 끝내기] 자리가 바뀔 수 있다.
+# 초안: 보드(§D3·§D4)·§9·§10 답(v1.2)으로 문구·규칙은 확정. 실제 화면에서 돌려 본 적은 없다 (frontend 구현 뒤 reviewer가 확인).
 #    여기서 쓰는 글자는 문서(TASK-014 §C·§D)에 적힌 것만, 이름(testID)은 __tests__/task-014-rehearsal.test.tsx 머리말의 계약과 같다.
 #    frontend·reviewer가 보드에 맞춰 고치고 스크린샷(§D 목록)을 붙인다.
 # 전제와 실행은 create-trip.yaml과 같다 (로컬 Supabase + 점검 서버 8010, 가짜 오사카, clearState로 매번 새 익명 사용자).
@@ -110,14 +110,9 @@ appId: com.csh0616.tripfriends
 - assertNotVisible: "위치 켜기"
 - takeScreenshot: rehearsal-2-start
 
-# 시계 막대: 접혀 있으면 편다 (보드에 따라 처음부터 펼쳐질 수 있다)
-- runFlow:
-    when:
-      notVisible:
-        id: "demo-plus-10"
-    commands:
-      - tapOn:
-          id: "demo-toggle"
+# 시계 막대: 처음부터 펼쳐져 있고 하루 시작 시각부터 (TASK-014 §10 Q13)
+- assertVisible:
+    id: "demo-plus-10"
 - tapOn:
     id: "demo-plus-10"
 - tapOn:

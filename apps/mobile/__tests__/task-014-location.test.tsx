@@ -10,9 +10,11 @@
 //   "앞에 있음/백그라운드" = react-native AppState 'change' 이벤트 ('active' | 'background')
 //   화면을 떠나는 길 = 기존 프로필 메뉴 [날짜 목록으로] (testID profile-restart)
 //   위치를 보내는 곳 = POST /days/{day_id}/check 본문 lat·lng (GET /now에는 싣지 않는다)
-// [보드] 표시 줄은 §D 보드가 정해지면 글자 자리·누르는 길이 바뀔 수 있다 (요약표).
+// §9·§10(v1.2)으로 문구가 확정돼 [보드] 표시는 뺐다. 글자는 TASK-014 §D·§9와 DESIGN-001 §4-13·docs/design/reviews/task-014-design.md §1 그대로.
+// §10 Q7: 1분마다 앱이 지금 위치를 직접 다시 잰다(getCurrentPositionAsync). 잰 시각이 120초보다 오래됐거나 정확도 값이 없으면 버린다.
+// §10 Q10: 안내는 기기당 한 번. §10 Q11: SOS는 좋은 좌표가 없으면 "위치 확인됨" 줄 자체가 없다. 데모는 데모 위치로 같은 규칙.
 import { act, render, screen, waitFor } from '@testing-library/react-native';
-import { AppState, Linking } from 'react-native';
+import { AppState, Linking, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { locationFake } from '../test-support/expo-location-mock';
@@ -112,7 +114,7 @@ const checksWith = (spot: { lat: number; lng: number }) => checks().filter((sent
 const anyCheckHasPosition = () => checks().some((sent) => field(sent, 'lat') !== undefined || field(sent, 'lng') !== undefined);
 
 /** 기기가 위치를 하나 잰다 (가짜 공급자) */
-async function walk(spot: { lat: number; lng: number }, accuracy = 10, timestamp = Date.now()) {
+async function walk(spot: { lat: number; lng: number }, accuracy: number | null | undefined = 10, timestamp = Date.now()) {
   await act(async () => {
     locationFake.emit({ ...spot, accuracy, timestamp });
   });
@@ -136,6 +138,22 @@ async function leaveToList() {
 async function turnOn() {
   await tap(await screen.findByText('위치 켜기'));
   await settleAll();
+}
+
+type Host = { props: Record<string, any>; parent: Host | null };
+const styleOf = (host: Host) => (StyleSheet.flatten(host.props.style) ?? {}) as Record<string, any>;
+/** 글자를 감싼 가장 가까운 눌리는 상자 */
+const pressableOf = (host: Host): Host => {
+  for (let now: Host | null = host; now; now = now.parent) if (typeof now.props.onClick === 'function' || typeof now.props.onPress === 'function') return now;
+  return host;
+};
+/** 누를 수 있는 높이: height·minHeight + hitSlop (task-010-new-trip-confirm의 reachHeight와 같은 셈) */
+function reachHeight(host: Host): number {
+  const style = styleOf(host);
+  const slop = host.props.hitSlop ?? {};
+  const extra = typeof slop === 'number' ? 2 * slop : Number(slop.top ?? 0) + Number(slop.bottom ?? 0);
+  const numeric = [style.height, style.minHeight].filter((v): v is number => typeof v === 'number');
+  return (numeric.length ? Math.max(...numeric) : 0) + extra;
 }
 
 const allDeviceText = () => [...storedValues(), ...secureStore.values()].join('\n');
@@ -179,7 +197,7 @@ describe('A1 언제 묻나: 실제 여행의 오늘 여행 중 화면을 처음 
     expect(screen.queryByText('위치 켜기')).toBeNull();
   });
 
-  test('T14_A1_오늘_화면을_처음_열면_안내_시트가_나오고_아직_권한_창은_띄우지_않는다 [보드]', async () => {
+  test('T14_A1_오늘_화면을_처음_열면_안내_시트가_나오고_아직_권한_창은_띄우지_않는다', async () => {
     await startHome();
     await openToday();
     expect(await screen.findByText('위치 켜기')).toBeTruthy();
@@ -252,7 +270,7 @@ describe('A1 언제 묻나: 실제 여행의 오늘 여행 중 화면을 처음 
 // =====================================================================
 
 describe('A2 거절·나중에', () => {
-  test('T14_A2_나중에면_시계만_쓰고_위치_꺼짐_알약이_보인다 [보드]', async () => {
+  test('T14_A2_나중에면_시계만_쓰고_위치_꺼짐_알약이_보인다', async () => {
     await startHome();
     await openToday();
     await tap(await screen.findByText('나중에'));
@@ -262,7 +280,7 @@ describe('A2 거절·나중에', () => {
     expect(anyCheckHasPosition()).toBe(false);
   });
 
-  test('T14_A2_권한_창에서_거절하면_시계만_쓰고_위치_꺼짐_알약 [보드]', async () => {
+  test('T14_A2_권한_창에서_거절하면_시계만_쓰고_위치_꺼짐_알약', async () => {
     locationFake.willAnswer('denied');
     await startHome();
     await openToday();
@@ -272,7 +290,7 @@ describe('A2 거절·나중에', () => {
     expect(anyCheckHasPosition()).toBe(false);
   });
 
-  test('T14_A2_알약을_누르면_설명과_설정_열기_누르면_설정으로 [보드]', async () => {
+  test('T14_A2_알약을_누르면_설명과_설정_열기_누르면_설정으로', async () => {
     const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined as never);
     locationFake.willAnswer('denied');
     await startHome();
@@ -319,7 +337,7 @@ describe('A2 거절·나중에', () => {
 });
 
 describe('§9 답 1·3·4·6: 권한 상태별 알약·띠·[내 위치]', () => {
-  test('T14_S9_1_나중에_뒤_알약을_누르면_다시_위치_켜기_시트_누르면_그때_권한_창 [보드]', async () => {
+  test('T14_S9_1_나중에_뒤_알약을_누르면_다시_위치_켜기_시트_누르면_그때_권한_창', async () => {
     await startHome();
     await openToday();
     await tap(await screen.findByText('나중에'));
@@ -332,7 +350,7 @@ describe('§9 답 1·3·4·6: 권한 상태별 알약·띠·[내 위치]', () =>
     expect(locationFake.backgroundCount()).toBe(0);
   });
 
-  test('T14_S9_1_거절된_뒤_알약을_누르면_설정_열기_시트이고_위치_켜기는_없다 [보드]', async () => {
+  test('T14_S9_1_거절된_뒤_알약을_누르면_설정_열기_시트이고_위치_켜기는_없다', async () => {
     locationFake.permit('denied', false);
     await startHome();
     await openToday();
@@ -373,6 +391,26 @@ describe('§9 답 1·3·4·6: 권한 상태별 알약·띠·[내 위치]', () =>
     await walk(HERE);
     await waitFor(() => expect(checksWith(HERE).length).toBeGreaterThanOrEqual(1));
     expect(screen.getByTestId('my-location-button')).toBeTruthy();
+  });
+
+  test('T14_Q10_나중에_뒤_앱을_다시_켜도_안내를_띄우지_않는다_기기당_한_번', async () => {
+    const first = await startHome();
+    await openToday();
+    await tap(await screen.findByText('나중에'));
+    await first.unmount(); // 앱을 끈다 (기기 저장소는 그대로, iOS 권한은 아직 undetermined)
+    await startHome();
+    await openToday();
+    expect(screen.queryByText('위치 켜기')).toBeNull();
+    expect(await screen.findByText('위치 꺼짐')).toBeTruthy(); // 켜는 길은 알약 하나
+    expect(locationFake.askCount()).toBe(0);
+  });
+
+  test('T14_D2_위치_꺼짐_알약의_누르는_높이는_44_이상', async () => {
+    locationFake.permit('denied', false);
+    await startHome();
+    await openToday();
+    const pill = pressableOf((await screen.findByText('위치 꺼짐')) as unknown as Host);
+    expect(reachHeight(pill)).toBeGreaterThanOrEqual(44); // task-014-design §2 pill-off: 보이는 32 · 누르는 44
   });
 
   test('T14_S9_6_부정확한_위치는_알약_없이_조용히_시계만', async () => {
@@ -522,7 +560,7 @@ describe('A4 정확도 · §6', () => {
     expect(checksWith(bad)).toEqual([]);
   });
 
-  test('T14_S6_기기_위치_서비스가_꺼져_있으면_시계만_위치_꺼짐_알약 [보드]', async () => {
+  test('T14_S6_기기_위치_서비스가_꺼져_있으면_시계만_위치_꺼짐_알약', async () => {
     locationFake.services(false);
     await startHome();
     await openToday();
@@ -536,7 +574,7 @@ describe('A4 정확도 · §6', () => {
 // =====================================================================
 
 describe('A5 SOS 시트', () => {
-  test('T14_A5_좌표가_있으면_SOS_시트에_위치_확인됨 [보드]', async () => {
+  test('T14_A5_좌표가_있으면_SOS_시트에_위치_확인됨', async () => {
     locationFake.permit('granted');
     await startHome();
     await openToday();
@@ -544,6 +582,13 @@ describe('A5 SOS 시트', () => {
     await waitFor(() => expect(checksWith(HERE).length).toBeGreaterThanOrEqual(1));
     await tap(screen.getByTestId('sos-button'));
     expect(await screen.findByText('위치 확인됨')).toBeTruthy();
+  });
+
+  test('T14_Q11_데모는_데모_위치로_같은_규칙_SOS에_위치_확인됨', async () => {
+    await toNow(); // 데모 여행 중: 위치는 fakePosition(코스대로)
+    await tap(screen.getByTestId('sos-button'));
+    expect(await screen.findByText('위치 확인됨')).toBeTruthy();
+    expect(locationFake.readCount()).toBe(0); // 데모는 실제 위치를 읽지 않는다
   });
 
   test('T14_A5_위치를_거절했으면_위치_확인됨이_없다', async () => {
@@ -564,6 +609,84 @@ describe('A5 SOS 시트', () => {
     await tap(screen.getByTestId('sos-button'));
     await screen.findByTestId('sos-sheet');
     expect(screen.queryByText('위치 확인됨')).toBeNull();
+  });
+});
+
+// =====================================================================
+// §10 Q7 오래된 위치: 1분마다 지금 위치를 다시 재고, 잰 시각이 120초보다 오래됐거나 정확도 값이 없으면 버린다
+// 가짜 타이머(setTimeout·setInterval·Date)로 시간을 민다
+// =====================================================================
+
+describe('§10 Q7 오래된 위치', () => {
+  beforeEach(() => {
+    jest.useRealTimers();
+    jest.useFakeTimers({ now: Date.parse(NOW_ISO), doNotFake: ['nextTick', 'setImmediate', 'clearImmediate', 'queueMicrotask'] });
+    locationFake.permit('granted');
+  });
+
+  const minutes = async (count: number) => {
+    for (let i = 0; i < count; i += 1) {
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(60_000);
+      });
+    }
+    await settleAll();
+  };
+
+  test('T14_Q7_1분마다_앱이_지금_위치를_직접_다시_잰다', async () => {
+    locationFake.stayAt(HERE);
+    await startHome();
+    await openToday();
+    const before = locationFake.currentCount();
+    await minutes(3);
+    expect(locationFake.currentCount()).toBeGreaterThanOrEqual(before + 3);
+  });
+
+  test('T14_Q7_가만히_30분_같은_자리에_있어도_위치를_계속_쓴다', async () => {
+    locationFake.stayAt(HERE); // 폰은 움직이지 않아 watch로는 새 위치를 안 준다. 앱이 물을 때마다 방금 잰 값
+    await startHome();
+    await openToday();
+    await minutes(28);
+    const at28 = checksWith(HERE).length;
+    expect(at28).toBeGreaterThanOrEqual(20);
+    await minutes(2);
+    expect(checksWith(HERE).length).toBeGreaterThan(at28); // 28분 뒤에도 버려지지 않는다
+  });
+
+  test.each([
+    [120_000, true],
+    [120_001, false],
+    [600_000, false],
+  ])('T14_Q7_폰이_%sms_전에_잰_값을_주면_보내나_%s', async (age, sent) => {
+    locationFake.answerOld(HERE, age);
+    await startHome();
+    await openToday();
+    await minutes(3);
+    if (sent) expect(checksWith(HERE).length).toBeGreaterThanOrEqual(1);
+    else expect(checksWith(HERE)).toEqual([]);
+  });
+
+  test.each([null, undefined])('T14_Q7_정확도_값이_%s인_위치는_버린다', async (accuracy) => {
+    locationFake.stayAt({ ...HERE, accuracy });
+    await startHome();
+    await openToday();
+    await act(async () => {
+      locationFake.emit({ ...HERE, accuracy, timestamp: Date.now() }); // watch로 온 값도 같다
+    });
+    await minutes(2);
+    expect(checksWith(HERE)).toEqual([]);
+    expect(screen.queryByText('위치 꺼짐')).toBeNull(); // §9 답 6: 조용히 시계만
+  });
+
+  test('T14_Q7_백그라운드에서는_1분이_지나도_다시_재지_않는다', async () => {
+    locationFake.stayAt(HERE);
+    await startHome();
+    await openToday();
+    await minutes(1);
+    await moveApp('background');
+    const before = locationFake.readCount();
+    await minutes(3);
+    expect(locationFake.readCount()).toBe(before);
   });
 });
 

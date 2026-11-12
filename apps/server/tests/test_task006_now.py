@@ -303,9 +303,9 @@ LAT, LNG = 35.123456, 135.654321
 
 
 def test_A1_보낸_위치가_position에(env, plain):
-    # TASK-007 B-4: 위치는 check 본문으로. GET /now의 위치 쿼리는 무시한다
+    # TASK-007 B-4: 위치는 check 본문으로. TASK-014 §10 Q2(B1): GET /now 주소창에 위치가 오면 무시가 아니라 400 (PM 승인으로 바꿈)
     assert check_now(env, plain, "13:20", LAT, LNG)["position"] == {"lat": LAT, "lng": LNG}
-    assert now(env, plain, "13:20", lat=LAT, lng=LNG)["position"] is None
+    assert get_now(env, plain, "13:20", lat=LAT, lng=LNG).status_code == 400
 
 
 def test_S7_위치를_안_보내면_position은_null(env, plain):
@@ -314,7 +314,7 @@ def test_S7_위치를_안_보내면_position은_null(env, plain):
 
 def test_AC3_위치를_보내도_저장소가_그대로다(env, plain):
     before = env.repo.snapshot()
-    assert get_now(env, plain, "13:20", lat=LAT, lng=LNG).status_code == 200
+    assert get_now(env, plain, "13:20", lat=LAT, lng=LNG).status_code == 400  # TASK-014 §10 Q2(B1): 200 -> 400 (PM 승인)
     after = env.repo.snapshot()
     assert {k: v for k, v in after.items() if k != "logs"} == {k: v for k, v in before.items() if k != "logs"}
     assert str(LAT) not in repr(after) and str(LNG) not in repr(after)
@@ -323,7 +323,7 @@ def test_AC3_위치를_보내도_저장소가_그대로다(env, plain):
 def test_AC3_서버_로그에_위치_값이_없다(env, plain, caplog):
     # 앱 코드의 로그만 본다. 서버 접근 로그의 쿼리는 §11 Q9로 이번 범위가 아니라 막지 않는다 (httpx·uvicorn 제외)
     with caplog.at_level(logging.DEBUG):
-        assert get_now(env, plain, "13:20", lat=LAT, lng=LNG).status_code == 200
+        assert get_now(env, plain, "13:20", lat=LAT, lng=LNG).status_code == 400  # TASK-014 §10 Q2(B1): 200 -> 400 (PM 승인)
     ours = [r.getMessage() for r in caplog.records if not r.name.startswith(("httpx", "httpcore", "uvicorn"))]
     assert not [message for message in ours if str(LAT) in message or str(LNG) in message]
 

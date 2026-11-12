@@ -4,17 +4,22 @@
 export type Spot = { lat: number; lng: number };
 
 /** 기기가 준 위치 한 번. accuracy = 수평 정확도 반경(m), timestamp = 잰 시각(ms) */
-export type Reading = Spot & { accuracy: number | null; timestamp: number };
+export type Reading = Spot & { accuracy: number | null | undefined; timestamp: number };
 
 /** 마지막으로 check 본문에 실어 보낸 위치와 그 시각(ms) */
 export type SentSpot = Spot & { timestamp: number };
 
-/** 두 점 사이 거리(m) */
+/** 두 점 사이 거리(m). 하버사인 (§10 Q6) */
 export function distanceM(_a: Spot, _b: Spot): number {
   throw new Error('not implemented');
 }
 
-/** A4: 정확도가 100m보다 나쁘면 쓰지 않는다 */
+/** §10 Q7: 잰 시각(timestamp)이 nowMs보다 120초 넘게 오래됐으면 쓰지 않는다 (가설) */
+export function isFresh(_reading: Reading, _nowMs: number): boolean {
+  throw new Error('not implemented');
+}
+
+/** A4: 정확도가 100m보다 나쁘거나 값이 없으면(§10 Q7) 쓰지 않는다 */
 export function isAccurate(_reading: Reading): boolean {
   throw new Error('not implemented');
 }
