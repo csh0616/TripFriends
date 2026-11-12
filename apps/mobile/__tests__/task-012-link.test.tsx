@@ -229,7 +229,7 @@ describe('C1 저장 권유 시트', () => {
     expect(screen.queryByText(SAVE.title)).toBeNull();
     expect(accountPaths()).toEqual([]);
     expect(authFake.linkCalls()).toEqual([]);
-    screen.unmount();
+    await screen.unmount();
     await startHome();
     await screen.findByTestId('day-row-day-t1');
     await settleAll();
@@ -257,7 +257,7 @@ describe('C1 저장 권유 시트', () => {
     expect(scrim).toBeDefined();
     await tap(scrim!);
     expect(screen.queryByText(SAVE.title)).toBeNull();
-    screen.unmount();
+    await screen.unmount();
     await startHome();
     await screen.findByTestId('day-row-day-t1');
     await settleAll();
@@ -496,7 +496,7 @@ describe('C4 이미 있는 Google 계정', () => {
     await screen.findByText(PICK.title);
     await tap(screen.getByText(PICK.cancel));
     await waitFor(() => expect(screen.queryByText(PICK.title)).toBeNull());
-    screen.unmount();
+    await screen.unmount();
     await startHome();
     await screen.findByTestId('day-row-day-t1');
     const last = server.sent(CURRENT).at(-1)!;

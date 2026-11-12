@@ -43,7 +43,7 @@ const settle = async () => {
   });
 };
 const press = async (element: Parameters<typeof fireEvent.press>[0]) => {
-  fireEvent.press(element);
+  await fireEvent.press(element);
   await settle();
   await settle();
 };
