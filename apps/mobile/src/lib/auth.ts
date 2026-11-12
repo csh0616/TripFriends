@@ -1,6 +1,7 @@
 // TASK-012 §B 익명 계정: Supabase는 로그인에만 쓴다 (DB는 서버만 읽고 쓴다, ADR-016 §3-3). 키는 공개 키만 (EXPO_PUBLIC_).
 // 세션은 기기 저장소(AsyncStorage)에 둔다 (B1). 토큰은 매번 저장소에서 읽는다 (앱이 따로 들고 있지 않는다).
 import 'react-native-url-polyfill/auto';
+import './crypto-polyfill';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type Session } from '@supabase/supabase-js';
