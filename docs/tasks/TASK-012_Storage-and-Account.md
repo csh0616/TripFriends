@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-09 |
-| 상태 | **v2.3** — §19 폰 확인 AC-8 통과·머지 전 F1~F3 · §18 구현 보고 답 · §17 frontend 전 답 · §16 2단계 질문 답·테스트 승인 · §15 2단계 보안 규칙 ·  1단계 완료(PR #14, §14) · §13 reviewer 뒤 답 · §12 1단계 구현 보고 답 · §11 데모·남의 것 답 · §10 test-writer Q1~Q12 답 · §9 디자인 답 · v1.2 — 2단계는 **Google 로그인만**. 이메일 코드·Apple·카카오 검토·도메인+SMTP·계정 삭제는 "파일럿 전 묶음"으로 (결정권자 11-09) |
+| 상태 | **v2.4** — K7 G 로고 PNG · §19 폰 확인 AC-8 통과·머지 전 F1~F3 · §18 구현 보고 답 · §17 frontend 전 답 · §16 2단계 질문 답·테스트 승인 · §15 2단계 보안 규칙 ·  1단계 완료(PR #14, §14) · §13 reviewer 뒤 답 · §12 1단계 구현 보고 답 · §11 데모·남의 것 답 · §10 test-writer Q1~Q12 답 · §9 디자인 답 · v1.2 — 2단계는 **Google 로그인만**. 이메일 코드·Apple·카카오 검토·도메인+SMTP·계정 삭제는 "파일럿 전 묶음"으로 (결정권자 11-09) |
 | 관련 | ADR-016(계정, **이 TASK의 근거**) · ADR-013(앱 → 서버 → Supabase) · DATA-001 · API-001 · SRS FR-32·33 · TASK-003 R12(저장 트랜잭션) · TASK-011 §17(넘어온 것) |
 | 브랜치 | `feat/task-012-storage-account` |
 | 다음 | TASK-013 실제 여행(위치 + 이 날 미리 걸어 보기) |
@@ -109,7 +109,7 @@
 | 8 ③-F01 로그인 시안 | **기록(쓰지 않음)** — ADR-016으로 로그인 첫 화면이 없음 |
 | 9 연결 실패·취소 | 한 줄 알림 **"연결하지 못했어. 지금 여행은 그대로야"** (취소면 알림 없음). 디자이너가 알림 모양 1장 추가 |
 | 디자인 확정 (11-09) | 캔버스 ①-22~28·②-12, 값은 **DESIGN-001 §4-12**와 리뷰 파일 §8. 디자이너 제안 3가지 승인: 알림 6초 뒤 사라짐·누르면 닫힘·시작한 화면 위, 실패하면 저장 권유 시트 닫힘, 날짜 목록 아바타는 bg-2 원(지도 위는 흰 원) · 계획 대화·코스안 머리엔 아바타 없음 |
-| K7 | **Google 로그인 버튼 공식 에셋**(G 로고 SVG): 결정권자가 Google 브랜드 가이드라인 페이지에서 내려받아 PM에게 → `docs/design/google/`에. 2단계 frontend 전 |
+| K7 | **완료 11-12 → §19 F3** · **Google 로그인 버튼 공식 에셋**(G 로고): 결정권자가 Google 브랜드 가이드라인 페이지에서 내려받아 PM에게 → `docs/design/google/`에. 2단계 frontend 전 |
 
 ## 10. 질문 답 (11-10, 1단계 test-writer Q1~Q12) · 테스트 승인
 **승인**: 미리 바꾼 기존 테스트(X-Device-Id → Bearer, "헤더 없음 400" → "토큰 없음 401"), 테스트 도구(`db` 표시, Supabase 가짜, 기기 초기화가 세션도 비움), 빈 껍데기 이름(`verify_token`, `PostgresPlanningRepo`, `PostgresTripRepo`), `DATABASE_URL` 있으면 Postgres·없으면 메모리, `apps/mobile/CLAUDE.md`의 `EXPO_PUBLIC_` 허용 목록에 `SUPABASE_URL`·`SUPABASE_KEY`(+ 점검용 `CHECK_` 둘) 추가
@@ -227,7 +227,7 @@
 |---|---|---|
 | F1 | **PKCE가 plain으로 동작** (경고 "WebCrypto API is not supported") → §15 S1 반쪽 | `crypto.subtle.digest`(SHA-256)를 앱에 채운다(`expo-crypto` 등, 새 네이티브 모듈이면 보고 → 개발 빌드 재설치). 테스트: authorize 주소의 `code_challenge_method=s256`(plain이면 실패). reviewer 놓친 이유를 PR에 |
 | F2 | **처음 화면(S0)에서 로그인할 길이 없음** → 앱을 다시 깐 사람이 데모·새 여행을 거쳐야 함 (AC-8 상황 그 자체) | S0에 보조 버튼 **「저장해 둔 여행 불러오기」** → 저장 권유 시트와 같은 시트(제목 「저장해 둔 여행 불러올래?」, Google 버튼) → 연결 결과대로(계정 여행이 지금 여행). 익명에 여행이 없으니 `moved`. 디자이너는 머지 뒤 확인 |
-| F3 | G 로고 (K7) | 파일이 오면 채움 |
+| F3 | G 로고 (K7, **11-12 받음**) | `docs/design/google/g-logo.png`·`@2x`·`@3x` (공식 iOS PNG에서 G 20×20만 잘라 냄, `g-logo-README.md`) → 앱 `assets/google/`에 같은 바이트로. **§16 Q12의 `g-logo.svg`를 PNG로 바꿈**: 새 G 로고 SVG가 foreignObject·blur 필터라 react-native-svg가 못 그림. 테스트 경로도 PNG로 |
 
 ## 포트폴리오 포인트
 - 저장소 인터페이스 하나에 메모리·Postgres 두 구현, **같은 계약 테스트**로 바꿔 끼움을 증명
