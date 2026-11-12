@@ -49,3 +49,6 @@ jest.mock('expo-web-browser', () => require('./test-support/supabase-mock').webB
 jest.mock('expo-secure-store', () => require('./test-support/secure-store-mock'), { virtual: true });
 // TASK-012 §19 F1: PKCE SHA-256을 채우는 데 쓸 수 있는 expo-crypto. 설치 전에도 돌고, 설치 뒤에도 가짜(Node crypto)를 쓴다 (virtual)
 jest.mock('expo-crypto', () => require('./test-support/expo-crypto-mock'), { virtual: true });
+// TASK-014 §A: 실제 위치(expo-location)는 가짜 위치 공급자. 설치 전에도 돌고, 설치 뒤에도 가짜를 쓴다 (virtual, 실제 GPS·권한 창 0).
+// 손잡이는 test-support/expo-location-mock의 locationFake (권한 상태·서비스 켜짐·위치 내보내기·부른 함수 세기)
+jest.mock('expo-location', () => require('./test-support/expo-location-mock'), { virtual: true });
