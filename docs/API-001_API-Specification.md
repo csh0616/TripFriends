@@ -69,7 +69,7 @@
 | POST `/proposals/{proposal_id}/accept` | — | `TripDay` (반영) | FR-13 |
 | POST `/proposals/{proposal_id}/dismiss` | — | 204 (일정 그대로) | FR-13, AC-06 |
 | POST `/places/{place_id}/visit-checks` | `{trip_day_id, was_open}` | 닫혔으면 대안 3곳 | FR-14·15, AC-07·08 |
-| GET `/sos?lat&lng&trip_id` | — | 긴급 번호, 현재 위치 주소, 숙소 주소 (오프라인 캐시용) | FR-30, AC-11 |
+| POST `/sos` | `{trip_id, lat?, lng?}` (**위치는 본문으로만**, TASK-014 §10 Q2 — 주소창에 `lat`·`lng`면 모든 길 400) | 긴급 번호, 현재 위치 주소, 숙소 주소 (오프라인 캐시용) | FR-30, AC-11 (TASK-015) |
 
 ### 2-4. 대화 (R2)
 | 메서드·경로 | 요청 | 응답 | FR·AC |
