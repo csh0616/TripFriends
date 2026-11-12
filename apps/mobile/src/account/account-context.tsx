@@ -147,9 +147,10 @@ export function AccountProvider({
         if (!alive.current) return;
         await refresh();
         setPick(null);
-        if (!restored) fail();
+        if (restored) onReload(); // 익명 토큰으로 지금 여행을 다시 받는다 (앱 시작 복구로 뜬 시트라면 화면은 아직 계정 여행)
+        else fail();
       }),
-    [guarded, refresh, fail],
+    [guarded, refresh, fail, onReload],
   );
 
   const logout = useCallback(async () => {
