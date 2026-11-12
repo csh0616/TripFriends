@@ -12,7 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { isTrip, type Trip } from '@/trips/api';
 
-import { authClient, readStoredSession } from './auth';
+import { authClient, readStoredSession, supabaseEndpoint } from './auth';
 import { send } from './planning-api';
 
 export type Choice = components['schemas']['TripChoice'];
@@ -140,29 +140,36 @@ async function signInWithGoogle(): Promise<Signed> {
 
 // ---------- 보관한 익명 세션 ----------
 
+/** 옛 계정 세션만 따로 끊는다 (Supabase POST /auth/v1/logout?scope=local, 그 세션의 access token). 실패해도 복원은 그대로: 조용히, 개발 빌드면 경고만 */
+async function revokeOldAccount(accessToken: string) {
+  try {
+    const response = await fetch(`${supabaseEndpoint.url}/auth/v1/logout?scope=local`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, apikey: supabaseEndpoint.key },
+    });
+    if (!response.ok) warn('revoke-old', { code: `http_${response.status}` });
+  } catch {
+    warn('revoke-old');
+  }
+}
+
 /**
- * 보관한 익명 세션으로 되돌린다. 먼저 그 세션을 되살려 보고, 되면 계정 세션을 로그아웃하고 그 익명으로 둔다.
- * 되살리지 못하면(§18 빈틈 2) 계정 세션을 그대로 두고 false: 새 익명 계정을 만들지 않고 보관본도 남긴다 (알려진 한계: 익명 여행이 닿지 않는 곳에 남음, 지워지지는 않음).
- * 지금 세션이 이미 그 익명 사용자면 보관본만 지운다.
+ * 보관한 익명 세션으로 되돌린다 (연결 취소·claim 실패·choose 실패·앱 시작 복구가 모두 이 함수).
+ * 순서: 보관한 익명 세션을 먼저 되살린다. 못 하면(§18 빈틈 2) 계정 세션을 그대로 두고 false — 새 익명 계정을 만들지 않고 보관본도 남긴다
+ * (알려진 한계: 익명 여행이 닿지 않는 곳에 남음, 지워지지는 않음). 되살렸을 때만 옛 계정 세션을 그 access token으로 따로 끊는다 (§16 Q13).
+ * 지금 클라이언트의 signOut()은 지금 세션(= 되살린 익명)을 끊으므로 쓰지 않는다. 지금 세션이 이미 그 익명이면 보관본만 지운다.
  */
 async function restoreAnonymous(): Promise<boolean> {
   const backup = await readBackup();
   if (!backup) return false;
-  const now = await readStoredSession();
-  if (now?.user.id !== backup.user.id) {
+  const old = await readStoredSession();
+  if (old?.user.id !== backup.user.id) {
     const restored = await authClient.setSession({ access_token: backup.access_token, refresh_token: backup.refresh_token });
-    const session = restored.data?.session;
-    if (restored.error || !session) {
+    if (restored.error || !restored.data?.session) {
       warn('restore', restored.error);
       return false;
     }
-    // 계정 세션 로그아웃 (이 기기에서). 로그아웃은 지금 세션을 비우므로 되살린 익명 세션을 다시 놓는다
-    await authClient.signOut({ scope: 'local' });
-    const again = await authClient.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
-    if (again.error || !again.data?.session) {
-      warn('restore-again', again.error);
-      return false;
-    }
+    if (old) await revokeOldAccount(old.access_token);
   }
   await clearBackup();
   return true;

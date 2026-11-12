@@ -52,6 +52,8 @@ const supabase = createClient(SUPABASE_URL, key || 'missing-key', {
 
 /** 계정 연결(lib/account-link.ts)·개발용 가짜 공급자가 같은 클라이언트·기기 저장소를 쓴다. 앱은 Supabase를 로그인에만 쓴다 (ADR-016 §3-3) */
 export const authClient = supabase.auth;
+/** 지금 세션이 아닌 옛 세션을 따로 끊을 때(lib/account-link.ts) 쓰는 주소·공개 키 */
+export const supabaseEndpoint = { url: SUPABASE_URL, key: key || 'missing-key' };
 
 /** 기기에 저장된 세션을 그대로 읽는다 (새로 받기·네트워크 없음). 프로필 메뉴가 "저장됨/안 됨"을 보여 줄 때 쓴다 */
 export async function readStoredSession(): Promise<Session | null> {
