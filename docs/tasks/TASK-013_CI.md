@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-13 |
-| 상태 | **v1.2** — A6 바뀐 파일만·B7 운영 방침 (결정권자 11-13) |
+| 상태 | **v1.3** — §9 test-writer 질문 답 · A6 바뀐 파일만·B7 운영 방침 (결정권자 11-13) |
 | 관련 | TEAM-001(에이전트 운영) · TASK-012 §20(테스트 환경이 실제와 달라 놓친 일) · AC 숫자를 지금은 에이전트 보고로만 확인 |
 | 브랜치 | `chore/task-013-ci` |
 | 다음 | TASK-014 실제 위치 + "이 날 미리 걸어 보기" (그때부터 모든 PR에 CI) |
@@ -50,6 +50,19 @@
 | AC-3 | reviewer가 일부러 테스트 하나를 깨뜨린 커밋을 올려 ❌ 확인 → 되돌려 ✅ |
 | AC-4 | 한 번 실행 시간(전부 / 앱만 / 서버만 / docs만)과 이번 달 예상 사용 분을 PR에 적음 (무료 월 $12 ≈ 리눅스 2,000분) |
 | AC-5 | `supabase/README.md`·루트 안내에 "CI가 무엇을 돌리고, 무엇은 맥에서 돌리나" 3줄 |
+
+## 9. test-writer 질문 답 (11-13, 커밋 `db2cc93` 승인)
+| Q | 답 |
+|---|---|
+| 1 A3 DB | **순수 Postgres 17 승인** (Supabase 전용 기능을 안 쓰고, 서명 키를 CI에서 만들 필요가 없고, 빠름). `supabase/README.md`에 "맥은 Supabase CLI, CI는 순수 Postgres 17 — 마이그레이션이 Supabase 전용 기능(auth 스키마·역할)을 쓰기 시작하면 CI를 CLI로 바꾼다" 한 줄 |
+| 2 docs를 읽는 테스트 | **넣는다**: 테스트가 실제로 읽는 `docs/` 경로(장소 시드·디자인 이미지 등)를 각 목록에 정확히 추가. docs만 바뀐 PR이라도 그 파일이면 해당 테스트가 돈다 |
+| 3 앱이 읽는 다른 폴더 파일 | **넣는다**: `testdata/particles.json`, `apps/server/trip/link.py`를 앱 목록에. **규칙**: 테스트가 자기 폴더 밖 파일을 읽으면 그 경로가 목록에 있어야 한다 — B5 검사로 고정(테스트 코드에서 읽는 경로를 찾아 목록과 비교, 어려우면 알려진 목록 대조) |
+| 4 Node·pnpm·안전장치 | 맥 값으로 고정: 루트 `package.json`에 `"packageManager": "pnpm@12.15.0"`, `.node-version`에 `26.10.0`. 안전장치는 저장소에 없음 → pnpm 기본값이거나 맥의 전역 설정. `pnpm config get minimumReleaseAge`로 지금 값을 확인해 **`pnpm-workspace.yaml`에 명시**(맥·CI가 같은 규칙). 값은 보고 |
+| 5 Python | **맥과 같은 버전으로 고정**: `apps/server/.python-version`(맥 `uv run python --version` 값). `requires-python >=3.12`는 그대로 |
+| 6 lint | **CI에서 뺀다 확정.** lint 설정·21개 정리는 백로그(작은 TASK). 그리고 **자동으로 패키지를 설치하는 명령은 실행 전에 묻는다**(이번 `expo lint`처럼) — 되돌린 것 확인함 |
+| 7 키 검사 | **pytest 테스트로** (`apps/server/tests/test_secret_scan.py`) — 규칙 6(실험 스크립트)에 해당 안 함. `git ls-files` 전체를 본다. 패턴: Google `AIza[0-9A-Za-z_-]{35}`, `sk-`로 시작하는 긴 키, Supabase `sb_secret_`, `service_role` JWT, 긴 `eyJ…` JWT, `-----BEGIN … PRIVATE KEY-----`, 비밀번호가 든 `postgres(ql)://user:pass@`(로컬 `postgres:postgres@127.0.0.1`·`localhost` 테스트 주소는 허용). `.env.example`의 빈 값·자리표시는 허용. 찾으면 **값은 출력하지 않고 파일:줄만**. A5 작업은 이 테스트 파일만 돌림 |
+| 8 B5 계약 | **승인**: `changes` 작업 + `SERVER_PATHS`·`MOBILE_PATHS`·`ALL_PATHS` |
+- 시간 기준 테스트(기본 5·slow 1·속성 9): **그대로 돌린다.** CI에서 흔들리면 실제 측정값과 함께 보고 → PM이 기준을 정함 (몰래 늘리지 않기, §B)
 
 ## 8. 하지 말 것
 - GitHub Secrets 만들기, 키 값 출력·`.env` 읽기, 클라우드 Supabase 사용
