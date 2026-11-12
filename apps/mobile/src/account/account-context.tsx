@@ -11,6 +11,7 @@ import {
   connectGoogle,
   logoutToAnonymous,
   markAsked,
+  recoverInterrupted,
   readAccountInfo,
   wasAsked,
   watchAccount,
@@ -79,6 +80,20 @@ export function AccountProvider({
 
   const fail = useCallback(() => setFailed((count) => count + 1), []);
   const closeNotice = useCallback(() => setFailed(0), []);
+
+  // 앱 시작 때 (§18 빈틈 1): 연결 도중 꺼졌다면 보관한 익명 세션을 처리한다. 결과는 연결할 때와 같게 보여 준다
+  useEffect(() => {
+    void recoverInterrupted().then(async (outcome) => {
+      if (!outcome || !alive.current) return;
+      await refresh();
+      if (!alive.current) return;
+      if (outcome.kind === 'choose') setPick({ email: outcome.email, choices: outcome.choices });
+      else {
+        if (outcome.kind === 'failed') fail();
+        onReload(); // moved·실패: 지금 여행을 다시 묻는다 (시작 때 받은 것은 계정 토큰이었을 수 있다)
+      }
+    });
+  }, [refresh, fail, onReload]);
 
   /** 한 번에 하나만 (두 번 눌러도 한 번) */
   const guarded = useCallback(async (job: () => Promise<void>) => {

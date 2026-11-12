@@ -7,6 +7,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import type { components } from 'api-types';
+import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 
 import { isTrip, type Trip } from '@/trips/api';
@@ -20,7 +21,8 @@ export type Choice = components['schemas']['TripChoice'];
 export const REDIRECT_URL = 'tripfriends://auth/callback';
 
 const OAUTH = { provider: 'google', options: { redirectTo: REDIRECT_URL, skipBrowserRedirect: true } } as const;
-const BACKUP_KEY = 'tripfriends.account.anonymous-session'; // §16 Q6: 이미 있는 계정으로 갈 때 익명 세션 전체를 기기에 보관
+const BACKUP_KEY = 'tripfriends.account.anonymous-session'; // §16 Q6·§18: 이미 있는 계정으로 갈 때 익명 세션 전체를 기기에 보관 (SecureStore, 토큰이라 AsyncStorage에 두지 않는다)
+const SECURE = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY };
 const ASKED_KEY = 'tripfriends.account.save-asked'; // C1: 저장 권유 시트는 한 번만
 const RENEW_WITHIN_SEC = 60; // §16 Q6: claim·choose 직전 만료까지 60초 안이면 먼저 갱신
 
@@ -67,7 +69,12 @@ async function currentSession(): Promise<Session | null> {
 }
 
 async function readBackup(): Promise<Session | null> {
-  const raw = await read(BACKUP_KEY);
+  let raw: string | null = null;
+  try {
+    raw = await SecureStore.getItemAsync(BACKUP_KEY, SECURE);
+  } catch {
+    warn('secure-read');
+  }
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as Session;
@@ -76,8 +83,16 @@ async function readBackup(): Promise<Session | null> {
     return null;
   }
 }
-const writeBackup = (session: Session) => write(BACKUP_KEY, JSON.stringify(session));
-const clearBackup = () => remove(BACKUP_KEY);
+async function writeBackup(session: Session) {
+  await SecureStore.setItemAsync(BACKUP_KEY, JSON.stringify(session), SECURE); // 못 쓰면 던진다: 보관 없이 계정으로 넘어가지 않는다
+}
+async function clearBackup() {
+  try {
+    await SecureStore.deleteItemAsync(BACKUP_KEY, SECURE);
+  } catch {
+    warn('secure-clear');
+  }
+}
 
 /** 돌아온 주소의 값 (query와 # 뒤 둘 다) */
 function callbackParams(url: string): URLSearchParams {
@@ -125,16 +140,27 @@ async function signInWithGoogle(): Promise<Signed> {
 
 // ---------- 보관한 익명 세션 ----------
 
-/** 보관한 익명 세션으로 되돌린다. 지금 세션이 이미 그 익명 사용자면 그대로. 못 하면 false (보관본은 남긴다) */
+/**
+ * 보관한 익명 세션으로 되돌린다. 먼저 그 세션을 되살려 보고, 되면 계정 세션을 로그아웃하고 그 익명으로 둔다.
+ * 되살리지 못하면(§18 빈틈 2) 계정 세션을 그대로 두고 false: 새 익명 계정을 만들지 않고 보관본도 남긴다 (알려진 한계: 익명 여행이 닿지 않는 곳에 남음, 지워지지는 않음).
+ * 지금 세션이 이미 그 익명 사용자면 보관본만 지운다.
+ */
 async function restoreAnonymous(): Promise<boolean> {
   const backup = await readBackup();
   if (!backup) return false;
-  const now = await currentSession().catch(() => null);
+  const now = await readStoredSession();
   if (now?.user.id !== backup.user.id) {
-    await authClient.signOut({ scope: 'local' });
     const restored = await authClient.setSession({ access_token: backup.access_token, refresh_token: backup.refresh_token });
-    if (restored.error || !restored.data.session) {
+    const session = restored.data?.session;
+    if (restored.error || !session) {
       warn('restore', restored.error);
+      return false;
+    }
+    // 계정 세션 로그아웃 (이 기기에서). 로그아웃은 지금 세션을 비우므로 되살린 익명 세션을 다시 놓는다
+    await authClient.signOut({ scope: 'local' });
+    const again = await authClient.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
+    if (again.error || !again.data?.session) {
+      warn('restore-again', again.error);
       return false;
     }
   }
@@ -209,8 +235,17 @@ async function claimAsExisting(anonymous: Session, signIn: () => Promise<Signed>
     return { kind: 'failed' };
   }
   const account = await currentSession().catch(() => null);
-  const token = account ? await anonymousToken().catch(() => null) : null;
-  if (!account || !token) {
+  if (!account) {
+    await restoreAnonymous();
+    return { kind: 'failed' };
+  }
+  return claimWithBackup(account);
+}
+
+/** 보관한 익명 토큰으로 POST /account/claim (헤더 = 지금 계정 토큰). 실패(409 포함)면 §16 Q13 복구 */
+async function claimWithBackup(account: Session): Promise<Outcome> {
+  const token = await anonymousToken().catch(() => null);
+  if (!token) {
     await restoreAnonymous();
     return { kind: 'failed' };
   }
@@ -223,6 +258,29 @@ async function claimAsExisting(anonymous: Session, signIn: () => Promise<Signed>
   if (data?.result === 'choose' && Array.isArray(data.choices)) return { kind: 'choose', choices: data.choices, email: account.user.email ?? '' };
   await restoreAnonymous(); // claim 실패(409 포함): 계정 로그아웃 -> 익명으로
   return { kind: 'failed' };
+}
+
+/**
+ * 앱 시작 때 (§18 빈틈 1): 연결 도중 꺼졌다면 보관한 익명 세션이 남아 있다.
+ * 지금 세션이 그 익명이면 보관본만 지운다 / 계정이면 claim을 다시 부른다 (moved·choose·실패는 연결할 때와 같다). 보관본이 없으면 null
+ */
+export async function recoverInterrupted(): Promise<Outcome | null> {
+  try {
+    const backup = await readBackup();
+    if (!backup) return null;
+    const now = await readStoredSession();
+    if (now && now.user.id === backup.user.id) {
+      await clearBackup();
+      return null;
+    }
+    if (!now || now.user.is_anonymous) {
+      return (await restoreAnonymous()) ? null : { kind: 'failed' };
+    }
+    return await claimWithBackup(now);
+  } catch {
+    warn('recover');
+    return null;
+  }
 }
 
 /** 어느 여행 시트 [이걸로 할래]: 고른 여행의 Trip. 실패하면 계정 로그아웃 + 익명으로 (claim 실패와 같은 복구) */
