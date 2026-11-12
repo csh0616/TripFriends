@@ -16,6 +16,12 @@
 - 점검 서버(8010): `DATABASE_URL`에 위 DB 주소, `SUPABASE_URL=http://127.0.0.1:54321`, `PLACES_PROVIDER=fake`로 켠다. 앱은 `EXPO_PUBLIC_CHECK_SUPABASE_URL=http://127.0.0.1:54321`과 `EXPO_PUBLIC_CHECK_SUPABASE_KEY`(= `supabase status -o env`의 `PUBLISHABLE_KEY`)를 쓴다.
 - 결정권자의 클라우드 프로젝트는 테스트·점검에 쓰지 않는다 (TASK-012 §8).
 
+## 시드 계정과 가짜 로그인 공급자 점검 (TASK-012 §16 Q11)
+- `seed.sql`은 `supabase db reset --local` 때 마이그레이션 뒤에 적용된다. **로컬 전용**이고 클라우드 프로젝트에는 적용하지 않는다.
+- 시드 계정 `link-existing@example.test` ("이미 있는 계정"): 비밀번호는 `apps/mobile/src/lib/dev-login.ts`의 개발 전용 테스트 값과 같다. 여행은 넣지 않았다 (choose 흐름은 이 계정으로 로그인해 앱·API로 여행을 만든 뒤 점검).
+- `link-new@example.test` ("새 계정")는 시드하지 않는다: 익명 사용자에게 이메일·비밀번호를 붙일 때 만들어진다 (같은 user_id). 로컬 설정 `enable_signup = true`, `enable_confirmations = false`라 바로 된다. 이미 만들어졌다면 다시 붙일 수 없으니 `supabase db reset --local`로 비운다.
+- 점검: `supabase start` → `supabase db reset --local` → 서버(8010)를 로컬 주소로 켜고(위 "서버·테스트에 연결") 앱을 `EXPO_PUBLIC_DEV_LOGIN=1`로 연다 → 개발 로그인 버튼. 끝나면 `supabase stop`.
+
 ## 폰 확인 때 막히는 곳 (클라우드 프로젝트, TASK-012 1단계 폰 확인에서 겪은 것)
 값(키·비밀번호·연결 문자열)은 화면이나 채팅에 붙여 넣지 않는다.
 
