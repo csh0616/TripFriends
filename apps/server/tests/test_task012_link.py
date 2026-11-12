@@ -581,3 +581,37 @@ def test_T12_S16_Q4_옮길_것이_없던_moved도_처리됨_다시_claim하면_4
     make_trip(osaka, account, offset=40)
     assert claim(client, anon, account).json()["result"] == "moved"
     assert_common(claim(client, anon, account), 409, "ALREADY_CLAIMED")
+
+
+# ---------- API-001 §1·TASK-012 §12 6: 본문 익명 토큰을 확인하다 공개 키(JWKS)를 못 받으면 503 AUTH_UNAVAILABLE ----------
+
+
+@pytest.mark.parametrize("path", [CLAIM, CHOOSE])
+def test_T12_S12_6_본문_토큰_확인에_JWKS를_못_받으면_503_AUTH_UNAVAILABLE_아무것도_안_바뀜(monkeypatch, path):
+    # 헤더 토큰은 받아 둔 키로 확인된다. 본문 토큰은 모르는 키 ID라 다시 받기가 필요한데 그 받기가 실패한다 (Supabase 장애 = 401 아님)
+    import api.auth
+    from api.auth import JwksCache
+    from api.main import app
+    from auth_helpers import FAKE_SUPABASE_URL
+
+    server_env(monkeypatch, "memory")
+    with open_server(app, raise_errors=False) as client:
+        osaka = Osaka(client, app)
+        anon, account = names()
+        mine = make_trip(osaka, anon)
+        theirs = make_trip(osaka, account, offset=40)
+        ids = [mine["trip_id"], theirs["trip_id"]]
+        before = picture(client, anon, account, ids)
+        now = [0.0]
+        app.state.jwks = JwksCache(FAKE_SUPABASE_URL, clock=lambda: now[0])
+        assert current_id(client, account_headers(account)) == theirs["trip_id"]  # 처음 받기 (헤더 키는 이제 받아 둠)
+        now[0] = 1000.0  # 다시 받기가 허용되는 때 (60초 넘음)
+
+        def down(_url):
+            raise RuntimeError("JWKS 못 받음 (테스트가 일부러)")
+
+        monkeypatch.setattr(api.auth, "fetch_jwks", down)
+        body = {"anonymous_token": anon_token(anon, key=STRANGER_KEY), "trip_id": mine["trip_id"]}
+        response = client.post(path, json=body, headers=account_headers(account))
+        assert_common(response, 503, "AUTH_UNAVAILABLE")
+        assert picture(client, anon, account, ids) == before

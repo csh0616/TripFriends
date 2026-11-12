@@ -338,6 +338,8 @@ export const authFake = {
     state.passwordCalls = [];
     state.revoked.clear();
     state.pair.clear();
+    state.byAccess.clear(); // 앞 테스트에서 발급한 토큰이 섞이지 않게 (accessTokensOf)
+    state.byRefresh.clear();
     state.logoutCalls = [];
     state.updateUserCalls = [];
   },
