@@ -64,7 +64,7 @@
 
 | 메서드·경로 | 요청 | 응답 | FR·AC |
 |---|---|---|---|
-| GET `/days/{day_id}/now?lat&lng&at` | 현재 위치·시간 (위치는 저장 안 함) | `NowView`: 지금 할 일, 다음 이동, 남은 일정, 숙소 가는 방법, 열린 사건·대안 | FR-10·16 |
+| GET `/days/{day_id}/now?at` | 현재 시간. **위치는 주소창에 싣지 않는다**(모든 길 400, TASK-014 §10 Q2) — 위치는 `POST /check` 본문으로만, 저장 안 함 | `NowView`: 지금 할 일, 다음 이동, 남은 일정, 숙소 가는 방법, 열린 사건·대안 | FR-10·16 |
 | POST `/days/{day_id}/check` | `{lat, lng, at}` | 새 `TripEvent[]` + `RecomposeProposal[]` (같은 사건은 다시 안 만듦) | FR-11·12·19, AC-05·10 |
 | POST `/proposals/{proposal_id}/accept` | — | `TripDay` (반영) | FR-13 |
 | POST `/proposals/{proposal_id}/dismiss` | — | 204 (일정 그대로) | FR-13, AC-06 |
