@@ -108,7 +108,7 @@ class TripService:
             if rehearsal:  # TASK-014 C3: 같은 계산. 저장은 요청 문지기가 되돌린다. 메모리의 '그날 마지막 check'만 여기서 되돌린다
                 saved = dict(self._last_check)
                 try:
-                    self._replay(day_id, when, actions or [])  # §12: 연습 기록을 먼저 적용
+                    self._replay(day_id, when, actions or [], position)  # §12: 연습 기록을 먼저 적용
                     return self._check(day_id, when, position)
                 finally:
                     self._last_check.clear()
@@ -117,7 +117,7 @@ class TripService:
 
     # ---- 연습 기록 (TASK-014 §12) ----
 
-    def _replay(self, day_id: str, when: datetime, actions: list[Any]) -> None:
+    def _replay(self, day_id: str, when: datetime, actions: list[Any], position: tuple[float, float] | None = None) -> None:
         """연습 행동을 적힌 순서대로, 실제 accept·dismiss·visit-checks와 같은 코드로 적용한다. 호출한 쪽이 끝에 되돌린다."""
         made: list[NowEvent] = []  # 앞선 visit_check [닫혔어]가 이 요청에서 만든 사건
         for action in actions:
@@ -138,15 +138,16 @@ class TripService:
                     self.dismiss(match.event_id)
                 continue
             if self.trip.get_event(event.event_id) is None:  # 이전 연습 요청이 만들고 되돌려진 사건: 지금 코스에 맞춰 다시 놓는다
-                self._install(day_id, when, event)
+                self._install(day_id, when, event, position)
             if action.type == "accept":
                 self.accept(action.proposal_id)
             else:
                 self.dismiss(event.event_id)
 
-    def _install(self, day_id: str, when: datetime, event: NowEvent) -> None:
+    def _install(self, day_id: str, when: datetime, event: NowEvent, position: tuple[float, float] | None = None) -> None:
         day, course, overrides = self.load(day_id, when)
-        record, proposals = rebuild(day_id, day, course, event, when)
+        here = detect_delay(delay_course(day_id, day, course), when, position) if position else None
+        record, proposals = rebuild(day_id, day, course, event, when, here.k if here else None)
         request = Request(day_id, day, course, when, self._builder(day_id, day, course, when, None, overrides), preset=(record, proposals))
         state = TripState(event_id=record.event_id, day_id=day_id, dedupe_key=record.dedupe_key, k=record.k).model_dump()
         outcome = self._invoke(record.event_id, state, request)

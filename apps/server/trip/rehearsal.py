@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from engine.models import CourseItem, CourseOption, Dropped
-from engine.planning import distance_km, travel_min
+from engine.planning import buffer_min, distance_km, travel_min
 from planning.repo import DayRecord
 from trip.repo import EventRecord, ProposalRecord
 from trip.schemas import NowEvent, NowProposal
@@ -90,7 +90,7 @@ def shape_of(event: NowEvent) -> dict[str, Any]:
     return strip(event.model_dump())
 
 
-def rebuild(day_id: str, day: DayRecord, course: CourseOption, event: NowEvent, when: datetime) -> tuple[EventRecord, list[ProposalRecord]]:
+def rebuild(day_id: str, day: DayRecord, course: CourseOption, event: NowEvent, when: datetime, k_hint: int | None = None) -> tuple[EventRecord, list[ProposalRecord]]:
     """클라이언트가 보낸 늦어짐 사건을 지금 코스에 맞춰 사건·제안 기록으로 다시 세운다. 맞지 않으면 400.
 
     제안의 일정(items)은 지금 코스의 장소들을 다시 짠 것이어야 한다 (장소가 코스에 없으면 400).
@@ -111,8 +111,10 @@ def rebuild(day_id: str, day: DayRecord, course: CourseOption, event: NowEvent, 
         elif k != here.seq:
             raise invalid("rehearsal_actions", "한 사건의 제안은 같은 장소에서 시작해야 해요")
         records.append(_proposal_record(event, proposal, course, day, from_index, originals, when))
-    if k is None:
-        raise invalid("rehearsal_actions", "제안이 없는 사건이에요")
+    if k is None:  # 제안 0개(낮음·대안 없음): 장소는 제안으로 알 수 없어 지금 위치에서 감지한 장소를 쓴다 (같은 자리에 있는 사건)
+        if k_hint is None:
+            raise invalid("rehearsal_actions", "제안이 없는 사건은 위치가 있는 확인에서만 받아요")
+        k = k_hint
     record = EventRecord(event.event_id, day_id, f"delay:{day_id}:{k}", k, event.severity, event.delay_min, event.state, when)
     return record, records
 
@@ -140,7 +142,11 @@ def _proposal_record(event: NowEvent, proposal: NowProposal, course: CourseOptio
     prefix = course.items[:from_index]
     spot = prefix[-1]
     position = (day.places[spot.place_id].lat, day.places[spot.place_id].lng) if spot.place_id else None
-    previous_end = _minutes(spot.end)
+    # 실제 엔진(retime·compose)과 같은 대기 식: 대기 = 시작 - 도착, 도착 = 떠난 시각 + 이동 (+ 방문 뒤에만 쉬는 시간).
+    # 첫 항목은 first_leave_at에 떠나므로 대기 0 (실제 첫 출발 시각이 곧 first_leave_at)
+    previous_end = _minutes(proposal.first_leave_at)
+    after_visit = False
+    pause = buffer_min(proposal.label)
     items: list[CourseItem] = []
     for number, view in enumerate(proposal.items, start=from_index + 1):
         if view.seq != number:
@@ -159,10 +165,10 @@ def _proposal_record(event: NowEvent, proposal: NowProposal, course: CourseOptio
         items.append(
             original.model_copy(
                 update={"seq": number, "start": view.start, "end": view.end, "stay_min": end - start, "travel_min": travel,
-                        "wait_min": max(0, start - previous_end - travel), "is_fixed": view.is_fixed}
+                        "wait_min": 0 if view.is_fixed else max(0, start - previous_end - travel - (pause if after_visit else 0)), "is_fixed": view.is_fixed}
             )
         )
-        previous_end = end
+        previous_end, after_visit = end, not view.is_fixed
     known = {d.place_id for d in course.dropped}
     dropped = [*course.dropped, *(Dropped(place_id=d.place_id, reason="no_time") for d in proposal.dropped if d.place_id not in known)]
     last = next((i for i in reversed([*prefix, *items]) if i.place_id), None)
