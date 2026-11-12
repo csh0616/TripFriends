@@ -53,6 +53,17 @@ function liveRecord(day: TripDay, index: number): NowRecord {
   };
 }
 
+/** TASK-014 §C: 계획 완료 날 "미리 걸어 보기" 기록. 연습 시계는 하루 시작 시각부터라 시각은 첫 응답의 day.start로 옮긴다. day는 첫 응답 전까지의 임시 값 */
+function rehearsalRecord(day: TripDay, index: number): NowRecord {
+  return {
+    day_id: day.day_id,
+    at: `${day.date}T00:00:00`,
+    demo: false,
+    rehearsal: true,
+    day: { day_id: day.day_id, day_number: index + 1, date: day.date, start: '00:00', end: '23:59', lodging: { lat: 0, lng: 0 }, must_visits: [], fixed: [] },
+  };
+}
+
 /** 계정 연결(저장 권유·어느 여행·실패 알림, TASK-012 2단계)이 홈 위에 올라간다. 옮긴 뒤·고른 뒤의 지금 여행은 홈이 다시 받는다 */
 export default function Home() {
   const hooks = useRef<{ reload: () => void; trip: (made: Trip) => void }>({ reload: () => undefined, trip: () => undefined });
@@ -131,6 +142,10 @@ function HomeBody({ hooks }: { hooks: React.RefObject<{ reload: () => void; trip
     else if (destination === 'now' && trip) setView({ name: 'now', record: liveRecord(day, trip.trip_days.indexOf(day)) });
   };
 
+  const rehearse = (day: TripDay) => {
+    if (trip) setView({ name: 'now', record: rehearsalRecord(day, trip.trip_days.indexOf(day)) });
+  };
+
   // 글꼴을 못 읽어도 막지 않는다 (시스템 글꼴). 읽는 중에만 빈 화면
   if (!fontsReady && !fontError) return <View style={styles.blank} />;
 
@@ -184,7 +199,7 @@ function HomeBody({ hooks }: { hooks: React.RefObject<{ reload: () => void; trip
       return <TripNowScreen key={view.record.day_id} record={view.record} onAtChange={noop} onNoCourse={() => setView({ name: 'planning', dayId: view.record.day_id })} onExit={() => setView({ name: 'days' })} />;
     case 'days':
       return trip ? (
-        <TripDays trip={trip} onOpen={open} onTripChange={setTrip} onNewTrip={() => setView({ name: 'create' })} />
+        <TripDays trip={trip} onOpen={open} onRehearse={rehearse} onTripChange={setTrip} onNewTrip={() => setView({ name: 'create' })} />
       ) : null;
   }
 }

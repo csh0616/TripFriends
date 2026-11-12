@@ -16,17 +16,24 @@ export type NowT06Proposal = Schemas['NowT06Proposal'];
 export type NowFact = Schemas['Fact'];
 export type VisitCheckBody = Schemas['VisitCheckRequest'];
 
+export type RehearsalAction = NonNullable<CheckBody['rehearsal_actions']>[number];
+
 export type NowParams = { at: string; lat?: number; lng?: number };
 
 /** 재실행·되돌림용 GET. 위치는 싣지 않는다 (B-4: 서버가 무시) */
 export const nowRequest = (dayId: string, at: string): Request => ({ method: 'GET', path: `/days/${dayId}/now?at=${encodeURIComponent(at)}` });
 
 /** 시각이 바뀔 때의 POST. 위치가 없으면 at만 (서버는 감지를 안 한다) */
-export const checkRequest = (dayId: string, params: NowParams): Request => {
+export const checkRequest = (dayId: string, params: NowParams, rehearsal?: RehearsalAction[]): Request => {
   const body: CheckBody = { at: params.at };
   if (params.lat !== undefined && params.lng !== undefined) {
     body.lat = params.lat;
     body.lng = params.lng;
+  }
+  // TASK-014 §C3·§11: 연습은 같은 계산을 하고 서버가 되돌린다. 앞서 연습에서 한 행동(연습 기록)을 순서대로 함께 보낸다
+  if (rehearsal) {
+    body.rehearsal = true;
+    body.rehearsal_actions = rehearsal;
   }
   return { method: 'POST', path: `/days/${dayId}/check`, body };
 };
@@ -40,3 +47,7 @@ export const visitCheckRequest = (placeId: string, body: VisitCheckBody): Reques
   path: `/places/${encodeURIComponent(placeId)}/visit-checks`,
   body,
 });
+
+/** 연습 중 [닫혔어]: 대안을 계산하는 요청이라 서버에 보내되 rehearsal: true (되돌림). 앞선 연습 기록을 함께 */
+export const rehearsalVisitCheckRequest = (placeId: string, body: VisitCheckBody, actions: RehearsalAction[]): Request =>
+  visitCheckRequest(placeId, { ...body, rehearsal: true, rehearsal_actions: actions });

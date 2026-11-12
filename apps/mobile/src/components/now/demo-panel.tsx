@@ -57,6 +57,7 @@ export function DemoPanel({
   delay,
   onDelay,
   onDelayReset,
+  rehearsal = false,
 }: {
   start: string;
   end: string;
@@ -69,6 +70,8 @@ export function DemoPanel({
   delay: number;
   onDelay: () => void;
   onDelayReset: () => void;
+  /** TASK-014 §D4: 연습 시계 = 같은 부품, 이름만 다르고 늦어짐 흉내 버튼은 없다 */
+  rehearsal?: boolean;
 }) {
   const [from, to] = [toMinutes(start), toMinutes(end)];
   const ratio = to > from ? Math.min(1, Math.max(0, (minutes - from) / (to - from))) : 0;
@@ -77,7 +80,7 @@ export function DemoPanel({
   return (
     <View testID="demo-panel" style={styles.panel}>
       <View style={styles.head}>
-        <Text style={text('caption', 'muted')}>데모 시계</Text>
+        <Text style={text('caption', 'muted')}>{rehearsal ? '연습 시계' : '데모 시계'}</Text>
         <View testID="demo-time">
           <Text style={text('num-md')}>{toClock(minutes)}</Text>
         </View>
@@ -91,14 +94,16 @@ export function DemoPanel({
           <SecondaryButton small testID="demo-play" label={playing ? '멈춤' : '재생'} onPress={onTogglePlay} />
         </View>
       </View>
-      <View style={styles.buttons}>
-        <View style={styles.grow}>
-          <SecondaryButton small testID="demo-delay-10" label="+10분 늦게" onPress={onDelay} />
+      {rehearsal ? null : (
+        <View style={styles.buttons}>
+          <View style={styles.grow}>
+            <SecondaryButton small testID="demo-delay-10" label="+10분 늦게" onPress={onDelay} />
+          </View>
+          <View style={styles.grow}>
+            <SecondaryButton small testID="demo-delay-reset" label="지연 초기화" onPress={onDelayReset} />
+          </View>
         </View>
-        <View style={styles.grow}>
-          <SecondaryButton small testID="demo-delay-reset" label="지연 초기화" onPress={onDelayReset} />
-        </View>
-      </View>
+      )}
       {delay > 0 ? <Text style={text('caption', 'muted')}>{`지연 ${delay}분`}</Text> : null}
     </View>
   );

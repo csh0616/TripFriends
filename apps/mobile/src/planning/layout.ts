@@ -149,4 +149,20 @@ export const layout = {
   fieldErrorLine: 2,
   // 누르는 영역 보강: 칩 36 -> 44
   chipSlop: (touchMin - chip) / 2,
+  // TASK-014 DESIGN-001 §4-13 위치·연습 모드 (토큰 이름이 없어 문서 숫자 그대로)
+  locIconCircle: 48, // loc-sheet 아이콘 원
+  locIcon: 24, // 원 안 핀
+  factIcon: 16, // fact-line 자물쇠
+  pillOff: 32, // pill-off 보이는 높이 (누르는 44는 hitSlop)
+  pillOffGap: 10, // 이동 상태 알약 아래 간격
+  pillOffIcon: 16,
+  statusPill: 36, // 이동 상태 알약 높이 (pill-off 자리 계산용)
+  rehBand: 52, // reh-band 높이
+  rehDot: 20, // reh-dot 바깥 지름
+  rehDotRing: 3, // reh-dot 고리
+  rehIcon: 18, // 띠 아이콘
+  rehEndHeight: 36, // [연습 끝내기] 보이는 높이 (누르는 44)
+  rehRowExtra: 40, // row-done-rehearse: 84 + 버튼 줄 40 = 124
+  chipSmIcon: 16, // btn-chip-sm 아이콘
+  noticeInfoHeight: 44, // notice-info
 } as const;

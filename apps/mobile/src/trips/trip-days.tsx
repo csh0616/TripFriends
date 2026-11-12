@@ -8,7 +8,7 @@ import { HeadAvatar } from '@/account/head-avatar';
 import { ProfileMenu } from '@/account/profile-menu';
 import { Text } from '@/components/app-text';
 import { CardButton } from '@/components/planning/card-button';
-import { CheckIcon, CloseIcon, NextIcon, PlusIcon } from '@/components/planning/icons';
+import { CheckIcon, CloseIcon, NextIcon, PlusIcon, WalkIcon } from '@/components/planning/icons';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { CityCover } from '@/components/trips/city-cover';
@@ -39,12 +39,15 @@ const FILLED = '●';
 export function TripDays({
   trip,
   onOpen,
+  onRehearse,
   onTripChange,
   onNewTrip,
 }: {
   trip: Trip;
   /** mode 'auto' = 카드의 [알아서 짜 줘]: 대화 없이 바로 자동 계획 (TASK-011 §9 Q3) */
   onOpen: (day: TripDay, destination: DayDestination, mode?: 'auto') => void;
+  /** TASK-014 §C1: 계획 완료 날의 [미리 걸어 보기] (연습 모드) */
+  onRehearse?: (day: TripDay) => void;
   onTripChange: (trip: Trip) => void;
   onNewTrip: () => void;
 }) {
@@ -127,6 +130,7 @@ export function TripDays({
                 card={card}
                 focus={card && primary?.dayId === day.day_id}
                 onOpen={() => open(day)}
+                onRehearse={!onRehearse || trip.is_demo || day.state !== 'planned' || day.chosen_option_id === null ? undefined : () => onRehearse(day)}
                 onPlan={() => plan(day)}
                 onAuto={() => plan(day, 'auto')}
                 onAdd={() => setSheetDay(day)}
@@ -234,6 +238,7 @@ function DayRow({
   card,
   focus,
   onOpen,
+  onRehearse,
   onPlan,
   onAuto,
   onAdd,
@@ -246,6 +251,8 @@ function DayRow({
   /** 지금 할 일 카드 = 아래 큰 버튼이 가리키는 날: 큰 [같이 고르기] + [알아서 짜 줘] */
   focus: boolean;
   onOpen: () => void;
+  /** 있으면(계획 완료 날, 데모 여행 아님) 줄 아래 [미리 걸어 보기] */
+  onRehearse?: () => void;
   onPlan: () => void;
   onAuto: () => void;
   onAdd: () => void;
@@ -275,13 +282,13 @@ function DayRow({
   }
 
   if (!card) {
-    return (
+    const line = (
       <Pressable
         testID={`day-row-${day.day_id}`}
         accessible={false} // 알약을 따로 읽히게 한다
         accessibilityRole="button"
         onPress={onOpen}
-        style={[styles.row, past ? styles.rowPast : styles.rowPlanned, today && styles.rowTodayFill]}
+        style={[styles.row, past ? styles.rowPast : styles.rowPlanned, today && styles.rowTodayFill, onRehearse && styles.rowInCard]}
       >
         {today ? <View pointerEvents="none" style={styles.rowRing} /> : null}
         <DayCircle past={past} />
@@ -298,6 +305,25 @@ function DayRow({
           <NextIcon color={color.muted} size={layout.dayChevron} />
         </View>
       </Pressable>
+    );
+    if (!onRehearse) return line;
+    // row-done-rehearse (DESIGN-001 §4-13): 줄 84 + 버튼 줄 40 = 카드 124. 줄을 누르면 코스 읽기만, 버튼은 아래 따로
+    return (
+      <View style={styles.rehearseCard}>
+        {line}
+        <View style={styles.rehearseRow}>
+          <Pressable
+            testID={`rehearse-${day.day_id}`}
+            accessibilityRole="button"
+            onPress={onRehearse}
+            hitSlop={{ top: addSlop, bottom: addSlop }}
+            style={styles.addEvent}
+          >
+            <WalkIcon color={fit['btn-add-event'].fg} size={layout.chipSmIcon} />
+            <Text style={fitText(fit['btn-add-event'])}>미리 걸어 보기</Text>
+          </Pressable>
+        </View>
+      </View>
     );
   }
 
@@ -416,6 +442,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: space['space-3'],
   },
+  rowInCard: { backgroundColor: 'transparent' },
+  rehearseCard: { borderRadius: radius['r-xl'], backgroundColor: color['bg-2'] },
+  // 버튼은 날짜 글자와 같은 줄(그림 원 오른쪽)에 맞춘다
+  rehearseRow: { height: layout.rehRowExtra, paddingLeft: space['space-4'] + layout.dayCircle + space['space-3'], alignItems: 'flex-start', justifyContent: 'flex-start' },
   rowPast: { minHeight: layout.rowPast },
   rowPlanned: { minHeight: layout.rowPlanned },
   card: {

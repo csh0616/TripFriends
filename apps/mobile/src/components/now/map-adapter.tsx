@@ -113,11 +113,11 @@ function HomePin({ coordinate }: { coordinate: LatLng }) {
   );
 }
 
-function MyPosition({ coordinate }: { coordinate: LatLng }) {
+function MyPosition({ coordinate, hollow }: { coordinate: LatLng; hollow: boolean }) {
   const tracking = useTrackingBriefly('position');
   return (
-    <Marker testID="map-my-position" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_POSITION}>
-      <View style={styles.position} />
+    <Marker testID={hollow ? 'map-reh-dot' : 'map-my-position'} coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_POSITION}>
+      <View style={hollow ? styles.rehDot : styles.position} />
     </Marker>
   );
 }
@@ -223,6 +223,7 @@ export function MapAdapter({
   routeDone,
   routeRemaining,
   position,
+  hollowPosition = false,
   onReady,
   onFail,
 }: {
@@ -233,6 +234,8 @@ export function MapAdapter({
   routeDone: LatLng[];
   routeRemaining: LatLng[];
   position: LatLng | null;
+  /** TASK-014 §4-13 reh-dot: 연습 중 "계획대로라면 여기" = 속이 빈 점 */
+  hollowPosition?: boolean;
   onReady: () => void;
   onFail: () => void;
 }) {
@@ -304,7 +307,7 @@ export function MapAdapter({
       {pins.map((pin) => (
         <NumberPin key={pin.seq} pin={pin} />
       ))}
-      {position ? <MyPosition coordinate={position} /> : null}
+      {position ? <MyPosition coordinate={position} hollow={hollowPosition} /> : null}
     </MapView>
   );
 }
@@ -384,6 +387,15 @@ const styles = StyleSheet.create({
     borderRightWidth: layout.homeStroke,
     borderBottomWidth: layout.homeStroke,
     borderColor: color.ink,
+  },
+  // reh-dot: 속 흰색 + 고리 3 ink, 바깥 지름 20, 퍼지는 고리 없음
+  rehDot: {
+    width: layout.rehDot,
+    height: layout.rehDot,
+    borderRadius: radius['r-full'],
+    backgroundColor: color.surface,
+    borderWidth: layout.rehDotRing,
+    borderColor: color['ink'],
   },
   position: {
     width: layout.positionDot,

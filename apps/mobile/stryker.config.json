@@ -22,7 +22,9 @@
     "src/lib/auth.ts",
     "src/lib/auth-messages.ts",
     "src/lib/account-link.ts",
-    "src/lib/mask-email.ts"
+    "src/lib/mask-email.ts",
+    "src/lib/live-location.ts",
+    "src/lib/now-api.ts"
   ],
   "reporters": [
     "clear-text",
@@ -60,7 +62,10 @@
         "<rootDir>/__tests__/task-012-link-lib.test.ts",
         "<rootDir>/__tests__/task-012-s18.test.tsx",
         "<rootDir>/__tests__/task-012-dev-login.test.tsx",
-        "<rootDir>/__tests__/planning-failures.test.tsx"
+        "<rootDir>/__tests__/planning-failures.test.tsx",
+        "<rootDir>/__tests__/task-014-location-lib.test.ts",
+        "<rootDir>/__tests__/task-014-location.test.tsx",
+        "<rootDir>/__tests__/task-014-rehearsal.test.tsx"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",
