@@ -1,0 +1,205 @@
+# TASK-013: PR(→ main)마다, 그리고 main push마다 테스트를 돌린다. 비밀값 0 (GitHub Secrets 안 씀).
+# 액션은 전부 커밋 SHA로 고정한다 (태그는 옮겨질 수 있어서). 뒤 주석이 사람이 읽는 버전.
+# 경로 목록(SERVER_PATHS·MOBILE_PATHS·ALL_PATHS)은 apps/server/tests/test_task013_ci.py가 문서 A6 표와 대조한다.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.decide.outputs.server }}
+      mobile: ${{ steps.decide.outputs.mobile }}
+    env:
+      SERVER_PATHS: >-
+        apps/server/**
+        supabase/**
+        packages/**
+        testdata/**
+        docs/poc/poc_c.json
+        docs/data/osaka-seed.yaml
+        docs/tasks/TASK-013_CI.md
+      MOBILE_PATHS: >-
+        apps/mobile/**
+        packages/**
+        package.json
+        pnpm-lock.yaml
+        .npmrc
+        testdata/particles.json
+        apps/server/trip/link.py
+        .node-version
+        pnpm-workspace.yaml
+        docs/DESIGN-001_Brand-Tokens.md
+        docs/design/logo-ink.png
+        docs/design/app-icon-1024.png
+        docs/design/google-map-style.json
+        docs/design/google/g-logo.png
+        docs/design/google/g-logo@2x.png
+        docs/design/google/g-logo@3x.png
+        docs/design/place-images/cafe.svg
+        docs/design/place-images/food.svg
+        docs/design/place-images/walk.svg
+        docs/design/place-images/museum.svg
+        docs/design/place-images/landmark.svg
+        docs/design/place-images/shop.svg
+        docs/design/place-images/experience.svg
+        docs/design/place-images/night.svg
+      ALL_PATHS: >-
+        .github/workflows/ci.yml
+      EVENT_NAME: ${{ github.event_name }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: decide
+        run: |
+          set -euo pipefail
+          # 패턴 하나가 파일 하나를 덮는지: "dir/**"는 그 아래 전부, 나머지는 정확한 파일
+          matches() {
+            local file="$1" pattern
+            shift
+            for pattern in "$@"; do
+              case "$pattern" in
+                */\*\*) [[ "$file" == "${pattern%\*\*}"* ]] && return 0 ;;
+                *) [[ "$file" == "$pattern" ]] && return 0 ;;
+              esac
+            done
+            return 1
+          }
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "main push: 전부 돌린다"
+            echo "server=true" >> "$GITHUB_OUTPUT"
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          read -r -a server_paths <<< "$SERVER_PATHS"
+          read -r -a mobile_paths <<< "$MOBILE_PATHS"
+          read -r -a all_paths <<< "$ALL_PATHS"
+          server=false
+          mobile=false
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            echo "바뀜: $file"
+            if matches "$file" "${all_paths[@]}"; then server=true; mobile=true; fi
+            if matches "$file" "${server_paths[@]}"; then server=true; fi
+            if matches "$file" "${mobile_paths[@]}"; then mobile=true; fi
+          done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          echo "server=$server mobile=$mobile"
+          echo "server=$server" >> "$GITHUB_OUTPUT"
+          echo "mobile=$mobile" >> "$GITHUB_OUTPUT"
+
+  server:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          working-directory: apps/server
+      - run: uv sync --frozen
+      - run: uv run pytest
+
+  server-slow:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          working-directory: apps/server
+      - run: uv sync --frozen
+      - run: uv run pytest -m slow
+
+  server-db:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: 마이그레이션을 이름 순서대로 적용
+        run: |
+          set -euo pipefail
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            echo "적용: $f"
+            psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -f "$f"
+          done
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          working-directory: apps/server
+      - run: uv sync --frozen
+        working-directory: apps/server
+      - run: uv run pytest -m db
+        working-directory: apps/server
+
+  mobile:
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # pnpm 버전은 루트 package.json의 packageManager에서 읽는다
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      # Node 버전은 .node-version에서 읽는다
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter mobile exec tsc --noEmit
+      - run: pnpm --filter mobile test --ci
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          working-directory: apps/server
+      - run: uv sync --frozen
+      - run: uv run pytest tests/test_secret_scan.py

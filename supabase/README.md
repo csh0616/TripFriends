@@ -43,3 +43,8 @@
 5. `supabase db push --remote` — 실제 적용
 
 한 번 적용한 마이그레이션 파일은 고치지 않고, 바뀌는 것은 새 파일로 더한다.
+
+## CI (TASK-013)
+- CI가 도는 것: PR·main push마다 서버 테스트(기본·`slow`·`db`), 앱 `tsc`·Jest, 키 검사. 맥에서 도는 것: `live`·Maestro·돌연변이 측정·화면 점검.
+- 맥은 Supabase CLI, CI는 순수 Postgres 17 — 마이그레이션이 Supabase 전용 기능(auth 스키마·역할)을 쓰기 시작하면 CI를 CLI로 바꾼다.
+- CI의 DB 작업은 `psql`로 `migrations/*.sql`을 이름 순서대로 적용한 뒤 `TEST_DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/postgres uv run pytest -m db`를 돌린다.

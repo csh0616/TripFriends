@@ -4,3 +4,6 @@ packages:
 allowBuilds:
   unrs-resolver: true
   "@parcel/watcher": false
+
+# 나온 지 얼마 안 된 패키지 안전장치 (분, 1440 = 1일). 맥·CI 같은 규칙, 예외 설정 없음 (TASK-013 B4)
+minimumReleaseAge: 1440
