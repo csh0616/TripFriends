@@ -29,3 +29,5 @@ declare module 'node:crypto' {
   export function randomBytes(size: number): NodeBuffer;
   export function randomUUID(): string;
 }
+// TASK-013 §11: 가짜 모듈 4개(module.exports)용. expo-env.d.ts(git 밖)가 없는 CI에서도 tsc가 통과하게.
+declare const module: { exports: unknown };
