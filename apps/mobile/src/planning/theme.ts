@@ -10,6 +10,8 @@ export const radius = tokens.radius;
 export const motion = tokens.motion;
 /** TASK-011 DESIGN-001 §4-11 디자인 맞추기 토큰 12개 (한 토큰에 값이 여럿이라 묶음) */
 export const fit = tokens.fit;
+/** TASK-012 2단계 DESIGN-001 §4-12 계정 연결 토큰 5개 (한 토큰에 값이 여럿이라 묶음) */
+export const account = tokens.account;
 
 export type TypeName = keyof typeof tokens.type;
 
@@ -71,6 +73,7 @@ export const shadow = {
   float: shadowFrom(tokens.shadow['sh-float']),
   sheet: shadowFrom(tokens.shadow['sh-sheet']),
   raise: shadowFrom(tokens.shadow['sh-raise']),
+  notice: shadowFrom(tokens.account['notice-fail'].shadow), // §4-12 notice-fail (두 겹 중 첫 겹)
 } as const;
 
 /** src-google (DESIGN-001 §4-10): "Google Maps" 글자. Roboto 400, 12/16, 줄바꿈 없음, 번역 금지 (TASK-010 §11 G1). 글자 크기·색은 토큰에서 */

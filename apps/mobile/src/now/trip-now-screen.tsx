@@ -11,6 +11,7 @@ import { Text } from '@/components/app-text';
 import { DemoPanel } from '@/components/now/demo-panel';
 import { MapAdapter, type MapAdapterHandle } from '@/components/now/map-adapter';
 import { NowCardView } from '@/components/now/now-cards';
+import { ProfileMenu } from '@/account/profile-menu';
 import { FriendAvatar } from '@/components/planning/friend-bubble';
 import { LocateIcon } from '@/components/planning/icons';
 import { InputBar } from '@/components/planning/input-bar';
@@ -543,13 +544,7 @@ export function TripNowScreen({
       {/* 입력창은 시트 아래 고정. R1은 비활성 안내 */}
       <InputBar onSend={() => undefined} disabled disabledHint={INPUT_HINT} />
       {profileOpen ? (
-        <View style={styles.profileOverlay}>
-          <Pressable testID="profile-scrim" accessibilityLabel="닫기" style={StyleSheet.absoluteFill} onPress={() => setProfileOpen(false)} />
-          <View testID="profile-sheet" style={styles.profileSheet}>
-            <SecondaryButton testID="profile-restart" label={live ? '날짜 목록으로' : '처음부터 다시'} onPress={onExit} />
-            <SecondaryButton testID="profile-close" label="닫기" onPress={() => setProfileOpen(false)} />
-          </View>
-        </View>
+        <ProfileMenu restartLabel={live ? '날짜 목록으로' : '처음부터 다시'} onRestart={onExit} onClose={() => setProfileOpen(false)} />
       ) : null}
       {sosOpen ? <SosSheet onClose={() => setSosOpen(false)} /> : null}
     </View>
@@ -571,16 +566,6 @@ const styles = StyleSheet.create({
     gap: space['space-2'],
   },
   avatarHit: { width: control['touch-min'], height: control['touch-min'], alignItems: 'center', justifyContent: 'center' },
-  profileOverlay: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end', backgroundColor: color.scrim },
-  profileSheet: {
-    backgroundColor: color.surface,
-    borderTopLeftRadius: radius['r-sheet'],
-    borderTopRightRadius: radius['r-sheet'],
-    padding: layout.screenMargin,
-    paddingBottom: space['space-8'],
-    gap: space['space-3'],
-    ...shadow.sheet,
-  },
   side: { minWidth: control.sos, justifyContent: 'center' },
   right: { alignItems: 'flex-end' },
   pill: {

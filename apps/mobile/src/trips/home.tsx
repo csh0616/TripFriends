@@ -5,6 +5,7 @@ import { useFonts } from 'expo-font';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
 
+import { AccountProvider, useAccount } from '@/account/account-context';
 import { Text } from '@/components/app-text';
 import { Notice } from '@/components/planning/notice';
 import { PrimaryButton } from '@/components/planning/primary-button';
@@ -52,7 +53,22 @@ function liveRecord(day: TripDay, index: number): NowRecord {
   };
 }
 
+/** 계정 연결(저장 권유·어느 여행·실패 알림, TASK-012 2단계)이 홈 위에 올라간다. 옮긴 뒤·고른 뒤의 지금 여행은 홈이 다시 받는다 */
 export default function Home() {
+  const hooks = useRef<{ reload: () => void; trip: (made: Trip) => void }>({ reload: () => undefined, trip: () => undefined });
+  const reload = useCallback(() => hooks.current.reload(), []);
+  const onTrip = useCallback((made: Trip) => hooks.current.trip(made), []);
+  return (
+    <AccountProvider onReload={reload} onTrip={onTrip}>
+      <HomeBody hooks={hooks} />
+    </AccountProvider>
+  );
+}
+
+const plannedCount = (trip: Trip | null) => (trip ? trip.trip_days.filter((day) => day.chosen_option_id !== null).length : 0);
+
+function HomeBody({ hooks }: { hooks: React.RefObject<{ reload: () => void; trip: (made: Trip) => void }> }) {
+  const account = useAccount();
   const [fontsReady, fontError] = useFonts(fontAssets);
   const [view, setView] = useState<View_>({ name: 'loading' });
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -66,32 +82,45 @@ export default function Home() {
   }, []);
 
   /** 서버에 지금 여행을 묻는다 (Bearer). 404 = 빈 첫 화면 */
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<Trip | null> => {
     setView({ name: 'loading' });
     const result = await send(tripRequests.current());
-    if (!alive.current) return;
+    if (!alive.current) return null;
     if (result.ok && isTrip(result.data)) {
       setTrip(result.data);
       setView({ name: 'days' });
-      return;
+      return result.data;
     }
     if (!result.ok && result.failure.kind === 'not_found') {
       setTrip(null);
       // 이어 가던 데모(계획 대화·여행 중 데모)가 기기에 있으면 그대로 이어 간다 (TASK-006 R10)
       const stored = await Promise.all([AsyncStorage.getItem(STORAGE_KEY), AsyncStorage.getItem(NOW_KEY)]).catch(() => [null, null]);
-      if (!alive.current) return;
+      if (!alive.current) return null;
       setView(stored.some((value) => value !== null) ? { name: 'demo' } : { name: 'empty', notice: null });
-      return;
+      return null;
     }
     // 익명 로그인이 안 됐으면 안내 없이 빈 첫 화면 (§6: 여행 만들기에서 다시 로그인). 저장소 503·401은 안내 + [다시]
     const failure = result.ok ? null : result.failure;
-    if (failure?.kind === 'auth_unavailable') return setView({ name: 'empty', notice: null });
+    if (failure?.kind === 'auth_unavailable') {
+      setView({ name: 'empty', notice: null });
+      return null;
+    }
     setView({ name: 'empty', notice: (failure && authNotice(failure)) ?? (failure?.kind === 'network' ? OFFLINE : OOPS) });
+    return null;
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 계정 연결이 끝난 뒤: 옮겼다/로그아웃했다 -> 지금 여행을 다시 묻고, 어느 여행을 골랐다 -> 그 여행의 날짜 목록
+  useEffect(() => {
+    hooks.current.reload = () => void load();
+    hooks.current.trip = (made) => {
+      setTrip(made);
+      setView({ name: 'days' });
+    };
+  }, [hooks, load]);
 
   const open = (day: TripDay, destination: DayDestination, mode?: 'auto') => {
     if (destination === 'planning') {
@@ -142,7 +171,11 @@ export default function Home() {
           onBackToList={() => setView({ name: 'days' })}
           onLeave={() => {
             delete sessions.current[dayId];
-            void load();
+            // 코스를 고른 그 순간에만 저장 권유 (TASK-012 C1): 계획 완료인 날이 늘었을 때. 데모 뒤·이미 계획한 여행을 열 때는 없다
+            const before = plannedCount(trip);
+            void load().then((next) => {
+              if (next && plannedCount(next) > before) void account.offerSave();
+            });
           }}
         />
       );

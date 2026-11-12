@@ -21,6 +21,7 @@ export function ScreenFrame({
   onBack,
   backLabel,
   backDisabled,
+  left,
   input,
   footer,
   action,
@@ -34,6 +35,8 @@ export function ScreenFrame({
   /** "‹ 날짜" 뒤로의 글자 (읽기만 화면). 실제 여행의 계획 대화는 아래 LeaveContext가 항상 "날짜" */
   backLabel?: string;
   backDisabled?: boolean;
+  /** 머리 왼쪽 자리 (뒤로가 없을 때) */
+  left?: React.ReactNode;
   input?: FrameInput;
   footer?: React.ReactNode;
   /** TASK-010: 스크롤 밖 맨 아래에 고정되는 주 버튼 자리 (입력창이 없는 화면) */
@@ -50,7 +53,7 @@ export function ScreenFrame({
   // 실제 여행의 계획 대화는 어느 단계(코스안 포함)에서든 머리 뒤로가 "‹ 날짜" (TASK-010 §12·§13 답 2). 단계 사이 뒤로는 화면의 단추가 맡는다
   return (
     <View style={styles.root}>
-      <Header title={title} subtitle={subtitle} onBack={leave ?? onBack} backLabel={leave ? '날짜' : backLabel} backDisabled={backDisabled} onSos={() => setSosOpen(true)} />
+      <Header title={title} subtitle={subtitle} onBack={leave ?? onBack} backLabel={leave ? '날짜' : backLabel} backDisabled={backDisabled} left={left} onSos={() => setSosOpen(true)} />
       <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.body}

@@ -4,6 +4,8 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
+import { HeadAvatar } from '@/account/head-avatar';
+import { ProfileMenu } from '@/account/profile-menu';
 import { Text } from '@/components/app-text';
 import { CardButton } from '@/components/planning/card-button';
 import { CheckIcon, CloseIcon, NextIcon, PlusIcon } from '@/components/planning/icons';
@@ -49,6 +51,7 @@ export function TripDays({
   const { width } = useWindowDimensions();
   const [sheetDay, setSheetDay] = useState<TripDay | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false); // 내 프로필 메뉴 (TASK-012 C5)
   const [hint, setHint] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -88,6 +91,7 @@ export function TripDays({
   return (
     <>
       <ScreenFrame
+        left={<HeadAvatar onPress={() => setMenuOpen(true)} />}
         action={
           primary && primaryDay ? (
             <View style={styles.primaryWrap}>
@@ -161,6 +165,16 @@ export function TripDays({
             change(sheetDay.day_id, (events) => [...events, event].sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at)));
             setSheetDay(null);
           }}
+        />
+      ) : null}
+      {menuOpen ? (
+        <ProfileMenu
+          restartLabel="처음부터 다시"
+          onRestart={() => {
+            setMenuOpen(false);
+            setConfirming(true); // 실제 여행의 [처음부터 다시]: 새 여행 확인과 같은 시트 (TASK-012 §9 5, §17 2)
+          }}
+          onClose={() => setMenuOpen(false)}
         />
       ) : null}
       {confirming ? (

@@ -3,7 +3,7 @@
 import 'react-native-url-polyfill/auto';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type Session } from '@supabase/supabase-js';
 
 // 점검 전용(로컬 Supabase) 값이 있으면 먼저 읽는다 (EXPO_PUBLIC_CHECK_API_URL과 같은 방식)
 const url = process.env.EXPO_PUBLIC_CHECK_SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -45,9 +45,23 @@ const storage = {
   },
 };
 
+// flowType 'pkce': Google 연결의 되돌아오기 주소(tripfriends://)는 다른 앱도 등록할 수 있다. code만으로는 세션을 못 만들게 한다 (TASK-012 §15 S1)
 const supabase = createClient(SUPABASE_URL, key || 'missing-key', {
-  auth: { storage, storageKey: STORAGE_KEY, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false },
+  auth: { storage, storageKey: STORAGE_KEY, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, flowType: 'pkce' },
 });
+
+/** 계정 연결(lib/account-link.ts)·개발용 가짜 공급자가 같은 클라이언트·기기 저장소를 쓴다. 앱은 Supabase를 로그인에만 쓴다 (ADR-016 §3-3) */
+export const authClient = supabase.auth;
+
+/** 기기에 저장된 세션을 그대로 읽는다 (새로 받기·네트워크 없음). 프로필 메뉴가 "저장됨/안 됨"을 보여 줄 때 쓴다 */
+export async function readStoredSession(): Promise<Session | null> {
+  try {
+    const raw = await storage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    return null;
+  }
+}
 
 export type Acquired = { token: string } | { problem: 'unauthorized' | 'unavailable' };
 
