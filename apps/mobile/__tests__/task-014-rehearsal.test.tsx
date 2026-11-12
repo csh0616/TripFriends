@@ -11,6 +11,9 @@
 //   §10 Q5: 계산하는 요청(check, [닫혔어] 뒤 대안 = POST /places/{place_id}/visit-checks 본문 {day_id, at, was_open:false})은 본문에 rehearsal: true.
 //     고르고 확정하는 행동([이걸로 할래] 반영, [그대로 갈래], [열었어] = 영업 확인했어)은 서버 요청 0, 화면에서만 바뀐다
 //     ([이걸로 할래] = 고른 제안의 일정으로 남은 화면, [열었어] = 그 장소 칩이 화면에서만 "확인됨"). 연습 한 번에 첫 행동에만 안내 한 줄
+//   §11 연습 기록: 고른 대안·영업 확인(열었어·닫혔어)을 순서대로 앱 메모리에 쌓고, 다음 연습 요청(check·visit-checks)마다 본문 rehearsal_actions로 보낸다
+//     [test-writer 제안 모양] {type:'accept', event:<응답의 NowEvent 그대로>, proposal_id} · {type:'visit_check', place_id, day_id, at, was_open}
+//     [연습 끝내기]·화면 이탈이면 버린다. 기기 저장소에 0
 //   [대안 고르기]·[그대로 갈래]·[열었어]/[닫혔어] = 기존 testID proposal-{id}·select-confirm·event-dismiss·visit-open·visit-closed
 //   연습 중 실패 = 글자 "지금 연습을 못 해" + [다시](기존 Notice의 retry-button)
 // §9·§10(v1.2)으로 문구·규칙이 확정돼 [보드] 표시는 뺐다. 누르는 영역 44(E2·task-014-design §2)는 height·minHeight + hitSlop으로 센다.
@@ -22,9 +25,10 @@ import { fakePosition } from '@/lib/fake-position';
 
 import { locationFake } from '../test-support/expo-location-mock';
 import { apiError, FakeServer, json, networkDown, type Reply, type Sent } from '../test-support/fake-server';
-import { resetDevice, tap } from '../test-support/planning-driver';
+import { resetDevice, storedValues, tap } from '../test-support/planning-driver';
 import { day as demoDay } from '../test-support/planning-fixtures';
-import { delayedView, nowView, t02 } from '../test-support/trip-now-fixtures';
+import { delayedView, nowView, PROPOSAL_SPOT, t02 } from '../test-support/trip-now-fixtures';
+import { secureStore } from '../test-support/secure-store-mock';
 
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
@@ -94,6 +98,9 @@ const checks = () => sentTo(`POST /days/${PLANNED}/check`);
 const body = (sent: Sent) => (sent.body ?? {}) as Record<string, unknown>;
 /** GET 말고 서버에 보낸 것 (쓰기일 수 있는 요청) */
 const writes = () => server.requests.filter((r) => r.method !== 'GET');
+/** §11 연습 기록 (본문 rehearsal_actions, 없으면 빈 목록) */
+const actionsOf = (sent: Sent): unknown[] => (Array.isArray(body(sent).rehearsal_actions) ? (body(sent).rehearsal_actions as unknown[]) : []);
+const hasAction = (sent: Sent, type: string) => actionsOf(sent).some((one) => (one as { type?: string }).type === type);
 
 async function toRehearsal() {
   await startHome();
@@ -316,20 +323,29 @@ describe('C4 연습 중 행동', () => {
     expect(sentTo('POST /events/')).toEqual([]);
   });
 
-  test('T14_C4_Q5_열었어(영업_확인했어)는_서버에_보내지_않고_칩만_화면에서_확인됨', async () => {
+  // §11: 고르고 확정하는 행동은 그 자리에서 서버에 보내지 않고 연습 기록에 쌓아, 다음 연습 요청마다 rehearsal_actions로 함께 보낸다.
+  // 가짜 서버는 기록을 본 응답(실제처럼 적용된 화면)을 돌려준다: 앱이 화면을 직접 바꾸든 다음 응답으로 바꾸든 같은 결과가 보이게
+
+  test('T14_C4_S11_Q2_열었어는_T_05가_빠지고_칩이_확인됨_다음_요청_기록에_든다', async () => {
     const view = rehearsalView({ main: t05, subs: [t02()] }); // t02의 다음 장소 = D02 (미확인)
+    const opened = rehearsalView({ main: t02({ next_item: { ...t02().next_item, facts: [{ ...t02().next_item.facts[0], status: 'confirmed' }] } }), subs: [] });
     nowReply = () => json(200, view);
-    checkReply = (sent) => json(200, { ...view, at: body(sent).at });
+    checkReply = (sent) => json(200, { ...(hasAction(sent, 'visit_check') ? opened : view), at: body(sent).at });
     await toRehearsal();
     expect(within(screen.getByTestId('card-T-02')).getByText('미확인')).toBeTruthy(); // 시험 자체 확인
+    const pressedAt = String(body(checks()[checks().length - 1]).at);
     await tap(await screen.findByTestId('visit-open'));
     expect(await screen.findByText(REHEARSAL_NOTE)).toBeTruthy();
-    expect(sentTo('POST /places/')).toEqual([]);
+    expect(sentTo('POST /places/')).toEqual([]); // [열었어]는 그 자리에서 보내지 않는다
+    await waitFor(() => expect(screen.queryByTestId('card-T-05')).toBeNull()); // 실제처럼 카드가 빠진다
     await waitFor(() => expect(within(screen.getByTestId('card-T-02')).getByText('확인됨')).toBeTruthy());
+    await plusTen();
+    await waitFor(() => expect(hasAction(checks()[checks().length - 1], 'visit_check')).toBe(true));
+    expect(actionsOf(checks()[checks().length - 1])).toEqual([{ type: 'visit_check', place_id: 'D02', day_id: PLANNED, at: pressedAt, was_open: true }]);
     for (const sent of writes()) expect(body(sent).rehearsal).toBe(true);
   });
 
-  test('T14_C4_Q5_닫혔어는_대안_계산이라_visit_checks를_rehearsal_true로_보낸다', async () => {
+  test('T14_C4_Q5_닫혔어는_대안_계산이라_visit_checks를_rehearsal_true로_보내고_기록에도_든다', async () => {
     const view = rehearsalView({ main: t05, subs: [t02()] });
     nowReply = () => json(200, view);
     checkReply = (sent) => json(200, { ...view, at: body(sent).at });
@@ -340,19 +356,66 @@ describe('C4 연습 중 행동', () => {
     const sent = body(sentTo('POST /places/D02/visit-checks')[0]);
     expect(sent).toMatchObject({ day_id: PLANNED, was_open: false, rehearsal: true });
     expect(String(sent.at).startsWith(PLANNED_DATE)).toBe(true);
+    expect(sent.rehearsal_actions ?? []).toEqual([]); // 첫 행동이라 앞선 기록이 없다
+    await plusTen();
+    await waitFor(() => expect(hasAction(checks()[checks().length - 1], 'visit_check')).toBe(true));
+    expect(actionsOf(checks()[checks().length - 1])).toEqual([{ type: 'visit_check', place_id: 'D02', day_id: PLANNED, at: sent.at, was_open: false }]);
     for (const one of writes()) expect(body(one).rehearsal).toBe(true);
   });
 
-  test('T14_C4_Q5_고른_대안의_일정으로_남은_연습_화면이_바뀐다', async () => {
+  test('T14_C4_S11_Q1_고른_대안은_다음_10분_요청의_기록으로_가고_화면은_고른_코스', async () => {
     const view = delayedView({ day: plannedDay });
+    const chosenCourse = rehearsalView({ pins: [{ seq: 2, place_id: 'D09', name: '서버_제안_장소', ...PROPOSAL_SPOT, start: '14:10', end: '15:00', travel_min: 20, state: 'next' }] });
     nowReply = () => json(200, view);
-    checkReply = (sent) => json(200, { ...view, at: body(sent).at });
+    checkReply = (sent) => json(200, { ...(hasAction(sent, 'accept') ? chosenCourse : view), at: body(sent).at });
     await toRehearsal();
     expect(screen.queryByText('서버_제안_장소')).toBeNull(); // 고르기 전에는 제안 일정이 화면에 없다 (TASK-007 C6)
     await tap(await screen.findByTestId('proposal-prop-relaxed'));
     await tap(screen.getByTestId('select-confirm'));
-    expect((await screen.findAllByText('서버_제안_장소')).length).toBeGreaterThan(0);
     expect(sentTo('POST /proposals/')).toEqual([]);
+    await plusTen();
+    await waitFor(() => expect(hasAction(checks()[checks().length - 1], 'accept')).toBe(true));
+    expect(actionsOf(checks()[checks().length - 1])).toEqual([{ type: 'accept', event: view.event, proposal_id: 'prop-relaxed' }]);
+    expect((await screen.findAllByText('서버_제안_장소')).length).toBeGreaterThan(0); // 고른 코스로 이어진다
+  });
+
+  test('T14_S11_기록은_행동_순서대로_쌓인다', async () => {
+    const view = rehearsalView({ main: t05, subs: [t02()] });
+    nowReply = () => json(200, view);
+    checkReply = (sent) => json(200, { ...view, at: body(sent).at });
+    await toRehearsal();
+    await tap(await screen.findByTestId('visit-open'));
+    await plusTen();
+    await waitFor(() => expect(actionsOf(checks()[checks().length - 1])).toHaveLength(1));
+    const delayed = delayedView({ day: plannedDay });
+    checkReply = (sent) => json(200, { ...delayed, at: body(sent).at });
+    await plusTen();
+    await tap(await screen.findByTestId('proposal-prop-relaxed'));
+    await tap(screen.getByTestId('select-confirm'));
+    await plusTen();
+    await waitFor(() => expect(actionsOf(checks()[checks().length - 1])).toHaveLength(2));
+    expect(actionsOf(checks()[checks().length - 1]).map((one) => (one as { type: string }).type)).toEqual(['visit_check', 'accept']);
+  });
+
+  test('T14_S11_연습_끝내기_뒤_새_연습의_기록은_비어_있고_기기_저장소에도_없다', async () => {
+    const view = delayedView({ day: plannedDay });
+    nowReply = () => json(200, view);
+    checkReply = (sent) => json(200, { ...view, at: body(sent).at });
+    await toRehearsal();
+    await tap(await screen.findByTestId('proposal-prop-relaxed'));
+    await tap(screen.getByTestId('select-confirm'));
+    await plusTen();
+    await waitFor(() => expect(hasAction(checks()[checks().length - 1], 'accept')).toBe(true));
+    const device = () => [...storedValues(), ...secureStore.values()].join('\n');
+    expect(device()).not.toMatch(/rehearsal_actions|prop-relaxed|visit_check/); // 연습 기록은 앱 메모리에만
+    await tap(await screen.findByText('연습 끝내기'));
+    const before = checks().length;
+    await tap(await screen.findByTestId(`rehearse-${PLANNED}`));
+    await screen.findByTestId('now-main');
+    await plusTen();
+    await waitFor(() => expect(checks().length).toBeGreaterThan(before));
+    for (const sent of checks().slice(before)) expect(actionsOf(sent)).toEqual([]);
+    expect(device()).not.toMatch(/rehearsal_actions|prop-relaxed|visit_check/);
   });
 
   test('T14_C4_연습에서_고른_뒤_끝내고_실제_오늘이_아닌_그날을_다시_열어도_저장_요청은_0', async () => {

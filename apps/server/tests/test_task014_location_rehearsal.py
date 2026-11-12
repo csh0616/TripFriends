@@ -748,3 +748,294 @@ def quiet_visit_env(env):
 
     env.client = TestClient(env.app, headers=bearer(TESTER), raise_server_exceptions=False)
     return env
+
+
+# =====================================================================
+# §11 연습 기록 rehearsal_actions: 연습 중 행동(고른 대안·영업 확인)을 다음 연습 요청마다 본문으로 함께 보낸다.
+# 서버는 같은 트랜잭션 안에서 실제와 같은 코드로 먼저 적용 -> 계산 -> 전부 되돌린다. "연습은 실제와 똑같이 보이고, 저장만 안 한다"
+#
+# 계약 (test-writer 제안, 승인 대기 — 칸 이름·종류는 문서에 없다):
+#   check·visit-checks 본문에 "rehearsal_actions": [행동, ...] (rehearsal: true일 때, 순서대로 적용)
+#   고른 대안 = {"type": "accept", "event": <앞선 연습 응답의 NowEvent 그대로>, "proposal_id": <그 event.proposals 중 고른 id>}
+#       accept 요청(경로 proposal_id)에 맞추되, 그 제안은 이미 되돌려져 서버에 없으므로 서버가 만든 사건을 통째로 싣는다
+#       (§11 "그 연습 요청에서 서버가 만든 것과 같은 모양인지 확인") -> 모양이 NowEvent가 아니거나 proposal_id가 그 안에 없으면 400
+#   영업 확인 = {"type": "visit_check", "place_id", "day_id", "at", "was_open"} = visit-checks 본문 + 경로의 place_id
+#   남의 여행 값(남의 day_id, 남의 사건 id) = 404 (§11 "남의 여행 값은 404 그대로"). 400·404 모두 저장 0
+# =====================================================================
+
+
+def act_accept(event: dict, proposal_id: str | None = None) -> dict:
+    return {"type": "accept", "event": event, "proposal_id": proposal_id or event["proposals"][0]["proposal_id"]}
+
+
+def act_visit(place_id: str, day_id: str, at: str, was_open: bool = True) -> dict:
+    return {"type": "visit_check", "place_id": place_id, "day_id": day_id, "at": at, "was_open": was_open}
+
+
+def rehearse_with(client: TestClient, day_id: str, at: str, position, actions: list, user: str = ME):
+    payload = body(at, position, rehearsal=True)
+    payload["rehearsal_actions"] = actions
+    return client.post(f"/days/{day_id}/check", json=payload, headers=bearer(user))
+
+
+def ok(response) -> dict:
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def view_cards(view: dict) -> list[dict]:
+    return [view["main"], *view["subs"]]
+
+
+def t05_places(view: dict) -> list[str]:
+    return [card["place"]["place_id"] for card in view_cards(view) if card["type"] == "T-05"]
+
+
+def find_t05(client: TestClient, day_id: str, date: str, after: str = "00:00", user: str = ME, skip: tuple[str, ...] = ()) -> tuple[str, str]:
+    """GET /now(읽기뿐)를 5분씩 돌려 영업 확인 카드(T-05)가 처음 나오는 (장소, 시각)."""
+    start = int(after[:2]) * 60 + int(after[3:5])
+    for minute in range(start, 24 * 60, 5):
+        hhmm = f"{minute // 60:02d}:{minute % 60:02d}"
+        found = [p for p in t05_places(now_view(client, day_id, date, hhmm, user)) if p not in skip]
+        if found:
+            return found[0], hhmm
+    raise AssertionError("시험 자체 확인: 영업 확인 카드(T-05)가 나오는 시각이 없다")
+
+
+def same_view(a: dict, b: dict, days: dict[str, str] | None = None) -> bool:
+    """same_shape + 날 id 바꾸기(다른 사용자의 같은 날과 비교할 때)."""
+    def swap(value):
+        if isinstance(value, dict):
+            return {k: swap(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [swap(v) for v in value]
+        return (days or {}).get(value, value) if isinstance(value, str) else value
+
+    return same_shape(swap(a)) == same_shape(swap(b))
+
+
+def real_accept(client: TestClient, proposal_id: str, user: str = ME) -> dict:
+    return ok(client.post(f"/proposals/{proposal_id}/accept", headers=bearer(user)))
+
+
+def real_visit(client: TestClient, action: dict, user: str | None = ME) -> dict:
+    """user None = 클라이언트 기본 헤더 (env 도우미의 TESTER)."""
+    payload = {k: action[k] for k in ("day_id", "at", "was_open")}
+    headers = bearer(user) if user else None
+    return ok(client.post(f"/places/{action['place_id']}/visit-checks", json=payload, headers=headers))
+
+
+# ---------- Q1 고른 대안 -> [+10분] check는 고른 코스 기준 ----------
+
+
+@WORLDS
+def test_T14_S11_Q1_고른_대안_뒤_10분_뒤_연습_check는_실제로_반영한_뒤와_같다(world):
+    kind, client, osaka = world
+    day_id, date = planned_day(osaka)
+    late, position = late_input(client, day_id, date)
+    later = at_of(date, hhmm_plus(late[11:16], 10))
+    event = rehearse(client, day_id, late, position)["event"]
+    assert event and event["state"] == "awaiting" and event["proposals"]  # 시험 자체 확인
+    chosen = event["proposals"][-1]["proposal_id"]  # 마지막 안(packed가 있으면 packed): 원래 코스와 다른 시각이 나오게
+    before = everything(osaka, kind)
+    practiced = ok(rehearse_with(client, day_id, later, position, [act_accept(event, chosen)]))
+    assert everything(osaka, kind) == before  # 저장 0
+    # 같은 행동을 실제로: check -> accept(같은 자리의 안) -> 같은 check
+    actual_event = real(client, day_id, late, position)["event"]
+    index = [p["proposal_id"] for p in event["proposals"]].index(chosen)
+    real_accept(client, actual_event["proposals"][index]["proposal_id"])
+    actual = real(client, day_id, later, position)
+    assert same_shape(practiced) == same_shape(actual)
+
+
+@WORLDS
+def test_T14_S11_Q1_경계_기록_없이_10분_뒤_연습은_원래_코스_그대로(world):
+    # 고른 대안을 기록에 넣지 않으면 서버는 고른 걸 모른다: 사건은 다시 그대로 (원래 코스)
+    _kind, client, osaka = world
+    day_id, date = planned_day(osaka)
+    late, position = late_input(client, day_id, date)
+    later = at_of(date, hhmm_plus(late[11:16], 10))
+    without = ok(rehearse_with(client, day_id, later, position, []))
+    assert same_shape(without) == same_shape(rehearse(client, day_id, later, position))
+
+
+# ---------- Q2 영업 확인 -> 다음 계산에서 그 장소의 T-05가 없다 ----------
+
+
+@WORLDS
+def test_T14_S11_Q2_열었어를_기록에_넣으면_다음_계산에서_그_장소의_T_05가_없다(world):
+    kind, client, osaka = world
+    day_id, date = planned_day(osaka)
+    place_id, hhmm = find_t05(client, day_id, date)
+    next_at = at_of(date, hhmm_plus(hhmm, 5))
+    assert place_id in t05_places(rehearse(client, day_id, next_at)) or place_id in t05_places(now_view(client, day_id, date, hhmm))  # 시험 자체 확인
+    before = everything(osaka, kind)
+    practiced = ok(rehearse_with(client, day_id, next_at, None, [act_visit(place_id, day_id, at_of(date, hhmm))]))
+    assert place_id not in t05_places(practiced)
+    assert everything(osaka, kind) == before
+    real_visit(client, act_visit(place_id, day_id, at_of(date, hhmm)))
+    assert same_shape(practiced) == same_shape(real(client, day_id, next_at))  # 칩 "확인됨"까지 실제와 같다
+
+
+def test_T14_S11_Q2_열었어_기록_뒤_같은_장소를_연습으로_다시_답하면_실제처럼_409(mem):
+    # 실제: 한 번 답한 장소를 다시 답하면 409 STATE_CONFLICT (TASK-008 A6). 연습 visit-checks 요청도 기록을 먼저 적용한다
+    day_id, date = planned_day(mem)
+    place_id, hhmm = find_t05(mem.client, day_id, date)
+    payload = {"day_id": day_id, "at": at_of(date, hhmm), "was_open": True, "rehearsal": True, "rehearsal_actions": [act_visit(place_id, day_id, at_of(date, hhmm))]}
+    before = everything(mem, "memory")
+    response = mem.client.post(f"/places/{place_id}/visit-checks", json=payload)
+    assert response.status_code == 409, response.text
+    assert everything(mem, "memory") == before
+
+
+# ---------- 행동 3개 적용 뒤 DB 그대로 + 실제와 같은 응답 ----------
+
+
+@WORLDS
+def test_T14_S11_행동_3개_적용_뒤_모든_표·체크포인트가_그대로이고_실제와_응답이_같다(world):
+    # 같은 날짜·같은 자동 계획의 쌍둥이 날(YOU)에서 실제로 하고, ME의 날에서 연습으로 한다 (시각은 실제 쪽에서 찾는다)
+    kind, client, osaka = world
+    mine, date = planned_day(osaka, user=ME)
+    twin, twin_date = planned_day(osaka, user=YOU)
+    assert date == twin_date
+    late, position = late_input(client, twin, date, user=YOU)
+    # 실제 (YOU)
+    real_event = real(client, twin, late, position, user=YOU)["event"]
+    real_accept(client, real_event["proposals"][0]["proposal_id"], user=YOU)
+    x, t_x = find_t05(client, twin, date, after=late[11:16], user=YOU)
+    real_visit(client, act_visit(x, twin, at_of(date, t_x)), user=YOU)
+    y, t_y = find_t05(client, twin, date, after=t_x, user=YOU, skip=(x,))
+    real_visit(client, act_visit(y, twin, at_of(date, t_y)), user=YOU)
+    final_at = at_of(date, hhmm_plus(t_y, 5))
+    actual = real(client, twin, final_at, user=YOU)
+    # 연습 (ME)
+    event = rehearse(client, mine, late, position)["event"]
+    actions = [act_accept(event), act_visit(x, mine, at_of(date, t_x)), act_visit(y, mine, at_of(date, t_y))]
+    before = everything(osaka, kind)
+    practiced = ok(rehearse_with(client, mine, final_at, None, actions))
+    assert everything(osaka, kind) == before
+    assert same_view(practiced, actual, {mine: "DAY", twin: "DAY"})
+
+
+def test_T14_S11_행동을_적용한_연습도_그날_마지막_check_시각을_바꾸지_않는다(env):
+    # TASK-007 §11 Q7 오래됨 기준(메모리의 마지막 check 시각)도 "DB 전후 같음"에 든다
+    day_id = plain_day(env)
+    first = env.client.post(f"/days/{day_id}/check", json={"at": "2026-12-02T12:20:00", "lat": P01[0], "lng": P01[1]})
+    assert first.status_code == 200, first.text
+    event = first.json()["event"]
+    payload = {"at": "2026-12-02T12:40:00", "lat": P01[0], "lng": P01[1], "rehearsal": True, "rehearsal_actions": [act_accept(event)]}
+    assert env.client.post(f"/days/{day_id}/check", json=payload).status_code == 200
+    accepted = env.client.post(f"/proposals/{event['proposals'][0]['proposal_id']}/accept")
+    assert accepted.status_code == 200, accepted.text  # 연습의 12:40이 남았다면 409 stale
+
+
+# ---------- 순서가 의미 있다: 닫힘 사건이 생긴 뒤에야 그 대안을 고를 수 있다 ----------
+
+
+def closed_event(env) -> tuple[str, dict, dict]:
+    from test_task008_visit import ALTS, visit_day
+
+    day_id = visit_day(env, extra=ALTS)
+    closed = act_visit("P02", day_id, "2026-12-02T11:40:00", was_open=False)
+    response = env.client.post("/places/P02/visit-checks", json={**{k: closed[k] for k in ("day_id", "at", "was_open")}, "rehearsal": True})
+    event = ok(response)["event"]
+    assert event and event["type"] == "closed" and event["proposals"]  # 시험 자체 확인: 닫힘 대안
+    return day_id, closed, event
+
+
+def test_T14_S11_순서_닫혔어_다음_고른_대안이면_실제로_한_것과_같다(env):
+    day_id, closed, event = closed_event(env)
+    before = everything(env, "memory")
+    practiced = ok(env.client.post(f"/days/{day_id}/check", json={"at": "2026-12-02T11:50:00", "rehearsal": True, "rehearsal_actions": [closed, act_accept(event)]}))
+    assert everything(env, "memory") == before
+    real_event = real_visit(env.client, closed, user=None)["event"]
+    env.client.post(f"/proposals/{real_event['proposals'][0]['proposal_id']}/accept").raise_for_status()
+    actual = ok(env.client.post(f"/days/{day_id}/check", json={"at": "2026-12-02T11:50:00"}))
+    assert same_shape(practiced) == same_shape(actual)
+
+
+def test_T14_S11_순서_고른_대안이_닫혔어보다_먼저면_받지_않고_저장_0(env):
+    # 그 대안을 만든 닫힘 사건이 아직 없다 -> 서버가 만든 것과 같은 모양이 아니다 (400), 또는 그 사건이 없다 (404)
+    day_id, closed, event = closed_event(env)
+    before = everything(env, "memory")
+    response = env.client.post(f"/days/{day_id}/check", json={"at": "2026-12-02T11:50:00", "rehearsal": True, "rehearsal_actions": [act_accept(event), closed]})
+    assert response.status_code in (400, 404), response.text
+    assert everything(env, "memory") == before
+
+
+# ---------- 검사: 모양이 이상하면 400, 남의 값이면 404, 저장 0 ----------
+
+
+def bad_actions(event: dict, day_id: str, date: str) -> list[tuple[object, str]]:
+    tampered = {**event, "proposals": [{**event["proposals"][0], "items": [{**event["proposals"][0]["items"][0], "place_id": "없는-장소"}]}]}
+    return [
+        ("행동", "목록이_아님"),
+        ([{"type": "teleport"}], "모르는_종류"),
+        ([{"type": "accept", "event": event}], "proposal_id_없음"),
+        ([act_accept(event, "그_사건에_없는_제안")], "사건에_없는_제안_id"),
+        ([{"type": "accept", "event": {"event_id": event["event_id"]}, "proposal_id": event["proposals"][0]["proposal_id"]}], "사건_모양이_아님"),
+        ([act_accept(tampered)], "서버가_만든_것과_다른_대안"),
+        ([{**act_visit("x", day_id, at_of(date, "12:00")), "was_open": "응"}], "was_open_글자"),
+        ([{"type": "visit_check", "place_id": "x", "day_id": day_id}], "visit_check_칸_빠짐"),
+        ([act_visit("x", day_id, "아무말")], "at_형식_오류"),
+    ]
+
+
+BAD_IDS = ["목록이_아님", "모르는_종류", "proposal_id_없음", "사건에_없는_제안_id", "사건_모양이_아님", "서버가_만든_것과_다른_대안", "was_open_글자", "visit_check_칸_빠짐", "at_형식_오류"]
+
+
+@WORLDS
+@pytest.mark.parametrize("index", range(len(BAD_IDS)), ids=BAD_IDS)
+def test_T14_S11_연습_기록_모양이_이상하면_400이고_저장_0(world, index):
+    kind, client, osaka = world
+    day_id, date = planned_day(osaka)
+    late, position = late_input(client, day_id, date)
+    event = rehearse(client, day_id, late, position)["event"]
+    actions, _ = bad_actions(event, day_id, date)[index]
+    before = everything(osaka, kind)
+    response = rehearse_with(client, day_id, at_of(date, hhmm_plus(late[11:16], 10)), position, actions)  # type: ignore[arg-type]
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"  # 4ae3cfd: 서버의 본문 검증 400 code
+    assert everything(osaka, kind) == before
+
+
+@WORLDS
+def test_T14_S11_연습_기록에_남의_날이면_404이고_저장_0(world):
+    kind, client, osaka = world
+    mine, date = planned_day(osaka, user=ME)
+    theirs, _ = planned_day(osaka, user=YOU)
+    place_id, hhmm = find_t05(client, theirs, date, user=YOU)
+    before = everything(osaka, kind)
+    response = rehearse_with(client, mine, at_of(date, hhmm), None, [act_visit(place_id, theirs, at_of(date, hhmm))])
+    assert response.status_code == 404, response.text
+    assert response.json()["error"]["code"] == "NOT_FOUND"
+    assert everything(osaka, kind) == before
+
+
+@WORLDS
+def test_T14_S11_연습_기록에_남의_사건·제안이면_404이고_저장_0(world):
+    kind, client, osaka = world
+    mine, date = planned_day(osaka, user=ME)
+    theirs, _ = planned_day(osaka, user=YOU)
+    late, position = late_input(client, theirs, date, user=YOU)
+    their_event = real(client, theirs, late, position, user=YOU)["event"]  # YOU의 실제(저장된) 사건·제안
+    assert their_event and their_event["proposals"]
+    before = everything(osaka, kind)
+    response = rehearse_with(client, mine, at_of(date, hhmm_plus(late[11:16], 10)), position, [act_accept(their_event)])
+    assert response.status_code == 404, response.text
+    assert everything(osaka, kind) == before
+
+
+def test_T14_S11_경계_rehearsal이_아닌_요청의_rehearsal_actions는_받지_않는다_저장_0(mem):
+    # 연습 기록은 연습 요청에만 (실제 check에 실리면 저장 길로 행동이 적용될 수 있다). 문서에 없는 경우라 저장 0만 고정
+    day_id, date = planned_day(mem)
+    late, position = late_input(mem.client, day_id, date)
+    event = rehearse(mem.client, day_id, late, position)["event"]
+    before = everything(mem, "memory")
+    payload = {**body(at_of(date, hhmm_plus(late[11:16], 10)), position), "rehearsal_actions": [act_accept(event)]}
+    response = mem.client.post(f"/days/{day_id}/check", json=payload)
+    if response.status_code == 200:  # 받아들인다면 기록은 무시하고 실제 check만 (사건 하나)
+        assert response.json()["event"] is None or response.json()["event"]["state"] != "resolved"
+    else:
+        assert response.status_code == 400
+        assert everything(mem, "memory") == before
