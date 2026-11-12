@@ -9,7 +9,7 @@
 //   개발용 가짜 로그인 공급자 = src/lib/dev-login.ts (안에 표시 글자 DEV_FAKE_LOGIN). 다른 파일은 이 모듈을
 //     `__DEV__`가 같은 줄에 있는 require로만 부른다 (`import` 금지) -> 릴리스 번들(__DEV__ = false)에서 죽은 코드로 빠진다
 //   §16 Q11: 가짜 공급자는 __DEV__ 그리고 EXPO_PUBLIC_DEV_LOGIN=1일 때만 (그 값을 읽는 줄도 __DEV__와 같은 줄)
-//   §16 Q12 G 로고: docs/design/google/g-logo.svg -> 앱 assets/google/g-logo.svg 같은 바이트. 파일이 아직 없으면 건너뜀
+//   G 로고(§19 F3, §16 Q12를 PNG로 바꿈)는 __tests__/task-012-g-logo.test.tsx
 //   §16 Q9: 날짜 기간은 날짜 목록 머리와 같은 함수 periodLabel (src/trips/format.ts)
 //   §16 Q10: Google 버튼 글꼴은 기기 기본 -> 글꼴 파일을 넣지 않는다 (Google Sans 0)
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -97,20 +97,6 @@ describe('AC-6 가짜 로그인 공급자', () => {
     expect(reads.length).toBeGreaterThan(0);
     expect(reads.filter((line) => !/__DEV__/.test(line))).toEqual([]);
   });
-});
-
-// ---------- §9 1·K7 G 로고는 공식 파일 그대로 ----------
-
-const OFFICIAL_G = join(REPO_ROOT, 'docs', 'design', 'google', 'g-logo.svg'); // §16 Q12
-const APP_G = join(MOBILE_ROOT, 'assets', 'google', 'g-logo.svg');
-
-(existsSync(OFFICIAL_G) ? test : test.skip)('T12_S9_1_S16_Q12_공식_G_로고가_앱_assets_google_g_logo_svg에_같은_바이트로_있다', () => {
-  expect(existsSync(APP_G)).toBe(true);
-  expect(readFileSync(APP_G).equals(readFileSync(OFFICIAL_G))).toBe(true);
-});
-
-(existsSync(OFFICIAL_G) ? test : test.skip)('T12_S9_1_S16_Q12_G_로고는_그_파일을_그대로_쓴다', () => {
-  expect(hits(files, /assets\/google\/g-logo\.svg/).length).toBeGreaterThan(0);
 });
 
 // ---------- §16 Q9 날짜 기간 (날짜 목록 머리와 같은 함수) ----------
