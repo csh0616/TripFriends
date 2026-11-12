@@ -20,7 +20,9 @@
     "src/lib/day-list.ts",
     "src/planning/format.ts",
     "src/lib/auth.ts",
-    "src/lib/auth-messages.ts"
+    "src/lib/auth-messages.ts",
+    "src/lib/account-link.ts",
+    "src/lib/mask-email.ts"
   ],
   "reporters": [
     "clear-text",
@@ -54,6 +56,10 @@
         "<rootDir>/__tests__/task-012-auth.test.tsx",
         "<rootDir>/__tests__/task-012-auth-lib.test.ts",
         "<rootDir>/__tests__/task-012-s12-messages.test.tsx",
+        "<rootDir>/__tests__/task-012-link.test.tsx",
+        "<rootDir>/__tests__/task-012-link-lib.test.ts",
+        "<rootDir>/__tests__/task-012-s18.test.tsx",
+        "<rootDir>/__tests__/task-012-dev-login.test.tsx",
         "<rootDir>/__tests__/planning-failures.test.tsx"
       ],
       "moduleNameMapper": {
