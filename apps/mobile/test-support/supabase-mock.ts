@@ -34,6 +34,10 @@ const state = {
   byRefresh: new Map<string, User>(), // 발급한 refresh token -> 사용자 (setSession으로 되돌릴 때)
   byAccess: new Map<string, User>(), // 발급한 access token -> 사용자 (claim 본문 토큰이 누구 것인지 테스트가 본다)
   passwordCalls: [] as any[],
+  // 실제 Supabase처럼: 로그아웃한 세션의 토큰은 무효 (그 뒤 그 토큰으로 setSession·refresh 실패). access·refresh는 한 쌍으로 무효가 된다
+  revoked: new Set<string>(),
+  pair: new Map<string, string>(), // access <-> refresh (양쪽 방향)
+  logoutCalls: [] as { access_token: string; scope: string }[],
   updateUserCalls: [] as any[],
   codes: new Map<string, User>(), // 브라우저가 돌려준 code -> 그 code로 받을 세션의 사용자
   google: { existing: false, email: GOOGLE_EMAIL } as { existing: boolean; email: string },
@@ -70,8 +74,25 @@ async function write(session: FakeSession | null) {
   else await storage.removeItem(storageKey);
 }
 
+function pairUp(access: string, refresh: string) {
+  state.pair.set(access, refresh);
+  state.pair.set(refresh, access);
+}
+
+/** 그 세션(access·refresh 한 쌍)을 무효로 */
+function revoke(token: string | undefined) {
+  if (!token) return;
+  state.revoked.add(token);
+  const other = state.pair.get(token);
+  if (other) state.revoked.add(other);
+}
+
+/** supabase-js AuthSessionMissingError 모양 (끊긴 세션으로 setSession·refresh) */
+const missing = () => ({ name: 'AuthSessionMissingError', message: 'Auth session missing!', status: 400, code: 'session_not_found' });
+
 function issue(user: User): FakeSession {
   state.issued += 1;
+  pairUp(`fake-access-${state.issued}`, `fake-refresh-${state.issued}`);
   state.byRefresh.set(`fake-refresh-${state.issued}`, user);
   state.byAccess.set(`fake-access-${state.issued}`, user);
   return {
@@ -131,6 +152,8 @@ const auth = {
     const stored = await read();
     const givenUser = given?.refresh_token ? state.byRefresh.get(given.refresh_token) : undefined;
     const current = given?.refresh_token ? (givenUser ? ({ ...(stored ?? issue(givenUser)), user: givenUser } as FakeSession) : null) : stored;
+    const usedRefresh = given?.refresh_token ?? current?.refresh_token;
+    if (usedRefresh && state.revoked.has(usedRefresh)) return { data: { session: null, user: null }, error: missing() };
     if (state.refreshFails > 0 || !current) {
       state.refreshFails = Math.max(0, state.refreshFails - 1);
       return { data: { session: null, user: null }, error: failure(state.refreshCode) };
@@ -141,7 +164,11 @@ const auth = {
     return { data: { session, user: session.user }, error: null };
   },
   async signOut(_options?: unknown) {
+    // 실제처럼: scope와 상관없이 지금 세션은 서버에서 끊긴다 (local은 이 세션만, global은 그 사용자의 모든 세션 — 가짜는 지금 세션만)
     state.signOuts += 1;
+    const current = await read();
+    revoke(current?.refresh_token);
+    revoke(current?.access_token);
     await write(null);
     notify('SIGNED_OUT', null);
     return { error: null };
@@ -192,7 +219,9 @@ const auth = {
       return { data: { session: null, user: null }, error: failure() };
     }
     if (!user) return { data: { session: null, user: null }, error: failure('refresh_token_not_found') };
+    if (state.revoked.has(tokens.refresh_token) || state.revoked.has(tokens.access_token)) return { data: { session: null, user: null }, error: missing() };
     const session: FakeSession = { ...issue(user), access_token: tokens.access_token, refresh_token: tokens.refresh_token };
+    pairUp(tokens.access_token, tokens.refresh_token);
     state.byRefresh.set(tokens.refresh_token, user);
     await write(session);
     notify('SIGNED_IN', session);
@@ -307,6 +336,9 @@ export const authFake = {
     state.browserCalls = [];
     state.signOuts = 0;
     state.passwordCalls = [];
+    state.revoked.clear();
+    state.pair.clear();
+    state.logoutCalls = [];
     state.updateUserCalls = [];
   },
   /** 이미 이 기기에 세션이 있는 것처럼 (앱을 전에 연 적 있음) */
@@ -359,6 +391,21 @@ export const authFake = {
   setSessionCalls: () => state.setSessionCalls,
   browserCalls: () => state.browserCalls,
   signOuts: () => state.signOuts,
+  /** 이 토큰의 세션이 끊겼나 (로그아웃됨) */
+  isRevoked: (token: unknown) => typeof token === 'string' && state.revoked.has(token),
+  /** 이 사용자에게 발급한 access token 전부 (옛 계정 세션이 모두 끊겼는지 볼 때) */
+  accessTokensOf: (userId: string) => [...state.byAccess.entries()].filter(([, user]) => user.id === userId).map(([token]) => token),
+  /**
+   * Supabase `POST {SUPABASE_URL}/auth/v1/logout?scope=local` (헤더 Authorization: Bearer <그 세션의 access token>) 가짜:
+   * 지금 클라이언트 세션이 아닌 **옛 계정 세션**을 따로 끊는 길. 가짜 서버(FakeServer)가 이 함수로 답한다 (fetch는 가짜 서버가 받는다)
+   */
+  logoutByToken(accessToken: string, scope = 'local') {
+    state.logoutCalls.push({ access_token: accessToken, scope });
+    if (!state.byAccess.has(accessToken) || state.revoked.has(accessToken)) return 401;
+    revoke(accessToken);
+    return 204;
+  },
+  logoutCalls: () => state.logoutCalls,
   signIns: () => state.signIns,
   refreshes: () => state.refreshes,
   session: () => read(),

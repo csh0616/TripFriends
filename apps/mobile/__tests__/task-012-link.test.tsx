@@ -107,6 +107,31 @@ const CHOICES = {
 };
 
 let server: FakeServer;
+
+// ---------- 익명 복원 뒤 확인 (reviewer 11-12: 실제 Supabase에서 signOut이 되살린 익명 세션을 끊던 버그) ----------
+// 계약 (승인 대기): 복원 = 보관한 익명 세션으로 setSession을 먼저 하고, 성공했을 때만 옛 계정 세션을 따로 끊는다
+//   -> Supabase `POST {SUPABASE_URL}/auth/v1/logout?scope=local` + Authorization: Bearer <옛 계정 access token> (가짜: authFake.logoutByToken)
+//   지금 클라이언트의 signOut()은 지금 세션(= 되살린 익명)을 끊으므로 복원 뒤에 부르지 않는다
+const installLogout = (target: FakeServer) =>
+  target.match('POST /auth/v1/logout', (sent) => {
+    const token = (target.headers(sent).authorization ?? '').replace(/^Bearer\s+/i, '');
+    const scope = /[?&]scope=([^&]+)/.exec(sent.path)?.[1] ?? 'global';
+    return json(authFake.logoutByToken(token, scope), {});
+  });
+/** 옛 계정(EXISTING_USER_ID) 세션이 모두 끊겼다 */
+const expectAccountRevoked = () => {
+  const tokens = authFake.accessTokensOf(EXISTING_USER_ID);
+  expect(tokens.length).toBeGreaterThan(0);
+  expect(tokens.filter((token) => !authFake.isRevoked(token))).toEqual([]);
+};
+/** 지금 세션이 연결 전 그 익명이고 끊기지 않았다 (refresh도 된다) */
+const expectLiveAnon = async (anonId: string) => {
+  const now = await authFake.session();
+  expect(now?.user.id).toBe(anonId);
+  expect(now?.user.is_anonymous).toBe(true);
+  expect(authFake.isRevoked(now?.access_token)).toBe(false);
+  expect(authFake.isRevoked(now?.refresh_token)).toBe(false);
+};
 const realDev = (globalThis as { __DEV__?: boolean }).__DEV__;
 
 function startHome() {
@@ -200,6 +225,7 @@ beforeEach(() => {
   resetDevice();
   freezeDate(NOW_ISO);
   server = new FakeServer();
+  installLogout(server);
 });
 
 afterEach(() => {
@@ -487,6 +513,19 @@ describe('C4 이미 있는 Google 계정', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByTestId('day-row-day-t1')).toBeTruthy();
     expectNoTripDeletion();
+    await expectLiveAnon(anon!.user.id); // 되살린 익명 세션이 끊기지 않았다
+    expectAccountRevoked(); // 옛 계정 세션은 끊겼다
+
+    // 앱을 다시 켜도 같은 익명, 새 익명 계정 0, 연결 전 여행 그대로 (AC-5)
+    await screen.unmount();
+    await startHome();
+    expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
+    await settleAll();
+    await expectLiveAnon(anon!.user.id);
+    expect(authFake.signIns()).toBe(1);
+    const lastCurrent = server.sent(CURRENT).at(-1)!;
+    expect(authFake.userOfAccess(bearerOf(lastCurrent)?.replace(/^Bearer /, ''))?.id).toBe(anon!.user.id);
+    expect(authFake.isRevoked(bearerOf(lastCurrent)?.replace(/^Bearer /, ''))).toBe(false);
   });
 
   test('T12_S9_3_연결_취소_뒤_요청은_익명_토큰으로_간다', async () => {
@@ -517,10 +556,53 @@ describe('C4 이미 있는 Google 계정', () => {
     await pressGoogle();
     expect(await screen.findByText(FAILED)).toBeTruthy();
     expect((await session())?.user).toEqual(anon?.user);
-    expect(authFake.signOuts()).toBeGreaterThanOrEqual(1); // 계정 세션을 로그아웃
+    await expectLiveAnon(anon!.user.id);
+    expectAccountRevoked(); // §16 Q13 "계정 세션 로그아웃" = 옛 계정 세션이 무효가 됨 (복원이 된 뒤에만)
     expect(authFake.signIns()).toBe(1);
     expect(server.sent(CHOOSE)).toEqual([]);
     expect(screen.getByTestId('day-row-day-t1')).toBeTruthy();
+
+    // 앱을 다시 켜도 같은 익명, 새 익명 계정 0, 연결 전 여행 그대로 (AC-5)
+    await screen.unmount();
+    await startHome();
+    expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
+    await settleAll();
+    await expectLiveAnon(anon!.user.id);
+    expect(authFake.signIns()).toBe(1);
+    const lastCurrent = server.sent(CURRENT).at(-1)!;
+    expect(authFake.userOfAccess(bearerOf(lastCurrent)?.replace(/^Bearer /, ''))?.id).toBe(anon!.user.id);
+    expect(authFake.isRevoked(bearerOf(lastCurrent)?.replace(/^Bearer /, ''))).toBe(false);
+  });
+
+  test.each([
+    ['서버_500', apiError(500, 'INTERNAL_ERROR')],
+    ['네트워크', networkDown],
+  ])('T12_S18_choose가_실패하면(%s)_같은_익명·여행_그대로·옛_계정_세션_끊김·다시_켜도_같은_익명', async (_name, reply) => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    server.on(CLAIM, json(200, CHOICES)).on(CHOOSE, reply);
+    await toSaveSheetFromMenu();
+    const anon = await session();
+    await pressGoogle();
+    await screen.findByText(PICK.title);
+    await tap(screen.getByText(PICK.device));
+    await tap(screen.getByRole('button', { name: PICK.confirm }));
+    expect(await screen.findByText(FAILED)).toBeTruthy();
+    await expectLiveAnon(anon!.user.id);
+    expectAccountRevoked();
+    expect(authFake.signIns()).toBe(1);
+    expect(screen.getByTestId('day-row-day-t1')).toBeTruthy();
+    expectNoTripDeletion();
+
+    // 앱을 다시 켜도 같은 익명, 새 익명 계정 0, 연결 전 여행 그대로 (AC-5)
+    await screen.unmount();
+    await startHome();
+    expect(await screen.findByTestId('day-row-day-t1')).toBeTruthy();
+    await settleAll();
+    await expectLiveAnon(anon!.user.id);
+    expect(authFake.signIns()).toBe(1);
+    const lastCurrent = server.sent(CURRENT).at(-1)!;
+    expect(authFake.userOfAccess(bearerOf(lastCurrent)?.replace(/^Bearer /, ''))?.id).toBe(anon!.user.id);
+    expect(authFake.isRevoked(bearerOf(lastCurrent)?.replace(/^Bearer /, ''))).toBe(false);
   });
 
   test('T12_S6_C4_그_계정_로그인을_브라우저에서_닫으면_알림_없이_익명', async () => {
