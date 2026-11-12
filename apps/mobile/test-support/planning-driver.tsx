@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import PlanningFlow from '@/planning/planning-flow';
 
 import { memoryStorage } from './async-storage-mock';
+import { secureStore } from './secure-store-mock';
 import { apiError, FakeServer, json, type Reply } from './fake-server';
 import { authFake } from './supabase-mock';
 import { batch, course, picks, seed, selected, session, SID } from './planning-fixtures';
@@ -111,9 +112,10 @@ export async function toS9() {
 }
 
 export const storedValues = () => memoryStorage.values();
-// TASK-012: 기기를 비우면 로그인 세션도 없다 (세션은 기기 저장소에, B1)
+// TASK-012: 기기를 비우면 로그인 세션도 없다 (세션은 기기 저장소에, B1). §18: 보관한 익명 세션(SecureStore)도 비운다
 export const resetDevice = () => {
   memoryStorage.clear();
+  secureStore.clear();
   authFake.reset();
 };
 export const hasStoredSession = () => storedValues().some((value) => value.includes(SID));

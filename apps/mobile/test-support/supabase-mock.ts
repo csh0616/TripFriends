@@ -13,7 +13,7 @@ export const FAKE_AUTHORIZE = 'https://fake-project.supabase.test/auth/v1/author
 /** 이미 다른 Supabase 사용자에 붙어 있는 Google 계정 (C4 "이미 있는 계정") */
 export const EXISTING_USER_ID = '00000000-0000-4000-9000-000000000001';
 /** 앱 안 브라우저에서 사용자가 하는 일: 계정 고름 / 취소(닫기) / 공급자 오류로 돌아옴 */
-export type BrowserStep = 'pick' | 'cancel' | 'dismiss' | 'error';
+export type BrowserStep = 'pick' | 'cancel' | 'dismiss' | 'error' | 'hang'; // hang = 브라우저가 떠 있는 채로 앱이 꺼짐 (§18 빈틈 1)
 // 오류 code가 있으면 supabase-js의 AuthApiError 모양 (예: anonymous_provider_disabled), 없으면 네트워크 실패 모양
 const failure = (code?: string) =>
   code ? { name: 'AuthApiError', message: `fake auth error: ${code}`, status: 422, code } : { name: 'AuthRetryableFetchError', message: 'Failed to fetch', status: 0 };
@@ -39,6 +39,7 @@ const state = {
   google: { existing: false, email: GOOGLE_EMAIL } as { existing: boolean; email: string },
   browserSteps: [] as BrowserStep[],
   linkFails: 0,
+  setSessionFails: 0,
   oauthFails: 0,
   exchangeFails: 0,
   linkCalls: [] as any[],
@@ -186,6 +187,10 @@ const auth = {
   async setSession(tokens: { access_token: string; refresh_token: string }) {
     state.setSessionCalls.push(tokens);
     const user = tokens?.refresh_token ? state.byRefresh.get(tokens.refresh_token) : undefined;
+    if (state.setSessionFails > 0) {
+      state.setSessionFails -= 1;
+      return { data: { session: null, user: null }, error: failure() };
+    }
     if (!user) return { data: { session: null, user: null }, error: failure('refresh_token_not_found') };
     const session: FakeSession = { ...issue(user), access_token: tokens.access_token, refresh_token: tokens.refresh_token };
     state.byRefresh.set(tokens.refresh_token, user);
@@ -243,6 +248,7 @@ export const webBrowser = {
   async openAuthSessionAsync(url: string, redirectUrl?: string, _options?: unknown) {
     state.browserCalls.push({ url, redirectUrl });
     const step = state.browserSteps.shift() ?? 'pick';
+    if (step === 'hang') return new Promise<never>(() => undefined);
     if (step === 'cancel' || step === 'dismiss') return { type: step };
     const back = String(redirectUrl ?? '');
     if (step === 'error') return { type: 'success', url: `${back}?error=server_error&error_code=unexpected_failure&error_description=fake+provider+error` };
@@ -291,6 +297,7 @@ export const authFake = {
     state.google = { existing: false, email: GOOGLE_EMAIL };
     state.browserSteps = [];
     state.linkFails = 0;
+    state.setSessionFails = 0;
     state.oauthFails = 0;
     state.exchangeFails = 0;
     state.linkCalls = [];
@@ -334,6 +341,10 @@ export const authFake = {
   },
   failOAuth(times = 1) {
     state.oauthFails = times;
+  },
+  /** 다음 n번 setSession(보관한 세션으로 되돌리기)이 실패 (§18 빈틈 2) */
+  failSetSession(times = 1) {
+    state.setSessionFails = times;
   },
   failExchange(times = 1) {
     state.exchangeFails = times;
