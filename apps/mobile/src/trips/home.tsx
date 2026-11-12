@@ -202,6 +202,7 @@ function EmptyHome({
   onCreate: () => void;
   onDemo: (start: 'demo' | 'now') => void;
 }) {
+  const account = useAccount();
   return (
     <ScreenFrame>
       <View style={styles.center}>
@@ -216,6 +217,8 @@ function EmptyHome({
       </View>
       <View style={styles.action}>
         <PrimaryButton testID="home-create" label="여행 만들기" onPress={onCreate} />
+        {/* TASK-012 §19 F2: 앱을 다시 깐 사람이 저장해 둔 여행으로 (개발·릴리스 모두) */}
+        <SecondaryButton testID="home-restore" label="저장해 둔 여행 불러오기" onPress={account.openRestore} />
         {/* TASK-010 §C1: 데모 버튼은 개발 빌드에서만, 그 아래 보조로 */}
         {__DEV__ ? (
           <>

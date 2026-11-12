@@ -32,13 +32,15 @@ export type Account = {
   email: string | null;
   /** 프로필 메뉴 [저장하기] -> 저장 권유 시트 */
   openSave: () => void;
+  /** 처음 화면 [저장해 둔 여행 불러오기] -> 같은 시트 (제목만 다름, TASK-012 §19 F2) */
+  openRestore: () => void;
   /** 첫 계획을 마친 날짜 목록 위에서 한 번 (이미 물었거나 연결됐으면 아무것도 안 함) */
   offerSave: () => Promise<void>;
   /** [로그아웃]: 새 익명 계정으로. 끝나면 지금 여행을 다시 묻는다 */
   logout: () => Promise<void>;
 };
 
-const NONE: Account = { linked: false, email: null, openSave: () => undefined, offerSave: async () => undefined, logout: async () => undefined };
+const NONE: Account = { linked: false, email: null, openSave: () => undefined, openRestore: () => undefined, offerSave: async () => undefined, logout: async () => undefined };
 const AccountContext = createContext<Account>(NONE);
 export const useAccount = () => useContext(AccountContext);
 
@@ -56,7 +58,7 @@ export function AccountProvider({
   children: React.ReactNode;
 }) {
   const [info, setInfo] = useState<AccountInfo>({ linked: false, email: null });
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<'save' | 'restore' | null>(null);
   const [pick, setPick] = useState<Pick_ | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(0); // 0 = 알림 없음, 실패할 때마다 늘려 6초를 처음부터 센다
@@ -109,7 +111,7 @@ export function AccountProvider({
   }, []);
 
   const later = useCallback(() => {
-    if (!busyRef.current) setSaving(false); // [나중에]·스크림. 이미 물었음은 시트를 띄울 때 적었다 (§C1)
+    if (!busyRef.current) setSaving(null); // [나중에]·스크림. 이미 물었음은 시트를 띄울 때 적었다 (§C1)
   }, []);
 
   const google = useCallback(
@@ -119,7 +121,7 @@ export function AccountProvider({
         if (!alive.current) return;
         await refresh();
         if (outcome.kind === 'cancelled') return; // §16 Q7: 알림 없이 시트 그대로
-        setSaving(false);
+        setSaving(null);
         if (outcome.kind === 'failed') fail();
         else if (outcome.kind === 'moved') onReload();
         else if (outcome.kind === 'choose') setPick({ email: outcome.email, choices: outcome.choices });
@@ -167,11 +169,11 @@ export function AccountProvider({
     const now = await readAccountInfo();
     if (now.linked || !alive.current) return;
     await markAsked();
-    if (alive.current) setSaving(true);
+    if (alive.current) setSaving('save');
   }, []);
 
   const value = useMemo<Account>(
-    () => ({ linked: info.linked, email: info.email, openSave: () => setSaving(true), offerSave, logout }),
+    () => ({ linked: info.linked, email: info.email, openSave: () => setSaving('save'), openRestore: () => setSaving('restore'), offerSave, logout }),
     [info, offerSave, logout],
   );
 
@@ -181,7 +183,7 @@ export function AccountProvider({
       <View style={styles.fill} accessibilityElementsHidden={pick !== null} importantForAccessibility={pick !== null ? 'no-hide-descendants' : 'auto'}>
         {children}
       </View>
-      {saving ? <SaveSheet busy={busy} onGoogle={() => void google()} onLater={later} /> : null}
+      {saving ? <SaveSheet busy={busy} restore={saving === 'restore'} onGoogle={() => void google()} onLater={later} /> : null}
       {pick ? <PickSheet email={pick.email} choices={pick.choices} busy={busy} onConfirm={(id) => void confirm(id)} onCancel={() => void cancelPick()} /> : null}
       {failed > 0 ? <FailNotice key={failed} onClose={closeNotice} /> : null}
     </AccountContext.Provider>
