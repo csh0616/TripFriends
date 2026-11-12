@@ -22,7 +22,7 @@
 - `link-new@example.test` ("새 계정")는 시드하지 않는다: 익명 사용자에게 이메일·비밀번호를 붙일 때 만들어진다 (같은 user_id). 로컬 설정 `enable_signup = true`, `enable_confirmations = false`라 바로 된다. 이미 만들어졌다면 다시 붙일 수 없으니 `supabase db reset --local`로 비운다.
 - 점검: `supabase start` → `supabase db reset --local` → 서버(8010)를 로컬 주소로 켜고(위 "서버·테스트에 연결") 앱을 `EXPO_PUBLIC_DEV_LOGIN=new`(새 계정 길) 또는 `existing`(이미 있는 계정 길)로 연다 (`__DEV__`가 아니면 무시, TASK-012 §17). 끝나면 `supabase stop`.
 
-## 폰 확인 때 막히는 곳 (클라우드 프로젝트, TASK-012 1단계 폰 확인에서 겪은 것)
+## 폰 확인 때 막히는 곳 (클라우드 프로젝트, TASK-012 1·2단계 폰 확인에서 겪은 것)
 값(키·비밀번호·연결 문자열)은 화면이나 채팅에 붙여 넣지 않는다.
 
 | 증상 | 원인 | 해결 |
@@ -31,6 +31,9 @@
 | 서버를 켜면 `Address already in use` | 8000번에 예전 서버가 남아 있음 | `lsof -i :8000`으로 그 PID를 찾아 `kill <PID>` (이름으로 끄는 `pkill`은 쓰지 않는다) |
 | 서버가 DB에 못 붙음 (503 `STORAGE_UNAVAILABLE`, 연결 문자열 오류) | `DATABASE_URL` 비밀번호에 `@`·`#`·`/` 같은 특수문자가 그대로 있거나, 화면 예시의 `[YOUR-PASSWORD]` 대괄호가 남아 있음 | 특수문자는 퍼센트 인코딩으로 바꾼다 (`@` → `%40`, `#` → `%23`, `/` → `%2F`). 대괄호 `[ ]`는 지우고 비밀번호만 남긴다 |
 | `supabase` 명령이 로컬 DB를 건드리거나 "로컬이 안 켜져 있다"고 함 | Supabase CLI는 기본이 **로컬**이다 | 클라우드에는 `supabase link --project-ref <ref>`로 연결한 뒤 명령마다 **`--remote`**를 붙인다 (예: `supabase migration list --remote`, `supabase db push --remote`). project-ref는 프로젝트 URL `https://<ref>.supabase.co` 가운데의 **20글자** |
+| Google 연결에서 개발 빌드 경고 `LINK_FAILED link manual_linking_disabled` (2단계) | 익명 계정에 Google을 붙이는 수동 연결이 꺼져 있음 | Supabase 화면 → Authentication → Sign In / Providers → **Allow manual linking** 켜고 **Save** |
+| Google 로그인 뒤 `unexpected_failure`, Supabase Auth 로그에 `invalid client` (2단계) | Supabase Google 공급자에 넣은 Client Secret이 틀리거나 만료됨 | Google Cloud에서 OAuth 클라이언트의 Client Secret을 다시 만들어 Supabase Authentication → Google 공급자에 넣고 Save |
+| 앱은 붙는데 가짜 장소만 나오고 로그인 요청이 401 | 서버가 `apps/server/.env`를 읽지 않고 켜짐 (`DATABASE_URL`·`SUPABASE_URL`·장소 키가 비어 메모리·가짜 공급자로 켜짐) | `apps/server`에서 `uv run --env-file .env fastapi dev api/main.py`처럼 **`--env-file .env`**를 붙여 켠다 |
 
 클라우드에 마이그레이션을 적용하는 순서 (저장소 맨 위에서):
 1. `supabase login` — 브라우저로 로그인
