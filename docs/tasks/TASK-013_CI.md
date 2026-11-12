@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-13 |
-| 상태 | **v1.3** — §9 test-writer 질문 답 · A6 바뀐 파일만·B7 운영 방침 (결정권자 11-13) |
+| 상태 | **v1.4** — §10 남은 값 3개 · §9 test-writer 질문 답 · A6 바뀐 파일만·B7 운영 방침 (결정권자 11-13) |
 | 관련 | TEAM-001(에이전트 운영) · TASK-012 §20(테스트 환경이 실제와 달라 놓친 일) · AC 숫자를 지금은 에이전트 보고로만 확인 |
 | 브랜치 | `chore/task-013-ci` |
 | 다음 | TASK-014 실제 위치 + "이 날 미리 걸어 보기" (그때부터 모든 PR에 CI) |
@@ -63,6 +63,14 @@
 | 7 키 검사 | **pytest 테스트로** (`apps/server/tests/test_secret_scan.py`) — 규칙 6(실험 스크립트)에 해당 안 함. `git ls-files` 전체를 본다. 패턴: Google `AIza[0-9A-Za-z_-]{35}`, `sk-`로 시작하는 긴 키, Supabase `sb_secret_`, `service_role` JWT, 긴 `eyJ…` JWT, `-----BEGIN … PRIVATE KEY-----`, 비밀번호가 든 `postgres(ql)://user:pass@`(로컬 `postgres:postgres@127.0.0.1`·`localhost` 테스트 주소는 허용). `.env.example`의 빈 값·자리표시는 허용. 찾으면 **값은 출력하지 않고 파일:줄만**. A5 작업은 이 테스트 파일만 돌림 |
 | 8 B5 계약 | **승인**: `changes` 작업 + `SERVER_PATHS`·`MOBILE_PATHS`·`ALL_PATHS` |
 - 시간 기준 테스트(기본 5·slow 1·속성 9): **그대로 돌린다.** CI에서 흔들리면 실제 측정값과 함께 보고 → PM이 기준을 정함 (몰래 늘리지 않기, §B)
+
+## 10. 남은 값 3개 답 (11-13, 커밋 `ac76107` 승인)
+| Q | 답 |
+|---|---|
+| 1 `minimumReleaseAge` | **1440 (분 = 1일)** 을 `pnpm-workspace.yaml`에 명시. pnpm 11부터 기본값이 1일(공식 11.0 릴리스 노트) — TASK-012 때 갓 나온 `expo-secure-store` 58.0.3이 막힌 것과 맞음. 테스트는 "양의 정수"가 아니라 **1440과 같음**으로 |
+| 2 `.node-version`·`pnpm-workspace.yaml`을 앱 목록에 | **승인** (§9 Q3 규칙 그대로). A6 표의 앱 목록에 두 줄 더한 것으로 본다. 표에 없는 경로가 생기는 건 PM 문서보다 실제 읽는 파일이 우선 |
+| 3 "긴 키" 기준 | **승인**: `sk-` 뒤 20자 이상 · JWT 세 조각 각 10자 이상 · `sb_secret_` 뒤 1자 이상 |
+- 다음: backend가 `ci.yml`·`.python-version`(3.15.2)·`.node-version`(26.10.0)·`packageManager`(pnpm@12.15.0)·`minimumReleaseAge: 1440` → PR을 올려 GitHub에서 확인
 
 ## 8. 하지 말 것
 - GitHub Secrets 만들기, 키 값 출력·`.env` 읽기, 클라우드 Supabase 사용
