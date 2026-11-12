@@ -300,3 +300,62 @@ export const REJECTED_PAIRS: [string, string, number][] = [
   ['#666C7A', '#E6E9ED', 4.32],
   ['#666C7A', '#DDE6EE', 4.17],
 ];
+
+// §4-12 계정 연결 (11-09, TASK-012 2단계). 값의 정본은 docs/design/reviews/task-012-design.md §2·§3·§4·§8 (DESIGN-001 §4-12가 가리킴).
+// 토큰 이름 5개는 §4-12 표 그대로. 필드 이름은 이 테스트가 정한 이름(승인 대기), FIT과 같은 뜻으로 쓴다:
+//   bg 바탕 · fg 글자 · border 테두리 색 · borderWidth 테두리 굵기 · height 높이 · radius 모서리 · size/lineHeight/weight 글자 · icon 아이콘 크기
+//   paddingLeft/paddingRight/paddingVertical/paddingHorizontal 안쪽 ("안쪽 14/16" = 위아래 14, 좌우 16) · 문서에 없는 칸은 키도 없다
+export const ACCOUNT: Record<string, Record<string, unknown>> = {
+  // 리뷰 §2: 밝은 모양 흰 바탕 · 테두리 #747775 1px · 글자 #1F1F1F 14/20 Medium(500) · G 20 · iOS 안쪽 왼쪽 16 · G 오른쪽 12 · 글자 오른쪽 16
+  //          높이 52 · 모서리 16 (문구는 화면 테스트가 본다). 글꼴은 기기 기본 (TASK-012 §16 Q10) -> family 칸 없음
+  'google-btn': {
+    bg: '#FFFFFF',
+    border: '#747775',
+    borderWidth: 1,
+    fg: '#1F1F1F',
+    size: 14,
+    lineHeight: 20,
+    weight: 500,
+    logo: 20,
+    paddingLeft: 16,
+    logoGap: 12,
+    paddingRight: 16,
+    height: 52,
+    radius: 16,
+  },
+  // 리뷰 §4: 카드 bg-2 · 모서리 20 · 안쪽 14/16 · 아바타 흰 원 44
+  'acct-card': { bg: '#F3F4F6', radius: 20, paddingVertical: 14, paddingHorizontal: 16, avatar: 44, avatarBg: '#FFFFFF' },
+  // 리뷰 §4: 칸 높이 84 · 안쪽 좌 12 · 우 14 · 썸네일 44 · 고르면 sel-bg + 안쪽 2px #FF5A00 고리 + radio 24
+  //          3줄: 어디서 온 여행 12/16·600·muted / 이름 15/22·600 / 날짜 · 진행 12/16·500·muted
+  'trip-pick': {
+    height: 84,
+    paddingLeft: 12,
+    paddingRight: 14,
+    thumb: 44,
+    selBg: '#FFF1E8',
+    ring: 'inset 0 0 0 2px #FF5A00',
+    radio: 24,
+    origin: { size: 12, lineHeight: 16, weight: 600, fg: '#666C7A' },
+    name: { size: 15, lineHeight: 22, weight: 600 },
+    meta: { size: 12, lineHeight: 16, weight: 500, fg: '#666C7A' },
+  },
+  // 리뷰 §8-4: 한 줄 44 · r16 · #FFEDD5 · 안쪽 좌우 12 · 경고 16 #C2410C · 13/18·700 #1A1A1A · 머리 아래 8 · 좌우 20 · 그림자(sh-float와 같은 값) · 6초
+  'notice-fail': {
+    height: 44,
+    radius: 16,
+    bg: '#FFEDD5',
+    paddingHorizontal: 12,
+    icon: 16,
+    iconFg: '#C2410C',
+    size: 13,
+    lineHeight: 18,
+    weight: 700,
+    fg: '#1A1A1A',
+    top: 8,
+    side: 20,
+    shadow: '0 6px 20px rgba(26,26,26,.14), 0 1px 2px rgba(26,26,26,.08)',
+    duration: 6000,
+  },
+  // 리뷰 §8-2: 44×44 원 · bg-2 · 사람 아이콘 #333333 · 머리 왼쪽 16
+  'head-avatar': { size: 44, bg: '#F3F4F6', fg: '#333333', left: 16 },
+};

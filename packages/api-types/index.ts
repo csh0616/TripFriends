@@ -379,6 +379,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/account/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 익명 여행을 로그인한 계정으로 (옮기거나 고르게 하기) */
+        post: operations["claim_account_claim_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/account/claim/choose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 두 여행 중 하나를 지금 여행으로 */
+        post: operations["claim_choose_account_claim_choose_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -551,6 +585,28 @@ export interface components {
             id: string;
             /** Label */
             label: string;
+        };
+        /** ChooseBody */
+        ChooseBody: {
+            /** Anonymous Token */
+            anonymous_token: string;
+            /** Trip Id */
+            trip_id: string;
+        };
+        /** ClaimBody */
+        ClaimBody: {
+            /** Anonymous Token */
+            anonymous_token: string;
+        };
+        /** ClaimResult */
+        ClaimResult: {
+            /**
+             * Result
+             * @enum {string}
+             */
+            result: "moved" | "choose";
+            /** Choices */
+            choices?: components["schemas"]["TripChoice"][] | null;
         };
         /**
          * CourseItemView
@@ -1521,6 +1577,26 @@ export interface components {
             is_demo: boolean;
             /** Trip Days */
             trip_days: components["schemas"]["TripDay"][];
+        };
+        /** TripChoice */
+        TripChoice: {
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "device" | "account";
+            /** Trip Id */
+            trip_id: string;
+            /** Name */
+            name: string;
+            /** Start Date */
+            start_date: string;
+            /** End Date */
+            end_date: string;
+            /** Planned Days */
+            planned_days: number;
+            /** Total Days */
+            total_days: number;
         };
         /** TripCreate */
         TripCreate: {
@@ -3025,6 +3101,135 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    claim_account_claim_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimResult"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    claim_choose_account_claim_choose_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChooseBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Trip"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

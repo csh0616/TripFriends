@@ -1,0 +1,120 @@
+# TASK-012 AC-6 새 흐름 account-link: 첫 계획 뒤 저장 권유 -> [Google 계정으로 계속] -> 프로필 메뉴 "Google 계정에 저장됨".
+# 연결 흐름만 본다. 실제 Google 화면은 쓰지 않는다: 개발 빌드 전용 가짜 로그인 공급자(src/lib/dev-login.ts, 릴리스 번들에 0)가 브라우저 대신 답한다.
+# 실제 Google 화면 확인은 결정권자 폰(AC-8).
+# §16 Q11·§17 3: 가짜 공급자는 개발 빌드에서 EXPO_PUBLIC_DEV_LOGIN 값으로 길을 고른다 (__DEV__가 아니면 값이 있어도 무시).
+#   이 흐름은 EXPO_PUBLIC_DEV_LOGIN=new 로 Metro를 켠다: 로컬 Supabase에서 익명 사용자에 link-new@example.test·비밀번호를 붙인다 (같은 user_id).
+#   =existing 은 시드된 link-existing@example.test로 로그인 -> 진짜 /account/claim (그 흐름은 따로, Maestro 흐름마다 다른 값).
+#   비밀번호는 로컬 시드 파일에서 (이 흐름·기록에 남기지 않음, §15 S4).
+# 전제: create-trip.yaml과 같다 (로컬 Supabase + 점검 서버 + 개발 빌드 + Metro). 실행:
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/account-link -e METRO_URL=http://127.0.0.1:8083 .maestro/account-link.yaml
+# 문구는 apps/mobile/__tests__/task-012-link.test.tsx(리뷰 파일 §1·§8)와 같다.
+appId: com.csh0616.tripfriends
+---
+- evalScript: |
+    ${
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const tokyo = (offsetDays) => {
+        const d = new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400 * 1000);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      };
+      output.start = tokyo(7);
+      output.end = tokyo(8);
+    }
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 만들기"
+    timeout: 60000
+- runFlow: common/close-dev-menu.yaml
+
+# 여행 만들기 (create-trip.yaml과 같은 방법, 꼭 갈 곳 없이)
+- tapOn: "여행 만들기"
+- extendedWaitUntil:
+    visible:
+      id: "create-trip-submit"
+    timeout: 30000
+- tapOn:
+    id: "field-start-date"
+- extendedWaitUntil:
+    visible:
+      id: "calendar-sheet"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.start}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.start}"
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.end}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.end}"
+- tapOn:
+    id: "calendar-confirm"
+- tapOn:
+    id: "create-trip-submit"
+- extendedWaitUntil:
+    visible: "계획 전"
+    timeout: 30000
+
+# 익명이면 프로필 메뉴는 "저장 안 됨" (C5)
+- tapOn: "내 프로필"
+- extendedWaitUntil:
+    visible: "저장 안 됨"
+    timeout: 10000
+- assertNotVisible: "로그아웃"
+- takeScreenshot: account-link-1-menu-anonymous
+- tapOn: "닫기"
+
+# 첫 계획: [알아서 짜 줘] -> 코스안 -> [이걸로 할래] -> [날짜 목록으로]
+- tapOn:
+    text: "알아서 짜 줘"
+    index: 0
+- extendedWaitUntil:
+    visible: "이걸로 할래"
+    timeout: 30000
+- tapOn: "이걸로 할래"
+- extendedWaitUntil:
+    visible: "코스 저장했어"
+    timeout: 30000
+- tapOn: "날짜 목록으로"
+
+# C1 저장 권유 시트 한 번
+- extendedWaitUntil:
+    visible: "저장해 둘래?"
+    timeout: 15000
+- assertVisible: "앱을 지우면 사라져"
+- assertVisible: "Google 계정으로 계속"
+- takeScreenshot: account-link-2-save-sheet
+- tapOn: "Google 계정으로 계속"
+
+# 가짜 공급자가 연결을 끝낸다 -> 시트가 닫히고 날짜 목록 그대로
+- extendedWaitUntil:
+    notVisible: "저장해 둘래?"
+    timeout: 30000
+- assertNotVisible: "연결하지 못했어. 지금 여행은 그대로야"
+- assertVisible: "계획 완료"
+- tapOn: "내 프로필"
+- extendedWaitUntil:
+    visible: "Google 계정에 저장됨"
+    timeout: 10000
+- assertVisible: "로그아웃해도 여행은 계정에 남아 있어"
+- assertVisible: "li***@example.test"
+- takeScreenshot: account-link-3-menu-linked
+- tapOn: "닫기"

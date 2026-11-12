@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { COLORS, FIT, FONTS, LISTS, NUMBERS, PILLS, STRINGS, TYPE } from '../test-support/design-table';
+import { ACCOUNT, COLORS, FIT, FONTS, LISTS, NUMBERS, PILLS, STRINGS, TYPE } from '../test-support/design-table';
 import { REPO_ROOT } from '../test-support/source-files';
 
 const PACKAGE = join(REPO_ROOT, 'packages', 'design-tokens');
@@ -17,6 +17,7 @@ const KNOWN = new Set([
   ...Object.keys(LISTS), // TASK-006 §13 E2, DESIGN-001 §4-6
   ...Object.keys(PILLS), // TASK-010 §14 답 2, DESIGN-001 §4-9
   ...Object.keys(FIT), // TASK-011 B1, DESIGN-001 §4-11
+  ...Object.keys(ACCOUNT), // TASK-012 2단계, DESIGN-001 §4-12
 ]);
 
 type Found = Map<string, unknown[]>;
@@ -109,6 +110,22 @@ test('T19_S4_11_새_토큰은_정확히_13개(TASK_011_S10_E6_S12_Q1)', () => {
   expect(Object.keys(FIT).sort()).toEqual(
     ['title-trip', 'end-note', 'back-day', 'row-read', 'read-note', 'btn-add-event', 'btn-new-trip', 'sheet-confirm', 'fact-line', 'btn-card-secondary', 'bottom-primary', 'chip-hint', 'pill-count'].sort(),
   );
+});
+
+// TASK-012 2단계: §4-12 계정 연결 토큰 5개. 색 글자는 대소문자를 가리지 않는다. 문서에 없는 칸은 키도 없다 (toEqual)
+test.each(Object.entries(ACCOUNT))('T20_S4_12_계정_연결_%s', (name, value) => {
+  expect(upperColors(one(name))).toEqual(value);
+});
+
+test('T20_S4_12_새_토큰은_정확히_5개', () => {
+  expect(Object.keys(ACCOUNT).sort()).toEqual(['google-btn', 'acct-card', 'trip-pick', 'notice-fail', 'head-avatar'].sort());
+});
+
+test('T20_S4_12_Google_버튼·연결_카드·머리_아바타에_주황이_없다', () => {
+  // 리뷰 §5·§8-6: 주 버튼을 뺀 주황은 고른 칸 고리뿐. 알림은 alert 색 (브랜드 주황 아님)
+  for (const name of ['google-btn', 'acct-card', 'head-avatar', 'notice-fail']) {
+    expect(JSON.stringify(one(name)).toUpperCase()).not.toContain(COLORS.brand);
+  }
 });
 
 test('T19_S4_11_bottom_primary_바탕은_brand_글자는_on_brand와_같은_값', () => {

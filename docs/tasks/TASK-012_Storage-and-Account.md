@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-09 |
-| 상태 | **v1.7** — §13 reviewer 뒤 답 · §12 1단계 구현 보고 답 · §11 데모·남의 것 답 · §10 test-writer Q1~Q12 답 · §9 디자인 답 · v1.2 — 2단계는 **Google 로그인만**. 이메일 코드·Apple·카카오 검토·도메인+SMTP·계정 삭제는 "파일럿 전 묶음"으로 (결정권자 11-09) |
+| 상태 | **v2.5** — §20 폰 확인 통과·PR · K7 G 로고 PNG · §19 폰 확인 AC-8 통과·머지 전 F1~F3 · §18 구현 보고 답 · §17 frontend 전 답 · §16 2단계 질문 답·테스트 승인 · §15 2단계 보안 규칙 ·  1단계 완료(PR #14, §14) · §13 reviewer 뒤 답 · §12 1단계 구현 보고 답 · §11 데모·남의 것 답 · §10 test-writer Q1~Q12 답 · §9 디자인 답 · v1.2 — 2단계는 **Google 로그인만**. 이메일 코드·Apple·카카오 검토·도메인+SMTP·계정 삭제는 "파일럿 전 묶음"으로 (결정권자 11-09) |
 | 관련 | ADR-016(계정, **이 TASK의 근거**) · ADR-013(앱 → 서버 → Supabase) · DATA-001 · API-001 · SRS FR-32·33 · TASK-003 R12(저장 트랜잭션) · TASK-011 §17(넘어온 것) |
 | 브랜치 | `feat/task-012-storage-account` |
 | 다음 | TASK-013 실제 여행(위치 + 이 날 미리 걸어 보기) |
@@ -28,7 +28,7 @@
 | K2 | 프로젝트 설정 → API 키: **공개 키**(publishable 또는 anon)와 프로젝트 URL | `apps/mobile/.env.local` (공개 키라 앱에 들어감, 저장소엔 안 올림) |
 | K3 | **비밀 키**(secret 또는 service_role), **DB 연결 주소**(Postgres connection string), JWT 확인용 값 | `apps/server/.env` |
 | K4 | Authentication → **익명 로그인 켜기** (11-09 완료: 서울, Data API 끔, 새 테이블 자동 노출 끔, 자동 RLS 켬) | Supabase 화면 |
-| K5 | Google Cloud에서 OAuth 클라이언트(웹) 만들기 → Supabase Authentication → Google 공급자에 넣기, 앱 되돌아오기 주소(redirect) 등록 | 2단계 전까지 |
+| K5 | Google Cloud에서 OAuth 클라이언트(웹) 만들기 → Supabase Authentication → Google 공급자에 넣기, 앱 되돌아오기 주소(redirect) 등록 | **완료 11-11** (Google Auth Platform: External·Testing·테스트 사용자, Web 클라이언트 → Supabase Google 공급자, manual linking 켬, Redirect URLs `tripfriends://**`) |
 | K6 | **(파일럿 전 묶음으로 옮김)** 도메인 사기 + 메일 서비스(SMTP) 연결: Supabase 기본 메일은 팀원 주소에만·시간당 2통이라 이메일 코드 로그인에 못 씀(공식 문서). 도메인(예: `no-reply@도메인`) → Resend 등에 도메인 등록(DNS 기록) → Supabase Authentication → SMTP 설정. 메일 틀은 한국어로 | 파일럿 전 |
 - 정확한 키 이름은 `backend`가 `.env.example`에 적는다. PM이 단계별 화면 안내를 따로 준다
 
@@ -109,7 +109,7 @@
 | 8 ③-F01 로그인 시안 | **기록(쓰지 않음)** — ADR-016으로 로그인 첫 화면이 없음 |
 | 9 연결 실패·취소 | 한 줄 알림 **"연결하지 못했어. 지금 여행은 그대로야"** (취소면 알림 없음). 디자이너가 알림 모양 1장 추가 |
 | 디자인 확정 (11-09) | 캔버스 ①-22~28·②-12, 값은 **DESIGN-001 §4-12**와 리뷰 파일 §8. 디자이너 제안 3가지 승인: 알림 6초 뒤 사라짐·누르면 닫힘·시작한 화면 위, 실패하면 저장 권유 시트 닫힘, 날짜 목록 아바타는 bg-2 원(지도 위는 흰 원) · 계획 대화·코스안 머리엔 아바타 없음 |
-| K7 | **Google 로그인 버튼 공식 에셋**(G 로고 SVG): 결정권자가 Google 브랜드 가이드라인 페이지에서 내려받아 PM에게 → `docs/design/google/`에. 2단계 frontend 전 |
+| K7 | **완료 11-12 → §19 F3** · **Google 로그인 버튼 공식 에셋**(G 로고): 결정권자가 Google 브랜드 가이드라인 페이지에서 내려받아 PM에게 → `docs/design/google/`에. 2단계 frontend 전 |
 
 ## 10. 질문 답 (11-10, 1단계 test-writer Q1~Q12) · 테스트 승인
 **승인**: 미리 바꾼 기존 테스트(X-Device-Id → Bearer, "헤더 없음 400" → "토큰 없음 401"), 테스트 도구(`db` 표시, Supabase 가짜, 기기 초기화가 세션도 비움), 빈 껍데기 이름(`verify_token`, `PostgresPlanningRepo`, `PostgresTripRepo`), `DATABASE_URL` 있으면 Postgres·없으면 메모리, `apps/mobile/CLAUDE.md`의 `EXPO_PUBLIC_` 허용 목록에 `SUPABASE_URL`·`SUPABASE_KEY`(+ 점검용 `CHECK_` 둘) 추가
@@ -158,6 +158,82 @@
 | 3 다시 받기 실패 → 503 | 승인. 단 **이미 받아 둔 키 ID로 서명된 토큰은 다시 받지 않고 바로 확인**(다시 받기는 모르는 키 ID일 때만) — 이 경계 테스트 추가 |
 | 4 DATA-001에 없는 열 | 반영한다. backend가 새로 만든 열·표 목록(이름·뜻)을 PR에 표로 → PM이 머지 때 DATA-001에 옮김. `place_facts`는 만들어 두되 1단계엔 안 씀 — 승인 |
 | 5 iPhone 16e 실측 | TASK-013으로 넘김 (기기 추가 뒤) |
+
+## 14. 1단계 머지 기록 (11-11, PR #14)
+- **AC-7 결정권자 폰 통과**(클라우드 Supabase): 여행 만들기 → 계획 중 앱 완전 종료·재시작 → 같은 계획 대화 → 코스 고르기 → 서버 재시작 → 날짜 목록·코스 그대로
+- 서버 3453·앱 2344 통과, DB 테스트 38(로컬 Supabase) 통과. 계약 테스트가 메모리·Postgres 두 구현에서 같음. 돌연변이: `api/auth.py` 98.6%, `trip/trips.py` 87.4%, 앱 `auth.ts` 72.7%
+- 새 길 **`GET /days/{day_id}/planning`**(그날 진행 중 계획 세션, 없으면 404) — 승인. 끝난 세션은 진행 중 아님, 데모는 세션 ID 기기 저장, [알아서 짜 줘]는 새로 시작 — 승인
+- **폰 확인에서 막힌 곳 3가지**(→ `supabase/README.md` "폰 확인 때 막히는 곳"): ① 익명 로그인 설정이 Save 안 됨(`anonymous_provider_disabled`) ② 8000번에 예전 서버 2개가 남아 새 서버가 안 뜸(`Address already in use`) → 폰이 예전 서버와 이야기해 401 ③ `DATABASE_URL` 비밀번호에 `@`·`[ ]` → 503. 원인은 실패 이유를 로그에 남기지 않아서 찾기 어려웠음 → 개발 빌드에서만 `AUTH_FAILED` 경고(값 없음)
+- **찾아서 고친 버그 2개**: 만료 세션 갱신 실패 때 새 익명 계정을 만들어 여행을 잃을 수 있었음(§10 Q6 위반) / 세션 저장 칸 이름이 바뀌어 업데이트 뒤 기존 폰이 여행을 못 찾을 뻔함 → 기본 이름으로 원복
+- 새 열·표 → DATA-001 §6에 옮김
+- **2단계로**: 계정 연결(§C·§D), Google 로그인, 로그아웃. **TASK-013으로**: iPhone 16e 실측
+
+## 15. 2단계 보안 규칙 (11-11, 결정권자 질문 "보안문제는 없지?")
+| # | 위험 | 규칙 (테스트로 고정) |
+|---|---|---|
+| S1 | 앱 주소(`tripfriends://`)는 다른 앱도 같은 이름으로 등록할 수 있음 → 돌아오는 code를 가로챌 수 있음 | supabase 클라이언트 `flowType: 'pkce'`. code만으로는 세션을 못 만든다(검증값은 우리 앱 안에만). iOS는 openAuthSessionAsync가 부른 앱으로만 돌려줌 |
+| S2 | Redirect URLs `tripfriends://**`가 넓음 | 경로가 `tripfriends://auth/callback`으로 정해지면 Supabase 허용 목록을 그 한 줄로 좁힌다 (결정권자, frontend 보고 뒤) |
+| S3 | `/account/claim`에 익명 토큰을 보냄 | 서버가 두 JWT 모두 검증(서명·만료), 익명 쪽은 `is_anonymous`여야 함. **한 번만**: 처리된 익명 사용자는 다시 claim 불가(두 번째는 409). 남의 여행은 여전히 404 |
+| S4 | 토큰 노출 | 토큰·코드를 로그·오류 메시지·Maestro 기록에 남기지 않음 (개발 경고에도 값 없이 이유만) |
+| S5 | 가짜 로그인 공급자 | 개발 빌드에만. 릴리스 번들에 0 (AC-6) |
+| S6 | 이메일 | 프로필 메뉴는 일부만 표시. DB에 따로 복사하지 않음(Supabase Auth에만) |
+- 그대로 둔 것: Client secret은 Supabase에만(앱·저장소 0), Client ID는 원래 공개값. **Testing 상태라 테스트 사용자만 로그인** → 파일럿 전 묶음에 "Google 앱 게시(브랜딩 확인)" 추가. manual linking은 로그인한 본인 세션이 있어야만 연결되므로 켜 둔다
+
+## 16. 2단계 test-writer 질문 답 (11-11) · 테스트 승인
+- **승인**: 테스트 커밋 `59c9e1d`·`fcb754f`, 바꾼 승인 테스트 2개(task-006-exit X1 버튼 3개·"저장 안 됨", design-tokens §4-12), 새 이름 `maskEmail`·`src/lib/dev-login.ts`·`result`(`moved`/`choose`)·`choices[].origin`(`device`/`account`)
+- "여행이 있음" = **보관·데모가 아닌 여행**(지금 여행)이 있음
+
+| Q | 답 |
+|---|---|
+| Q1 옮길 범위 | 익명 쪽 **보관 여행도 옮긴다**(지우지 않음 원칙). **데모 여행은 옮기지 않고** 익명 사용자에게 남긴다. 계정 쪽에 보관 여행만 있으면 "여행 없음" → 익명 여행을 옮겨 지금 여행으로 |
+| Q2 고르지 않은 기기 여행 | **계정으로 옮겨 `archived`** (익명 사용자는 다시 닿을 수 없으므로) |
+| Q3 오류 | 익명이 아닌 `anonymous_token` → 400 `NOT_ANONYMOUS_TOKEN` · 두 여행이 아닌 `trip_id` → 404 `NOT_FOUND`(남의 것 규칙과 같게) · 본문 빠짐 → 서버에 이미 있는 본문 검증 오류 code 그대로 |
+| Q4 409 | 409 `ALREADY_CLAIMED`. `moved`(옮길 것이 없었어도)·`choose` 완료 뒤 "처리됨". `result:"choose"`를 돌려준 claim은 아직 처리 전 → 다시 부르면 같은 `choose` |
+| Q5 헤더·같은 사용자 | 헤더 토큰이 익명이면 400 `ACCOUNT_REQUIRED`. 두 토큰이 같은 사용자면 400 `SAME_USER` (앱 버그를 드러내게) |
+| Q6 익명 토큰 | 기기에 **익명 세션 전체(access + refresh)** 보관. claim·choose 직전 만료 60초 안이면 먼저 갱신. 지우는 때: `moved` 또는 choose 성공 뒤. [연결 취소]·실패면 그 세션이 다시 지금 세션 |
+| Q7 저장 권유 | 익명 + **실제 여행에서 코스를 고른 그 순간**에만, 기기당 한 번. 이미 계획을 마친 여행은 자동으로 띄우지 않음(프로필 [저장하기]로). 데모 뒤엔 없음. 스크림 = [나중에]. 브라우저 **취소 → 시트 그대로**(다시 누르거나 [나중에]), **실패 → 시트 닫힘 + 알림**(§9 확정) |
+| Q8 처음부터 다시 | 실제 여행: ①-28 확인 → 지금 여행 `archived` → 첫 화면(S0, 새 여행 만들기). 메뉴 버튼은 디자인 ①-26·27 그대로. 지금 코드에 디자인에 없는 "날짜 목록으로" 버튼이 있으면 지우지 말고 그대로 두고 보고 |
+| Q9 날짜 표기 | 날짜 목록 머리와 **같은 함수**를 쓴다. 그 함수에 세 경우 테스트 추가: 같은 달 `11월 20일~23일`, 달 넘김 `11월 30일~12월 2일`, 하루 `11월 20일` (기간은 "~") |
+| Q10 버튼 글꼴 | **기기 기본 글꼴, 굵기 500, 14/20**. 문구가 한글이라 Roboto·Google Sans 모두 글자가 없음 → 글꼴 파일을 넣지 않는다 (리뷰 파일 §8의 "에셋 글꼴을 따름"을 이렇게 정함) |
+| Q11 가짜 공급자 | `__DEV__` **그리고** `EXPO_PUBLIC_DEV_LOGIN=1`일 때만. 브라우저 단계 대신 **로컬 Supabase**에서: "새 계정" = 익명 사용자에 테스트 이메일·비밀번호를 붙임(같은 user_id, 연결과 같은 결과) · "이미 있는 계정" = 시드된 테스트 계정으로 로그인 → 진짜 `/account/claim` 경로. 이메일 `link-new@example.test`·`link-existing@example.test`, 비밀번호는 로컬 시드 파일에서. **reviewer 단계에 릴리스 번들 확인 넣음**(실제 export 번들에서 `dev-login` 흔적 0) |
+| Q12 G 로고 | `docs/design/google/g-logo.svg` (PM이 공식 zip에서 넣음) → 앱 `assets/google/g-logo.svg`로 복사 |
+| Q13 claim 실패 | **맞다**: 계정 세션 로그아웃 → 보관한 익명 세션으로 되돌림 → "연결하지 못했어. 지금 여행은 그대로야" (409 포함) |
+
+## 17. frontend 전 질문 답 (11-11, 테스트 `37bf21f` 승인)
+| # | 답 |
+|---|---|
+| 1 날짜 띄어쓰기 | **띄어 쓴다** `12월 11일 ~ 13일` (지금 날짜 목록 머리 함수 그대로). §16 Q9의 붙여 쓴 예는 이 표기로 바꿔 읽는다 |
+| 2 [처음부터 다시] 보관 | **새 API 없음**: 확인 → 첫 화면(여행 만들기)으로만 보내고, 보관은 새 여행을 만들 때(`POST /trips`, 지금 동작). 만들기 전에 그만두면 이전 여행이 지금 여행으로 남는다 → **잃는 것이 없어 더 안전**(의도한 동작으로 둔다) |
+| 3 가짜 공급자 | `EXPO_PUBLIC_DEV_LOGIN=new` / `existing`, Maestro 흐름마다 다른 값. `__DEV__`가 아니면 값이 있어도 무시(테스트로 고정). `apps/mobile/CLAUDE.md` 허용 목록에 추가 승인(비밀값 아님) |
+
+## 18. 2단계 구현 보고 답 (11-12, 서버 `f5c0dfd` · 앱 `e0c5148` · 테스트 `3665baa`)
+| # | 답 |
+|---|---|
+| scheme | `mobile` → `tripfriends` **승인**. 개발 빌드 다시 설치(폰·시뮬레이터) |
+| S2 | 콜백 `tripfriends://auth/callback` 확정 → 결정권자가 Supabase Redirect URLs를 이 한 줄로 바꿈 (`tripfriends://**` 지움) |
+| 새 마이그레이션 `account_claims` | 승인. 1단계 파일을 고치지 않은 것 맞음. 클라우드 적용은 머지 뒤 결정권자가 `supabase db push` (폰 확인 전) |
+| 서버 도시 이름 표 | 승인하되 **어긋남을 테스트로 막는다**: 서버 표와 앱 표의 도시 코드·이름이 같은지 확인하는 테스트 하나 (어느 여행 시트는 서버가 준 이름을 그대로 씀) |
+| [이걸로 할래] 실패 복구 | 승인 (claim 실패와 같게) |
+| 여행 중 메뉴 [날짜 목록으로] 유지 | 승인 (§16 Q8) |
+| 빈틈 1 연결 도중 앱 종료 | **이번에 막는다**: 앱 시작 때 보관한 익명 세션이 있으면 — 지금 세션이 그 익명이면 보관본만 지움 / 지금 세션이 계정이면 claim을 다시 부름(같은 결과가 나오게 되어 있음, `choose`면 어느 여행 시트) / 실패면 §16 Q13 복구. 보관본은 SecureStore에 |
+| 빈틈 2 익명 복원 실패 | R1은 **알림만**으로 둔다(계정 세션 유지, 새 익명 계정 만들지 않음). 남는 위험: 익명 여행이 닿지 않는 곳에 남음(지워지지는 않음) → 알려진 한계로 PR에 적기 |
+
+## 19. 2단계 폰 확인 (11-12, AC-8 통과) · 머지 전 고칠 것
+- **AC-8 통과**(클라우드 Supabase, 실제 Google): 아바타 → [저장하기] → Google 연결 → 같은 여행·이메일 일부 표시 → 앱 삭제·재설치 → 데모 경유 로그인 → **같은 여행이 돌아옴**
+- 마이그레이션 `20261111000000_task012_account_claims.sql` 클라우드 적용(브랜치에서, dry-run 확인 뒤)
+- 폰 확인에서 막힌 곳 (결정권자 설정, → `supabase/README.md` "폰 확인 때 막히는 곳"에 더함): ① `LINK_FAILED link manual_linking_disabled` = Allow manual linking 저장 안 됨 ② 로그인 뒤 `unexpected_failure` = Supabase Auth 로그 `invalid client` → Google Client Secret 다시 만들어 넣음 ③ 서버는 `uv run --env-file .env …`로 켜야 함(빠지면 가짜 공급자·인증 401)
+
+| # | 머지 전 고칠 것 | 규칙 |
+|---|---|---|
+| F1 | **PKCE가 plain으로 동작** (경고 "WebCrypto API is not supported") → §15 S1 반쪽 | `crypto.subtle.digest`(SHA-256)를 앱에 채운다(`expo-crypto` 등, 새 네이티브 모듈이면 보고 → 개발 빌드 재설치). 테스트: authorize 주소의 `code_challenge_method=s256`(plain이면 실패). reviewer 놓친 이유를 PR에 |
+| F2 | **처음 화면(S0)에서 로그인할 길이 없음** → 앱을 다시 깐 사람이 데모·새 여행을 거쳐야 함 (AC-8 상황 그 자체) | S0에 보조 버튼 **「저장해 둔 여행 불러오기」** → 저장 권유 시트와 같은 시트(제목 「저장해 둔 여행 불러올래?」, Google 버튼) → 연결 결과대로(계정 여행이 지금 여행). 익명에 여행이 없으니 `moved`. 디자이너는 머지 뒤 확인 |
+| F3 | G 로고 (K7, **11-12 받음**) | `docs/design/google/g-logo.png`·`@2x`·`@3x` (공식 iOS PNG에서 G 20×20만 잘라 냄, `g-logo-README.md`) → 앱 `assets/google/`에 같은 바이트로. **§16 Q12의 `g-logo.svg`를 PNG로 바꿈**: 새 G 로고 SVG가 foreignObject·blur 필터라 react-native-svg가 못 그림. 테스트 경로도 PNG로 |
+
+## 20. F1~F3 뒤 폰 확인 (11-13) · PR 진행
+- F1 `expo-crypto` 58.0.8(`npx expo install`, 안전장치 예외 없음) + `crypto-polyfill.ts` → 시뮬레이터에서 `code_challenge_method=s256`, 폰에서 Google 연결 때 WebCrypto 경고 0
+- F2 S0 「저장해 둔 여행 불러오기」 → Google 로그인 → **같은 여행** (폰, 앱 삭제·재설치 뒤) · F3 G 로고 표시 (폰)
+- reviewer 재점검 "PR 가능": 서버 3496·로컬 DB 74·slow 22, 앱 2462(건너뜀 0), tsc 0, 릴리스 번들 가짜 공급자 0, Maestro 6
+- plain을 놓친 이유(PR에): 다른 테스트가 Supabase 라이브러리를 통째로 가짜로 바꿨고, 테스트 환경(Node)엔 폰과 달리 `crypto.subtle`이 있었다 → **보안 규칙은 "쓰는지"가 아니라 "실제 요청 값"으로 확인**
 
 ## 포트폴리오 포인트
 - 저장소 인터페이스 하나에 메모리·Postgres 두 구현, **같은 계약 테스트**로 바꿔 끼움을 증명

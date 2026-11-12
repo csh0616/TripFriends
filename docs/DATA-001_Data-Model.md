@@ -249,6 +249,24 @@ erDiagram
 | conversations, messages | role, content, route(`chat`/`request`/`clarify`/`safety`) | 원문은 30일 보관 후 삭제 (가설, 개인정보 처리방침에 명시) |
 | decision_logs | kind(`router`/`composer`/`parser`), model(`rule`/`jev`/`llm`), output(선택·확률), latency_ms, cost_usd | 측정 M-21~24·27의 원자료. 개인 식별 정보 없이 저장 |
 
+## 3-1. 구현에서 더한 열·표 (TASK-012 1단계, 11-11) — 정확한 정의는 `supabase/migrations/20261110000000_task012_storage.sql`
+| 이름 | 표 | 뜻 |
+|---|---|---|
+| `seq` | trips, planning_sessions, course_options, trip_events, recompose_proposals, reactions | 만든 순서 (지금 여행·가장 나중 세션·목록 순서) |
+| `is_demo`, `demo_today`, `demo_current` | trips | 데모 여행 표시, 데모 시계, `as_current`로 지금 여행에 붙었나 |
+| `day_number`, `lodging_known`, `place_ids`, `sources_known`, `plan_fixed`, `stay_overrides`, `demo` | trip_days | 몇째 날, 숙소를 아나, 그날 후보 id, 영업시간 출처 넘겨받음, 계획용 고정 일정(좌표 없이), 머무는 시간 덮어쓴 값, 데모 가상 장소 |
+| `trip_id` | fixed_events, must_visits | 여행 연결 |
+| `slot` | must_visits | 꼭 갈 곳 순서 |
+| `batch_relaxed`, `batch_first`, `stay_overrides` | planning_sessions | 지금 후보 묶음 성질, 머무는 시간 덮어쓴 값 |
+| `picks`, `go_home_min`, `total_travel_min` | course_options | 계산에 쓴 담은 곳, 코스 요약 |
+| `wait_min`, `stay_min`, `hours_status` | course_items | 코스 줄 부가 값 |
+| `state`, `user_choice` | trip_events | 사건 처리 상태·사용자 선택 |
+| `course`, `from_index`, `first_leave_at`, `keeps_fixed`, `reason`, `dropped`, `created_at`, `base_delay_min`, `superseded`, `closed`, `label` | recompose_proposals | 제안이 만드는 새 코스와 부가 정보 (옛 제안은 지우지 않고 `superseded`) |
+| `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations` (표) | — | LangGraph 체크포인트 (라이브러리 3.2.0 모양). 라이브러리를 올리면 늘어난 부분을 새 마이그레이션으로 |
+| `place_facts` (표) | — | 사용자 확인(`user`)만 담을 자리. 1단계엔 안 씀 |
+- 모든 표 RLS 켜짐·정책 없음 → 앱 역할은 표에 직접 못 닿음. 서버만 `postgres` 역할로 읽고 씀 (ADR-016). 위치 열 0 (테스트로 고정)
+- 클라우드에 한 번 적용한 마이그레이션 파일은 고치지 않는다. 바꿀 것은 새 파일로
+
 ## 4. 저장하지 않는 것
 - 이동 경로, 백그라운드 위치 기록 (목적지 근처 판정 결과만 trip_events에)
 - 전화번호, 실명, 결제 정보

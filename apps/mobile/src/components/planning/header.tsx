@@ -15,6 +15,7 @@ export function Header({
   onBack,
   backLabel,
   backDisabled,
+  left,
   onSos,
 }: {
   title?: string;
@@ -23,6 +24,8 @@ export function Header({
   /** 있으면 "‹ 글자" 뒤로 (back-day: 투명 바탕, 아이콘 + 글자. TASK-011) */
   backLabel?: string;
   backDisabled?: boolean;
+  /** 뒤로가 없는 머리의 왼쪽 자리 (날짜 목록의 내 프로필 아바타, TASK-012 C5) */
+  left?: React.ReactNode;
   onSos: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -58,7 +61,9 @@ export function Header({
                 <BackIcon color={backDisabled ? color.muted : color.ink} />
               </Pressable>
             )
-          ) : null}
+          ) : (
+            left ?? null
+          )}
         </View>
         <View style={backLabel ? styles.centerFlex : styles.center}>
           {title ? (

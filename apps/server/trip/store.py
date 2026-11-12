@@ -46,6 +46,14 @@ class TripStore(ABC):
     def get_trip(self, trip_id: str) -> TripRow | None: ...
 
     @abstractmethod
+    def move_trips(self, from_owner: str, to_owner: str) -> None:
+        """from_owner의 데모가 아닌 여행을 모두 to_owner에게 옮긴다 (보관 여행도 상태 그대로, 날·고정 일정·코스는 여행을 따라간다). 지우지 않는다 (§16 Q1)."""
+
+    @abstractmethod
+    def archive_trip(self, trip_id: str) -> None:
+        """이 여행을 archived로 (지우지 않음, §16 Q2)."""
+
+    @abstractmethod
     def trip_of_day(self, day_id: str) -> TripRow | None: ...
 
     @abstractmethod
@@ -103,6 +111,18 @@ class MemoryTripStore(TripStore):
     def get_trip(self, trip_id: str) -> TripRow | None:
         with self._lock:
             return self._data.trips.get(trip_id)
+
+    def move_trips(self, from_owner: str, to_owner: str) -> None:
+        with self._lock:
+            for trip in self._data.trips.values():
+                if trip.owner_id == from_owner and not trip.is_demo:
+                    trip.owner_id = to_owner
+
+    def archive_trip(self, trip_id: str) -> None:
+        with self._lock:
+            trip = self._data.trips.get(trip_id)
+            if trip is not None:
+                trip.status = "archived"
 
     def trip_of_day(self, day_id: str) -> TripRow | None:
         with self._lock:
