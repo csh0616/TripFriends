@@ -202,4 +202,4 @@ jobs:
           enable-cache: true
           working-directory: apps/server
       - run: uv sync --frozen
-      - run: uv run pytest tests/test_secret_scan.py
+      - run: uv run pytest tests/test_secret_scan.py tests/test_task013_ci.py
