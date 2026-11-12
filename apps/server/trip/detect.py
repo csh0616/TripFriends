@@ -104,6 +104,10 @@ def detect_delay(course: DelayCourse, at: datetime, position: tuple[float, float
     if index is None or index + 1 >= len(course.stops):
         return None  # 지킬 다음 일정이 없으면 늦어짐도 없다 (A2)
     here, following = course.stops[index], course.stops[index + 1]
+    if following.lat is None and index + 2 >= len(course.stops):
+        # TASK-014 §13 5: 위치 없는 고정 일정이 하루의 마지막이면 이동 시간으로 늦어짐을 판단하지 않는다 (시각으로만, T-07 -> 끝나면 T-08).
+        # 이동 0분으로 잡으면 일정이 시작한 뒤 내내(저녁이 끝난 뒤에도) 거짓 늦어짐이 된다. 뒤에 지킬 일정이 더 있는 경우(TASK-007 A2·A4)는 그대로
+        return None
     leave = _minutes(following.start) - following.travel_min  # 예정 출발 시각
     now_seconds = at.hour * 3600 + at.minute * 60 + at.second
     late_seconds = now_seconds - leave * 60

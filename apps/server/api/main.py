@@ -42,16 +42,17 @@ from planning.seed import DEMO_DATES
 
 log = logging.getLogger(__name__)
 
-# TASK-010 §9 Q19·§E5: 요청 기록 줄(uvicorn.access)은 남기되 쿼리의 위치 값만 가린다 (실제 GPS는 TASK-011, 그 전의 바닥)
-_POSITION_QUERY = re.compile(r"([?&](?:lat|lng|lon|latitude|longitude)=)[^&\s\"]*", re.IGNORECASE)
+# TASK-014 §13 3: 요청 기록 줄(uvicorn.access)에는 길만 남기고 쿼리 문자열을 통째로 지운다 (TASK-010 §E5의 키 가리기를 대체).
+# 막는 쪽(RejectPositionQuery)과 가리는 쪽이 키를 다르게 읽는 문제(%6Cat 등)가 구조적으로 없다. 우리 로그에 쿼리가 필요한 곳은 없다
+_QUERY = re.compile(r"[?#].*", re.DOTALL)
 
 
 class MaskPosition(logging.Filter):
+    """uvicorn 요청 줄의 인자(클라이언트, 메서드, 경로+쿼리, 판, 상태) 중 경로에서 `?` 뒤를 지운다."""
+
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str):
-            record.msg = _POSITION_QUERY.sub(r"\1***", record.msg)
-        if isinstance(record.args, tuple):
-            record.args = tuple(_POSITION_QUERY.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args)
+        if isinstance(record.msg, str) and isinstance(record.args, tuple):
+            record.args = tuple(_QUERY.sub("", a) if isinstance(a, str) and a.startswith("/") else a for a in record.args)
         return True
 
 

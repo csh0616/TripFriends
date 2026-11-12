@@ -7,7 +7,7 @@
 """
 
 import logging
-from urllib.parse import parse_qsl
+from urllib.parse import unquote
 from typing import Any
 
 import anyio
@@ -19,6 +19,17 @@ from api.planning import http_error_response
 from store.unit import MEMORY_LOCK, Transaction, activate
 
 POSITION_KEYS = frozenset({"lat", "lng"})
+MAX_DECODES = 5  # 키를 퍼센트 해제하는 최대 횟수. 앱은 한 번만 풀지만 이중·삼중 인코딩(%256Cat)도 같은 키로 보고 막는다. 5번 풀어도 계속 바뀌는 키는 정상이 아니라 그대로 400
+
+
+def _is_position_key(raw_key: str) -> bool:
+    key = raw_key.replace("+", " ")
+    for _ in range(MAX_DECODES):
+        decoded = unquote(key)
+        if decoded == key:
+            return key.lower() in POSITION_KEYS
+        key = decoded
+    return True
 log = logging.getLogger(__name__)
 PUBLIC_PATHS = frozenset({"/health", "/catalog", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"})  # §11 Q1: 열린 길은 health·catalog(+ 문서 길)뿐
 
@@ -51,7 +62,7 @@ class RejectPositionQuery:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and any(k.lower() in POSITION_KEYS for k, _ in parse_qsl(scope.get("query_string", b"").decode("latin-1"), keep_blank_values=True)):
+        if scope["type"] == "http" and any(_is_position_key(part.partition("=")[0]) for part in scope.get("query_string", b"").decode("latin-1").split("&") if part):
             await http_error_response(400, "VALIDATION_ERROR", "위치는 주소창이 아니라 요청 본문으로 보내 주세요", {"field": "query"})(scope, receive, send)
             return
         await self.app(scope, receive, send)
