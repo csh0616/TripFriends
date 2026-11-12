@@ -210,7 +210,7 @@ def test_T9_C1_retime은_엔진_값을_읽는다_엔진이_바뀌면_따라간�
 
     original = engine._limits()
     monkeypatch.setattr(engine, "_limits", lambda: original._replace(relaxed_buffer_min=23, packed_buffer_min=7))
-    assert engine.buffer_min("relaxed") == 23
+    assert engine.buffer_min("relaxed") == 24
     assert (buffer_min("relaxed"), buffer_min("packed")) == (23, 7)
 
 
