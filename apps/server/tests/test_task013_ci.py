@@ -54,7 +54,7 @@ OUTSIDE_READS: dict[str, set[str]] = {
     "apps/server/tests/test_task010_places.py": {"testdata/cities/osaka-fake.json", "testdata/cities/osaka-seed-fake.yaml"},
     "apps/server/tests/test_task010_v14.py": {"docs/data/osaka-seed.yaml"},
     "apps/server/tests/test_task012_schema.py": {"supabase/migrations/**"},
-    "apps/server/tests/test_task013_ci.py": {"docs/tasks/TASK-013_CI.md", WORKFLOW_SELF},
+    "apps/server/tests/test_task013_ci.py": {"docs/tasks/TASK-013_CI.md", WORKFLOW_SELF},  # §12: A5 작업에서도 항상 돈다
     # ---- 앱 (apps/mobile) ----
     "apps/mobile/__tests__/design-tokens.test.ts": {"packages/design-tokens/**"},
     "apps/mobile/__tests__/guardrails.test.tsx": {
@@ -271,6 +271,27 @@ def test_T13_Q2_워크플로의_docs_경로는_테스트가_읽는_파일뿐():
     for key in ("SERVER_PATHS", "MOBILE_PATHS", "ALL_PATHS"):
         wide = [p for p in _paths(env.get(key)) if p.startswith("docs") and p not in reads]
         assert wide == [], f"{key}: {wide}"
+
+
+# ---------- §12 항상 도는 키 검사 작업이 이 검사도 함께 돌린다 ----------
+
+ALWAYS_TESTS = ("tests/test_secret_scan.py", "tests/test_task013_ci.py")  # §9 Q7 · §12 질문 답
+
+
+def test_T13_S12_키_검사_작업은_항상_돌고_키_검사와_워크플로_검사를_함께_돌린다():
+    """§12: test_task013_ci.py(워크플로 검사 + 바깥 읽기 검사)를 키 검사 작업(항상 돎)에서 함께 돌린다.
+    OUTSIDE_READS의 test_secret_scan.py 주석("A5 작업이 항상 돌리므로")도 이 작업이 조건 없이 돈다는 전제다."""
+    job = (_workflow().get("jobs") or {}).get("secret-scan")
+    assert job is not None, "jobs.secret-scan이 없다 (A5)"
+    assert "if" not in job, f"secret-scan에 if: {job.get('if')!r} — 항상 돌아야 한다 (A6 키 검사 ← 항상)"
+    runs = [str(step.get("run", "")) for step in job.get("steps") or [] if isinstance(step, dict)]
+    pytest_runs = [run for run in runs if "pytest" in run]
+    for name in ALWAYS_TESTS:
+        assert any(name in run.split() for run in pytest_runs), f"secret-scan의 pytest 명령에 {name}이 없다: {pytest_runs}"
+    # 조건 없는 작업이라도 그 단계가 조건으로 빠지면 안 된다
+    for step in job.get("steps") or []:
+        if isinstance(step, dict) and "pytest" in str(step.get("run", "")):
+            assert "if" not in step, f"pytest 단계에 if: {step.get('if')!r}"
 
 
 # ---------- §9 Q5 Python 고정 (파일은 backend가 만든다) ----------
