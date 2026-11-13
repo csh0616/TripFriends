@@ -136,10 +136,11 @@ def test_A2_예정_출발은_다음_시작_빼기_다음_이동():
     assert detect(c, "11:25", AT1).delay_min == 10
 
 
-@pytest.mark.parametrize("clock", ["12:59", "13:00", "13:10", "13:30", "13:59", "14:00", "14:30"])
+@pytest.mark.parametrize("clock", ["12:59", "13:00", "13:10", "13:30", "13:59", "14:00"])
 def test_A2_S14_Q1_다음이_장소_없는_고정_일정이면_그_구간은_None(clock):
     # TASK-014 §14 Q1 (승인된 변경, 전: 13:10에 delay_min 10): 다음 일정(k+1)이 위치 없는 고정 일정이면 그 구간은 delay_min = None.
-    # 그 일정은 T-07이 시각으로 알린다 (§13 5 원칙: 위치 없는 고정 일정은 이동 시간으로 늦어짐을 판단하지 않음). 뒤에 장소(3번)가 더 있어도 같다
+    # 그 일정은 T-07이 시각으로 알린다 (§13 5 원칙: 위치 없는 고정 일정은 이동 시간으로 늦어짐을 판단하지 않음).
+    # §15 Q1 (승인된 변경, 전: 12:59~14:30 모두 None): None은 F(2번)가 끝날 때(14:00)까지. 14:30은 아래 "F 끝난 뒤" 테스트로 옮겼다
     c = course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", 0, km=None, fixed=True), stop(3, "14:30", "15:00", 20, km=3.0))
     assert detect(c, clock, AT1) is None
 
@@ -148,6 +149,56 @@ def test_A2_S14_Q1_다음이_장소_없는_고정_일정이면_그_구간은_Non
 def test_A2_S14_Q1_다음이_장소_없는_고정_일정이면_이동_분_값과_상관없이_None(travel):
     c = course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", travel, km=None, fixed=True), stop(3, "14:30", "15:00", 20, km=3.0))
     assert detect(c, "13:20", AT1) is None
+
+
+# §15 Q1: F가 끝난 뒤에는 F를 건너뛰고 다음 위치 있는 장소 기준. leave = 다음 장소 시작 - 지금 장소에서 그 장소까지 이동 분.
+# 코스 데이터에서 "지금 장소 -> 다음 위치 있는 장소" 이동 분 = 그 장소의 travel_min (엔진 값).
+# 엔진은 위치 없는 고정 일정 뒤에도 자리를 앞 장소로 둔다 (engine/planning.py simulate·trip/retime.py: here = slot.coord or here)
+# -> F 다음 장소의 travel_min은 F 앞 장소에서 오는 이동 분이다. F의 travel_min은 쓰지 않는다
+
+
+@pytest.mark.parametrize("f_travel", [0, 15], ids=["F_이동_0", "F_이동_15"])
+@pytest.mark.parametrize(
+    "clock, expected",
+    [("14:01", None), ("14:10", None), ("14:19", None), ("14:19:59", None), ("14:20", 10), ("14:30", 20)],
+    ids=["F_끝_1분_뒤_아직_출발_전", "다음_장소_출발_정각", "9분", "9분_59초", "10분", "20분"],
+)
+def test_A2_S15_Q1_F가_끝난_뒤에는_다음_위치_있는_장소_기준(f_travel, clock, expected):
+    # F 13:00~14:00, 3번 14:30 시작·이동 20 -> leave = 14:10. 1번에 아직 있으면 1번(k=1) 기준으로 늦음
+    c = course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", f_travel, km=None, fixed=True), stop(3, "14:30", "15:00", 20, km=3.0))
+    result = detect(c, clock, AT1)
+    assert (result.delay_min if result else None) == expected
+    if result:
+        assert (result.k, result.dedupe_key) == (1, f"delay:{DAY_ID}:1")
+
+
+def test_A2_S15_Q1_F_뒤_20분_늦으면_높음():
+    c = course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", 0, km=None, fixed=True), stop(3, "14:30", "15:00", 20, km=3.0))
+    assert detect(c, "14:30", AT1).severity == "high"  # A4 20분 규칙 그대로
+
+
+@pytest.mark.parametrize("next_travel, clock, expected", [(20, "14:20", 10), (40, "14:20", 30), (40, "13:59", None)], ids=["이동_20", "이동_40", "이동_40_F_안"])
+def test_A2_S15_Q1_다음_장소의_이동_분이_leave를_정한다(next_travel, clock, expected):
+    # 3번 14:30 시작: 이동 20 -> leave 14:10, 이동 40 -> leave 13:50. F 안(13:59)은 leave가 지났어도 None
+    c = course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", 0, km=None, fixed=True), stop(3, "14:30", "15:00", next_travel, km=3.0))
+    result = detect(c, clock, AT1)
+    assert (result.delay_min if result else None) == expected
+
+
+def f_end_after_leave():
+    """F 13:00~14:00, 3번 14:10 시작·이동 20 -> leave 13:50 (F가 끝나기 전에 이미 출발했어야 함). F 끝 바로 전·후를 가른다."""
+    return course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", 0, km=None, fixed=True), stop(3, "14:10", "15:00", 20, km=3.0))
+
+
+@pytest.mark.parametrize(
+    "clock, expected", [("13:59", None), ("14:00", None), ("14:01", 11), ("14:05", 15)], ids=["F_끝_1분_전", "F_끝_정각", "F_끝_1분_뒤", "F_끝_5분_뒤"]
+)
+def test_A2_S15_Q1_경계_F_끝_바로_전후(clock, expected):
+    # F의 시간(시작~끝) 동안 None: 끝 정각(14:00)은 F 안. 1분 뒤부터 다음 장소 기준(14:01 - 13:50 = 11분)
+    result = detect(f_end_after_leave(), clock, AT1)
+    assert (result.delay_min if result else None) == expected
+    if result:
+        assert result.k == 1
 
 
 def test_A2_S14_Q1_경계_장소_없는_고정_일정_뒤의_장소_사이는_그대로_감지한다():

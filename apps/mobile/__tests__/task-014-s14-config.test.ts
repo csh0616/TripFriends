@@ -75,4 +75,19 @@ describe('§14 ② 최종 iOS 설정 (플러그인을 거친 뒤)', () => {
     expect(locationTexts.length).toBeGreaterThan(0);
     for (const text of locationTexts) expect(text).not.toMatch(/Allow \$\(PRODUCT_NAME\)/);
   });
+
+  test('T14_S15_Q4_최종_Info_plist에_위치_앱_사용_중_외_권한_설명_키가_없다', async () => {
+    // §15 Q4: 앱이 실제로 묻지 않는 권한의 설명은 넣지 않는다 (정확한 위치 임시 요청·동작 센서·Face ID 등 플러그인 기본 문구 포함).
+    // 앱이 묻는 권한은 위치 "앱 사용 중" 하나 (src/now/use-live-location.ts requestForegroundPermissionsAsync)
+    // 질문 중(§15 test-writer 질문): NSLocalNetworkUsageDescription은 expo-dev-client(개발 런처)가 Metro를 찾으려고 넣고,
+    //   Release 빌드에서는 그 플러그인의 빌드 단계가 지운다. 개발 빌드가 실제로 쓰는 권한이라 답이 올 때까지 이 검사에서 뺀다
+    const plist = await finalInfoPlist();
+    const permissionKeys = Object.keys(plist).filter((key) => /^NS.*UsageDescription(Dictionary)?$/.test(key) && key !== 'NSLocalNetworkUsageDescription');
+    expect(permissionKeys).toEqual(['NSLocationWhenInUseUsageDescription']);
+  });
+
+  test('T14_S15_Q4_도구_자체_확인_권한_설명_키_고르기', () => {
+    const keys = ['NSLocationWhenInUseUsageDescription', 'NSLocationTemporaryUsageDescriptionDictionary', 'NSMotionUsageDescription', 'NSFaceIDUsageDescription', 'CFBundleName', 'UIBackgroundModes'];
+    expect(keys.filter((key) => /^NS.*UsageDescription(Dictionary)?$/.test(key))).toEqual(keys.slice(0, 4));
+  });
 });

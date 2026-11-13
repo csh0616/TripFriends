@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from auth_helpers import bearer
-from storage_helpers import KINDS, server_env
+from storage_helpers import KINDS, new_id, server_env
 from test_task010_trips import Osaka, states
 from trip_helpers import at_place, at_time, fixed_at, item, plant, spot
 
@@ -53,7 +53,7 @@ def test_T14_S14_Q1_시험_자체_확인_점심은_코스_가운데에_있고_�
 
 
 @pytest.mark.parametrize("rehearsal", [False, True], ids=["실제", "연습"])
-@pytest.mark.parametrize("clock", ["12:40", "12:50", "13:00", "13:29"])
+@pytest.mark.parametrize("clock", ["12:40", "12:50", "13:00", "13:29", "13:30"])
 def test_T14_S14_Q1_점심_중_앞_장소_근처에_있어도_늦어짐이_아니다(env, rehearsal, clock):
     # 점심 가게가 앞 장소 근처일 수 있다. 다음 일정이 위치 없는 고정 일정이면 그 구간은 delay_min = None (§14 Q1 A2)
     day_id = lunch_mid_day(env)
@@ -80,6 +80,38 @@ def test_T14_S14_Q1_경계_점심_뒤_위치_있는_장소_사이는_지금처�
     assert view["event"] is not None
     assert (view["event"]["delay_min"], view["event"]["severity"]) == (20, "high")
     assert view["status"] == "delayed"
+
+
+# §15 Q1: 점심(F)이 끝난 뒤에는 F를 건너뛰고 다음 위치 있는 장소(3번 P03) 기준.
+# leave = 3번 시작 14:00 - P01에서 P03까지 이동 분 30(코스의 3번 travel_min, 엔진은 F 뒤에도 자리를 P01로 둔다) = 13:30 = F 끝
+
+
+@pytest.mark.parametrize("rehearsal", [False, True], ids=["실제", "연습"])
+@pytest.mark.parametrize("clock", ["13:31", "13:39"], ids=["F_끝_1분_뒤_1분", "9분"])
+def test_T14_S15_Q1_점심_뒤_다음_장소_출발_10분_전까지는_늦어짐이_아니다(env, rehearsal, clock):
+    day_id = lunch_mid_day(env)
+    view = check(env, day_id, clock, P01, rehearsal=rehearsal)
+    assert view["event"] is None, view["event"]
+    assert view["status"] != "delayed", view["status_text"]
+
+
+@pytest.mark.parametrize("rehearsal", [False, True], ids=["실제", "연습"])
+@pytest.mark.parametrize("clock, delay", [("13:40", 10), ("13:45", 15)], ids=["10분_경계", "13시45분"])
+def test_T14_S15_Q1_점심이_끝났는데_앞_장소에_있으면_P03에_늦는_걸_감지한다(env, rehearsal, clock, delay):
+    # §15 Q1: "13:45에 아직 앞 장소에 있으면 P03에 늦는 걸 감지한다". 실제·연습 둘 다 (같은 계산, §C3)
+    day_id = lunch_mid_day(env)
+    view = check(env, day_id, clock, P01, rehearsal=rehearsal)
+    assert view["event"] is not None
+    assert (view["event"]["type"], view["event"]["delay_min"], view["event"]["severity"]) == ("delay", delay, "low")  # 20분 미만, 뒤 고정 일정 없음 (A4)
+    assert view["status"] == "delayed"
+
+
+def test_T14_S15_Q1_점심_뒤_늦어짐은_실제와_연습의_응답이_같다(env):
+    day_id = lunch_mid_day(env)
+    rehearsal = check(env, day_id, "13:45", P01, rehearsal=True)
+    real = check(env, day_id, "13:45", P01)
+    assert (rehearsal["status"], rehearsal["status_text"], card_types(rehearsal)) == (real["status"], real["status_text"], card_types(real))
+    assert (rehearsal["event"]["delay_min"], rehearsal["event"]["severity"]) == (real["event"]["delay_min"], real["event"]["severity"])
 
 
 # =====================================================================
@@ -138,3 +170,23 @@ def test_T14_S14_Q3_끝난_데모_여행은_두_저장소에서_같게_모든_�
         assert trip.status_code == 200, trip.text
         assert [day["day_id"] for day in trip.json()["trip_days"]] == seeded.json()["day_ids"]
         assert states(trip.json()) == ["past"] * DEMO_DAYS
+
+
+@pytest.mark.parametrize("kind", KINDS)
+def test_T14_S15_Q3_끝난_데모_여행은_지금_여행으로_그대로_나온다(monkeypatch, kind):
+    # §15 Q3: "지금 여행으로 그대로 보여 준다 (새 여행을 만들 때만 보관 — 지금 규칙)". D6 화면의 서버 쪽.
+    # 앱 쪽(모든 날 지난 줄 + 주 버튼 없음 -> end-note "여행이 끝났어" + [새 여행 만들기])은 TASK-011 테스트가 이미 덮는다
+    from api.main import app
+
+    server_env(monkeypatch, kind)
+    me = f"user-T14-s15-{kind}-{new_id()}"  # 실행마다 새 이름 (§12)
+    with TestClient(app, headers=bearer(me)) as client:
+        seeded = seed(client, {"past_days": DEMO_DAYS, "as_current": True}, me)
+        assert seeded.status_code == 201, seeded.text
+        current = Osaka(client, app).current(me)
+        assert current.status_code == 200, current.text
+        body = current.json()
+        assert body["trip_id"] == seeded.json()["trip_id"]
+        assert body["status"] == "active"  # 끝났다고 보관(archived)하지 않는다
+        assert [day["day_id"] for day in body["trip_days"]] == seeded.json()["day_ids"]
+        assert states(body) == ["past"] * DEMO_DAYS
