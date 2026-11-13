@@ -158,6 +158,10 @@ export const layout = {
   pillOffIcon: 16,
   statusPill: 36, // 이동 상태 알약 높이 (pill-off 자리 계산용)
   rehBand: 52, // reh-band 높이
+  rehClock: 112, // reh-clock 판 높이
+  rehSheetDrop: 76, // 연습 중 카드 시트(중간 단)가 ①-18보다 낮아지는 만큼
+  rehPlusWidth: 84, // reh-clock [+10분] 폭
+  rehPlayWidth: 96, // reh-clock [재생] 폭
   rehDot: 20, // reh-dot 바깥 지름
   rehDotRing: 3, // reh-dot 고리
   rehIcon: 18, // 띠 아이콘

@@ -23,6 +23,7 @@ import { SecondaryButton } from '@/components/planning/secondary-button';
 import { SosButton } from '@/components/planning/sos-button';
 import { SosSheet } from '@/components/planning/sos-sheet';
 import { failureText } from '@/lib/auth-messages';
+import { isFresh } from '@/lib/live-location';
 import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBOUNCE_MS, toMinutes } from '@/lib/demo-clock';
 import { cityClock } from '@/lib/calendar';
 import { dayHeading } from '@/lib/day-list';
@@ -182,7 +183,7 @@ export function TripNowScreen({
   const rehearsalLog = useRef<RehearsalAction[]>([]); // §11 연습 기록: 앱 메모리에만. 끝내거나 화면을 떠나면 사라진다
   const skipAt = useRef<string | null>(null); // 연습 첫 응답 뒤 이미 바로 보낸 시각
   const noteShown = useRef(false); // 연습 한 번에 처음 한 번만
-  const sentSpot = useRef<{ lat: number; lng: number } | null>(null); // 실제 위치: 마지막으로 보낸 곳 (시계로 다시 물을 때도 같이 보낸다)
+  const sentSpot = useRef<{ lat: number; lng: number; timestamp: number } | null>(null); // 실제 위치: 마지막으로 보낸 곳과 잰 시각 (시계로 다시 물을 때도 같이 보낸다, 120초 넘게 오래되면 뺀다)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<MapAdapterHandle>(null);
 
@@ -204,7 +205,11 @@ export function TripNowScreen({
   const positionFor = useCallback(
     (when: string): { lat?: number; lng?: number } => {
       // TASK-014 A3: 실제 여행은 기기가 잰 위치(마지막으로 보낸 곳)를 쓴다. 아직 없거나 쓸 수 없으면 시계만
-      if (live) return sentSpot.current ?? {};
+      if (live) {
+        const sent = sentSpot.current;
+        // §13 7·§10 Q7: 잰 지 120초보다 오래된 위치는 싣지 않는다 (시계만)
+        return sent && isFresh({ ...sent, accuracy: 0 }, Date.now()) ? { lat: sent.lat, lng: sent.lng } : {};
+      }
       const now = viewRef.current;
       if (!now || now.pins.length === 0) return {};
       // C2·§14: 지연 중이면 길 위가 아니라 "아직 머무는" 장소 (일정 안 = 그 장소, 이동 중 = 앞 장소, 첫 일정 전 = 숙소)
@@ -360,7 +365,7 @@ export function TripNowScreen({
   }, [playing, minutes, endMin]);
 
   // 지도 카메라: 처음 한 번만 코스 전체와 숙소가 보이게 (B10). 시트(중간) 높이만큼 아래 여백
-  const sheetMid = (areaHeight || windowHeight) * layout.sheetFractions[1];
+  const sheetMid = (areaHeight || windowHeight) * layout.sheetFractions[1] - (rehearsal ? layout.rehSheetDrop : 0); // 연습 중엔 시계 판 자리만큼 시트가 낮다
   useEffect(() => {
     if (!mapReady || fitted.current || !view || view.pins.length === 0) return;
     fitted.current = true;
@@ -387,8 +392,8 @@ export function TripNowScreen({
   // TASK-014 A3: 좋은 위치가 보낼 만하면 check 본문에 싣는다 (주소창 아님)
   const location = useLiveLocation({
     enabled: live,
-    onSend: (spot) => {
-      sentSpot.current = spot;
+    onSend: (spot, timestamp) => {
+      sentSpot.current = { ...spot, timestamp };
       void fetchNow({ kind: 'check', params: { at: liveAt(), lat: spot.lat, lng: spot.lng } });
     },
   });
@@ -467,7 +472,13 @@ export function TripNowScreen({
   };
 
   // ---------- 시트 ----------
-  const snapPoints = useMemo(() => layout.sheetFractions.map((fraction) => `${Math.round(fraction * 100)}%`), []);
+  // 연습 중엔 중간 단이 76 낮다 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
+  const snapPoints = useMemo(() => {
+    const total = areaHeight || windowHeight;
+    return layout.sheetFractions.map((fraction, index) =>
+      rehearsal && index === 1 ? `${Math.round((fraction - layout.rehSheetDrop / total) * 1000) / 10}%` : `${Math.round(fraction * 100)}%`,
+    );
+  }, [rehearsal, areaHeight, windowHeight]);
   const sheetTop = useSharedValue(0);
   const gap = space['space-3'];
   // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)

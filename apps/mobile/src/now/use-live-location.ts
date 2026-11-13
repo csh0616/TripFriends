@@ -19,7 +19,8 @@ type Options = {
   /** 실제 여행의 오늘 화면이고 연습 중이 아닐 때만 true */
   enabled: boolean;
   /** 좋은 위치(정확·신선)가 보낼 만하면 부른다 (A3) */
-  onSend: (spot: Spot) => void;
+  /** timestamp = 기기가 그 위치를 잰 시각(ms). 시계로 다시 물을 때 120초가 넘었는지 보려고 같이 준다 */
+  onSend: (spot: Spot, timestamp: number) => void;
 };
 
 export function useLiveLocation({ enabled, onSend }: Options) {
@@ -93,7 +94,7 @@ export function useLiveLocation({ enabled, onSend }: Options) {
       setSpot({ lat: reading.lat, lng: reading.lng });
       if (shouldSend(sent.current, reading)) {
         sent.current = { lat: reading.lat, lng: reading.lng, timestamp: reading.timestamp };
-        sendRef.current({ lat: reading.lat, lng: reading.lng });
+        sendRef.current({ lat: reading.lat, lng: reading.lng }, reading.timestamp);
       }
     };
     Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, distanceInterval: 10 }, take)
