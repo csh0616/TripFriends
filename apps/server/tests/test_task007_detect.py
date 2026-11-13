@@ -201,6 +201,64 @@ def test_A2_S15_Q1_경계_F_끝_바로_전후(clock, expected):
         assert result.k == 1
 
 
+# §16 Q3: 위치 없는 고정 일정이 연달아 있으면 다음 위치 있는 장소까지 모두 건너뛴다.
+# 연달은 묶음의 첫 시작부터 마지막 끝까지(사이 빈 시간 포함) None, 그 뒤는 다음 위치 있는 장소 기준.
+# 묶음 끝 정각은 묶음 안(None) — §16 "F 끝 정각은 F 안"과 같은 규칙을 묶음 끝에 적용. 다음 장소 이동 분 = 그 장소의 travel_min (§16 정한 것)
+
+
+def two_fixed_no_gap():
+    """F1 13:00~13:30, F2 13:30~14:00 (빈 시간 0), 4번 14:10 시작·이동 20 -> leave 13:50 (묶음이 끝나기 전)."""
+    return course(
+        stop(1, "10:00", "12:00", 10, km=1.0),
+        stop(2, "13:00", "13:30", 0, km=None, fixed=True),
+        stop(3, "13:30", "14:00", 0, km=None, fixed=True),
+        stop(4, "14:10", "15:00", 20, km=4.0),
+    )
+
+
+@pytest.mark.parametrize(
+    "clock, expected",
+    [("13:00", None), ("13:29", None), ("13:30", None), ("13:31", None), ("13:59", None), ("14:00", None), ("14:01", 11), ("14:05", 15)],
+    ids=["F1_시작", "F1_끝_1분_전", "F1_끝_정각_F2_시작", "F1_끝_1분_뒤_F2_안", "묶음_끝_1분_전", "묶음_끝_정각", "묶음_끝_1분_뒤", "묶음_끝_5분_뒤"],
+)
+def test_A2_S16_Q3_연달은_고정_일정_빈_시간_0_묶음_끝까지_None_뒤는_다음_장소_기준(clock, expected):
+    # leave = 4번 시작 14:10 - 이동 20 = 13:50. 묶음(13:00~14:00) 안은 leave가 지났어도 None. 14:01 - 13:50 = 11분
+    result = detect(two_fixed_no_gap(), clock, AT1)
+    assert (result.delay_min if result else None) == expected
+    if result:
+        assert (result.k, result.dedupe_key) == (1, f"delay:{DAY_ID}:1")
+
+
+def two_fixed_gap_30():
+    """F1 13:00~13:30, 빈 시간 30분, F2 14:00~14:30, 4번 14:40 시작·이동 70 -> leave 13:30 (빈 시간이 시작될 때 이미 출발했어야 함)."""
+    return course(
+        stop(1, "10:00", "12:00", 10, km=1.0),
+        stop(2, "13:00", "13:30", 0, km=None, fixed=True),
+        stop(3, "14:00", "14:30", 0, km=None, fixed=True),
+        stop(4, "14:40", "15:30", 70, km=4.0),
+    )
+
+
+@pytest.mark.parametrize(
+    "clock, expected",
+    [("13:30", None), ("13:31", None), ("13:40", None), ("13:59", None), ("14:00", None), ("14:29", None), ("14:30", None), ("14:31", 61)],
+    ids=["F1_끝_정각", "빈_시간_1분", "빈_시간_10분", "빈_시간_끝_1분_전", "F2_시작", "묶음_끝_1분_전", "묶음_끝_정각", "묶음_끝_1분_뒤"],
+)
+def test_A2_S16_Q3_연달은_고정_일정_사이_30분_빈_시간도_묶음_끝까지_None(clock, expected):
+    # §16 Q3 "사이 빈 시간 포함": F1이 끝난 빈 시간(13:30~14:00)에도 F1 하나만 보고 다음 장소 기준으로 판단하지 않는다
+    # (그러면 13:40에 10분 늦음이 된다). 묶음 끝(14:30) 1분 뒤부터 4번 기준: 14:31 - 13:30 = 61분
+    result = detect(two_fixed_gap_30(), clock, AT1)
+    assert (result.delay_min if result else None) == expected
+    if result:
+        assert (result.k, result.dedupe_key) == (1, f"delay:{DAY_ID}:1")
+
+
+def test_A2_S16_Q3_묶음_뒤_늦어짐의_심각도는_A4_그대로():
+    # 61분 >= 20 -> 높음 (A4 20분 규칙). 빈 시간 0 묶음의 11분은 뒤 고정 일정이 없으니 낮음 (이미 끝난 F는 심각도에 세지 않음, §16)
+    assert detect(two_fixed_gap_30(), "14:31", AT1).severity == "high"
+    assert detect(two_fixed_no_gap(), "14:01", AT1).severity == "low"
+
+
 def test_A2_S14_Q1_경계_장소_없는_고정_일정_뒤의_장소_사이는_그대로_감지한다():
     # 위치 있는 장소 사이(3번 -> 4번)는 TASK-007 A2 그대로: 4번 예정 출발 = 16:00 - 30 = 15:30
     c = course(

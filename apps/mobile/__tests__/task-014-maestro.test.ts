@@ -77,3 +77,43 @@ test('T14_S13_1_연습_흐름은_연습_끝내기를_누른다_좌표로_누르�
   expect(text).toContain('tapOn: "연습 끝내기"');
   expect(text).not.toMatch(/point:/); // 좌표 탭 금지 (§13 1: 끄는 방법이 있으면 그쪽)
 });
+
+// §15 Q2·§16 Q1: trip-delay는 Maestro만 13:05 -> 13:10("15분 늦어지는 중", 낮음)·13:15 -> 13:20("25분", T-04 높음).
+//   [재생]/[멈춤]으로 5분을 맞추지 않는다(멈추는 때가 흔들림). 카드 종류·순서(낮음 알약 -> T-04 -> 고르기 -> 다시 안 뜸)는 그대로.
+//   TASK-007 단위 테스트의 13:05는 그대로(이 테스트는 Maestro 흐름만 본다).
+describe('§16 Q1 trip-delay 시각', () => {
+  const text = read('trip-delay.yaml');
+  const steps = text.split('\n').filter((line) => !line.trim().startsWith('#')).join('\n');
+
+  test('T14_S16_Q1_trip_delay는_재생_멈춤_단추를_누르지_않는다', () => {
+    expect(steps).not.toMatch(/id:\s*"demo-play"/);
+    expect(steps).not.toMatch(/"(재생|멈춤)"/);
+  });
+
+  test('T14_S16_Q1_trip_delay는_10분_단추_19번으로_13시10분을_고른다', () => {
+    expect(steps).toMatch(/times:\s*19\s*\n\s*commands:\s*\n\s*- tapOn:\s*\n\s*id:\s*"demo-plus-10"/);
+    expect(steps).toContain('visible: "13:10"');
+    expect(steps).not.toMatch(/"13:0[05]"|"13:15"/);
+  });
+
+  test('T14_S16_Q1_trip_delay_순서_13시10분_낮음_15분_13시20분_T_04_25분_고르기_다시_안_뜸', () => {
+    const marks = [
+      'visible: "13:10"',
+      'visible: ".*15분 늦어지는 중.*"',
+      'visible: "13:20"',
+      'id: "card-T-04"',
+      'visible: ".*25분 늦어지고 있어.*"',
+      'id: "select-confirm"',
+      'visible: "바꾼 일정으로 안내할게"',
+      'visible: "지연 20분"',
+    ];
+    let from = 0;
+    for (const mark of marks) {
+      const at = steps.indexOf(mark, from);
+      expect({ mark, found: at >= 0 }).toEqual({ mark, found: true });
+      from = at + mark.length;
+    }
+    // 13:10과 [+10분 늦게] 사이, 낮음 알약 뒤에는 T-04 카드가 없다 (assertNotVisible 두 번 + 고른 뒤·다시 안 뜸 두 번)
+    expect(steps.match(/assertNotVisible:\s*\n\s*id:\s*"card-T-04"/g)).toHaveLength(4);
+  });
+});
