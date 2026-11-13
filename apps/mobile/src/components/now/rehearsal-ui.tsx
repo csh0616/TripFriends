@@ -41,7 +41,7 @@ export function RehearsalNotice({ top, onClose }: { top: number; onClose: () => 
     return () => clearTimeout(timer);
   }, [onClose]);
   return (
-    <Pressable testID="notice-info" accessibilityRole="status" accessibilityLiveRegion="polite" onPress={onClose} style={[styles.notice, { top }]}>
+    <Pressable testID="notice-info" role="status" accessibilityLiveRegion="polite" onPress={onClose} style={[styles.notice, { top }]}>
       <InfoIcon color={color.muted} size={NOTICE.icon} />
       <Text numberOfLines={1} style={styles.noticeText}>
         {REHEARSAL_NOTE}

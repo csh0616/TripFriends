@@ -25,10 +25,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store",
+      ["expo-secure-store", { "faceIDPermission": false }],
       [
         "expo-location",
         {
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "locationFullAccuracyPermission": false,
+          "motionUsagePermission": false,
           "locationWhenInUsePermission": "지금 어디쯤인지 알아서, 일정이 늦어질 때 미리 알려 주려고 위치를 써요. 위치는 저장하지 않아요."
         }
       ],
