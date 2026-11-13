@@ -4874,7 +4874,7 @@
           },
           "past_days": {
             "type": "integer",
-            "maximum": 2.0,
+            "maximum": 3.0,
             "minimum": 0.0,
             "title": "Past Days",
             "default": 0
