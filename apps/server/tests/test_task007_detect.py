@@ -136,9 +136,31 @@ def test_A2_예정_출발은_다음_시작_빼기_다음_이동():
     assert detect(c, "11:25", AT1).delay_min == 10
 
 
-def test_A2_다음이_장소_없는_고정_일정이어도_그_시작과_이동으로():
+@pytest.mark.parametrize("clock", ["12:59", "13:00", "13:10", "13:30", "13:59", "14:00", "14:30"])
+def test_A2_S14_Q1_다음이_장소_없는_고정_일정이면_그_구간은_None(clock):
+    # TASK-014 §14 Q1 (승인된 변경, 전: 13:10에 delay_min 10): 다음 일정(k+1)이 위치 없는 고정 일정이면 그 구간은 delay_min = None.
+    # 그 일정은 T-07이 시각으로 알린다 (§13 5 원칙: 위치 없는 고정 일정은 이동 시간으로 늦어짐을 판단하지 않음). 뒤에 장소(3번)가 더 있어도 같다
     c = course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", 0, km=None, fixed=True), stop(3, "14:30", "15:00", 20, km=3.0))
-    assert detect(c, "13:10", AT1).delay_min == 10
+    assert detect(c, clock, AT1) is None
+
+
+@pytest.mark.parametrize("travel", [0, 15], ids=["이동_0", "이동_15"])
+def test_A2_S14_Q1_다음이_장소_없는_고정_일정이면_이동_분_값과_상관없이_None(travel):
+    c = course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", travel, km=None, fixed=True), stop(3, "14:30", "15:00", 20, km=3.0))
+    assert detect(c, "13:20", AT1) is None
+
+
+def test_A2_S14_Q1_경계_장소_없는_고정_일정_뒤의_장소_사이는_그대로_감지한다():
+    # 위치 있는 장소 사이(3번 -> 4번)는 TASK-007 A2 그대로: 4번 예정 출발 = 16:00 - 30 = 15:30
+    c = course(
+        stop(1, "10:00", "12:00", 10, km=1.0),
+        stop(2, "13:00", "14:00", 0, km=None, fixed=True),
+        stop(3, "14:30", "15:00", 20, km=3.0),
+        stop(4, "16:00", "17:00", 30, km=4.0),
+    )
+    assert detect(c, "15:39", AT3) is None
+    found = detect(c, "15:40", AT3)
+    assert (found.k, found.delay_min) == (3, 10)
 
 
 def test_A2_2번에서_늦으면_2번_기준():
@@ -197,9 +219,25 @@ def test_A4_다음_일정이_고정이면_10분만_늦어도_높음():
     assert (result.delay_min, result.severity) == (10, "high")
 
 
-def test_A4_장소_없는_고정_일정도_고정_일정이다():
-    c = course(stop(1, "10:00", "12:00", 10, km=1.0), stop(2, "13:00", "14:00", 0, km=None, fixed=True), stop(3, "14:30", "15:00", 20, km=3.0))
-    assert detect(c, "13:10", AT1).severity == "high"
+def placeless_after_next(travel: int):
+    """2번(장소) 다음 3번이 위치 없는 고정 일정 13:10. 1번 예정 출발 12:00.
+    늦은 만큼 2번을 밀면 2번 끝 = 13:00 + 늦은 분. 이동 시간 없이 시작 시각만으로 보면 10분 늦음까지 13:10에 딱 맞고, 11분이면 1분 늦는다."""
+    return course(
+        stop(1, "10:00", "12:00", 10, km=1.0),
+        stop(2, "12:30", "13:00", 30, km=2.0),
+        stop(3, "13:10", "14:00", travel, km=None, fixed=True),
+        stop(4, "14:30", "15:00", 20, km=3.0),
+    )
+
+
+@pytest.mark.parametrize("travel", [0, 15], ids=["이동_0", "이동_15"])
+@pytest.mark.parametrize("clock, severity", [("12:10", "low"), ("12:11", "high")], ids=["10분_딱_맞음", "11분_1분_늦음"])
+def test_A4_S14_Q1_장소_없는_고정_일정도_고정_일정이고_이동_시간_없이_시작_시각만으로(travel, clock, severity):
+    # TASK-014 §14 Q1 (승인된 변경, 전: k+1이 장소 없는 고정 일정인 코스로 13:10 높음): A4 — 위치 없는 고정 일정은 이동 시간 없이
+    # 시작 시각만으로 "늦음"(§11 Q2처럼 차례로 밀어서, 앞 일정 끝이 그 시작을 넘으면). 이동 분 값이 있어도 더하지 않는다 (이동_15)
+    result = detect(placeless_after_next(travel), clock, AT1)
+    assert result.delay_min < 20  # 시험 자체 확인: 20분 규칙이 아니라 고정 일정 규칙으로 갈린다
+    assert (result.k, result.severity) == (1, severity)
 
 
 def test_A4_빈_시간이_넉넉한_고정_일정은_낮음():

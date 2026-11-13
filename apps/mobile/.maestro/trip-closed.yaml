@@ -5,17 +5,16 @@
 #   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --device <UDID> test -e METRO_URL=http://127.0.0.1:8083 \
 #     --test-output-dir=.maestro/screenshots/trip-closed .maestro/trip-closed.yaml
 # 스크린샷은 --test-output-dir 아래에 쌓이고 저장소에는 올리지 않는다.
-# 시각 막대는 하루 시작~끝(데모 시드 둘째 날 10:00~20:00)을 0~100%로 보고 누른 위치를 5분 단위로 맞춘다 (15% = 11:30).
+# 시각 막대는 하루 시작~끝(데모 시드 둘째 날 10:00~20:00)을 0~100%로 보고 누른 위치를 5분 단위로 맞춘다.
+# TASK-014 §14 ④: 비율로 시각을 고르지 않는다 (기기 폭에 따라 좁은 칸이 다른 5분으로 떨어진다). 막대는 맨 앞(0% = 10:00)만 누르고 [+10분]을 정한 횟수만큼.
 # 시나리오 장소(D02, 12:00 시작)와 대안(D31 골목 카페 E)은 데모 시드가 고정이라 정해져 있다. 시드가 바뀌면 글자를 다시 확인한다.
 appId: com.csh0616.tripfriends
 ---
 - launchApp:
     clearState: true
-    # TASK-014 §13 1: 개발 메뉴의 떠 있는 버튼(톱니)이 화면을 덮지 않게 끈다. expo-dev-menu가 UserDefaults 키
-    # EXDevMenuShowFloatingActionButton(DevMenuPreferences.swift)을 읽고, iOS 실행 인자는 UserDefaults(인자 영역)로 들어간다
-    arguments:
-      EXDevMenuShowFloatingActionButton: false
-- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1
+# TASK-014 §14 ①: 개발 메뉴의 떠 있는 버튼(톱니)이 화면을 덮지 않게 여는 주소에 __expo_disable_fab=1.
+# (§13의 launchApp 실행 인자 EXDevMenuShowFloatingActionButton은 효과가 없어 뺐다, reviewer 재점검)
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1&__expo_disable_fab=1
 - tapOn:
     text: "열기"
     optional: true
@@ -56,16 +55,25 @@ appId: com.csh0616.tripfriends
             id: "demo-panel"
           timeout: 3000
 
-# 데모 11:30: 막대 15% (90분 -> 11:30). 시나리오 장소 출발 30분 전이라 T-05가 뜬다
+# 데모 11:30: 막대 맨 앞 10:00 + [+10분] 9번. 시나리오 장소 출발 30분 전이라 T-05가 뜬다
+# 탭이 하나라도 안 닿으면 시각 글자가 맞지 않아 retry가 0%부터 다시 한다
 - retry:
     maxRetries: 3
     commands:
       - tapOn:
           id: "demo-bar"
-          point: "15%,50%"
+          point: "0%,50%"
+      - extendedWaitUntil:
+          visible: "10:00"
+          timeout: 3000
+      - repeat:
+          times: 9
+          commands:
+            - tapOn:
+                id: "demo-plus-10"
       - extendedWaitUntil:
           visible: "11:30"
-          timeout: 3000
+          timeout: 5000
 - extendedWaitUntil:
     visible:
       id: "card-T-05"

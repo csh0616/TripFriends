@@ -679,3 +679,57 @@ describe('§6 연습 중 실패', () => {
     expect(await screen.findByText(REHEARSAL_FAILED)).toBeTruthy();
   });
 });
+
+// =====================================================================
+// §14 ③ 안내 한 줄 role="status" · Q2 연습 시계 글자 토큰
+// 근거: TASK-014 §14 ③("role=status + 빠진 테스트")·§13 9("문서대로 status")·Q2("시각 DM Mono 22/28·500, 시작·끝 12/16·500 muted",
+//   tokens.json 글자 토큰, 이름은 기존 규칙대로)·task-014-design §2 reh-clock. 토큰 값 자체는 design-tokens.test.ts(TYPE 표)가 본다
+// =====================================================================
+
+describe('§14 ③ 안내 한 줄 접근성 역할', () => {
+  test('T14_S14_3_연습이라_저장하지_않았어_한_줄은_role_status', async () => {
+    const view = delayedView({ day: plannedDay });
+    nowReply = () => json(200, view);
+    checkReply = (sent) => json(200, { ...view, at: body(sent).at });
+    await toRehearsal();
+    await tap(await screen.findByTestId('event-dismiss'));
+    await screen.findByText(REHEARSAL_NOTE);
+    // accessibilityRole이 아니라 문서의 role 속성 그대로 (getByRole은 둘을 가리지 않아서 속성을 본다)
+    const notice = pressableOf(screen.getByText(REHEARSAL_NOTE) as unknown as Host);
+    expect(notice.props.testID).toBe('notice-info'); // 시험 자체 확인: 한 줄을 감싼 누르는 칸
+    expect(notice.props.role).toBe('status');
+  });
+});
+
+describe('§14 Q2 연습 시계 글자는 토큰 (num-lg · num-sm)', () => {
+  const tokens = require('design-tokens').default;
+  const flat = (host: Host) => styleOf(host);
+  /** num-md와 같은 DM Mono 500 글꼴 이름 (theme이 고르는 이름, 굵기 500) */
+  const mono500 = () => require('@/planning/theme').text('num-md').fontFamily;
+
+  test('T14_S14_Q2_연습_시계_시각은_num_lg_토큰_DM_Mono_22_28_500', async () => {
+    await toRehearsal();
+    const time = within(screen.getByTestId('demo-time')).getByText(plannedDay.start) as unknown as Host;
+    const spec = tokens.type['num-lg'];
+    expect(spec).toBeDefined();
+    expect({ fontSize: flat(time).fontSize, lineHeight: flat(time).lineHeight }).toEqual({ fontSize: spec.size, lineHeight: spec.lineHeight });
+    expect({ fontSize: flat(time).fontSize, lineHeight: flat(time).lineHeight }).toEqual({ fontSize: 22, lineHeight: 28 }); // §14 Q2 값
+    expect(flat(time).fontFamily).toBe(mono500());
+  });
+
+  test('T14_S14_Q2_연습_시계_시작·끝은_num_sm_토큰_DM_Mono_12_16_500_muted', async () => {
+    await toRehearsal();
+    await plusTen(); // 시각 글자가 시작 시각과 겹치지 않게
+    await waitFor(() => expect(within(screen.getByTestId('demo-time')).queryByText(plannedDay.start)).toBeNull());
+    const panel = screen.getByTestId('demo-panel');
+    const spec = tokens.type['num-sm'];
+    expect(spec).toBeDefined();
+    for (const label of [plannedDay.start, plannedDay.end]) {
+      const found = within(panel).getByText(label) as unknown as Host;
+      expect({ fontSize: flat(found).fontSize, lineHeight: flat(found).lineHeight }).toEqual({ fontSize: spec.size, lineHeight: spec.lineHeight });
+      expect({ fontSize: flat(found).fontSize, lineHeight: flat(found).lineHeight }).toEqual({ fontSize: 12, lineHeight: 16 }); // §14 Q2 값
+      expect(flat(found).fontFamily).toBe(mono500());
+      expect(String(flat(found).color).toUpperCase()).toBe(String(tokens.color.muted).toUpperCase());
+    }
+  });
+});
