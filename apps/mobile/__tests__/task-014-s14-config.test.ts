@@ -175,7 +175,19 @@ describe('§14 ② 최종 iOS 설정 (플러그인을 거친 뒤)', () => {
     expect(plist.NSLocalNetworkUsageDescription).toBeDefined();
     expect(removed).toContain('NSLocalNetworkUsageDescription');
     for (const key of removed) expect(['NSLocalNetworkUsageDescription', 'NSBonjourServices']).toContain(key);
-    expect(release.NSBonjourServices ?? []).not.toContain('_expo._tcp');
+    // Bonjour가 릴리스에서 0인지는 아래 T14_S17_Q2 릴리스 테스트가 본다 (§17 Q2)
+  });
+
+  // §17 Q2: 개발 런처가 넣는 키(로컬 네트워크 문구·Bonjour)는 개발 설정에서만, 릴리스 설정엔 0.
+  test('T14_S17_Q2_개발_설정의_Bonjour는_있어도_개발_런처_값_expo_tcp뿐', async () => {
+    const plist = await finalInfoPlist();
+    for (const service of plist.NSBonjourServices ?? []) expect(service).toBe('_expo._tcp');
+  });
+
+  (onMac ? test : test.skip)('T14_S17_Q2_릴리스_설정에_NSBonjourServices_키가_없다_macOS_빌드_단계_실행', async () => {
+    // 값 하나만 빼는 게 아니라 키 자체가 0 (빈 배열로 남아도 빨강)
+    const release = await afterBuildPhases(await finalInfoPlist(), { debug: false });
+    expect(Object.keys(release)).not.toContain('NSBonjourServices');
   });
 
   test('T14_S15_Q4_도구_자체_확인_권한_설명_키_고르기', () => {

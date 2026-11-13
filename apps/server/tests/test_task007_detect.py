@@ -259,6 +259,32 @@ def test_A2_S16_Q3_묶음_뒤_늦어짐의_심각도는_A4_그대로():
     assert detect(two_fixed_no_gap(), "14:01", AT1).severity == "low"
 
 
+# §17 Q1: 빈 시간 길이에 상한 없음. "연달아" = 사이에 위치 있는 장소가 없음. 3시간 빈 시간도 묶음 끝까지 None.
+
+
+def two_fixed_gap_3h():
+    """F1 13:00~13:30, 빈 시간 3시간, F2 16:30~17:00, 4번 17:10 시작·이동 70 -> leave 16:00 (긴 빈 시간 안)."""
+    return course(
+        stop(1, "10:00", "12:00", 10, km=1.0),
+        stop(2, "13:00", "13:30", 0, km=None, fixed=True),
+        stop(3, "16:30", "17:00", 0, km=None, fixed=True),
+        stop(4, "17:10", "18:00", 70, km=4.0),
+    )
+
+
+@pytest.mark.parametrize(
+    "clock, expected",
+    [("13:30", None), ("13:31", None), ("15:00", None), ("16:00", None), ("16:01", None), ("16:29", None), ("16:30", None), ("16:59", None), ("17:00", None), ("17:01", 61)],
+    ids=["F1_끝_정각", "빈_시간_1분", "빈_시간_중간", "leave_정각", "leave_1분_뒤", "빈_시간_끝_1분_전", "F2_시작", "묶음_끝_1분_전", "묶음_끝_정각", "묶음_끝_1분_뒤"],
+)
+def test_A2_S17_Q1_사이_3시간_빈_시간도_묶음_끝까지_None_뒤는_다음_장소_기준(clock, expected):
+    # leave = 17:10 - 70 = 16:00. 빈 시간 안에서 leave가 지나도(16:01~16:59) None. 17:01 - 16:00 = 61분
+    result = detect(two_fixed_gap_3h(), clock, AT1)
+    assert (result.delay_min if result else None) == expected
+    if result:
+        assert (result.k, result.dedupe_key) == (1, f"delay:{DAY_ID}:1")
+
+
 def test_A2_S14_Q1_경계_장소_없는_고정_일정_뒤의_장소_사이는_그대로_감지한다():
     # 위치 있는 장소 사이(3번 -> 4번)는 TASK-007 A2 그대로: 4번 예정 출발 = 16:00 - 30 = 15:30
     c = course(
