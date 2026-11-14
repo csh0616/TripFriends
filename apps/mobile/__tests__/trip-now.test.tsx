@@ -552,7 +552,7 @@ describe('B7 데모 시계', () => {
     await flow(5000);
     expect(demoTime()).toBe('20:00');
     expect(control.requests()).toHaveLength(settled);
-  });
+  }, 20000); // 가짜 시간 130초를 100ms씩 민다(act 약 1300번). 혼자 ~0.4초, 전체 실행 부하에서 5초 기본 제한을 넘어 흔들렸다
 
   // 시각 막대의 끌기 자체는 Maestro 몫. 위치 → 시각 계산만 본다 (함수 이름은 이 테스트가 정한 계약)
   describe('시각 막대 계산', () => {
