@@ -11,9 +11,9 @@
 //   D6 날짜: 숫자 Text("12/11")와 요일 Text("금")가 같은 부모 아래 나란한 별도 Text. 숫자 Text는 다른 Text 안에 없다. 숫자 = DM Mono 13/18
 //   [+10분] `demo-plus-10`: 보이는 글자는 "10분" 하나(버튼 안 글자에 "+" 없음, + 는 아이콘 하나), accessibilityLabel은 "10분"을 포함하고 "+"가 없다
 //   테스트로 못 고정하는 것 (reviewer 스크린샷): DM Mono가 실제로 그려지는지 · 800m가 화면에서 어떻게 보이는지 · 경로·점이 시계 판에 가리지 않는지
-import { act, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import Constants from 'expo-constants';
-import { StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { sheetControl } from '../test-support/bottom-sheet-mock';
@@ -102,10 +102,10 @@ const settleAll = async () => {
   });
 };
 
-function startHome() {
+function startHome(metrics: typeof METRICS = METRICS) {
   const Index = require('@/app/index').default;
   return render(
-    <SafeAreaProvider initialMetrics={METRICS}>
+    <SafeAreaProvider initialMetrics={metrics}>
       <Index />
     </SafeAreaProvider>,
   );
@@ -156,75 +156,135 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+const mid = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => ({ lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 });
+// 첫 구간: 숙소 -> 1번. 지난 핀 없음, 1 다음 · 2·3 나중
+const FIRST_LEG_PINS = [
+  { ...basePins[0], state: 'next' },
+  { ...basePins[1], state: 'later' },
+  { ...basePins[2], state: 'later' },
+];
+const FIRST_LEG_AT = mid(LODGING, SPOT.D01);
+// 마지막 구간: 3번 -> 숙소. 모두 지남
+const LAST_LEG_PINS = basePins.map((pin) => ({ ...pin, state: 'done' }));
+const LAST_LEG_AT = mid(SPOT.D30, LODGING);
+
 // =====================================================================
-// 1 연습 지도 = 지금 구간만 (TASK-014 §21 1)
+// 1 연습 지도 = 지금 구간만 (TASK-014 §21 1) -> §24: fit 대신 우리가 계산한 영역(animateToRegion)
+// 화면 테스트는 보드 402×874(안전 영역 위 62)에서 시트 영역 높이를 넣고, 보이는 띠를 기존 layout 값으로 따로 계산해 본다:
+//   위 = 안전 영역 + 연습 띠(rehBand 52) + 머리(header 52) + 말풍선(pinBubble 24)
+//   아래 = 연습 카드 시트 중간 단 윗변 − (시계 판 rehClock 112 + 시계 판과 시트 사이 space-3 12)
+// 지도 view = 시트 영역 상자 전체 (폭 402, 높이 = 그 상자 onLayout 높이)
 // =====================================================================
 
-describe('§21 1 연습 지도는 지금 구간만 비춘다', () => {
-  test('T14_S21_1_머무는_중이면_그_장소가_가운데', async () => {
-    withMap();
-    await toRehearsal();
+type Box = { width: number; height: number; top: number; bottom: number };
+type Region = { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number };
+const BOARD = { frame: { x: 0, y: 0, width: 402, height: 874 }, insets: { top: 62, left: 0, right: 0, bottom: 34 } };
+const MOVE_CAP_M = 3000; // §24 이동 중 동서 상한
+
+const mercY = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+function project(region: Region, box: Box, at: { lat: number; lng: number }) {
+  const x = box.width / 2 + ((at.lng - region.longitude) / region.longitudeDelta) * box.width;
+  const top = mercY(region.latitude + region.latitudeDelta / 2);
+  const bottom = mercY(region.latitude - region.latitudeDelta / 2);
+  return { x, y: ((top - mercY(at.lat)) / (top - bottom)) * box.height };
+}
+const spanEW = (region: Region) => region.longitudeDelta * METERS_PER_DEGREE * Math.cos((region.latitude * Math.PI) / 180);
+const nearRatio = (value: number, target: number) => value >= target * (1 - STAY_TOLERANCE) && value <= target * (1 + STAY_TOLERANCE);
+const inBand = (y: number, box: Box) => y >= box.top - 0.5 && y <= box.bottom + 0.5;
+const snapPx = (point: unknown, area: number) => {
+  if (typeof point === 'number') return point <= 1 ? point * area : point;
+  const text = String(point);
+  return text.endsWith('%') ? (Number(text.slice(0, -1)) / 100) * area : Number(text);
+};
+
+/** 보드 화면에서 연습에 들어가 시트 영역 높이를 넣은 뒤 지도 준비 신호를 준다. 따로 계산한 보이는 띠를 돌려준다 */
+async function toRehearsalOnBoard(): Promise<Box> {
+  const window = Dimensions.get('window');
+  jest.spyOn(Dimensions, 'get').mockImplementation(() => ({ ...window, width: 402, height: 874 }));
+  mapControl.silent = true; // 띠를 넣기 전에 카메라를 맞추지 않게
+  withMap();
+  await startHome(BOARD);
+  await tap(await screen.findByTestId(`rehearse-${PLANNED}`));
+  await screen.findByTestId('now-main');
+  await settleAll();
+  const bar = byId('input-bar');
+  const field = bar.queryAll((inner) => typeof styleOf(inner).minHeight === 'number')[0];
+  const area = 874 - (Number(styleOf(bar).paddingTop ?? 0) + Number(styleOf(field).minHeight) + Number(styleOf(bar).paddingBottom ?? 0));
+  const host = byId('trip-now-screen').queryAll((inner) => typeof inner.props.onLayout === 'function')[0];
+  await act(async () => {
+    fireEvent(host as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: area } } });
+  });
+  const points = sheetControl.props?.snapPoints as unknown[];
+  const sheetTop = area - snapPx(points[1], area);
+  const { layout } = require('@/planning/layout');
+  const { space } = require('@/planning/theme');
+  await act(async () => mapControl.ready());
+  await settleAll();
+  return {
+    width: 402,
+    height: area,
+    top: BOARD.insets.top + layout.rehBand + layout.header + layout.pinBubble,
+    bottom: sheetTop - (layout.rehClock + space['space-3']),
+  };
+}
+
+const lastRegion = (): Region => {
+  expect(mapControl.regions.length).toBeGreaterThan(0);
+  return mapControl.regions[mapControl.regions.length - 1];
+};
+/** 같은 영역인가: 가운데 1m 안, 폭 1% 안 */
+function sameRegion(a: Region, b: Region) {
+  const cos = Math.cos((a.latitude * Math.PI) / 180);
+  expect(Math.abs(a.latitude - b.latitude) * METERS_PER_DEGREE).toBeLessThanOrEqual(1);
+  expect(Math.abs(a.longitude - b.longitude) * METERS_PER_DEGREE * cos).toBeLessThanOrEqual(1);
+  expect(Math.abs(a.longitudeDelta / b.longitudeDelta - 1)).toBeLessThanOrEqual(0.01);
+  expect(Math.abs(a.latitudeDelta / b.latitudeDelta - 1)).toBeLessThanOrEqual(0.01);
+}
+const expected = (view: { pins: unknown[]; position: unknown }, box: Box): Region =>
+  require('@/now/rehearsal-camera').rehearsalCamera(view.pins, view.position ?? null, LODGING, box).region;
+
+describe('§21 1·§24 연습 지도 카메라 (화면)', () => {
+  test('T14_S24_화면_연습_카메라는_fit이_아니라_계산한_영역_하나', async () => {
+    await toRehearsalOnBoard();
     expect(screen.queryByTestId('map-fallback')).toBeNull(); // 시험 자체 확인: 지도가 그려졌다
-    const { coordinates } = await firstFit();
-    const lats = coordinates.map((p) => p.latitude);
-    const lngs = coordinates.map((p) => p.longitude);
-    const center = { lat: (Math.min(...lats) + Math.max(...lats)) / 2, lng: (Math.min(...lngs) + Math.max(...lngs)) / 2 };
-    const cos = Math.cos((SPOT.D20.lat * Math.PI) / 180);
-    expect(Math.abs(center.lat - SPOT.D20.lat) * METERS_PER_DEGREE).toBeLessThanOrEqual(1);
-    expect(Math.abs(center.lng - SPOT.D20.lng) * METERS_PER_DEGREE * cos).toBeLessThanOrEqual(1);
+    expect(mapControl.fits).toEqual([]);
+    expect(mapControl.regions).toHaveLength(1);
   });
 
-  test('T14_S21_1_머무는_중이면_동서_폭은_약_800m_코스_전체가_아니다', async () => {
-    withMap();
-    await toRehearsal();
-    const { coordinates } = await firstFit();
-    const lngs = coordinates.map((p) => p.longitude);
-    const width = (Math.max(...lngs) - Math.min(...lngs)) * METERS_PER_DEGREE * Math.cos((SPOT.D20.lat * Math.PI) / 180);
-    expect(width).toBeGreaterThanOrEqual(STAY_SPAN_M * (1 - STAY_TOLERANCE));
-    expect(width).toBeLessThanOrEqual(STAY_SPAN_M * (1 + STAY_TOLERANCE));
-    // 다른 핀·숙소는 맞춤 좌표에 없다
-    const others = [SPOT.D01, SPOT.D30, LODGING].map((at) => key(asCoord(at)));
-    for (const point of coordinates) expect(others).not.toContain(key(point));
+  test('T14_S24_화면_머무는_중_동서_800m·그_장소가_보이는_띠_안', async () => {
+    const box = await toRehearsalOnBoard();
+    expect(box.bottom).toBeGreaterThan(box.top); // 시험 자체 확인: 띠가 있다
+    const region = lastRegion();
+    expect(nearRatio(spanEW(region), STAY_SPAN_M)).toBe(true);
+    const { x, y } = project(region, box, SPOT.D20);
+    expect(inBand(y, box)).toBe(true);
+    expect(Math.abs(x - box.width / 2)).toBeLessThanOrEqual(1);
   });
 
-  test('T14_S21_1_머무는_중_처음_맞출_때_옮기기_호출은_없다_맞춤_하나', async () => {
-    withMap();
-    await toRehearsal();
-    await firstFit();
-    await settleAll();
-    expect(mapControl.fits).toHaveLength(1);
-    expect(mapControl.moves).toEqual([]);
-  });
-
-  test('T14_S21_1_이동_중이면_지금_자리·출발·도착_셋만', async () => {
+  test('T14_S24_화면_이동_중_3km로_묶고_reh_dot이_보이는_띠_안', async () => {
+    // D01 -> D20은 남북 약 1.1km: 띠 높이에 넣으면 3km를 넘는다
     rehReply = () => moveView();
-    withMap();
-    await toRehearsal();
-    const { coordinates } = await firstFit();
-    expect(keysOf(coordinates)).toEqual(keysOf([asCoord(POSITION), asCoord(SPOT.D01), asCoord(SPOT.D20)]));
-  });
-
-  test('T14_S21_1_경계_이동_중이어도_나중_장소와_숙소는_넣지_않는다', async () => {
-    rehReply = () => moveView();
-    withMap();
-    await toRehearsal();
-    const { coordinates } = await firstFit();
-    const keys = coordinates.map(key);
-    expect(keys).not.toContain(key(asCoord(SPOT.D30)));
-    expect(keys).not.toContain(key(asCoord(LODGING)));
+    const box = await toRehearsalOnBoard();
+    const region = lastRegion();
+    expect(spanEW(region)).toBeLessThanOrEqual(MOVE_CAP_M * (1 + STAY_TOLERANCE));
+    const { x, y } = project(region, box, POSITION);
+    expect(inBand(y, box)).toBe(true);
+    expect(x).toBeGreaterThanOrEqual(0);
+    expect(x).toBeLessThanOrEqual(box.width);
   });
 
   test.each([
     ['머무는 중', () => stayView()],
     ['이동 중', () => moveView()],
-  ])('T14_S21_1_%s도_아래_여백은_440_더하기_112_이상_그대로', async (_name, reply) => {
+    ['첫 구간', () => nowView({ day: plannedDay, pins: FIRST_LEG_PINS, position: FIRST_LEG_AT, main: t02(), subs: [t03()] })],
+    ['마지막 구간', () => nowView({ day: plannedDay, pins: LAST_LEG_PINS, position: LAST_LEG_AT })],
+  ])('T14_S24_화면_%s_영역은_보이는_띠로_계산한_rehearsalCamera와_같다', async (_name, reply) => {
     rehReply = reply;
-    withMap();
-    await toRehearsal();
-    const fit = await firstFit();
-    expect(Number(fit.options?.edgePadding?.bottom ?? 0)).toBeGreaterThanOrEqual(REH_SHEET + REH_CLOCK);
+    const box = await toRehearsalOnBoard();
+    sameRegion(lastRegion(), expected(reply() as never, box));
   });
 });
+
 
 describe('§21 1 경계 실제 여행(연습 아님) 카메라는 그대로', () => {
   const todayDay = { ...demoDay, day_id: TODAY, date: '2026-12-02' };
@@ -252,83 +312,55 @@ describe('§21 1 경계 실제 여행(연습 아님) 카메라는 그대로', ()
 // §22 Q2 구간 끝: 첫 구간 출발 = 숙소, 마지막 구간 도착 = 숙소, 연습 중 구간이 바뀌면 다시 맞춘다 (실제 여행은 B10대로 안 맞춤)
 // =====================================================================
 
-const mid = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => ({ lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 });
-// 첫 구간: 숙소 -> 1번. 지난 핀 없음, 1 다음 · 2·3 나중
-const FIRST_LEG_PINS = [
-  { ...basePins[0], state: 'next' },
-  { ...basePins[1], state: 'later' },
-  { ...basePins[2], state: 'later' },
-];
-const FIRST_LEG_AT = mid(LODGING, SPOT.D01);
-// 마지막 구간: 3번 -> 숙소. 모두 지남
-const LAST_LEG_PINS = basePins.map((pin) => ({ ...pin, state: 'done' }));
-const LAST_LEG_AT = mid(SPOT.D30, LODGING);
-
-describe('§22 Q2 구간 끝은 숙소', () => {
-  test('T14_S22_Q2_첫_구간이면_지금_자리·숙소(출발)·1번(도착)', async () => {
-    rehReply = () => nowView({ day: plannedDay, pins: FIRST_LEG_PINS, position: FIRST_LEG_AT, main: t02(), subs: [t03()] });
-    withMap();
-    await toRehearsal();
-    const { coordinates } = await firstFit();
-    expect(keysOf(coordinates)).toEqual(keysOf([asCoord(FIRST_LEG_AT), asCoord(LODGING), asCoord(SPOT.D01)]));
-  });
-
-  test('T14_S22_Q2_마지막_구간이면_지금_자리·3번(출발)·숙소(도착)', async () => {
-    rehReply = () => nowView({ day: plannedDay, pins: LAST_LEG_PINS, position: LAST_LEG_AT });
-    withMap();
-    await toRehearsal();
-    const { coordinates } = await firstFit();
-    expect(keysOf(coordinates)).toEqual(keysOf([asCoord(LAST_LEG_AT), asCoord(SPOT.D30), asCoord(LODGING)]));
-  });
-});
-
-describe('§22 Q2 연습 중 구간이 바뀌면 카메라를 다시 맞춘다', () => {
-  const lastFit = () => mapControl.fits[mapControl.fits.length - 1];
-
-  test('T14_S22_Q2_머묾에서_이동으로_바뀌면_이동_구간으로_다시_맞춘다', async () => {
-    withMap();
-    await toRehearsal();
-    await firstFit();
-    const before = mapControl.fits.length;
-    rehReply = () => moveView();
+describe('§22 Q2·§24 연습 중 구간이 바뀌면 카메라를 다시 계산한다', () => {
+  async function jump(next: () => object) {
+    const before = mapControl.regions.length;
+    rehReply = next;
     await tap(screen.getByTestId('demo-plus-10'));
-    await waitFor(() => expect(mapControl.fits.length).toBeGreaterThan(before));
-    expect(keysOf(lastFit().coordinates)).toEqual(keysOf([asCoord(POSITION), asCoord(SPOT.D01), asCoord(SPOT.D20)]));
-    expect(Number(lastFit().options?.edgePadding?.bottom ?? 0)).toBeGreaterThanOrEqual(REH_SHEET + REH_CLOCK); // 여백 그대로
+    await waitFor(() => expect(mapControl.regions.length).toBeGreaterThan(before));
+  }
+
+  test('T14_S22_S24_머묾에서_이동으로_바뀌면_이동_구간으로_다시_계산', async () => {
+    const box = await toRehearsalOnBoard();
+    await jump(() => moveView());
+    sameRegion(lastRegion(), expected(moveView() as never, box));
   });
 
-  test('T14_S22_Q2_이동에서_도착해_머물면_그_장소_가운데로_다시_맞춘다', async () => {
+  test('T14_S22_S24_이동에서_도착해_머물면_그_장소로_다시_계산', async () => {
     rehReply = () => moveView();
-    withMap();
-    await toRehearsal();
-    await firstFit();
-    const before = mapControl.fits.length;
-    rehReply = () => stayView();
-    await tap(screen.getByTestId('demo-plus-10'));
-    await waitFor(() => expect(mapControl.fits.length).toBeGreaterThan(before));
-    const lngs = lastFit().coordinates.map((p) => p.longitude);
-    const lats = lastFit().coordinates.map((p) => p.latitude);
-    expect(Math.abs((Math.min(...lats) + Math.max(...lats)) / 2 - SPOT.D20.lat) * METERS_PER_DEGREE).toBeLessThanOrEqual(1);
-    expect(Math.abs((Math.min(...lngs) + Math.max(...lngs)) / 2 - SPOT.D20.lng) * METERS_PER_DEGREE * Math.cos((SPOT.D20.lat * Math.PI) / 180)).toBeLessThanOrEqual(1);
+    const box = await toRehearsalOnBoard();
+    await jump(() => stayView());
+    const region = lastRegion();
+    expect(nearRatio(spanEW(region), STAY_SPAN_M)).toBe(true);
+    expect(inBand(project(region, box, SPOT.D20).y, box)).toBe(true);
   });
 
-  test('T14_S22_Q2_다음_구간으로_건너뛰면_새_구간으로_다시_맞춘다', async () => {
-    // 1->2 이동 중에서 시계를 건너뛰어 2->3 이동 중으로 (같은 "이동 중"이어도 구간이 다르다)
+  test('T14_S22_S24_다음_이동_구간으로_건너뛰면_새_구간으로_다시_계산', async () => {
     rehReply = () => moveView();
-    withMap();
-    await toRehearsal();
-    await firstFit();
-    const before = mapControl.fits.length;
+    const box = await toRehearsalOnBoard();
     const between = mid(SPOT.D20, SPOT.D30);
     const nextLeg = [
       { ...basePins[0], state: 'done' },
       { ...basePins[1], state: 'done' },
       { ...basePins[2], state: 'next' },
     ];
-    rehReply = () => moveView({ pins: nextLeg, position: between });
+    const next = () => moveView({ pins: nextLeg, position: between });
+    await jump(next);
+    sameRegion(lastRegion(), expected(next() as never, box));
+  });
+
+  test('T14_S23_S24_같은_구간에서_시각만_바뀌면_카메라는_그대로', async () => {
+    rehReply = () => moveView();
+    await toRehearsalOnBoard();
+    const before = mapControl.regions.length;
+    expect(before).toBe(1); // 처음 한 번은 계산했다
+    const checks = () => server.sent(`POST /days/${PLANNED}/check`).length;
+    const sentBefore = checks();
+    rehReply = () => moveView({ position: mid(POSITION, SPOT.D20) }); // 같은 1 -> 2 구간, 지금 자리만 앞으로
     await tap(screen.getByTestId('demo-plus-10'));
-    await waitFor(() => expect(mapControl.fits.length).toBeGreaterThan(before));
-    expect(keysOf(lastFit().coordinates)).toEqual(keysOf([asCoord(between), asCoord(SPOT.D20), asCoord(SPOT.D30)]));
+    await waitFor(() => expect(checks()).toBeGreaterThan(sentBefore)); // 시험 자체 확인: 새 응답을 받았다
+    await settleAll();
+    expect(mapControl.regions).toHaveLength(before);
   });
 });
 

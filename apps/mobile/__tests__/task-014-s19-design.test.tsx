@@ -224,13 +224,13 @@ describe('§19 상 연습 띠는 화면 맨 위까지', () => {
 });
 
 describe('§19 상 연습 지도 카메라 아래 여백 = 시트 + 시계 판', () => {
-  test('T14_S19_처음_맞출_때_아래_여백은_440_더하기_112_이상', async () => {
+  // TASK-014 §24: 연습 카메라는 fit 여백 대신 우리가 계산한 영역(보이는 띠 = 시계 판·시트 위). 띠 안인지는 task-014-s21 T14_S24_화면_* 이 본다
+  test('T14_S19_S24_연습_카메라는_fit_여백이_아니라_계산한_영역', async () => {
     (Constants as unknown as { expoConfig: unknown }).expoConfig = { extra: { googleMapsKeyPresent: true } };
     await toRehearsal();
     expect(screen.queryByTestId('map-fallback')).toBeNull(); // 시험 자체 확인: 지도가 그려졌다
-    await waitFor(() => expect(mapControl.fits.length).toBeGreaterThan(0));
-    const bottom = Number(mapControl.fits[0].options?.edgePadding?.bottom ?? 0);
-    expect(bottom).toBeGreaterThanOrEqual(REH_SHEET + REH_CLOCK);
+    await waitFor(() => expect(mapControl.regions.length).toBeGreaterThan(0));
+    expect(mapControl.fits).toEqual([]);
   });
 });
 
