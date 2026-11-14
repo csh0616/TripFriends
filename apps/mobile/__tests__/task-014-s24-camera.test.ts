@@ -20,7 +20,7 @@
 //     -> 세 곳·reh-dot이 "띠 안"이라는 단언은 모두 줄어든 띠 [top + 30, bottom − 30] 기준
 //   이동 중에도 동서 폭을 800m보다 좁히지 않는다 (§26 작은 것, §25 Q4 "두 배 이하"의 예외)
 //   다섯째 인자 previous(이전 결과 { key, region }, 없어도 됨): 같은 구간 키면
-//     - 3km로 묶인 구간: reh-dot이 previous 영역에서 줄어든 띠 안(그리고 화면 x 0~width 안)이면 previous를 그대로(같은 객체) 돌려준다. 벗어나면 새로 계산(reh-dot이 띠 가운데)
+//     - 3km로 묶인 구간: reh-dot이 previous 영역에서 줄어든 띠 안(그리고 화면 x [30, width − 30] 안, §27 Q1)이면 previous를 그대로(같은 객체) 돌려준다. 벗어나면 새로 계산(reh-dot이 띠 가운데)
 //     - 3km 미만 구간·머묾: previous 그대로 (지금 규칙)
 //   다른 구간 키면 새로 계산
 import fc from 'fast-check';
@@ -391,6 +391,36 @@ describe('§26 1 묶인 구간은 벗어날 때만 다시', () => {
     const next = camera(pins, far, LODGING, BOX, first);
     expect(next).not.toBe(first);
     atBandCenter(next.region, BOX, far);
+  });
+
+  // §27 Q1: 가로도 30 안쪽 [30, width − 30] (핀 반지름 22 + 8). 세로는 띠 가운데 줄(점의 처음 위도)에 둔다
+  const lngAtX = (region: Region, box: Box, x: number) => region.longitude + ((x - box.width / 2) / box.width) * region.longitudeDelta;
+  const dotStart = north(from, 1000);
+
+  test.each([
+    ['왼쪽', (box: Box) => PIN_INSET + 2],
+    ['오른쪽', (box: Box) => box.width - PIN_INSET - 2],
+  ])('T14_S27_Q1_가로_%s_안_경계_바로_안이면_그대로', (_name, xOf) => {
+    const first = start();
+    const inside = { lat: dotStart.lat, lng: lngAtX(first.region, BOX, xOf(BOX)) };
+    expect(inBand(project(first.region, BOX, inside).y, BOX)).toBe(true); // 시험 자체 확인: 세로는 띠 안
+    expect(camera(pins, inside, LODGING, BOX, first)).toBe(first);
+  });
+
+  test.each([
+    ['왼쪽', () => PIN_INSET - 2],
+    ['오른쪽', (box: Box) => box.width - PIN_INSET + 2],
+  ])('T14_S27_Q1_가로_%s_안_경계_바로_밖이면_다시_맞추고_가운데', (_name, xOf) => {
+    const first = start();
+    const outside = { lat: dotStart.lat, lng: lngAtX(first.region, BOX, xOf(BOX)) };
+    const { x } = project(first.region, BOX, outside);
+    expect(x).toBeGreaterThanOrEqual(0); // 시험 자체 확인: 아직 화면 안 (예전 기준 [0, 폭]이면 그대로였을 자리)
+    expect(x).toBeLessThanOrEqual(BOX.width);
+    const next = camera(pins, outside, LODGING, BOX, first);
+    expect(next).not.toBe(first);
+    expect(next.key).toBe(first.key);
+    expect(near(spanEW(next.region), MOVE_CAP_M)).toBe(true);
+    atBandCenter(next.region, BOX, outside);
   });
 
   test('T14_S26_1_경계_3km_미만_구간은_같은_구간이면_reh_dot이_움직여도_그대로', () => {
