@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-13 |
-| 상태 | **v2.3** — §21 reviewer 답 · §20 test-writer 답 · §19 디자이너 검수 답 · §18 reviewer 통과 · §17 test-writer 답 · §16 test-writer 답 · §15 test-writer 답 · §14 reviewer 재점검 답 · §13 reviewer 답 · §12 연습 기록 모양 · §11 연습 기록 · §10 test-writer 질문 답 · §9 디자인 답 · E2 |
+| 상태 | **v2.4** — §22 test-writer 답 · §21 reviewer 답 · §20 test-writer 답 · §19 디자이너 검수 답 · §18 reviewer 통과 · §17 test-writer 답 · §16 test-writer 답 · §15 test-writer 답 · §14 reviewer 재점검 답 · §13 reviewer 답 · §12 연습 기록 모양 · §11 연습 기록 · §10 test-writer 질문 답 · §9 디자인 답 · E2 |
 | 관련 | SRS FR-11(늦어짐 감지)·FR-30(SOS 위치 주소)·NFR-10(위치는 감지에만, 경로 저장 안 함) · TASK-006(데모 시계·`fake-position.ts`, §11 Q9 로그의 위치) · TASK-007(`check`, 위치는 본문) · TASK-010 C4(실제 여행은 시계만)·§13 알려진 한계 · TASK-011 04 스크린샷 · TASK-012 B6(iPhone 16e) · `docs/design/canvas-map.md` "①에 빠진 화면" 3·8, "앱과 다른 곳" 1 · TASK-013(CI) |
 | 브랜치 | `feat/task-014-location-rehearsal` |
 | 다음 | TASK-015 데이터 확장(ADR-018 수집·평가 에이전트) → TASK-016 SOS·오프라인·알림·출발 전 점검 |
@@ -230,6 +230,18 @@
 - **Maestro `account-link`가 매번 로컬 DB reset을 요구하는 문제**: 고정 테스트 계정(`link-new`)이 남아서다 → 흐름이 시작할 때 **로컬 개발 환경에서만** 그 테스트 계정을 지우고 시작하도록(개발 전용, 클라우드엔 닿지 않게). 그전 이번 한 번은 결정권자가 reset
 - PM·디자이너 docs 커밋: `canvas-map.md`·`task-014-design.md`·`character-proposal.md`·이 TASK 문서를 "docs: 캐릭터 시안 v2·TASK-014 디자인 §10·§21 (PM·디자이너)"로
 - `REASONS` 전체 표: 다음 push 때 PR 본문에 → PM이 디자이너에게 전달
+
+## 22. test-writer §21 답 (11-15, 테스트 `6e5c8e4` 승인)
+- 바뀌는 기존 단언 2개(`task-014-s19-design` "+10분"→"10분", `task-012-dev-login` 가짜 서버에 초기화 길 한 줄) **승인**
+
+| Q | 답 |
+|---|---|
+| 1 800m | 승인: 동서 폭 ±5%, 남북은 스크린샷 |
+| 2 구간 | 첫 구간 출발점 = **숙소** · 마지막 구간 도착점 = **숙소** · 연습 중 구간이 바뀌면 **카메라를 다시 맞춘다**(연습은 시계를 점프시키므로 지금 구간을 따라가는 게 목적). 실제 여행 화면은 B10대로 다시 맞추지 않음 |
+| 3 화면 읽기 이름 | **"10분 앞으로"** 승인. 데모 시계의 "+10분"은 이번 범위 밖 — 다음 디자인 맞추기에서 같이 |
+| 4 계정 지우기 | **`POST /debug/reset-test-account` 승인**, 조건: 토큰 필요(다른 `/debug`와 같음) · 운영 404 · 서버 DB 주소가 이 컴퓨터(127.0.0.1·localhost·::1)일 때만 연결 · **지우는 건 고정 테스트 이메일 `link-new@example.test` 하나뿐**(다른 값은 받지 않음) · 앱 개발용 가짜 로그인 new가 **연결 직전**에 부름(§21 "흐름 시작"을 이걸로 바꿔 읽음). TASK-012 §11 Q1의 "토큰 없이 열린 길은 health·catalog 둘"을 지킨 판단 좋음 |
+| 5 CI 한계 | 승인: CI는 "로컬 주소에만 붙으려 함"까지, 실제 삭제는 로컬 Supabase에서 확인 |
+| 6 스크린샷 | 승인: DM Mono 실제 렌더 · 800m 화면 경로·점 가림 · 숫자·요일 간격 — reviewer |
 
 ## E2. 넘어온 것 (디자인 검사에서)
 | # | 할 것 |
