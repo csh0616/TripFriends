@@ -142,6 +142,15 @@ def test_T14_S14_Q3_경계_여행_일수_하나_전이면_마지막_날만_남�
     assert got[-1] != "past"
 
 
+def test_T14_S14_Q3_경계_past_days_0이면_201이고_지난_날이_없다(env):
+    # 아래쪽 경계: 0은 허용(지난 날 0개). ge=0 -> ge=1 돌연변이를 잡는다
+    response = env.client.post("/debug/seed-demo", json={"past_days": 0})
+    assert response.status_code == 201, response.text
+    got = [day["state"] for day in response.json()["trip_days"]]
+    assert len(got) == DEMO_DAYS
+    assert "past" not in got
+
+
 @pytest.mark.parametrize("n", [DEMO_DAYS + 1, DEMO_DAYS + 10], ids=["일수_더하기_1", "일수_더하기_10"])
 def test_T14_S14_Q3_여행_일수를_넘으면_지금과_같은_오류(env, n):
     # "일수 초과는 지금과 같은 오류": 지금(le=2)의 초과 응답 = 422, detail[0].loc = ["body", "past_days"] (FastAPI 본문 검증)
