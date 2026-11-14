@@ -15,8 +15,11 @@ function DemoBar({
   onRatio,
   onStep,
   thumb = layout.demoThumb,
+  reh = false,
 }: {
   thumb?: number;
+  /** 연습 시계 막대: 두께 6 · 모서리 3 · line 바탕 · 손잡이 흰 테두리 3 (reh-clock) */
+  reh?: boolean;
   ratio: number;
   onRatio: (ratio: number) => void;
   onStep: (direction: 1 | -1) => void;
@@ -41,10 +44,10 @@ function DemoBar({
       style={styles.hit}
     >
       {/* 안쪽은 터치를 받지 않는다: locationX가 늘 막대 기준이 되게 */}
-      <View pointerEvents="none" style={styles.track}>
-        <View style={[styles.fill, { width: percent }]} />
+      <View pointerEvents="none" style={[styles.track, reh && styles.rehTrack]}>
+        <View style={[styles.fill, reh && styles.rehFill, { width: percent }]} />
       </View>
-      <View testID="demo-thumb" pointerEvents="none" style={[styles.thumb, { left: percent, width: thumb, height: thumb, marginLeft: -thumb / 2 }]} />
+      <View testID="demo-thumb" pointerEvents="none" style={[styles.thumb, reh && styles.rehThumb, { left: percent, width: thumb, height: thumb, marginLeft: -thumb / 2 }]} />
     </View>
   );
 }
@@ -103,7 +106,7 @@ export function DemoPanel({
         <View style={styles.rehRow}>
           <Text style={styles.rehEnd}>{start}</Text>
           <View style={styles.rehBar}>
-            <DemoBar thumb={layout.rehThumb} ratio={ratio} onRatio={(value) => onMinutes(toMinutes(barTime(value, start, end)))} onStep={step} />
+            <DemoBar reh thumb={layout.rehThumb} ratio={ratio} onRatio={(value) => onMinutes(toMinutes(barTime(value, start, end)))} onStep={step} />
           </View>
           <Text style={styles.rehEnd}>{end}</Text>
         </View>
@@ -170,6 +173,9 @@ const styles = StyleSheet.create({
   buttons: { flexDirection: 'row', gap: space['space-2'] },
   hit: { minHeight: control['touch-min'], justifyContent: 'center' },
   track: { height: layout.barHeight, borderRadius: radius['r-full'], backgroundColor: color['bg-2'], overflow: 'hidden' },
+  rehTrack: { height: layout.rehBar, borderRadius: layout.rehBar / 2, backgroundColor: color.line },
+  rehFill: { height: layout.rehBar },
+  rehThumb: { borderWidth: layout.rehThumbBorder },
   fill: { height: layout.barHeight, backgroundColor: color.ink },
   thumb: {
     position: 'absolute',

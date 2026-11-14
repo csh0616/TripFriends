@@ -168,6 +168,8 @@ export const layout = {
   rehDotRing: 3, // reh-dot 고리
   rehIcon: 18, // 띠 아이콘
   headIcon: 24, // head-avatar 사람 아이콘
+  rehBar: 6, // reh-clock 막대 두께 (모서리 3)
+  rehThumbBorder: 3, // reh-clock 손잡이 흰 테두리
   rehThumb: 28, // reh-clock 막대 손잡이 (누르는 높이는 막대 줄 44)
   rehButtonIcon: 16, // reh-clock 버튼 안 아이콘 (문서에 크기가 없어 btn-chip-sm 아이콘 16과 같게)
   rehEndHeight: 36, // [연습 끝내기] 보이는 높이 (누르는 44)
