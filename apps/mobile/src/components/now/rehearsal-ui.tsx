@@ -4,19 +4,19 @@ import tokens from 'design-tokens';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
-import { InfoIcon, WalkIcon } from '@/components/planning/icons';
+import { InfoIcon, RouteIcon } from '@/components/planning/icons';
 import { layout } from '@/planning/layout';
 import { account, color, fit, fitText, radius, shadow, space, text } from '@/planning/theme';
 
 export const REHEARSAL_NOTE = '연습이라 저장하지 않았어';
 export const REHEARSAL_FAILED = '지금 연습을 못 해';
 
-/** reh-band: 높이 52, 바탕 ink(on-brand 토큰 값), 주황 없음. [연습 끝내기] 흰 알약 (보이는 36 · 누르는 44) */
+/** reh-band: 화면 맨 위(0)부터 안전 영역(top) + 52, 바탕 ink(on-brand 토큰 값), 주황 없음. [연습 끝내기] 흰 알약 (보이는 36 · 누르는 44) */
 export function RehearsalBand({ top, label, onEnd }: { top: number; label: string; onEnd: () => void }) {
   const slop = (fit['btn-add-event'].hit - layout.rehEndHeight) / 2;
   return (
-    <View testID="rehearsal-band" style={[styles.band, { top }]}>
-      <WalkIcon color={color.surface} size={layout.rehIcon} />
+    <View testID="rehearsal-band" style={[styles.band, { height: top + layout.rehBand, paddingTop: top }]}>
+      <RouteIcon color={color.surface} size={layout.rehIcon} />
       <View style={styles.names}>
         <Text style={text('heading', 'surface')}>연습 중</Text>
         <Text numberOfLines={1} style={[text('caption', 'line'), { color: DAY_NAME }]}>
@@ -53,9 +53,9 @@ export function RehearsalNotice({ top, onClose }: { top: number; onClose: () => 
 const styles = StyleSheet.create({
   band: {
     position: 'absolute',
+    top: 0,
     left: 0,
     right: 0,
-    height: layout.rehBand,
     zIndex: 2,
     flexDirection: 'row',
     alignItems: 'center',

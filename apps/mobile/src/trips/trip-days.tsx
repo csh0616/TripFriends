@@ -154,8 +154,9 @@ export function TripDays({
             },
           ]}
         >
-          <Pressable testID="new-trip" accessibilityRole="button" onPress={() => setConfirming(true)} style={styles.newTrip}>
-            <Text style={fitText(fit['btn-new-trip'])}>새 여행 만들기</Text>
+          {/* 끝난 여행(지난 날만 남은 목록)이면 다음 할 일이 이것뿐이라 주 버튼 (DESIGN-001 §4-11, 11-14) */}
+          <Pressable testID="new-trip" accessibilityRole="button" onPress={() => setConfirming(true)} style={[styles.newTrip, finished && styles.newTripPrimary]}>
+            <Text style={fitText(finished ? fit['bottom-primary'] : fit['btn-new-trip'])}>새 여행 만들기</Text>
           </Pressable>
         </View>
       </ScreenFrame>
@@ -221,7 +222,8 @@ function DayTitle({ index, date, small }: { index: number; date: string; small?:
         {dayName(index + 1)}
       </Text>
       <Text numberOfLines={1} style={text('caption', 'muted')}>
-        {shortDateLabel(date)}
+        <Text style={text('num-md', 'muted')}>{shortDateLabel(date).slice(0, -2)}</Text>
+        {shortDateLabel(date).slice(-2)}
       </Text>
     </View>
   );
@@ -523,4 +525,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  newTripPrimary: { height: fit['bottom-primary'].height, backgroundColor: fit['bottom-primary'].bg },
 });

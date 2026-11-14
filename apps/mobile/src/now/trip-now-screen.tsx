@@ -2,6 +2,7 @@
 // 앱은 그리기만 한다: 카드를 고르지 않고(서버 main이 이긴다, §6) 일정을 바꾸지 않는다. 시각은 데모 시계만 쓴다 (실제 시계는 쓰지 않는다).
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Constants from 'expo-constants';
+import { StatusBar } from 'expo-status-bar';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -365,7 +366,15 @@ export function TripNowScreen({
   }, [playing, minutes, endMin]);
 
   // 지도 카메라: 처음 한 번만 코스 전체와 숙소가 보이게 (B10). 시트(중간) 높이만큼 아래 여백
-  const sheetMid = (areaHeight || windowHeight) * layout.sheetFractions[1] - (rehearsal ? layout.rehSheetDrop : 0); // 연습 중엔 시계 판 자리만큼 시트가 낮다
+  // 연습 중엔 시트 윗변을 보드 ①-35 자리(874 화면에서 y 434)에 맞추고, 시계 판(112)은 그 위에 뜬다 (§19·§20 Q2)
+  const rehSheetHeight = (area: number) => {
+    const boardArea = layout.rehBoardHeight - (space['space-2'] + control.input + layout.rehBoardBottom + space['space-2']);
+    const low = area * layout.sheetFractions[0];
+    const high = area * layout.sheetFractions[2];
+    return Math.round(Math.min(high - 1, Math.max(low + 1, area - (layout.rehSheetTop * area) / boardArea)));
+  };
+  const sheetMid = rehearsal ? rehSheetHeight(areaHeight || windowHeight) : (areaHeight || windowHeight) * layout.sheetFractions[1];
+  const clockRoom = rehearsal ? layout.rehClock + space['space-3'] : 0; // 카메라 아래 여백 = 시트 + 시계 판
   useEffect(() => {
     if (!mapReady || fitted.current || !view || view.pins.length === 0) return;
     fitted.current = true;
@@ -374,10 +383,10 @@ export function TripNowScreen({
       {
         // 위: 알약·프로필·SOS 줄 + 다음 핀의 이름 말풍선 + 핀 반쪽이 가려지지 않게. 아래: 시트 윗면 + 핀 반쪽
         top: insets.top + rehTop + layout.header + layout.pinBubble + control['touch-min'] + space['space-2'],
-        bottom: sheetMid + control['touch-min'] / 2 + space['space-2'],
+        bottom: sheetMid + clockRoom + control['touch-min'] / 2 + space['space-2'],
       },
     );
-  }, [mapReady, view, day.lodging, insets.top, sheetMid]);
+  }, [mapReady, view, day.lodging, insets.top, sheetMid, clockRoom]);
 
   const retry = () => {
     if (last.current) void fetchNow(last.current);
@@ -472,12 +481,11 @@ export function TripNowScreen({
   };
 
   // ---------- 시트 ----------
-  // 연습 중엔 중간 단이 76 낮다 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
+  // 연습 중엔 중간 단 윗변이 보드 자리 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
   const snapPoints = useMemo(() => {
     const total = areaHeight || windowHeight;
-    return layout.sheetFractions.map((fraction, index) =>
-      rehearsal && index === 1 ? `${Math.round((fraction - layout.rehSheetDrop / total) * 1000) / 10}%` : `${Math.round(fraction * 100)}%`,
-    );
+    return layout.sheetFractions.map((fraction, index) => (rehearsal && index === 1 ? rehSheetHeight(total) : `${Math.round(fraction * 100)}%`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rehearsal, areaHeight, windowHeight]);
   const sheetTop = useSharedValue(0);
   const gap = space['space-3'];
@@ -503,6 +511,7 @@ export function TripNowScreen({
 
   return (
     <View testID="trip-now-screen" style={styles.root}>
+      {rehearsal ? <StatusBar style="light" /> : null}
       <View style={styles.area} onLayout={(event) => setAreaHeight(event.nativeEvent.layout.height)}>
         {live && view === null ? null : mapFailed ? (
           <View testID="map-fallback" style={[styles.fallback, { paddingTop: bandTop + space['space-10'] }]}>

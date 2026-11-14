@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { PauseIcon, PlayIcon, PlusIcon } from '@/components/planning/icons';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { barTime, DEMO_STEP_MIN, toClock, toMinutes } from '@/lib/demo-clock';
 import { layout } from '@/planning/layout';
@@ -13,7 +14,9 @@ function DemoBar({
   ratio,
   onRatio,
   onStep,
+  thumb = layout.demoThumb,
 }: {
+  thumb?: number;
   ratio: number;
   onRatio: (ratio: number) => void;
   onStep: (direction: 1 | -1) => void;
@@ -41,7 +44,7 @@ function DemoBar({
       <View pointerEvents="none" style={styles.track}>
         <View style={[styles.fill, { width: percent }]} />
       </View>
-      <View pointerEvents="none" style={[styles.thumb, { left: percent }]} />
+      <View testID="demo-thumb" pointerEvents="none" style={[styles.thumb, { left: percent, width: thumb, height: thumb, marginLeft: -thumb / 2 }]} />
     </View>
   );
 }
@@ -89,16 +92,18 @@ export function DemoPanel({
             </View>
           </View>
           <Pressable testID="demo-plus-10" accessibilityRole="button" onPress={onPlus} style={[styles.rehButton, styles.rehPlus]}>
+            <PlusIcon color={color.ink} size={layout.rehButtonIcon} />
             <Text style={text('caption', 'ink')}>+10분</Text>
           </Pressable>
           <Pressable testID="demo-play" accessibilityRole="button" onPress={onTogglePlay} style={[styles.rehButton, styles.rehPlay]}>
+            {playing ? <PauseIcon color={color.surface} size={layout.rehButtonIcon} /> : <PlayIcon color={color.surface} size={layout.rehButtonIcon} />}
             <Text style={text('caption', 'surface')}>{playing ? '멈춤' : '재생'}</Text>
           </Pressable>
         </View>
         <View style={styles.rehRow}>
           <Text style={styles.rehEnd}>{start}</Text>
           <View style={styles.rehBar}>
-            <DemoBar ratio={ratio} onRatio={(value) => onMinutes(toMinutes(barTime(value, start, end)))} onStep={step} />
+            <DemoBar thumb={layout.rehThumb} ratio={ratio} onRatio={(value) => onMinutes(toMinutes(barTime(value, start, end)))} onStep={step} />
           </View>
           <Text style={styles.rehEnd}>{end}</Text>
         </View>
@@ -153,9 +158,9 @@ const styles = StyleSheet.create({
     ...shadow.float,
   },
   rehRow: { height: control['touch-min'], flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
-  rehHead: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  rehHead: { flex: 1, height: control['touch-min'], justifyContent: 'center' },
   rehTime: text('num-lg'),
-  rehButton: { height: control['touch-min'], alignItems: 'center', justifyContent: 'center', borderRadius: radius['r-md'] },
+  rehButton: { height: control['touch-min'], flexDirection: 'row', gap: space['space-1'], alignItems: 'center', justifyContent: 'center', borderRadius: radius['r-md'] },
   rehPlus: { width: layout.rehPlusWidth, backgroundColor: color['bg-2'] },
   rehPlay: { width: layout.rehPlayWidth, backgroundColor: color.ink },
   rehBar: { flex: 1 },
