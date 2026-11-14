@@ -7,7 +7,7 @@
 //   연습 띠 `rehearsal-band` = ink 바탕 상자 하나가 화면 맨 위(top 0)부터 높이 안전 영역 + 52 (METRICS top 47 -> 99)
 //   상태 표시줄: expo-status-bar. 연습 중에만 style "light" (<StatusBar style="light" /> 또는 setStatusBarStyle('light')). 연습을 끝내면 light가 남지 않는다
 //   연습 카드 시트 중간 단 윗변 = 874 화면에서 y 434 (§20 Q2, 다른 화면 높이는 문서에 없음). 지도 카메라 아래 여백 >= 440 + 시계 판 112 (§20 Q3 하한)
-//   시계 판: "연습 시계"(12/16 muted)와 시각이 위아래 두 줄. [+10분] `demo-plus-10`·[재생] `demo-play` 안에 아이콘(Svg) 하나씩.
+//   시계 판: "연습 시계"(12/16 muted)와 시각이 위아래 두 줄. [10분](§21 3, 옛 "+10분") `demo-plus-10`·[재생] `demo-play` 안에 아이콘(Svg) 하나씩.
 //           막대 손잡이 testID `demo-thumb` = 보이는 28, 그 손잡이를 받는 상자(onStartShouldSetResponder)의 높이 44 이상
 //   SOS 시트(`sheet-scrim`·`sos-sheet`): 스크림이 위쪽 컨트롤(SOS·연습 띠)보다 위에 그려진다 = Modal 안이거나,
 //           공통 조상 아래에서 스크림 쪽 zIndex 최댓값 > 컨트롤 쪽 zIndex 최댓값 그리고 elevation >= (Android)
@@ -258,9 +258,10 @@ describe('§19 중 연습 시계 판 (reh-clock)', () => {
     expect(svgsIn(byId(id))).toHaveLength(1);
   });
 
-  test('T14_S19_버튼_글자는_그대로_+10분·재생', async () => {
+  test('T14_S19_S21_버튼_글자는_10분·재생', async () => {
+    // TASK-014 §21 3: 아이콘(+)과 글자 "+10분"이 겹쳐 + 가 두 번 -> 글자는 "10분" (승인된 §19 "+10분"을 바꿈)
     await toRehearsal();
-    expect(within(screen.getByTestId('demo-plus-10')).getByText('+10분')).toBeTruthy();
+    expect(within(screen.getByTestId('demo-plus-10')).getByText('10분')).toBeTruthy();
     expect(within(screen.getByTestId('demo-play')).getByText('재생')).toBeTruthy();
   });
 
