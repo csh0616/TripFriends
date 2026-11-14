@@ -37,12 +37,28 @@ function regionAt(at: At, px: number, py: number, k: number, box: ViewBox): Came
 /** 동서 폭이 spanM이 되는 k (영역 가운데 위도의 cos로 줄어든다) */
 const kForSpan = (spanM: number, latRad: number, box: ViewBox) => (box.width * EARTH_R * Math.cos(latRad)) / spanM;
 
+const PIN_INSET = 30; // §26: 핀 반지름 22 + 여백 8
+
+export type RehearsalCameraResult = { key: string; region: CameraRegion };
+
+/** region 영역에서 at의 화면 위치 (메르카토르) */
+function project(region: CameraRegion, box: ViewBox, at: At) {
+  const x = box.width / 2 + ((at.lng - region.longitude) / region.longitudeDelta) * box.width;
+  const north = merc((region.latitude + region.latitudeDelta / 2) * RAD);
+  const south = merc((region.latitude - region.latitudeDelta / 2) * RAD);
+  const y = ((north - merc(at.lat * RAD)) / (north - south)) * box.height;
+  return { x, y };
+}
+
 export function rehearsalCamera(
   pins: NowPin[],
   position: At | null,
   lodging: At,
-  box: ViewBox,
-): { key: string; region: CameraRegion } {
+  fullBox: ViewBox,
+  previous?: RehearsalCameraResult,
+): RehearsalCameraResult {
+  // 보이는 띠 안에서 핀 전체가 보이게 위·아래 30씩 줄인다 (§26). 가운데는 같다
+  const box: ViewBox = { ...fullBox, top: fullBox.top + PIN_INSET, bottom: fullBox.bottom - PIN_INSET };
   const bandCenter = (box.top + box.bottom) / 2;
   const now = pins.find((pin) => pin.state === 'now');
   if (now) {
@@ -52,7 +68,8 @@ export function rehearsalCamera(
       guess = region.latitude * RAD;
       region = regionAt(now, box.width / 2, bandCenter, kForSpan(STAY_SPAN_M, guess, box), box);
     }
-    return { key: `stay-${now.seq}`, region };
+    const key = `stay-${now.seq}`;
+    return previous && previous.key === key ? previous : { key, region };
   }
 
   const done = pins.filter((pin) => pin.state === 'done');
@@ -77,6 +94,7 @@ export function rehearsalCamera(
   const bandHeight = Math.max(1, box.bottom - box.top);
   let guess = centerAt.lat * RAD;
   let region = regionAt(centerAt, box.width / 2, bandCenter, 1, box);
+  let clamped = false;
   for (let i = 0; i < 4; i += 1) {
     const kFit = Math.min(
       rangeX > 0 ? (box.width - 2 * side) / rangeX : Infinity,
@@ -84,12 +102,20 @@ export function rehearsalCamera(
     );
     const kMax = kForSpan(STAY_SPAN_M, guess, box); // 너무 좁게 들어가지 않게 (머무는 폭이 한계)
     const kMin = kForSpan(MOVE_CAP_M, guess, box);
-    if (kFit < kMin) {
+    clamped = kFit < kMin;
+    if (clamped) {
       region = regionAt(focus, box.width / 2, bandCenter, kMin, box);
     } else {
       region = regionAt(centerAt, box.width / 2, bandCenter, Math.min(kFit, kMax), box);
     }
     guess = region.latitude * RAD;
+  }
+  if (previous && previous.key === key) {
+    if (!clamped) return previous; // 3km 미만: 같은 구간이면 그대로
+    // 3km로 묶인 구간: reh-dot(모르면 도착할 곳)이 이전 영역의 줄어든 띠·가로 [30, 폭-30] 안이면 그대로
+    const { x, y } = project(previous.region, box, focus);
+    const inside = y >= box.top && y <= box.bottom && x >= PIN_INSET && x <= box.width - PIN_INSET;
+    if (inside) return previous;
   }
   return { key, region };
 }

@@ -29,7 +29,7 @@ import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBO
 import { cityClock } from '@/lib/calendar';
 import { dayHeading } from '@/lib/day-list';
 import { delayedPosition } from '@/lib/fake-position';
-import { rehearsalCamera } from './rehearsal-camera';
+import { rehearsalCamera, type RehearsalCameraResult } from './rehearsal-camera';
 import {
   acceptRequest,
   checkRequest,
@@ -181,6 +181,7 @@ export function TripNowScreen({
   const homeMin = useRef<number | null>(null);
   const positioned = useRef(false); // §12 R7: 첫 응답 뒤 위치를 넣어 한 번 더
   const fitted = useRef(false);
+  const cameraRef = useRef<RehearsalCameraResult | null>(null); // 연습: 마지막 카메라 결과
   const fittedLeg = useRef<string | null>(null); // 연습: 마지막으로 맞춘 구간
   const currentAt = useRef('');
   const rehearsalLog = useRef<RehearsalAction[]>([]); // §11 연습 기록: 앱 메모리에만. 끝내거나 화면을 떠나면 사라진다
@@ -381,14 +382,22 @@ export function TripNowScreen({
     if (!mapReady || !view || view.pins.length === 0) return;
     // 연습: 지금 구간만 직접 계산한 영역(보이는 띠 기준), 구간이 바뀔 때만 다시 (같은 구간 안에서 시각만 바뀌면 그대로)
     if (rehearsal) {
-      const total = areaHeight || windowHeight;
-      const camera = rehearsalCamera(view.pins, view.position ?? null, day.lodging, {
-        width,
-        height: total,
-        top: insets.top + rehTop + layout.header + layout.pinBubble,
-        bottom: total - sheetMid - clockRoom,
-      });
-      if (fittedLeg.current === camera.key) return;
+      // 시트 영역 높이(onLayout)를 알기 전에는 계산하지 않는다. 안 뒤 결과 객체가 바뀔 때만 한 번 (§26)
+      if (areaHeight <= 0) return;
+      const camera = rehearsalCamera(
+        view.pins,
+        view.position ?? null,
+        day.lodging,
+        {
+          width,
+          height: areaHeight,
+          top: insets.top + rehTop + layout.header + layout.pinBubble,
+          bottom: areaHeight - sheetMid - clockRoom,
+        },
+        cameraRef.current ?? undefined,
+      );
+      if (cameraRef.current === camera) return;
+      cameraRef.current = camera;
       fitted.current = true;
       fittedLeg.current = camera.key;
       mapRef.current?.showRegion(camera.region);
@@ -406,7 +415,7 @@ export function TripNowScreen({
         bottom: sheetMid + clockRoom + control['touch-min'] / 2 + space['space-2'],
       },
     );
-  }, [mapReady, view, rehearsal, day.lodging, insets.top, sheetMid, clockRoom, areaHeight, windowHeight, width]);
+  }, [mapReady, view, rehearsal, day.lodging, insets.top, sheetMid, clockRoom, areaHeight, width]);
 
   const retry = () => {
     if (last.current) void fetchNow(last.current);
