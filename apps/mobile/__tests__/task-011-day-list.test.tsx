@@ -820,7 +820,11 @@ describe('§14 04 지난 날만 남은 날짜 목록 (리뷰 §9-5 표)', () => 
     const n = Number(dayId.slice(1));
     const row = within(outerRow(dayId) as never);
     expect(row.getByText(`${n}일째`)).toBeTruthy();
-    expect(row.getByText(['12/11 금', '12/12 토', '12/13 일'][n - 1])).toBeTruthy();
+    // TASK-014 §21·§23: 날짜 숫자와 요일은 나란한 별도 글자 (예전엔 "12/11 금" 한 글자로 찾았다)
+    const digits = row.getByText(['12/11', '12/12', '12/13'][n - 1]) as unknown as Host;
+    const weekday = row.getByText(['금', '토', '일'][n - 1]) as unknown as Host;
+    expect(weekday.parent).toBe(digits.parent);
+    expect(styleOf(digits.parent!).flexDirection).toBe('row');
     expect(within(screen.getByTestId(`day-pill-${dayId}`)).getByText('지난 날')).toBeTruthy();
   });
 
