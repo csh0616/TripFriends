@@ -172,6 +172,8 @@ export const layout = {
   rehThumbBorder: 3, // reh-clock 손잡이 흰 테두리
   rehThumb: 28, // reh-clock 막대 손잡이 (누르는 높이는 막대 줄 44)
   rehButtonIcon: 16, // reh-clock 버튼 안 아이콘 (문서에 크기가 없어 btn-chip-sm 아이콘 16과 같게)
+  dateNumSize: 13, // D6 날짜 숫자 DM Mono 13/18 (TASK-014 §21 2, 토큰에 13/18 DM Mono가 없어 여기에 둔다)
+  dateNumLine: 18,
   rehEndHeight: 36, // [연습 끝내기] 보이는 높이 (누르는 44)
   rehRowExtra: 40, // row-done-rehearse: 84 + 버튼 줄 40 = 124
   chipSmIcon: 16, // btn-chip-sm 아이콘

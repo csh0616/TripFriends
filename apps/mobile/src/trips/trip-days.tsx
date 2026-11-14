@@ -20,6 +20,7 @@ import { send } from '@/lib/planning-api';
 import { dayName, timeRange } from '@/planning/format';
 import { layout } from '@/planning/layout';
 import { color, control, fit, fitText, radius, space, text } from '@/planning/theme';
+import tokens from 'design-tokens';
 
 import { tripRequests, type FixedEvent, type Trip, type TripDay } from './api';
 import { FixedEventSheet } from './fixed-event-sheet';
@@ -221,10 +222,15 @@ function DayTitle({ index, date, small }: { index: number; date: string; small?:
       <Text numberOfLines={1} style={text(small ? 'body' : 'heading')}>
         {dayName(index + 1)}
       </Text>
-      <Text numberOfLines={1} style={text('caption', 'muted')}>
-        <Text style={text('num-md', 'muted')}>{shortDateLabel(date).slice(0, -2)}</Text>
-        {shortDateLabel(date).slice(-2)}
-      </Text>
+      {/* 날짜 숫자(DM Mono 13/18)와 요일은 나란한 별도 글자 (§21 2, 중첩 금지) */}
+      <View style={styles.dateRow}>
+        <Text numberOfLines={1} style={fitText({ size: layout.dateNumSize, lineHeight: layout.dateNumLine, weight: 500, family: tokens.font['font-mono'] }, 'muted')}>
+          {shortDateLabel(date).slice(0, -2)}
+        </Text>
+        <Text numberOfLines={1} style={text('caption', 'muted')}>
+          {shortDateLabel(date).slice(-1)}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -405,6 +411,7 @@ function DayRow({
 const addSlop = (fit['btn-add-event'].hit - fit['btn-add-event'].height) / 2;
 
 const styles = StyleSheet.create({
+  dateRow: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-1'] },
   banner: { borderRadius: radius['r-xl'], alignSelf: 'center' },
   grow: { flex: 1 },
   days: { gap: space['space-3'] }, // 날 카드 사이 12 (§14 8)

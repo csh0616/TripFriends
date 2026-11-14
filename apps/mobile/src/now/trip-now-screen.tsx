@@ -29,6 +29,7 @@ import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBO
 import { cityClock } from '@/lib/calendar';
 import { dayHeading } from '@/lib/day-list';
 import { delayedPosition } from '@/lib/fake-position';
+import { rehearsalFit } from './rehearsal-fit';
 import {
   acceptRequest,
   checkRequest,
@@ -180,6 +181,7 @@ export function TripNowScreen({
   const homeMin = useRef<number | null>(null);
   const positioned = useRef(false); // §12 R7: 첫 응답 뒤 위치를 넣어 한 번 더
   const fitted = useRef(false);
+  const fittedLeg = useRef<string | null>(null); // 연습: 마지막으로 맞춘 구간
   const currentAt = useRef('');
   const rehearsalLog = useRef<RehearsalAction[]>([]); // §11 연습 기록: 앱 메모리에만. 끝내거나 화면을 떠나면 사라진다
   const skipAt = useRef<string | null>(null); // 연습 첫 응답 뒤 이미 바로 보낸 시각
@@ -376,17 +378,21 @@ export function TripNowScreen({
   const sheetMid = rehearsal ? rehSheetHeight(areaHeight || windowHeight) : (areaHeight || windowHeight) * layout.sheetFractions[1];
   const clockRoom = rehearsal ? layout.rehClock + space['space-3'] : 0; // 카메라 아래 여백 = 시트 + 시계 판
   useEffect(() => {
-    if (!mapReady || fitted.current || !view || view.pins.length === 0) return;
+    if (!mapReady || !view || view.pins.length === 0) return;
+    // 연습: 지금 구간만, 구간이 바뀌면 다시 맞춘다 (같은 구간 안에서 시각만 바뀌면 그대로). 실제 여행: 처음 한 번 모든 핀 + 숙소 (B10)
+    const leg = rehearsal ? rehearsalFit(view.pins, view.position ?? null, day.lodging) : null;
+    if (leg ? fittedLeg.current === leg.key : fitted.current) return;
     fitted.current = true;
+    fittedLeg.current = leg ? leg.key : null;
     mapRef.current?.fit(
-      [...view.pins.map((pin) => ({ latitude: pin.lat, longitude: pin.lng })), { latitude: day.lodging.lat, longitude: day.lodging.lng }],
+      leg ? leg.coordinates : [...view.pins.map((pin) => ({ latitude: pin.lat, longitude: pin.lng })), { latitude: day.lodging.lat, longitude: day.lodging.lng }],
       {
         // 위: 알약·프로필·SOS 줄 + 다음 핀의 이름 말풍선 + 핀 반쪽이 가려지지 않게. 아래: 시트 윗면 + 핀 반쪽
         top: insets.top + rehTop + layout.header + layout.pinBubble + control['touch-min'] + space['space-2'],
         bottom: sheetMid + clockRoom + control['touch-min'] / 2 + space['space-2'],
       },
     );
-  }, [mapReady, view, day.lodging, insets.top, sheetMid, clockRoom]);
+  }, [mapReady, view, rehearsal, day.lodging, insets.top, sheetMid, clockRoom]);
 
   const retry = () => {
     if (last.current) void fetchNow(last.current);

@@ -94,9 +94,9 @@ export function DemoPanel({
               <Text style={styles.rehTime}>{toClock(minutes)}</Text>
             </View>
           </View>
-          <Pressable testID="demo-plus-10" accessibilityRole="button" onPress={onPlus} style={[styles.rehButton, styles.rehPlus]}>
+          <Pressable testID="demo-plus-10" accessibilityRole="button" accessibilityLabel="10분 앞으로" onPress={onPlus} style={[styles.rehButton, styles.rehPlus]}>
             <PlusIcon color={color.ink} size={layout.rehButtonIcon} />
-            <Text style={text('caption', 'ink')}>+10분</Text>
+            <Text style={text('caption', 'ink')}>10분</Text>
           </Pressable>
           <Pressable testID="demo-play" accessibilityRole="button" onPress={onTogglePlay} style={[styles.rehButton, styles.rehPlay]}>
             {playing ? <PauseIcon color={color.surface} size={layout.rehButtonIcon} /> : <PlayIcon color={color.surface} size={layout.rehButtonIcon} />}
