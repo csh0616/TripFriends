@@ -4,6 +4,7 @@
   "coverageAnalysis": "perTest",
   "mutate": [
     "src/lib/screen-for.ts",
+    "src/now/rehearsal-camera.ts",
     "src/lib/planning-reducer.ts",
     "src/lib/distance-label.ts",
     "src/lib/format-stay.ts",
