@@ -251,26 +251,26 @@ describe('§21 1·§24 연습 지도 카메라 (화면)', () => {
     expect(mapControl.regions).toHaveLength(1);
   });
 
-  test('T14_S24_화면_머무는_중_동서_800m·그_장소가_보이는_띠_안', async () => {
+  test('T14_S24_S25_화면_머무는_중_동서_800m·그_장소가_보이는_띠_가운데', async () => {
     const box = await toRehearsalOnBoard();
     expect(box.bottom).toBeGreaterThan(box.top); // 시험 자체 확인: 띠가 있다
     const region = lastRegion();
     expect(nearRatio(spanEW(region), STAY_SPAN_M)).toBe(true);
     const { x, y } = project(region, box, SPOT.D20);
-    expect(inBand(y, box)).toBe(true);
+    expect(Math.abs(y - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1); // §25 Q2 띠 가운데 (±1pt)
     expect(Math.abs(x - box.width / 2)).toBeLessThanOrEqual(1);
   });
 
-  test('T14_S24_화면_이동_중_3km로_묶고_reh_dot이_보이는_띠_안', async () => {
+  test('T14_S24_S25_화면_이동_중_3km로_묶고_reh_dot이_보이는_띠_가운데', async () => {
     // D01 -> D20은 남북 약 1.1km: 띠 높이에 넣으면 3km를 넘는다
     rehReply = () => moveView();
     const box = await toRehearsalOnBoard();
     const region = lastRegion();
     expect(spanEW(region)).toBeLessThanOrEqual(MOVE_CAP_M * (1 + STAY_TOLERANCE));
+    expect(spanEW(region)).toBeGreaterThanOrEqual(MOVE_CAP_M * (1 - STAY_TOLERANCE)); // 묶였다
     const { x, y } = project(region, box, POSITION);
-    expect(inBand(y, box)).toBe(true);
-    expect(x).toBeGreaterThanOrEqual(0);
-    expect(x).toBeLessThanOrEqual(box.width);
+    expect(Math.abs(y - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1); // §25 Q2 띠 가운데 (±1pt)
+    expect(Math.abs(x - box.width / 2)).toBeLessThanOrEqual(1);
   });
 
   test.each([
@@ -332,7 +332,7 @@ describe('§22 Q2·§24 연습 중 구간이 바뀌면 카메라를 다시 계�
     await jump(() => stayView());
     const region = lastRegion();
     expect(nearRatio(spanEW(region), STAY_SPAN_M)).toBe(true);
-    expect(inBand(project(region, box, SPOT.D20).y, box)).toBe(true);
+    expect(Math.abs(project(region, box, SPOT.D20).y - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1); // §25 Q2
   });
 
   test('T14_S22_S24_다음_이동_구간으로_건너뛰면_새_구간으로_다시_계산', async () => {

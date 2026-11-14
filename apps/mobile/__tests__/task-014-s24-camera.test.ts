@@ -13,7 +13,8 @@
 //     동서 폭(m) = longitudeDelta × (π/180 × 6371000) × cos(가운데 위도). 위아래·좌우 1pt가 같은 땅 길이(±5%) — 지도가 다른 쪽 폭으로 멀어지지 않게
 //   머무는 중(state "now" 핀): 동서 폭 800m ±5%, 가운데 경도 = 그 장소(1m 안), 그 장소의 화면 y가 [top, bottom] 안
 //   이동 중: 세 곳(지금 자리·출발·도착)이 모두 x ∈ [mapEdge 60, width − 60], y ∈ [top, bottom] 안에 들어가는 가장 작은 폭 — 그 폭이 3km를 넘으면
-//            동서 폭 3km ±5%, reh-dot(지금 자리)이 x ∈ [0, width], y ∈ [top, bottom] 안
+//            동서 폭 3km ±5%, reh-dot(지금 자리)이 띠 가운데 (§25 Q2: x = width/2, y = (top+bottom)/2, ±1pt). 지금 자리를 모르면 도착할 곳(§25 Q5)
+//   머무는 장소도 띠 가운데 (§25 Q2)
 import fc from 'fast-check';
 
 type At = { lat: number; lng: number };
@@ -43,6 +44,13 @@ const aspect = (region: Region, box: Box) => (region.latitudeDelta * METERS_PER_
 
 const near = (value: number, target: number) => value >= target * (1 - TOL) && value <= target * (1 + TOL);
 const inBand = (y: number, box: Box) => y >= box.top - 0.5 && y <= box.bottom + 0.5;
+// §25 Q2: 머무는 장소와 3km로 묶을 때의 reh-dot(지금 자리를 모르면 도착할 곳, Q5)은 띠 가운데. 허용 오차 1pt (문서에 없어 이 테스트가 정함)
+const CENTER_TOL = 1;
+function atBandCenter(region: Region, box: Box, at: At) {
+  const { x, y } = project(region, box, at);
+  expect(Math.abs(y - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(CENTER_TOL);
+  expect(Math.abs(x - box.width / 2)).toBeLessThanOrEqual(CENTER_TOL);
+}
 
 // 연습 화면과 비슷한 띠: 390×763 지도에 보이는 띠 175~211 (36pt, §24 "약 36pt") — 띠가 지도 가운데(381.5)보다 위
 const BOX: Box = { width: 390, height: 763, top: 175, bottom: 211 };
@@ -87,11 +95,9 @@ describe('§24 머무는 동안', () => {
     expect(Math.abs(region.longitude - PLACE.lng) * METERS_PER_DEGREE * Math.cos((PLACE.lat * Math.PI) / 180)).toBeLessThanOrEqual(1);
   });
 
-  test('T14_S24_1_머무는_중_그_장소의_화면_y는_보이는_띠_안', () => {
+  test('T14_S24_S25_머무는_중_그_장소는_보이는_띠_가운데', () => {
     const { region } = camera(pins, PLACE, LODGING, BOX);
-    const { x, y } = project(region, BOX, PLACE);
-    expect(inBand(y, BOX)).toBe(true);
-    expect(Math.abs(x - BOX.width / 2)).toBeLessThanOrEqual(1);
+    atBandCenter(region, BOX, PLACE);
   });
 
   test('T14_S24_1_머무는_중_띠가_가운데보다_위면_가운데를_남쪽으로_옮긴다', () => {
@@ -103,10 +109,10 @@ describe('§24 머무는 동안', () => {
     const low: Box = { width: 390, height: 763, top: 600, bottom: 640 };
     const { region } = camera(pins, PLACE, LODGING, low);
     expect(region.latitude).toBeGreaterThan(PLACE.lat);
-    expect(inBand(project(region, low, PLACE).y, low)).toBe(true);
+    atBandCenter(region, low, PLACE);
   });
 
-  test('T14_S24_1_속성_어떤_화면·띠·위도에서도_800m_띠_안_같은_축척', () => {
+  test('T14_S24_S25_속성_어떤_화면·띠·위도에서도_800m_띠_가운데_같은_축척', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 300, max: 430 }),
@@ -121,7 +127,7 @@ describe('§24 머무는 동안', () => {
           const place = { lat, lng };
           const { region } = camera([pin(1, place, 'now')], place, LODGING, box);
           expect(near(spanEW(region), STAY_M)).toBe(true);
-          expect(inBand(project(region, box, place).y, box)).toBe(true);
+          atBandCenter(region, box, place);
           expect(Math.abs(aspect(region, box) - 1)).toBeLessThanOrEqual(TOL);
         },
       ),
@@ -161,42 +167,58 @@ describe('§24 이동 중', () => {
     expect(spanEW(region)).toBeLessThanOrEqual(need * 2);
   });
 
-  test('T14_S24_2_동서로_긴_구간이면_3km로_묶고_reh_dot은_띠_안', () => {
+  test('T14_S24_S25_동서로_긴_구간이면_3km로_묶고_reh_dot은_띠_가운데', () => {
     const from = { lat: 35.0, lng: 135.0 };
     const to = east(from, 6000);
     const dot = east(from, 1500);
     const { region } = camera([pin(1, from, 'done'), pin(2, to, 'next')], dot, LODGING, BOX);
     expect(near(spanEW(region), MOVE_CAP_M)).toBe(true);
-    const { x, y } = project(region, BOX, dot);
-    expect(inBand(y, BOX)).toBe(true);
-    expect(x).toBeGreaterThanOrEqual(0);
-    expect(x).toBeLessThanOrEqual(BOX.width);
+    atBandCenter(region, BOX, dot);
   });
 
-  test('T14_S24_2_남북으로_긴_구간도_3km로_묶고_reh_dot은_띠_안', () => {
+  test('T14_S24_S25_남북으로_긴_구간도_3km로_묶고_reh_dot은_띠_가운데', () => {
     const from = { lat: 35.0, lng: 135.0 };
     const to = north(from, 5000);
     const dot = north(from, 3500);
     const { region } = camera([pin(1, from, 'done'), pin(2, to, 'next')], dot, LODGING, BOX);
     expect(near(spanEW(region), MOVE_CAP_M)).toBe(true);
-    const { x, y } = project(region, BOX, dot);
-    expect(inBand(y, BOX)).toBe(true);
-    expect(x).toBeGreaterThanOrEqual(0);
-    expect(x).toBeLessThanOrEqual(BOX.width);
+    atBandCenter(region, BOX, dot);
     expect(Math.abs(aspect(region, BOX) - 1)).toBeLessThanOrEqual(TOL);
   });
 
-  test('T14_S24_2_경계_남북_300m만_돼도_36pt_띠엔_못_넣어_3km로_묶는다', () => {
+  test('T14_S24_S25_경계_남북_300m만_돼도_36pt_띠엔_못_넣어_3km로_묶고_reh_dot은_가운데', () => {
     // 300m를 36pt에 넣으려면 동서 폭이 약 3250m — 상한을 넘는다
     const from = { lat: 35.0, lng: 135.0 };
     const to = north(from, 300);
     const dot = mid(from, to);
     const { region } = camera([pin(1, from, 'done'), pin(2, to, 'next')], dot, LODGING, BOX);
     expect(near(spanEW(region), MOVE_CAP_M)).toBe(true);
-    expect(inBand(project(region, BOX, dot).y, BOX)).toBe(true);
+    atBandCenter(region, BOX, dot);
   });
 
-  test('T14_S24_2_속성_이동_중_폭은_3km_이하이고_reh_dot은_늘_띠_안', () => {
+  test('T14_S25_Q5_지금_자리를_모르고_3km를_넘으면_도착할_곳이_띠_가운데', () => {
+    const from = { lat: 35.0, lng: 135.0 };
+    const to = north(east(from, 2000), 4000);
+    const { region } = camera([pin(1, from, 'done'), pin(2, to, 'next')], null, LODGING, BOX);
+    expect(near(spanEW(region), MOVE_CAP_M)).toBe(true);
+    atBandCenter(region, BOX, to);
+  });
+
+  test('T14_S25_Q5_첫_구간_지금_자리를_모르고_3km를_넘으면_1번이_띠_가운데', () => {
+    const first = north(LODGING, 5000);
+    const { region } = camera([pin(1, first, 'next'), pin(2, east(first, 900), 'later')], null, LODGING, BOX);
+    expect(near(spanEW(region), MOVE_CAP_M)).toBe(true);
+    atBandCenter(region, BOX, first);
+  });
+
+  test('T14_S25_Q5_마지막_구간_지금_자리를_모르고_3km를_넘으면_숙소가_띠_가운데', () => {
+    const last = north(LODGING, -5000);
+    const { region } = camera([pin(1, east(last, 900), 'done'), pin(2, last, 'done')], null, LODGING, BOX);
+    expect(near(spanEW(region), MOVE_CAP_M)).toBe(true);
+    atBandCenter(region, BOX, LODGING);
+  });
+
+  test('T14_S24_S25_속성_이동_중_폭은_3km_이하·reh_dot은_띠_안·묶이면_가운데', () => {
     fc.assert(
       fc.property(
         fc.double({ min: -3000, max: 3000, noNaN: true }),
@@ -210,6 +232,9 @@ describe('§24 이동 중', () => {
           const { region } = camera([pin(1, from, 'done'), pin(2, to, 'next')], dot, LODGING, BOX);
           expect(spanEW(region)).toBeLessThanOrEqual(MOVE_CAP_M * (1 + TOL));
           expect(inBand(project(region, BOX, dot).y, BOX)).toBe(true);
+          // 세 곳을 띠에 넣는 데 필요한 폭 (테스트가 따로 셈): 동서는 좌우 60씩 뺀 폭, 남북은 띠 높이에 넣는다
+          const need = Math.max((Math.abs(eastM) * BOX.width) / (BOX.width - 2 * MAP_EDGE), (Math.abs(northM) * BOX.width) / (BOX.bottom - BOX.top));
+          if (need > MOVE_CAP_M * (1 + TOL)) atBandCenter(region, BOX, dot); // 3km로 묶을 때만 가운데 (§25 Q2)
           expect(Math.abs(aspect(region, BOX) - 1)).toBeLessThanOrEqual(TOL);
         },
       ),
