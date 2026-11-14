@@ -7,7 +7,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
+from urllib.parse import urlparse
+
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -260,3 +262,30 @@ if os.environ.get("APP_ENV", "development") != "production":
             as_current=bool(body and body.as_current),
         )
         return result
+
+
+_RESET_EMAIL = "link-new@example.test"  # 개발용 계정 초기화가 지우는 유일한 계정. 요청의 어떤 값으로도 바뀌지 않는다
+_LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def _local_database_url() -> str | None:
+    """DATABASE_URL의 호스트가 정확히 로컬 주소일 때만 그 주소를 돌려준다. 없거나 다르면 None (호스트 문자열 일치, 부분 일치 아님)."""
+    url = os.environ.get("DATABASE_URL") or None
+    try:
+        host = urlparse(url).hostname if url else None
+    except ValueError:
+        return None
+    return url if host in _LOCAL_HOSTS else None
+
+
+if os.environ.get("APP_ENV", "development") != "production":
+
+    @app.post("/debug/reset-test-account", status_code=204, responses={404: {"model": ErrorResponse}})
+    def debug_reset_test_account(user: UserId) -> Response:
+        """개발용(TASK-014 §21): 로컬 DB에서 고정 테스트 계정 하나만 지운다. 본문·쿼리 값은 받지 않는다. 로컬 DB가 아니면 길이 없는 것처럼 404."""
+        url = _local_database_url()
+        if url is None:
+            raise HTTPException(status_code=404, detail="Not Found")
+        with psycopg.connect(url, autocommit=True) as conn:
+            conn.execute("delete from auth.users where email = %s", (_RESET_EMAIL,))
+        return Response(status_code=204)
