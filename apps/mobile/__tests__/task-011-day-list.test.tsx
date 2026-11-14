@@ -14,7 +14,7 @@
 //   머리: tripHeader의 title·line 글자가 화면에 보인다
 //   AC-3: 화면 전체에서 바탕이 brand인 상자는 bottom-primary 하나 이하 (카드 안 버튼에 주황 0)
 //   §9 v1.1:
-//     Q1 [새 여행 만들기] `new-trip` = btn-new-trip (bg-2 바탕, 높이 52 이상)
+//     Q1 [새 여행 만들기] `new-trip` = btn-new-trip (bg-2 바탕, 높이 52 이상). 11-14 고침(TASK-014 §19): 끝난 여행(지난 날만)이면 주 버튼(brand)
 //     Q2 고른 코스가 있는 날(계획 완료·지난 날) 줄에 요약 "18:30 끝 · 8곳 · 이동 125분" (서버 summary 그대로). 계획 전 카드에 꼭 갈 곳 이름
 //        날짜 목록을 그릴 때 GET /days/{id}/course 를 부르지 않는다
 //     Q3 카드 [알아서 짜 줘]를 누르면 바로 POST /days/{id}/planning {mode: 'auto'} -> 코스안(`option-relaxed`). 오늘인데 코스 없는 카드도 버튼 둘
@@ -248,19 +248,20 @@ describe('A1 카드 안 버튼', () => {
 
 describe('AC-3 날짜 목록의 주황', () => {
   test.each([
-    ['여행 전 섞임', MIXED, AT.before, true],
-    ['오늘 여행 중', TODAY_WITH_COURSE, AT.day2, true],
-    ['오늘인데 코스 없음', TODAY_NO_COURSE, AT.day2, true],
-    ['모두 계획 완료', ALL_PLANNED, AT.before, false],
-    ['지난 날만', ALL_PAST, AT.after, false],
-  ])('T11_AC3_%s_주황_바탕은_bottom_primary_하나뿐', async (_name, value, at, hasPrimary) => {
+    ['여행 전 섞임', MIXED, AT.before, 'bottom-primary'],
+    ['오늘 여행 중', TODAY_WITH_COURSE, AT.day2, 'bottom-primary'],
+    ['오늘인데 코스 없음', TODAY_NO_COURSE, AT.day2, 'bottom-primary'],
+    ['모두 계획 완료', ALL_PLANNED, AT.before, null],
+    // TASK-014 §19 · DESIGN-001 §4-11(11-14): 끝난 여행이면 [새 여행 만들기]가 주 버튼 (전엔 주황 0)
+    ['지난 날만', ALL_PAST, AT.after, 'new-trip'],
+  ])('T11_AC3_%s_주황_바탕은_주_버튼_하나뿐', async (_name, value, at, primaryId) => {
     await show(value, at);
     const orange = filledWith(COLORS.brand);
-    if (!hasPrimary) {
+    if (primaryId === null) {
       expect(orange).toEqual([]);
       return;
     }
-    const primary = byId('bottom-primary');
+    const primary = byId(primaryId);
     expect(orange.length).toBeGreaterThanOrEqual(1);
     for (const host of orange) expect(isInside(host, primary) || isInside(primary, host)).toBe(true);
     expect(orange.filter((host) => typeof host.props.onClick === 'function')).toHaveLength(1);
@@ -787,11 +788,13 @@ describe('§14 9-5 모든 지난 날이 고른 코스 없음이면 끝맺음 글
     expect(within(screen.getByTestId('end-note')).getByText('날짜를 누르면 고른 코스를 볼 수 있어')).toBeTruthy();
   });
 
-  test('T11_S14_9-5_모두_고른_코스_없음이어도_맨_아래_새_여행_만들기·주황_0', async () => {
+  test('T11_S14_9-5_모두_고른_코스_없음이어도_맨_아래_새_여행_만들기·주황은_그_버튼뿐', async () => {
     await show(NONE_PAST, AT.after);
     expect(screen.getByTestId('new-trip')).toBeTruthy();
     expect(screen.queryByTestId('bottom-primary')).toBeNull();
-    expect(filledWith(COLORS.brand)).toEqual([]);
+    // TASK-014 §19 · DESIGN-001 §4-11(11-14): 끝난 여행의 [새 여행 만들기] = 주 버튼 (전엔 주황 0)
+    for (const host of filledWith(COLORS.brand)) expect(isInside(host, byId('new-trip')) || isInside(byId('new-trip'), host)).toBe(true);
+    expect(filledWith(COLORS.brand).filter((host) => typeof host.props.onClick === 'function')).toHaveLength(1);
   });
 
   test('T11_S14_9-5_여행_전_모두_정했어는_그대로_설명_줄_있음', async () => {
@@ -834,10 +837,10 @@ describe('§14 04 지난 날만 남은 날짜 목록 (리뷰 §9-5 표)', () => 
     expect(screen.queryByTestId('day-chevron-d2')).toBeNull(); // 계획 전 카드에는 없다
   });
 
-  test('T11_S14_04_새_여행_만들기는_btn_new_trip(bg_2·52_이상)', async () => {
+  test('T11_S14_04_새_여행_만들기는_주_버튼(brand·52_이상)_TASK_014_S19', async () => {
     await show(ALL_PAST, AT.after);
     const style = styleOf(pressableOf(byId('new-trip')));
-    expect(String(style.backgroundColor).toUpperCase()).toBe(COLORS['bg-2']);
+    expect(String(style.backgroundColor).toUpperCase()).toBe(COLORS.brand); // DESIGN-001 §4-11(11-14): 끝난 여행이면 주 버튼 (전엔 bg-2)
     expect(Math.max(...[style.height, style.minHeight].filter((v): v is number => typeof v === 'number'))).toBeGreaterThanOrEqual(52);
   });
 });
