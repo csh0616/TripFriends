@@ -249,6 +249,116 @@ describe('§21 1 경계 실제 여행(연습 아님) 카메라는 그대로', ()
 });
 
 // =====================================================================
+// §22 Q2 구간 끝: 첫 구간 출발 = 숙소, 마지막 구간 도착 = 숙소, 연습 중 구간이 바뀌면 다시 맞춘다 (실제 여행은 B10대로 안 맞춤)
+// =====================================================================
+
+const mid = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => ({ lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 });
+// 첫 구간: 숙소 -> 1번. 지난 핀 없음, 1 다음 · 2·3 나중
+const FIRST_LEG_PINS = [
+  { ...basePins[0], state: 'next' },
+  { ...basePins[1], state: 'later' },
+  { ...basePins[2], state: 'later' },
+];
+const FIRST_LEG_AT = mid(LODGING, SPOT.D01);
+// 마지막 구간: 3번 -> 숙소. 모두 지남
+const LAST_LEG_PINS = basePins.map((pin) => ({ ...pin, state: 'done' }));
+const LAST_LEG_AT = mid(SPOT.D30, LODGING);
+
+describe('§22 Q2 구간 끝은 숙소', () => {
+  test('T14_S22_Q2_첫_구간이면_지금_자리·숙소(출발)·1번(도착)', async () => {
+    rehReply = () => nowView({ day: plannedDay, pins: FIRST_LEG_PINS, position: FIRST_LEG_AT, main: t02(), subs: [t03()] });
+    withMap();
+    await toRehearsal();
+    const { coordinates } = await firstFit();
+    expect(keysOf(coordinates)).toEqual(keysOf([asCoord(FIRST_LEG_AT), asCoord(LODGING), asCoord(SPOT.D01)]));
+  });
+
+  test('T14_S22_Q2_마지막_구간이면_지금_자리·3번(출발)·숙소(도착)', async () => {
+    rehReply = () => nowView({ day: plannedDay, pins: LAST_LEG_PINS, position: LAST_LEG_AT });
+    withMap();
+    await toRehearsal();
+    const { coordinates } = await firstFit();
+    expect(keysOf(coordinates)).toEqual(keysOf([asCoord(LAST_LEG_AT), asCoord(SPOT.D30), asCoord(LODGING)]));
+  });
+});
+
+describe('§22 Q2 연습 중 구간이 바뀌면 카메라를 다시 맞춘다', () => {
+  const lastFit = () => mapControl.fits[mapControl.fits.length - 1];
+
+  test('T14_S22_Q2_머묾에서_이동으로_바뀌면_이동_구간으로_다시_맞춘다', async () => {
+    withMap();
+    await toRehearsal();
+    await firstFit();
+    const before = mapControl.fits.length;
+    rehReply = () => moveView();
+    await tap(screen.getByTestId('demo-plus-10'));
+    await waitFor(() => expect(mapControl.fits.length).toBeGreaterThan(before));
+    expect(keysOf(lastFit().coordinates)).toEqual(keysOf([asCoord(POSITION), asCoord(SPOT.D01), asCoord(SPOT.D20)]));
+    expect(Number(lastFit().options?.edgePadding?.bottom ?? 0)).toBeGreaterThanOrEqual(REH_SHEET + REH_CLOCK); // 여백 그대로
+  });
+
+  test('T14_S22_Q2_이동에서_도착해_머물면_그_장소_가운데로_다시_맞춘다', async () => {
+    rehReply = () => moveView();
+    withMap();
+    await toRehearsal();
+    await firstFit();
+    const before = mapControl.fits.length;
+    rehReply = () => stayView();
+    await tap(screen.getByTestId('demo-plus-10'));
+    await waitFor(() => expect(mapControl.fits.length).toBeGreaterThan(before));
+    const lngs = lastFit().coordinates.map((p) => p.longitude);
+    const lats = lastFit().coordinates.map((p) => p.latitude);
+    expect(Math.abs((Math.min(...lats) + Math.max(...lats)) / 2 - SPOT.D20.lat) * METERS_PER_DEGREE).toBeLessThanOrEqual(1);
+    expect(Math.abs((Math.min(...lngs) + Math.max(...lngs)) / 2 - SPOT.D20.lng) * METERS_PER_DEGREE * Math.cos((SPOT.D20.lat * Math.PI) / 180)).toBeLessThanOrEqual(1);
+  });
+
+  test('T14_S22_Q2_다음_구간으로_건너뛰면_새_구간으로_다시_맞춘다', async () => {
+    // 1->2 이동 중에서 시계를 건너뛰어 2->3 이동 중으로 (같은 "이동 중"이어도 구간이 다르다)
+    rehReply = () => moveView();
+    withMap();
+    await toRehearsal();
+    await firstFit();
+    const before = mapControl.fits.length;
+    const between = mid(SPOT.D20, SPOT.D30);
+    const nextLeg = [
+      { ...basePins[0], state: 'done' },
+      { ...basePins[1], state: 'done' },
+      { ...basePins[2], state: 'next' },
+    ];
+    rehReply = () => moveView({ pins: nextLeg, position: between });
+    await tap(screen.getByTestId('demo-plus-10'));
+    await waitFor(() => expect(mapControl.fits.length).toBeGreaterThan(before));
+    expect(keysOf(lastFit().coordinates)).toEqual(keysOf([asCoord(between), asCoord(SPOT.D20), asCoord(SPOT.D30)]));
+  });
+});
+
+describe('§22 Q2 경계 실제 여행은 구간이 바뀌어도 다시 맞추지 않는다 (TASK-006 B10)', () => {
+  test('T14_S22_Q2_실제_여행_머묾에서_이동으로_바뀌어도_맞춤은_처음_한_번', async () => {
+    const todayDay = { ...demoDay, day_id: TODAY, date: '2026-12-02' };
+    let liveView = () => nowView({ day: todayDay, at: '2026-12-02T12:00:00', pins: STAY_PINS });
+    server.match(`GET /days/${TODAY}/now`, () => json(200, liveView()));
+    server.match(`POST /days/${TODAY}/check`, () => json(200, liveView()));
+    locationFake.permit('granted');
+    locationFake.stayAt({ lat: POSITION.lat, lng: POSITION.lng, accuracy: 10 });
+    withMap();
+    await startHome();
+    await tap(await screen.findByTestId(`day-row-${TODAY}`));
+    await screen.findByTestId('trip-now-screen');
+    await firstFit();
+    const before = mapControl.fits.length;
+    liveView = () => nowView({ day: todayDay, at: '2026-12-02T12:01:00', pins: MOVE_PINS });
+    const checksBefore = server.sent(`POST /days/${TODAY}/check`).length;
+    await act(async () => {
+      locationFake.emit({ lat: POSITION.lat + 0.001, lng: POSITION.lng, accuracy: 10, timestamp: Date.now() });
+    });
+    await settleAll();
+    await waitFor(() => expect(server.sent(`POST /days/${TODAY}/check`).length).toBeGreaterThan(checksBefore)); // 시험 자체 확인: 새 응답(이동 중)을 받았다
+    await settleAll();
+    expect(mapControl.fits).toHaveLength(before);
+  });
+});
+
+// =====================================================================
 // 2 D6 날짜 숫자: 나란한 별도 Text · DM Mono 13/18 (TASK-014 §21 2)
 // =====================================================================
 
@@ -361,6 +471,11 @@ describe('§21 3 연습 시계 [10분] 버튼', () => {
     expect(label).toContain('10분');
     expect(label.startsWith('+')).toBe(false);
     expect(label).not.toContain('+');
+  });
+
+  test('T14_S22_Q3_화면_읽기_이름은_정확히_10분_앞으로', async () => {
+    await toRehearsal();
+    expect(byId('demo-plus-10').props.accessibilityLabel).toBe('10분 앞으로'); // TASK-014 §22 Q3
   });
 
   test('T14_S21_3_경계_누르면_여전히_10분_뒤로', async () => {

@@ -95,7 +95,7 @@ def test_T14_S21_4_토큰이_없으면_401(monkeypatch):
 def test_T14_S21_4_경계_DB_주소가_로컬이_아니면_404_route이고_연결하지_않는다(monkeypatch, host):
     from api.main import app
 
-    _env(monkeypatch, f"postgresql://postgres:secret@{host}:5432/postgres")
+    _env(monkeypatch, f"postgresql://postgres@{host}:5432/postgres")
     urls = _record_connects(monkeypatch)
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.post(PATH, headers=AUTH)
@@ -126,7 +126,7 @@ def test_T14_S21_4_운영이면_로컬_DB여도_404_route이고_연결하지_않
 def test_T14_S21_4_로컬_DB면_길이_있고_그_로컬_주소에만_붙으려_한다(monkeypatch, host):
     from api.main import app
 
-    _env(monkeypatch, f"postgresql://postgres:postgres@{host}:54322/postgres")
+    _env(monkeypatch, f"postgresql://postgres@{host}:54322/postgres")
     urls = _record_connects(monkeypatch)
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.post(PATH, headers=AUTH)
@@ -173,3 +173,74 @@ def test_T14_S21_4_로컬_DB에서_link_new만_지우고_204_다른_계정은_�
     with psycopg.connect(url, autocommit=True) as conn:
         assert _count(conn, NEW_EMAIL) == 0
         assert _count(conn, EXISTING_EMAIL) == existing_before
+
+
+# ---------- §22 Q4: 지우는 건 고정 테스트 이메일 하나뿐, 다른 값은 받지 않는다 ----------
+# 문서는 "무시"인지 "거부"인지 정하지 않았다 -> 응답은 기존 계약(204) 그대로, 다른 계정이 지워지지 않고 고정 이메일만 지워짐을 본다
+
+_EMAIL = __import__("re").compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+
+
+def _server_sources():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    skip = {"tests", ".venv", "mutants", "__pycache__"}
+    for path in root.rglob("*.py"):  # .py만 읽는다 (.env는 읽지 않는다)
+        if not skip.intersection(path.relative_to(root).parts):
+            yield path
+
+
+def test_T14_S22_Q4_서버_코드의_이메일_값은_link_new_하나_한_번뿐():
+    found = [(str(path.name), email) for path in _server_sources() for email in _EMAIL.findall(path.read_text(encoding="utf-8"))]
+    assert [email for _, email in found] == [NEW_EMAIL], found
+
+
+def _insert_user(conn, email: str) -> str:
+    return str(
+        conn.execute(
+            "insert into auth.users (instance_id, id, aud, role, email, created_at, updated_at) "
+            "values ('00000000-0000-0000-0000-000000000000', gen_random_uuid(), 'authenticated', 'authenticated', %s, now(), now()) returning id",
+            (email,),
+        ).fetchone()[0]
+    )
+
+
+@pytest.mark.db
+@pytest.mark.parametrize(
+    "how",
+    ["본문_email", "본문_user_id", "쿼리_email", "쿼리_user_id", "본문·쿼리_모두"],
+)
+def test_T14_S22_Q4_다른_이메일·user_id를_보내도_그_계정은_그대로_고정_이메일만_지운다(monkeypatch, how):
+    import uuid
+
+    from api.main import app
+
+    url = db_url()
+    other_email = f"reset-other-{uuid.uuid4().hex[:8]}@example.test"
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not _auth_users_exists(conn):
+            pytest.skip("auth.users가 없는 로컬 Postgres (로컬 Supabase에서만 확인)")
+        other_id = _insert_user(conn, other_email)
+        if _count(conn, NEW_EMAIL) == 0:
+            _insert_user(conn, NEW_EMAIL)
+        existing_before = _count(conn, EXISTING_EMAIL)
+
+    body = {"email": other_email} if how == "본문_email" else {"user_id": other_id} if how == "본문_user_id" else None
+    query = {"email": other_email} if how == "쿼리_email" else {"user_id": other_id} if how == "쿼리_user_id" else None
+    if how == "본문·쿼리_모두":
+        body = {"email": other_email, "user_id": other_id, "emails": [other_email, EXISTING_EMAIL]}
+        query = {"email": EXISTING_EMAIL, "user_id": other_id}
+
+    _env(monkeypatch, url)
+    try:
+        with TestClient(app, headers=AUTH) as client:
+            response = client.post(PATH, json=body, params=query)
+        assert response.status_code == 204, response.text
+        with psycopg.connect(url, autocommit=True) as conn:
+            assert _count(conn, other_email) == 1  # 보낸 값의 계정은 그대로
+            assert _count(conn, EXISTING_EMAIL) == existing_before
+            assert _count(conn, NEW_EMAIL) == 0  # 고정 이메일만 지운다
+    finally:
+        with psycopg.connect(url, autocommit=True) as conn:
+            conn.execute("delete from auth.users where email = %s", (other_email,))  # 이 테스트가 넣은 것만 치운다
