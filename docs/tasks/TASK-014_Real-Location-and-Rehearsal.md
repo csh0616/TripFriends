@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-13 |
-| 상태 | **v2.4** — §22 test-writer 답 · §21 reviewer 답 · §20 test-writer 답 · §19 디자이너 검수 답 · §18 reviewer 통과 · §17 test-writer 답 · §16 test-writer 답 · §15 test-writer 답 · §14 reviewer 재점검 답 · §13 reviewer 답 · §12 연습 기록 모양 · §11 연습 기록 · §10 test-writer 질문 답 · §9 디자인 답 · E2 |
+| 상태 | **v2.5** — §23 · §22 test-writer 답 · §21 reviewer 답 · §20 test-writer 답 · §19 디자이너 검수 답 · §18 reviewer 통과 · §17 test-writer 답 · §16 test-writer 답 · §15 test-writer 답 · §14 reviewer 재점검 답 · §13 reviewer 답 · §12 연습 기록 모양 · §11 연습 기록 · §10 test-writer 질문 답 · §9 디자인 답 · E2 |
 | 관련 | SRS FR-11(늦어짐 감지)·FR-30(SOS 위치 주소)·NFR-10(위치는 감지에만, 경로 저장 안 함) · TASK-006(데모 시계·`fake-position.ts`, §11 Q9 로그의 위치) · TASK-007(`check`, 위치는 본문) · TASK-010 C4(실제 여행은 시계만)·§13 알려진 한계 · TASK-011 04 스크린샷 · TASK-012 B6(iPhone 16e) · `docs/design/canvas-map.md` "①에 빠진 화면" 3·8, "앱과 다른 곳" 1 · TASK-013(CI) |
 | 브랜치 | `feat/task-014-location-rehearsal` |
 | 다음 | TASK-015 데이터 확장(ADR-018 수집·평가 에이전트) → TASK-016 SOS·오프라인·알림·출발 전 점검 |
@@ -242,6 +242,10 @@
 | 4 계정 지우기 | **`POST /debug/reset-test-account` 승인**, 조건: 토큰 필요(다른 `/debug`와 같음) · 운영 404 · 서버 DB 주소가 이 컴퓨터(127.0.0.1·localhost·::1)일 때만 연결 · **지우는 건 고정 테스트 이메일 `link-new@example.test` 하나뿐**(다른 값은 받지 않음) · 앱 개발용 가짜 로그인 new가 **연결 직전**에 부름(§21 "흐름 시작"을 이걸로 바꿔 읽음). TASK-012 §11 Q1의 "토큰 없이 열린 길은 health·catalog 둘"을 지킨 판단 좋음 |
 | 5 CI 한계 | 승인: CI는 "로컬 주소에만 붙으려 함"까지, 실제 삭제는 로컬 Supabase에서 확인 |
 | 6 스크린샷 | 승인: DM Mono 실제 렌더 · 800m 화면 경로·점 가림 · 숫자·요일 간격 — reviewer |
+
+## 23. frontend §21·§22 답 (11-15, `30cd736`)
+- 부딪히는 승인 테스트 3개(`task-011-day-list` `T11_S14_04_d1~d3`, "12/11 금"을 한 글자로 찾음) → **"12/11"과 "금"을 따로 찾되 같은 줄에 나란히 있는지**까지 보도록 바꾸는 것 승인 (test-writer). 확인하는 뜻은 같고 §21 2와 맞춤
+- frontend가 정한 것 4개 승인: 같은 구간 안 시각 변화엔 카메라 그대로 · 800m 정사각형 · 이동 중 지금 자리를 모르면 출발·도착 두 곳 · 숫자·요일 간격 4(디자이너가 스크린샷으로 확인)
 
 ## E2. 넘어온 것 (디자인 검사에서)
 | # | 할 것 |
