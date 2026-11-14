@@ -29,7 +29,7 @@ import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBO
 import { cityClock } from '@/lib/calendar';
 import { dayHeading } from '@/lib/day-list';
 import { delayedPosition } from '@/lib/fake-position';
-import { rehearsalFit } from './rehearsal-fit';
+import { rehearsalCamera } from './rehearsal-camera';
 import {
   acceptRequest,
   checkRequest,
@@ -379,20 +379,34 @@ export function TripNowScreen({
   const clockRoom = rehearsal ? layout.rehClock + space['space-3'] : 0; // 카메라 아래 여백 = 시트 + 시계 판
   useEffect(() => {
     if (!mapReady || !view || view.pins.length === 0) return;
-    // 연습: 지금 구간만, 구간이 바뀌면 다시 맞춘다 (같은 구간 안에서 시각만 바뀌면 그대로). 실제 여행: 처음 한 번 모든 핀 + 숙소 (B10)
-    const leg = rehearsal ? rehearsalFit(view.pins, view.position ?? null, day.lodging) : null;
-    if (leg ? fittedLeg.current === leg.key : fitted.current) return;
+    // 연습: 지금 구간만 직접 계산한 영역(보이는 띠 기준), 구간이 바뀔 때만 다시 (같은 구간 안에서 시각만 바뀌면 그대로)
+    if (rehearsal) {
+      const total = areaHeight || windowHeight;
+      const camera = rehearsalCamera(view.pins, view.position ?? null, day.lodging, {
+        width,
+        height: total,
+        top: insets.top + rehTop + layout.header + layout.pinBubble,
+        bottom: total - sheetMid - clockRoom,
+      });
+      if (fittedLeg.current === camera.key) return;
+      fitted.current = true;
+      fittedLeg.current = camera.key;
+      mapRef.current?.showRegion(camera.region);
+      return;
+    }
+    // 실제 여행: 처음 한 번 모든 핀 + 숙소 (B10)
+    if (fitted.current) return;
     fitted.current = true;
-    fittedLeg.current = leg ? leg.key : null;
+    fittedLeg.current = null;
     mapRef.current?.fit(
-      leg ? leg.coordinates : [...view.pins.map((pin) => ({ latitude: pin.lat, longitude: pin.lng })), { latitude: day.lodging.lat, longitude: day.lodging.lng }],
+      [...view.pins.map((pin) => ({ latitude: pin.lat, longitude: pin.lng })), { latitude: day.lodging.lat, longitude: day.lodging.lng }],
       {
         // 위: 알약·프로필·SOS 줄 + 다음 핀의 이름 말풍선 + 핀 반쪽이 가려지지 않게. 아래: 시트 윗면 + 핀 반쪽
         top: insets.top + rehTop + layout.header + layout.pinBubble + control['touch-min'] + space['space-2'],
         bottom: sheetMid + clockRoom + control['touch-min'] / 2 + space['space-2'],
       },
     );
-  }, [mapReady, view, rehearsal, day.lodging, insets.top, sheetMid, clockRoom]);
+  }, [mapReady, view, rehearsal, day.lodging, insets.top, sheetMid, clockRoom, areaHeight, windowHeight, width]);
 
   const retry = () => {
     if (last.current) void fetchNow(last.current);

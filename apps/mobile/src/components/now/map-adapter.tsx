@@ -16,6 +16,8 @@ export type LatLng = { latitude: number; longitude: number };
 export type MapAdapterHandle = {
   /** 모든 점이 보이게 맞춘다. bottom = 시트가 가리는 높이 */
   fit: (coordinates: LatLng[], padding: { top: number; bottom: number }) => void;
+  /** TASK-014 §24: 직접 계산한 영역으로 한 번에 (연습 카메라) */
+  showRegion: (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => void;
   moveTo: (coordinate: LatLng) => void;
 };
 
@@ -250,6 +252,9 @@ export function MapAdapter({
         edgePadding: { top: padding.top, bottom: padding.bottom, left: layout.mapEdge, right: layout.mapEdge },
         animated: false,
       });
+    },
+    showRegion: (region) => {
+      map.current?.animateToRegion(region, 0);
     },
     moveTo: (coordinate) => {
       map.current?.animateToRegion(
