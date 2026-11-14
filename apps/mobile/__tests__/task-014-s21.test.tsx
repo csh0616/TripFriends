@@ -190,7 +190,28 @@ function project(region: Region, box: Box, at: { lat: number; lng: number }) {
 }
 const spanEW = (region: Region) => region.longitudeDelta * METERS_PER_DEGREE * Math.cos((region.latitude * Math.PI) / 180);
 const nearRatio = (value: number, target: number) => value >= target * (1 - STAY_TOLERANCE) && value <= target * (1 + STAY_TOLERANCE);
-const inBand = (y: number, box: Box) => y >= box.top - 0.5 && y <= box.bottom + 0.5;
+const PIN_INSET = 30; // §26: 핀 반지름 22 + 여백 8. 화면은 띠 전체를 넘기고 함수가 안에서 줄인다
+/** 줄어든 띠 [top + 30, bottom − 30] 안인가 (§26) */
+const inBand = (y: number, box: Box) => y >= box.top + PIN_INSET - 0.5 && y <= box.bottom - PIN_INSET + 0.5;
+/** 영역에서 화면 y가 target이 되는 위도 (메르카토르 역산) */
+function latAtY(region: Region, box: Box, y: number) {
+  const top = mercY(region.latitude + region.latitudeDelta / 2);
+  const bottom = mercY(region.latitude - region.latitudeDelta / 2);
+  const m = top - (y / box.height) * (top - bottom);
+  return ((2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180) / Math.PI;
+}
+const eastOf = (from: { lat: number; lng: number }, m: number) => ({ lat: from.lat, lng: from.lng + m / (METERS_PER_DEGREE * Math.cos((from.lat * Math.PI) / 180)) });
+// 3km 미만 짧은 구간: 1번(D01) -> 동쪽 500m·북쪽 150m의 2번. 150m는 띠 전체(120)엔 800m 폭으로 들어가지만 줄어든 띠(60)엔 안 들어가 약 1km가 된다
+const SHORT_TO = { lat: SPOT.D01.lat + 150 / METERS_PER_DEGREE, lng: eastOf(SPOT.D01, 500).lng };
+const shortView = (position: { lat: number; lng: number }) =>
+  moveView({
+    pins: [
+      { ...basePins[0], state: 'done' },
+      { ...basePins[1], lat: SHORT_TO.lat, lng: SHORT_TO.lng, state: 'next' },
+      { ...basePins[2], state: 'later' },
+    ],
+    position,
+  });
 const snapPx = (point: unknown, area: number) => {
   if (typeof point === 'number') return point <= 1 ? point * area : point;
   const text = String(point);
@@ -349,18 +370,76 @@ describe('§22 Q2·§24 연습 중 구간이 바뀌면 카메라를 다시 계�
     sameRegion(lastRegion(), expected(next() as never, box));
   });
 
-  test('T14_S23_S24_같은_구간에서_시각만_바뀌면_카메라는_그대로', async () => {
-    rehReply = () => moveView();
+  test('T14_S23_S24_S26_3km_미만_같은_구간에서_시각만_바뀌면_카메라는_그대로', async () => {
+    // §26: 묶인 구간은 벗어날 때 다시 맞추므로, 이 경계는 3km 미만 구간으로 본다
+    rehReply = () => shortView(eastOf(SPOT.D01, 100));
     await toRehearsalOnBoard();
     const before = mapControl.regions.length;
     expect(before).toBe(1); // 처음 한 번은 계산했다
+    expect(spanEW(lastRegion())).toBeLessThan(MOVE_CAP_M); // 시험 자체 확인: 묶이지 않았다
     const checks = () => server.sent(`POST /days/${PLANNED}/check`).length;
     const sentBefore = checks();
-    rehReply = () => moveView({ position: mid(POSITION, SPOT.D20) }); // 같은 1 -> 2 구간, 지금 자리만 앞으로
+    rehReply = () => shortView(eastOf(SPOT.D01, 400)); // 같은 1 -> 2 구간, 지금 자리만 앞으로
     await tap(screen.getByTestId('demo-plus-10'));
     await waitFor(() => expect(checks()).toBeGreaterThan(sentBefore)); // 시험 자체 확인: 새 응답을 받았다
     await settleAll();
     expect(mapControl.regions).toHaveLength(before);
+  });
+});
+
+describe('§26 연습 카메라 (화면)', () => {
+  const checks = () => server.sent(`POST /days/${PLANNED}/check`).length;
+  async function plus(next: () => object) {
+    const sentBefore = checks();
+    rehReply = next;
+    await tap(screen.getByTestId('demo-plus-10'));
+    await waitFor(() => expect(checks()).toBeGreaterThan(sentBefore)); // 시험 자체 확인: 새 응답을 받았다
+    await settleAll();
+  }
+
+  test('T14_S26_1_화면_묶인_구간은_reh_dot이_줄어든_띠_안이면_그대로_벗어나면_한_번', async () => {
+    rehReply = () => moveView(); // D01 -> D20 (남북 1.1km): 보드 띠에서 3km로 묶인다
+    const box = await toRehearsalOnBoard();
+    const first = lastRegion();
+    expect(spanEW(first)).toBeGreaterThanOrEqual(MOVE_CAP_M * (1 - STAY_TOLERANCE)); // 시험 자체 확인: 묶였다
+    expect(mapControl.regions).toHaveLength(1);
+    const inside = { lat: latAtY(first, box, box.top + PIN_INSET + 2), lng: POSITION.lng };
+    await plus(() => moveView({ position: inside }));
+    expect(mapControl.regions).toHaveLength(1); // 벗어나기 전엔 그대로
+    const outside = { lat: latAtY(first, box, box.top + PIN_INSET - 4), lng: POSITION.lng };
+    await plus(() => moveView({ position: outside }));
+    expect(mapControl.regions).toHaveLength(2); // 벗어나는 순간 한 번
+    const { x, y } = project(lastRegion(), box, outside);
+    expect(Math.abs(y - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(x - box.width / 2)).toBeLessThanOrEqual(1);
+  });
+
+  test('T14_S26_2_화면_짧은_구간은_세_곳이_줄어든_띠_안_핀_전체가_보인다', async () => {
+    const dot = mid(SPOT.D01, SHORT_TO);
+    rehReply = () => shortView(dot);
+    const box = await toRehearsalOnBoard();
+    const region = lastRegion();
+    for (const at of [SPOT.D01, dot, SHORT_TO]) expect(inBand(project(region, box, at).y, box)).toBe(true);
+  });
+
+  test('T14_S26_3_지도_높이를_모르면_카메라를_계산하지_않고_높이를_안_뒤_한_번', async () => {
+    const window = Dimensions.get('window');
+    jest.spyOn(Dimensions, 'get').mockImplementation(() => ({ ...window, width: 402, height: 874 }));
+    withMap();
+    await startHome(BOARD);
+    await tap(await screen.findByTestId(`rehearse-${PLANNED}`));
+    await screen.findByTestId('now-main');
+    await settleAll();
+    await act(async () => mapControl.ready()); // 지도는 준비됐지만 시트 영역 높이(onLayout)는 아직
+    await settleAll();
+    expect(mapControl.regions).toEqual([]);
+    expect(mapControl.fits).toEqual([]);
+    const host = byId('trip-now-screen').queryAll((inner) => typeof inner.props.onLayout === 'function')[0];
+    await act(async () => {
+      fireEvent(host as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: 800 } } });
+    });
+    await settleAll();
+    expect(mapControl.regions).toHaveLength(1);
   });
 });
 

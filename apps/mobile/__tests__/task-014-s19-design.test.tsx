@@ -229,6 +229,11 @@ describe('§19 상 연습 지도 카메라 아래 여백 = 시트 + 시계 판',
     (Constants as unknown as { expoConfig: unknown }).expoConfig = { extra: { googleMapsKeyPresent: true } };
     await toRehearsal();
     expect(screen.queryByTestId('map-fallback')).toBeNull(); // 시험 자체 확인: 지도가 그려졌다
+    // §26 3: 지도 높이(시트 영역 onLayout)를 안 뒤에 계산한다
+    const host = byId('trip-now-screen').queryAll((inner) => typeof inner.props.onLayout === 'function')[0];
+    await act(async () => {
+      fireEvent(host as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: 770 } } });
+    });
     await waitFor(() => expect(mapControl.regions.length).toBeGreaterThan(0));
     expect(mapControl.fits).toEqual([]);
   });
