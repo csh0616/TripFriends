@@ -34,7 +34,7 @@ export type Request = {
 /** 실패 종류 (TASK-004 §7, §12 Q18·Q21). 끊김·시간 초과는 network, 모르는 모양은 server */
 export type Failure =
   | { kind: 'network' }
-  | { kind: 'invalid'; field?: string } // TASK-010 §9 Q13: 400 VALIDATION_ERROR의 detail.field
+  | { kind: 'invalid'; field?: string; code?: string; reason?: string } // TASK-010 §9 Q13: 400 VALIDATION_ERROR의 detail.field · TASK-015 §11 Q1: 400 INVALID_LODGING의 code · detail.reason
   | { kind: 'not_found'; resource: string | null }
   | { kind: 'conflict'; reason: string | null; code?: string } // code: 공통 오류 코드 (예: PLAN_EXISTS)
   | { kind: 'infeasible'; reason: string; blocking: string[] }
@@ -52,7 +52,9 @@ function classify(status: number, body: unknown): Failure {
   const detail = isRecord(body) && isRecord(body.error) ? body.error.detail : undefined;
   if (status === 400) {
     const field = isRecord(detail) && typeof detail.field === 'string' ? detail.field : undefined;
-    return field === undefined ? { kind: 'invalid' } : { kind: 'invalid', field };
+    const code = isRecord(body) && isRecord(body.error) && typeof body.error.code === 'string' ? body.error.code : undefined;
+    const reason = isRecord(detail) && typeof detail.reason === 'string' ? detail.reason : undefined;
+    return { kind: 'invalid', ...(field === undefined ? {} : { field }), ...(code === undefined ? {} : { code }), ...(reason === undefined ? {} : { reason }) };
   }
   if (status === 404) {
     const resource = isRecord(detail) && typeof detail.resource === 'string' ? detail.resource : null;

@@ -215,6 +215,86 @@ function RemainingRoute({ path, metersPerPoint }: { path: LatLng[]; metersPerPoi
   );
 }
 
+/** 집 모양 (숙소 마커·찍은 핀 안): 45도 돌린 네모의 윗변·왼변이 지붕, 아래 네모가 벽. 지도 Marker 안이라 Svg 없이 View로 (변환은 View 하나에만) */
+export function HouseGlyph({ tint, scale = 1 }: { tint: string; scale?: number }) {
+  const roof = layout.homeRoof * scale;
+  return (
+    <View style={styles.homeGlyph}>
+      <View style={{ width: roof, height: roof, borderTopWidth: layout.homeStroke, borderLeftWidth: layout.homeStroke, borderColor: tint, transform: [{ rotate: '45deg' }], marginBottom: -roof / 2 }} />
+      <View style={{ width: layout.homeWall[0] * scale, height: layout.homeWall[1] * scale, borderLeftWidth: layout.homeStroke, borderRightWidth: layout.homeStroke, borderBottomWidth: layout.homeStroke, borderColor: tint }} />
+    </View>
+  );
+}
+
+// ---------- TASK-015 §A ③ a2: 지도에서 찍기 (길게 눌러 핀) ----------
+const PICK_AREA_RADIUS = 64; // task-015-design §1-3 pick-area: 핀 중심 반지름 64 (그림일 뿐, 저장은 좌표 하나)
+const PICK_FACE = 32; // pin-pick = 머무는 동안 숙소 마커 = "지금 핀" 모양 (지름 32 · ink 면 · 흰 테두리 3 · 흰 집)
+const PICK_BORDER = 3;
+const WIDE_DELTA = 8; // 중심을 모를 때(도시 정보를 못 받음) 일본이 보이는 정도
+
+export function PickMap({
+  center,
+  pin,
+  bottomPadding,
+  onLongPress,
+  onReady,
+  onFail,
+}: {
+  /** 여행 도시 중심. 모르면 null (일본 가운데에서 넓게 시작) */
+  center: LatLng | null;
+  pin: LatLng | null;
+  /** 아래 시트가 가리는 높이 (Google 로고가 가려지지 않게 mapPadding.bottom) */
+  bottomPadding: number;
+  onLongPress: (at: LatLng) => void;
+  onReady: () => void;
+  onFail: () => void;
+}) {
+  const ready = useRef(false);
+  const pinKey = pin ? `${pin.latitude},${pin.longitude}` : 'none';
+  const tracking = useTrackingBriefly(pinKey);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!ready.current) onFail();
+    }, MAP_READY_LIMIT_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const signalReady = () => {
+    if (ready.current) return;
+    ready.current = true;
+    onReady();
+  };
+  const start = center ?? NO_CENTER;
+  const delta = center ? layout.mapDelta : WIDE_DELTA;
+  return (
+    <MapView
+      testID="pick-map"
+      provider={PROVIDER_GOOGLE}
+      customMapStyle={MAP_STYLE}
+      style={StyleSheet.absoluteFill}
+      initialRegion={{ ...start, latitudeDelta: delta, longitudeDelta: delta }}
+      mapPadding={{ top: 0, left: 0, right: 0, bottom: bottomPadding }}
+      toolbarEnabled={false}
+      onLongPress={(event) => onLongPress(event.nativeEvent.coordinate)}
+      onMapReady={signalReady}
+      onMapLoaded={signalReady}
+    >
+      {pin ? (
+        <>
+          <Marker testID="pick-area" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={0} tappable={false}>
+            <View style={styles.pickArea} />
+          </Marker>
+          <Marker testID="pin-pick" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={1}>
+            <View style={styles.pickFace}>
+              <HouseGlyph tint={color.surface} />
+            </View>
+          </Marker>
+        </>
+      ) : null}
+    </MapView>
+  );
+}
+
 const NO_CENTER: LatLng = { latitude: 36.2, longitude: 138.25 }; // 첫 응답 전 숙소·핀이 없을 때만 (곧 카메라가 옮긴다)
 const MAP_STYLE = mapStyleFile as unknown as MapViewProps['customMapStyle']; // 원본: docs/design/google-map-style.json (§13 E1)
 
@@ -321,6 +401,26 @@ export function MapAdapter({
 }
 
 const styles = StyleSheet.create({
+  homeGlyph: { alignItems: 'center', justifyContent: 'center' },
+  pickArea: {
+    width: PICK_AREA_RADIUS * 2,
+    height: PICK_AREA_RADIUS * 2,
+    borderRadius: radius['r-full'],
+    backgroundColor: 'rgba(26,26,26,0.06)', // ink 6% (새 토큰 아님, 기존 ink에 투명도만)
+    borderWidth: layout.emptyBorder,
+    borderStyle: 'dashed',
+    borderColor: color.muted,
+  },
+  pickFace: {
+    width: PICK_FACE,
+    height: PICK_FACE,
+    borderRadius: radius['r-full'],
+    backgroundColor: color.ink,
+    borderWidth: PICK_BORDER,
+    borderColor: color.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pinColumn: { alignItems: 'center' },
   pinTouch: { width: control['touch-min'], height: control['touch-min'], alignItems: 'center', justifyContent: 'center' },
   faceDone: {

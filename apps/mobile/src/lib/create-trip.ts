@@ -2,20 +2,47 @@
 import { addDays, daysBetween } from './calendar';
 import { CITY_NAME } from './day-list';
 
+/** 고른 숙소 (TASK-015 §A 세 경로). place = 이름 검색, address = 주소 검색(장소 ID + 입력한 글), pin = 지도에서 찍은 좌표 + 이름표 */
+export type LodgingChoice =
+  | { kind?: 'place'; place_id: string; name: string }
+  | { kind: 'address'; place_id: string; address_text: string }
+  | { kind: 'pin'; lat: number; lng: number; label: string | null };
+
 export type TripForm = {
   startDate: string | null;
   endDate: string | null;
-  lodging: { place_id: string; name: string } | null;
+  lodging: LodgingChoice | null;
   mustVisits: Record<string, string[]>;
 };
+
+/** POST /trips의 숙소: 여섯 칸이 늘 있다 (§12 Q7·§13 Q5) */
+export type LodgingBody = { kind: 'place' | 'address' | 'pin'; place_id: string | null; address_text: string | null; lat: number | null; lng: number | null; label: string | null };
 
 export type CreateTripBody = {
   city_code: 'osaka';
   start_date: string;
   end_date: string;
-  lodging_place_id?: string;
+  lodging: LodgingBody | null;
   must_visits: { date: string; place_id: string }[];
 };
+
+/** 이름 칸 글: 앞뒤 공백(탭·줄바꿈 포함)을 자르고 비면 null (§14 Q3, 서버와 같은 규칙) */
+export const trimLabel = (text: string): string | null => text.trim() || null;
+
+/** 숙소 칸에 보이는 글 (§10: place 이름 · address 입력 글 · pin 이름표 또는 "지도에서 찍은 곳") */
+export function lodgingText(lodging: LodgingChoice): string {
+  if (lodging.kind === 'pin') return lodging.label ?? '지도에서 찍은 곳';
+  if (lodging.kind === 'address') return lodging.address_text;
+  return lodging.name;
+}
+
+function lodgingBody(lodging: LodgingChoice | null): LodgingBody | null {
+  if (lodging === null) return null;
+  const none = { place_id: null, address_text: null, lat: null, lng: null, label: null };
+  if (lodging.kind === 'pin') return { ...none, kind: 'pin', lat: lodging.lat, lng: lodging.lng, label: lodging.label };
+  if (lodging.kind === 'address') return { ...none, kind: 'address', place_id: lodging.place_id, address_text: lodging.address_text };
+  return { ...none, kind: 'place', place_id: lodging.place_id };
+}
 
 export const LODGING_TIMEOUT_MS = 3000; // §6: 숙소 검색 시간 초과
 export const MAX_MUST_VISITS_PER_DAY = 5; // TASK-005 A3
@@ -58,9 +85,9 @@ export function createTripBody(form: TripForm): CreateTripBody {
     city_code: 'osaka',
     start_date: start,
     end_date: end,
+    lodging: lodgingBody(form.lodging),
     must_visits: tripDates(start, end).flatMap((date) => (form.mustVisits[date] ?? []).map((place_id) => ({ date, place_id }))),
   };
-  if (form.lodging) body.lodging_place_id = form.lodging.place_id;
   return body;
 }
 
