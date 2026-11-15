@@ -34,6 +34,7 @@
 | GET `/places/search?city_code&q` | 장소 이름 검색 (꼭 갈 곳, 도시 팩 안) | `Place[]` | FR-01 |
 | GET `/places/lodging-search?city_code&q` | 숙소 검색 (Google 실시간, TASK-010 §B5) | `{place_id, name, address_short}[]` | FR-01 |
 | GET `/places/address-search?city_code&q` | (11-16 TASK-015 §A②) 주소 검색 — 종류 제한 없음, 일본어·영어 주소. 규칙은 `lodging-search`와 같음(글자 수·개수·시간 제한) | `lodging-search`와 같은 모양. 공급자 실패 503 `PROVIDER_UNAVAILABLE`(원인 글 없음) | FR-01 |
+| GET `/cities/{city_code}` | (11-16 TASK-015 §14) 도시 정보 — **토큰 필요 없음**(공개 값, `/catalog`와 같음). 앱의 숙소 지도 찍기(a2)가 50km 검사에 씀 | 200 `{code, name_ko, center: {lat, lng}}`(도시 팩의 우리 값, `NowView.city.center`와 같음), 모르는 도시 404 | FR-01 |
 | GET `/trips/current` | 이 기기의 지금 여행 (R1은 하나) | `Trip` 또는 404 | FR-33 (TASK-010) |
 | GET `/days/{day_id}/course` | 그날 고른 코스 (코스안 카드와 같은 모양, 읽기만) | `CourseOption` 또는 404 | FR-03 (TASK-010 §12) |
 | GET `/days/{day_id}/planning` | 그날 **진행 중** 계획 세션 (앱을 다시 켜도 이어 가기) | `PlanningSession` 또는 404 (끝난 세션은 진행 중 아님) | FR-02 (TASK-012 §13·§14) |
@@ -67,7 +68,7 @@
 |---|---|---|---|
 | GET `/days/{day_id}/now?at` | 현재 시간. **위치는 주소창에 싣지 않는다**(모든 길 400, TASK-014 §10 Q2) — 위치는 `POST /check` 본문으로만, 저장 안 함 | `NowView`: 지금 할 일, 다음 이동, 남은 일정, 숙소 가는 방법, 열린 사건·대안 | FR-10·16 |
 | (11-15 TASK-014 §29·§31) `NowView.day.lodging` | 숙소를 입력하지 않았거나 좌표를 못 찾은 여행이면 **`null`** (도시 중심을 숙소처럼 내보내지 않음). 그때 T-08은 숨기지 않고 **숙소 없는 모양**(`lodging: null`, `map_url: null`, `go_home_min: null` → 앱이 "오늘 일정 끝" 카드), 집 표시 없음, 경로 선에 도시 중심 없음 | — | FR-30 관련 |
-| (11-16 TASK-015 §E③·§9) `NowView.city` | `{code, center: {lat, lng}}` — 도시 팩의 **우리 값**(Google 값 아님), 시각과 상관없이 같음, 숙소와 별개. 앱 지도 시작 가운데(숙소 → 첫 핀 → `city.center`). Trip·계획 응답엔 아직 없음 | — | — |
+| (11-16 TASK-015 §E③·§9) `NowView.city` | `{code, center: {lat, lng}}` — 도시 팩의 **우리 값**(Google 값 아님), 시각과 상관없이 같음, 숙소와 별개. 앱 지도 시작 가운데(숙소 → 첫 핀 → `city.center`). Trip·계획 응답엔 아직 없음(도시 정보는 `GET /cities/{city_code}`) | — | — |
 | POST `/days/{day_id}/check` | `{lat, lng, at}` | 새 `TripEvent[]` + `RecomposeProposal[]` (같은 사건은 다시 안 만듦) | FR-11·12·19, AC-05·10 |
 | POST `/proposals/{proposal_id}/accept` | — | `TripDay` (반영) | FR-13 |
 | POST `/proposals/{proposal_id}/dismiss` | — | 204 (일정 그대로) | FR-13, AC-06 |

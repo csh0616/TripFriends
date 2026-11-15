@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-16 |
-| 상태 | **v1.7** — §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
+| 상태 | **v1.8** — §14 test-writer 답(`1ba11ea`·`7eba928` 승인) · v1.7 §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
 | 관련 | TASK-010 §B5(숙소 검색)·C4 · TASK-014 §28·§29·§34(넘어온 것) · `docs/design/reviews/task-014-design.md` §9-4·§10·§11·§12·§13 · DESIGN-001 v2.8 §4-6·§4-9·§4-11·§4-13 · API-001(`/places/lodging-search`·`POST /trips`·`NowView`) · ADR-015(Google 약관·좌표 30일) · HISTORY 11-15·11-16 결정권자 의견 · ADR-019(배포는 이 TASK 밖) |
 | 브랜치 | `feat/task-015-cleanup` |
 | 다음 | TASK-016 장소 데이터 확장(ADR-018) → TASK-017 SOS·오프라인·알림·출발 전 점검 |
@@ -167,6 +167,21 @@
 | 7 | 기타 | ① 빈 글 `kind`("" · 공백) = **`missing_field`**, 숫자 · 다른 타입 = **`invalid_kind`** ② 탭 · 줄바꿈도 공백으로 자름 — **승인**(서버 · 앱 같은 규칙) ③ `lodging-pick-screen.tsx`는 Stryker `mutate`에 **넣지 않는다**(화면). 대신 거리 검사 · 버튼 켜짐 판단을 **lib 함수로 빼서 그것을 넣는다** |
 
 - 다음: test-writer §13 반영(Q2 도시 정보 `center` · 앱 거리 검사 lib · Q3 · Q4 · Q5 · Q6 · Q7) → 승인 → `backend` → `frontend`
+
+## 14. test-writer §13 답 (11-16, 테스트 `1ba11ea` · Stryker `7eba928` 승인)
+- **요약표 · 바꾼 단언(Q5 `lodging: null` 3곳 · a2 `center` prop · RNTL 14 `await render` 고침) · 껍데기 `lodging-pick.ts`(빈 함수 + 상수 6371 · 50,000m) 승인**
+- 도시 정보는 지금 앱에 박혀 있음(`CITY_CODE` · `CITY_NAME`) → **`GET /cities/{city_code}` 승인**: 200 `{code, name_ko, center:{lat,lng}}`, 모르는 도시 404. API-001에 PM이 더함. 박힌 값 정리는 frontend가 이 응답으로 바꾸는 범위에서만(다른 화면의 `CITY_NAME`은 그대로 둬도 됨 — 권역 확장 때 정리, ADR-018 §3-0b)
+- backend 메모 승인: 정확히 50km가 공식상 49,999.9999999998m → **소수 6자리 반올림 후 비교**(`detect._within`과 같은 방식). 앱 lib도 같은 반올림
+
+| # | 질문 | 답 |
+|---|---|---|
+| 1 | `GET /cities/{city_code}`에 토큰? | **필요 없음.** 사용자 데이터가 아닌 공개 값이라 `/catalog`와 같다. 테스트: 토큰 없이 200 |
+| 2 | 도시 정보를 못 받으면 a2는 | **막지 않는다.** 조용히 한 번 다시 받고, 그래도 못 받으면 **앱 검사를 건너뛰고** 핀이 있으면 [여기로 정했어]를 켠다. 서버(`POST /trips`)가 마지막에 확인하고 `too_far`면 a2로 돌아와 안내 — 사용자가 길이 막히지 않게(§6 원칙) |
+| 3 | 이름 앞뒤 공백 | **앱도 자르고 보낸다**(서버와 같은 규칙). 자른 뒤 빈 글이면 `null` |
+| 4 | `kind: null` · `" pin "` | `null` = 값 없음 = **`missing_field`**. `" pin "`은 **받지 않는다 → `invalid_kind`**(정해진 값은 자르지 않고 정확히 일치만) |
+| 5 | testID `btn-pick-map` · 이름 · 주소 둘 다 0건이면 a3 | **둘 다 승인** |
+
+- 다음: test-writer가 §14 Q1~Q4를 테스트에 반영(작은 변경) → **요약만 남기고 승인 대기 없이 `backend` 시작**(PM 제안: 바꿀 내용을 이 표가 이미 정해서 다시 볼 것이 적음 — 결정권자가 이 순서로 프롬프트를 보내면 승인으로 봄) → `frontend`
 
 ## 6. 실패하면
 | 상황 | 결과 |
