@@ -26,7 +26,11 @@ TASK-015 §11(11-16 PM 답: Q1 INVALID_LODGING + reason too_far·coords_not_allo
             "too_far"            = pin이 city.center에서 50km 밖 (Q5)
             "label_too_long"     = 앞뒤 공백을 자른 label이 31자 이상 (§11 Q2: 자르지 않는다)
             "missing_field"      = kind·그 kind의 필수 칸이 없음 (null·빈 글 포함)
-        모르는 kind는 400 이고 아무것도 저장하지 않는다 (코드는 문서에 없음 — 질문)
+            "invalid_kind"       = kind가 place·address·pin이 아님 (§12 Q1, 예 "house")
+        모르는 kind는 400 INVALID_LODGING · invalid_kind 이고 아무것도 저장하지 않는다 (§12 Q1)
+        공백만 있는 address_text = 자른 뒤 빈 글 = missing_field (§12 Q2)
+        여러 조건이 겹치면 reason은 하나, 먼저 걸린 것 (§12 Q3):
+            invalid_kind -> missing_field -> coords_not_allowed -> label_too_long -> too_far
         옛 필드 lodging_place_id만 오면 {"kind": "place", "place_id": 그 값, 나머지 null}로 받는다 (요청에서만)
     Trip 응답(POST /trips · GET /trips/{id} · /trips/current)에 lodging_place_id 칸이 없다 (Q2: 같은 뜻의 값이 두 곳이면 어긋난다)
     place·address 여행의 응답·저장소에 좌표가 없다 (place_id로 그때 불러옴). address인데 place_id가 없거나 좌표를 못 구하면 숙소 없음과 같다(§30 Q6)
@@ -498,12 +502,29 @@ def test_T15_S11_Q1_필수_칸이_빠진_lodging은_400_INVALID_LODGING_missing_
     assert stores(mem) == before
 
 
-def test_T15_A_모르는_kind는_400이고_아무것도_저장하지_않는다(mem):
-    """모르는 kind의 코드·reason은 §11 Q1 목록에 없다(질문) -> 400과 저장 0만 본다."""
+def test_T15_S12_Q1_모르는_kind는_400_INVALID_LODGING_invalid_kind이고_아무것도_저장하지_않는다(mem):
+    """§12 Q1 (이전 단언: 400과 저장 0만 — 코드·reason은 질문이었다)."""
     before = stores(mem)
     response = post_trip(mem, {"kind": "house", "place_id": GOOGLE_LODGING_ID})
     assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "invalid_kind", response.json()
     assert stores(mem) == before
+
+
+@pytest.mark.parametrize("kind", ["house", "PLACE", "Pin", "places"], ids=["house", "대문자_PLACE", "섞인_Pin", "places"])
+def test_T15_S12_Q1_경계_세_kind와_한_글자라도_다르면_invalid_kind(mem, kind):
+    response = post_trip(mem, {**pin_body(), "kind": kind})
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "invalid_kind", response.json()
+
+
+@pytest.mark.parametrize("text", ["   ", "\t", " \n "], ids=["공백", "탭", "공백·줄바꿈"])
+def test_T15_S12_Q2_공백만_있는_주소는_자른_뒤_빈_글이라_missing_field(mem, text):
+    """§12 Q2: 공백만 = 자른 뒤 빈 글 = missing_field. reason 자리는 error.detail.reason."""
+    response = post_trip(mem, {"kind": "address", "address_text": text, "place_id": ADDR_ID})
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "missing_field", response.json()
+    assert response.json()["error"]["detail"]["reason"] == "missing_field"
 
 
 @pytest.mark.parametrize(
@@ -664,6 +685,49 @@ def test_T15_Q5_city_center에서_50km_밖의_pin은_400이고_아무것도_저�
     assert response.status_code == 400, response.text
     assert lodging_reason(response) == "too_far", response.json()  # §11 Q1 (앱은 이 이유로 a2 안내)
     assert stores(mem_v3) == before
+
+
+# ---------- §12 Q3 여러 조건이 겹치면 reason 하나, 순서대로 ----------
+
+FAR = (35.6812, 139.7671)  # 도쿄역: city.center에서 50km 밖
+LONG = "가" * 31
+
+REASON_ORDER = [
+    # (보낸 숙소, 걸리는 조건들, 기대 reason)
+    pytest.param({"kind": "house"}, "invalid_kind", id="kind+필수칸없음"),
+    pytest.param({"kind": "house", "place_id": GOOGLE_LODGING_ID, "lat": PIN[0], "lng": PIN[1]}, "invalid_kind", id="kind+좌표"),
+    pytest.param({"kind": "house", "place_id": GOOGLE_LODGING_ID, "label": LONG}, "invalid_kind", id="kind+label"),
+    pytest.param({"kind": "house", "lat": FAR[0], "lng": FAR[1]}, "invalid_kind", id="kind+멀다"),
+    pytest.param({"kind": "place", "lat": PIN[0], "lng": PIN[1]}, "missing_field", id="필수칸+좌표"),
+    pytest.param({"kind": "address", "address_text": "   ", "lat": PIN[0], "lng": PIN[1]}, "missing_field", id="공백주소+좌표"),
+    pytest.param({"kind": "pin", "lat": PIN[0], "label": LONG}, "missing_field", id="필수칸+label"),
+    pytest.param({"kind": "pin", "lat": FAR[0]}, "missing_field", id="필수칸+먼_위도"),
+    pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "lat": PIN[0], "lng": PIN[1], "label": LONG}, "coords_not_allowed", id="좌표+label"),
+    pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "lat": FAR[0], "lng": FAR[1]}, "coords_not_allowed", id="좌표+먼_좌표"),
+    pytest.param({**pin_body(FAR), "label": LONG}, "label_too_long", id="label+멀다"),
+    pytest.param({"kind": "house", "lat": FAR[0], "label": LONG}, "invalid_kind", id="kind+필수칸+label+멀다"),
+    pytest.param({"kind": "place", "lat": FAR[0], "lng": FAR[1], "label": LONG}, "missing_field", id="필수칸+좌표+label+멀다"),
+]
+
+
+@pytest.mark.parametrize(("sent", "expected"), REASON_ORDER)
+def test_T15_S12_Q3_여러_조건이_겹치면_먼저_걸린_reason_하나만(request, sent, expected):
+    """§12 Q3: invalid_kind -> missing_field -> coords_not_allowed -> label_too_long -> too_far. 모양 오류가 먼저, 거리는 마지막.
+    먼 좌표가 든 경우만 city.center(v3)가 있는 서버로 (거리를 잴 수 있어야 '먼저 걸린 것'을 가린다)."""
+    far = FAR[0] in (sent.get("lat"), sent.get("lng")) or FAR[1] in (sent.get("lat"), sent.get("lng"))
+    osaka = request.getfixturevalue("mem_v3" if far else "mem")
+    before = stores(osaka)
+    response = post_trip(osaka, sent)
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == expected, response.json()
+    assert isinstance(response.json()["error"]["detail"]["reason"], str)  # 목록이 아니라 하나
+    assert stores(osaka) == before
+
+
+def test_T15_S12_Q3_경계_겹치지_않으면_too_far는_홀로_걸린다(mem_v3):
+    """순서의 맨 끝: 다른 조건이 없을 때만 too_far (30자 label은 걸리지 않는다)."""
+    response = post_trip(mem_v3, {**pin_body(FAR), "label": "가" * 30})
+    assert lodging_reason(response) == "too_far", response.json()
 
 
 # ---------- Q2 응답에 lodging_place_id 없음 ----------

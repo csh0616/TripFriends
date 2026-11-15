@@ -420,6 +420,23 @@ describe('C2 여행 만들기', () => {
     await tap(screen.getByTestId('create-trip-submit'));
     await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
     expect(server.sent(CREATE)[0].body).not.toHaveProperty('lodging_place_id');
+    expect((server.sent(CREATE)[0].body as { lodging?: unknown }).lodging ?? null).toBeNull(); // TASK-015 §12 Q7 · §6 숙소 없이 = lodging 없음
+  });
+
+  test('T15_S12_Q7_숙소_검색에서_고르면_본문은_lodging_place_모양이고_옛_필드는_없다', async () => {
+    // TASK-015 §A ① 이름 · §9 · §12 Q7: 앱 요청 본문의 옛 필드 lodging_place_id -> lodging
+    server.match('GET /places/lodging-search', () => json(200, [{ place_id: 'FAKE-lodging-1', name: '난바 테스트 호텔 1', address_short: '가짜구 테스트동 1' }]));
+    server.on(CREATE, json(201, trip(['planning', 'planning'])));
+    await toForm();
+    await fillDates();
+    await type('lodging-search', '난바');
+    await tap(await screen.findByTestId('lodging-result-FAKE-lodging-1'));
+    await tap(screen.getByTestId('create-trip-submit'));
+    await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
+    const body = server.sent(CREATE)[0].body as Record<string, unknown>;
+    expect(body.lodging).toEqual({ kind: 'place', place_id: 'FAKE-lodging-1', address_text: null, lat: null, lng: null, label: null });
+    expect(body).not.toHaveProperty('lodging_place_id');
+    expect(JSON.stringify(body)).not.toContain('난바 테스트 호텔 1'); // Google 이름은 보내지 않는다
   });
 
   test.each(['호', ' 호 '])('T10_B5_Q14_숙소는_공백을_지우고_한_글자면_검색하지_않는다_%j', async (q) => {

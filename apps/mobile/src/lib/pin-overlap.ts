@@ -4,7 +4,7 @@
 /** 핀 종류. 순위·가림 순서 모두 next > now > lodging > later > done */
 export type PinKind = 'next' | 'now' | 'lodging' | 'later' | 'done';
 
-/** 화면 좌표(pt). x·y = 핀 중심, size = 핀 지름(pin-later 28 · pin-done·pin-now 32 · pin-next 36, 숙소는 화면이 정한 값) */
+/** 화면 좌표(pt). x·y = 핀 중심, size = 핀 지름(TASK-015 §12: 지난 28 · 지금 32 · 다음 36 · 나중 28 · 숙소 보통 28, 숙소에 머무는 동안은 결과에서 32) */
 export type ScreenPin = {
   id: string;
   kind: PinKind;

@@ -4,29 +4,33 @@
 //       숙소에 머무는 동안 숙소 마커가 '지금 핀' 모양 · 내 위치 점은 핀 아래 · 계산 순서 ①~⑤. 순수 함수로 — 입력: 핀 화면 좌표·순위, 출력: 보일 핀·배지·이름표 자리") ·
 //       §9 Q10(test-writer가 먼저) · docs/design/reviews/task-014-design.md §11-3 표(값)·§12-3(계산 순서 한 줄 요약) · DESIGN-001 §4-6(핀 크기 28 / 32 / 36) ·
 //       §6("핀 겹침 계산 실패 -> 규칙 없이 지금처럼 그림") ·
-//       TASK-015 §11(11-16 PM 답) Q3(숙소 마커 32 가정·디자이너 확인 중 · 옆 이름표는 핀 중심에 세로 가운데 · 이름표 자리는 다른 핀과 맞닿음(간격 0)도 겹침 · 묶기 < 36) ·
+//       TASK-015 §11(11-16 PM 답) Q3(옆 이름표는 핀 중심에 세로 가운데 · 이름표 자리는 다른 핀과 맞닿음(간격 0)도 겹침 · 묶기 < 36) ·
 //       Q4(같은 순위면 코스 번호가 앞선 핀이 남음 · 사슬은 욕심 방식) · Q5(숙소+번호 핀이면 번호 핀이 이김, 순위표는 번호 핀끼리와 그리는 순서에만) ·
-//       Q6(함수는 순수·예외를 잡지 않음, 화면이 감쌈 · 보이는 핀마다 a11yLabel을 함수가 만든다).
+//       Q6(함수는 순수·예외를 잡지 않음, 화면이 감쌈 · 보이는 핀마다 a11yLabel을 함수가 만든다) ·
+//       TASK-015 §12(11-16) 숙소 마커 지름(보통 28, 지금 있는 곳이 숙소일 때만 32 '지금 핀' 모양·내 위치 점 안 그림. 지난 28 · 지금 32 · 다음 36 · 나중 28.
+//       묶기는 크기와 상관없이 중심 거리 < 36) · Q4(a11yLabel 글 6가지, 사용자 이름표 label은 넣지 않음) ·
+//       Q5(이름표 자리 검사의 장애물: 다른 핀은 간격 4 미만이면 겹침, 내 위치 점·떠 있는 판은 간격 0 이하(맞닿음 포함)면 겹침).
 //
 // 계약 (이 테스트가 정한 것, 승인 대기 — 질문 목록 참고):
 //   모듈 '@/lib/pin-overlap'
 //   resolvePinOverlap({ pins, screen, labelWidth, me?, panels?, stayingAtLodging? }) -> { pins: ShownPin[], label, meDot }
 //     입력 pins = [{ id, kind: next|now|lodging|later|done, x, y(핀 중심, pt), size(지름), seq: 코스 번호(숙소는 null) }] — ① 카메라는 부르는 쪽이 끝낸 뒤의 화면 좌표
 //     출력 pins = 보일 핀만, 그리는 순서(아래 -> 위) done · later · lodging · now · next. 각 핀 { ...입력, shape: pin|home|now, badges, hidden: 묶여 빠진 id[], a11yLabel }
-//     a11yLabel (§11 Q6): 보이는 핀마다 화면 읽기 글. 번호 핀은 "{종류} {번호}번"으로 시작(종류 = 다음·지금·나중·지난), 묶인 번호가 있으면 예 "나중 4번, 5번도 같은 곳".
-//                숙소가 보이거나 집 배지로 묶이면 글에 "숙소"가 든다 (그 밖의 정확한 글은 질문)
+//     a11yLabel (§11 Q6 · §12 Q4): 보이는 핀마다 화면 읽기 글. 순위 말(다음·지금·지난·나중)은 순위표에서
+//                묶이지 않은 핀 "나중 4번" · 여러 번호 묶음 "나중 4번, 5번·6번도 같은 곳" · 숙소 혼자 "숙소" ·
+//                집 배지 "다음 3번, 숙소도 같은 곳" · 둘 다 "나중 4번, 5번도 같은 곳, 숙소도 같은 곳" · 숙소에 머무는 중 "지금 숙소" (label은 넣지 않음)
 //     badges: { type: 'plus', count, corner } (빠진 번호 핀 수) · { type: 'home', corner: 'top-right' } (숙소가 번호 핀에 묶임). 둘 다면 home 오른쪽 위, plus 오른쪽 아래
 //     label = 다음 핀 하나의 이름표 { pinId, side: top|right|left|bottom, rect } | null
 //   이름표 자리 (§11-3 "높이 28 · 핀과 위 4 · 옆 6"):
 //     top    = { x: cx − w/2, y: cy − size/2 − 4 − 28, w, 28 }      bottom = { x: cx − w/2, y: cy + size/2 + 4, w, 28 }
 //     right  = { x: cx + size/2 + 6, (세로 가운데 맞춤), w, 28 }       left   = { x: cx − size/2 − 6 − w, (세로 가운데 맞춤), w, 28 }
 //     막히는 것: 보이는 다른 핀(원, 반지름 size/2 + 4) · 내 위치 점(원, 반지름 size/2, 숙소에 머무는 동안은 그리지 않아 막지 않음) · 떠 있는 판 ·
-//                화면 가장자리에서 8 안쪽을 벗어남. 다른 핀(원 + 4)과는 맞닿음(간격 0)도 겹침 (§11 Q3). 판·점과의 맞닿음은 질문 (테스트는 1pt 떨어뜨리거나 겹치게 둔다)
+//                화면 가장자리에서 8 안쪽을 벗어남. 다른 핀(원 + 4)과는 맞닿음(간격 0)도 겹침 (§11 Q3). 내 위치 점·떠 있는 판도 맞닿음(간격 0)이면 겹침 (§12 Q5)
 //   묶기: 중심 거리 < 36(GROUP_DISTANCE)이면 순위가 낮은 핀이 빠진다 (순위 next > now > lodging > later > done). 다만 숙소와 번호 핀이면 번호 핀이 이긴다(집 배지)
 //     욕심 방식 (§11 Q4): 번호 핀을 순위 -> 코스 번호 순으로 하나씩 보며, 이미 남긴 핀 중 36 안의 첫 핀(남긴 순서)에 붙고, 없으면 새로 남는다.
 //     그 뒤 숙소: 남긴 번호 핀 중 36 안의 첫 핀에 집 배지로 붙고, 없으면 숙소 마커로 남는다 (번호 핀은 숙소에 붙지 않는다, Q5). 입력 순서와 상관없다
 //   예외: 함수는 잡지 않는다 (§11 Q6). 화면이 감싸 실패하면 규칙 없이 그린다 (task-015-pin-overlap-fallback.test.tsx)
-//   숙소에 머무는 동안: 숙소 마커 shape 'now'·size 32, meDot false
+//   숙소 마커 지름 (§12): 보통 28(입력 size 그대로), 머무는 동안은 shape 'now'·size 32, meDot false
 import fc from 'fast-check';
 
 import { GROUP_DISTANCE, PIN_STACK, resolvePinOverlap, type PinKind, type PinOverlapInput, type Rect, type ScreenPin } from '@/lib/pin-overlap';
@@ -34,8 +38,9 @@ import { GROUP_DISTANCE, PIN_STACK, resolvePinOverlap, type PinKind, type PinOve
 const SCREEN = { width: 390, height: 600 };
 const W = 80; // 이름표 폭 (화면이 잰 값으로 친다)
 const H = 28;
-// DESIGN-001 §4-6. 보통 숙소 마커 32는 가정 — 디자이너 확인 중 (TASK-015 §11 Q3 ①). 바뀌면 이 값만 고친다
-const SIZE: Record<PinKind, number> = { next: 36, now: 32, done: 32, later: 28, lodging: 32 };
+// TASK-015 §12: 지난 28 · 지금 32 · 다음 36 · 나중 28 · 숙소 보통 28 (지금 있는 곳이 숙소일 때만 32 — 함수가 바꾼다)
+const SIZE: Record<PinKind, number> = { next: 36, now: 32, done: 28, later: 28, lodging: 28 };
+const LODGING_STAYING_SIZE = 32;
 
 const pin = (id: string, kind: PinKind, x: number, y: number, seq: number | null = kind === 'lodging' ? null : 1): ScreenPin => ({ id, kind, x, y, size: SIZE[kind], seq });
 const NEXT = pin('n', 'next', 195, 300);
@@ -277,12 +282,42 @@ describe('§11 Q6 a11yLabel', () => {
     expect(byId(result, 'p').a11yLabel.startsWith(`${word} 7번`)).toBe(true);
   });
 
-  test('T15_S11_Q6_숙소_마커와_집_배지에는_숙소가_든다', () => {
-    expect(byId(run([pin('h', 'lodging', 100, 100)]), 'h').a11yLabel).toContain('숙소');
-    expect(byId(run([pin('h', 'lodging', 100, 100)], { stayingAtLodging: true }), 'h').a11yLabel).toContain('숙소');
-    const home = byId(run([pin('h', 'lodging', 100, 100), pin('l', 'later', 110, 100, 3)]), 'l').a11yLabel;
-    expect(home.startsWith('나중 3번')).toBe(true);
-    expect(home).toContain('숙소');
+  // §12 Q4 정확한 글 (이전 단언: 숙소·집 배지 글에 "숙소"가 든다 / "나중 3번"으로 시작 — 정확한 글은 질문이었다)
+  test('T15_S12_Q4_묶이지_않은_핀은_나중_4번', () => {
+    expect(byId(run([pin('a', 'later', 100, 100, 4)]), 'a').a11yLabel).toBe('나중 4번');
+  });
+
+  test('T15_S12_Q4_여러_번호_묶음은_나중_4번,_5번·6번도_같은_곳', () => {
+    const pins = [pin('a', 'later', 100, 100, 4), pin('b', 'later', 120, 100, 5), pin('c', 'later', 100, 120, 6)];
+    for (const order of [pins, [...pins].reverse()]) expect(byId(run(order), 'a').a11yLabel).toBe('나중 4번, 5번·6번도 같은 곳');
+  });
+
+  test('T15_S12_Q4_숙소_혼자는_숙소', () => {
+    expect(byId(run([pin('h', 'lodging', 100, 100), NEXT]), 'h').a11yLabel).toBe('숙소');
+  });
+
+  test('T15_S12_Q4_집_배지는_다음_3번,_숙소도_같은_곳', () => {
+    expect(byId(run([pin('h', 'lodging', 100, 100), pin('n', 'next', 120, 100, 3)]), 'n').a11yLabel).toBe('다음 3번, 숙소도 같은 곳');
+  });
+
+  test('T15_S12_Q4_번호_묶음과_집_배지가_둘_다면_나중_4번,_5번도_같은_곳,_숙소도_같은_곳', () => {
+    const result = run([pin('h', 'lodging', 100, 118), pin('a', 'later', 100, 100, 4), pin('b', 'later', 115, 100, 5)]);
+    expect(byId(result, 'a').a11yLabel).toBe('나중 4번, 5번도 같은 곳, 숙소도 같은 곳');
+  });
+
+  test('T15_S12_Q4_숙소에_머무는_중은_지금_숙소', () => {
+    expect(byId(run([pin('h', 'lodging', 100, 100), NEXT], { stayingAtLodging: true }), 'h').a11yLabel).toBe('지금 숙소');
+  });
+
+  test('T15_S12_Q4_경계_머물지_않으면_지금이_붙지_않는다', () => {
+    expect(byId(run([pin('h', 'lodging', 100, 100), NEXT], { stayingAtLodging: false }), 'h').a11yLabel).toBe('숙소');
+  });
+
+  test('T15_S12_Q4_사용자_이름표_label은_입력에_있어도_글에_넣지_않는다', () => {
+    // §12 Q4 "사용자 이름표(label)는 넣지 않는다(짧게)". 함수 입력 모양에 label 칸이 없다 -> 핀에 붙여 보내도 글은 그대로
+    const withLabel = { ...pin('h', 'lodging', 100, 100), label: '친구 집' } as ScreenPin;
+    expect(byId(run([withLabel, NEXT]), 'h').a11yLabel).toBe('숙소');
+    expect(byId(run([withLabel, NEXT], { stayingAtLodging: true }), 'h').a11yLabel).toBe('지금 숙소');
   });
 });
 
@@ -293,17 +328,41 @@ describe('§11 Q6 a11yLabel', () => {
 describe('§B6 숙소에 머무는 동안', () => {
   const ME = { x: 100, y: 100, size: 22 };
 
-  test('T15_B6_머무는_동안_숙소_마커는_지금_핀_모양_32이고_내_위치_점을_그리지_않는다', () => {
-    const result = run([pin('h', 'lodging', 100, 100), NEXT], { me: ME, stayingAtLodging: true });
+  test('T15_S12_숙소_마커_보통_지름은_28', () => {
+    expect(SIZE.lodging).toBe(28);
+    expect(byId(run([pin('h', 'lodging', 100, 100), NEXT]), 'h').size).toBe(28);
+  });
+
+  test('T15_B6_S12_머무는_동안_숙소_마커는_지금_핀_모양_32이고_내_위치_점을_그리지_않는다', () => {
+    const result = run([pin('h', 'lodging', 100, 100), NEXT], { me: ME, stayingAtLodging: true }); // 입력 지름 28
     expect(byId(result, 'h').shape).toBe('now');
-    expect(byId(result, 'h').size).toBe(32);
+    expect(byId(result, 'h').size).toBe(LODGING_STAYING_SIZE);
     expect(result.meDot).toBe(false);
   });
 
-  test('T15_B6_경계_머물지_않으면_숙소는_숙소_모양이고_내_위치_점을_그린다', () => {
+  test('T15_B6_S12_경계_머물지_않으면_숙소는_숙소_모양_28이고_내_위치_점을_그린다', () => {
     const result = run([pin('h', 'lodging', 100, 100), NEXT], { me: ME, stayingAtLodging: false });
     expect(byId(result, 'h').shape).toBe('home');
+    expect(byId(result, 'h').size).toBe(28);
     expect(result.meDot).toBe(true);
+  });
+
+  test('T15_S12_번호_핀_지름은_머물든_아니든_입력_그대로_지난_28·지금_32·다음_36·나중_28', () => {
+    const pins = [pin('n', 'next', 50, 100, 1), pin('w', 'now', 150, 100, 2), pin('l', 'later', 250, 100, 3), pin('d', 'done', 350, 100, 4), pin('h', 'lodging', 200, 400)];
+    for (const staying of [false, true]) {
+      const result = run(pins, { stayingAtLodging: staying });
+      expect(Object.fromEntries(result.pins.filter((p) => p.kind !== 'lodging').map((p) => [p.kind, p.size]))).toEqual({ next: 36, now: 32, later: 28, done: 28 });
+    }
+  });
+
+  test.each([
+    [35.99, false],
+    [35.99, true],
+    [36, false],
+    [36, true],
+  ])('T15_S12_경계_묶기는_숙소_크기와_상관없이_중심_거리_<_36_거리_%d·머무는_중_%s', (gap, staying) => {
+    const result = run([pin('h', 'lodging', 100, 100), pin('l', 'later', 100 + gap, 100, 3)], { stayingAtLodging: staying });
+    expect(shownIds(result).sort()).toEqual(gap < 36 ? ['l'] : ['h', 'l']);
   });
 
   test('T15_B6_경계_위치를_모르면_내_위치_점_없음', () => {
@@ -402,6 +461,26 @@ describe('§B6 이름표 자리', () => {
     expect(run([NEXT], { panels: [{ x: 0, y: 229, width: 390, height: 20 }] }).label?.side).toBe('top'); // 판 아래 끝 249
   });
 
+  // §12 Q5: 내 위치 점·떠 있는 판은 간격 0 이하(맞닿음 포함)면 겹침. 위 후보 = x 155 ~ 235, y 250 ~ 278
+  test.each([
+    [{ x: 0, y: 229, width: 390, height: 21 }, 'right'], // 판 아래 끝 250 = 위 후보 윗변: 맞닿음
+    [{ x: 0, y: 229, width: 390, height: 20 }, 'top'], // 249: 1 떨어짐
+    [{ x: 235, y: 250, width: 50, height: 28 }, 'right'], // 판 왼쪽 끝 235 = 위 후보 오른쪽 끝: 맞닿음
+    [{ x: 236, y: 250, width: 50, height: 28 }, 'top'], // 1 떨어짐
+    [{ x: 105, y: 250, width: 50, height: 28 }, 'right'], // 판 오른쪽 끝 155 = 위 후보 왼쪽 끝: 맞닿음
+  ])('T15_S12_Q5_경계_떠_있는_판과_맞닿으면_겹침_판_%j면_%s', (panel, side) => {
+    expect(run([NEXT], { panels: [panel] }).label?.side).toBe(side);
+  });
+
+  test.each([
+    [195, 239, 'right'], // 점(반지름 11) 아래 끝 250 = 위 후보 윗변: 맞닿음
+    [195, 238, 'top'], // 249: 1 떨어짐
+    [246, 264, 'right'], // 점 왼쪽 끝 235 = 위 후보 오른쪽 끝: 맞닿음
+    [247, 264, 'top'], // 236: 1 떨어짐
+  ])('T15_S12_Q5_경계_내_위치_점과_맞닿으면_겹침_점_중심_(%d,_%d)면_%s', (x, y, side) => {
+    expect(run([NEXT], { me: { x, y, size: 22 } }).label?.side).toBe(side);
+  });
+
   test.each([
     [58, 'top'], // 위 후보 y = 8 (가장자리에서 8)
     [57.5, 'right'], // 7.5
@@ -460,18 +539,14 @@ const arbInput: fc.Arbitrary<PinOverlapInput> = fc
   });
 
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
-const rectHitsCircle = (r: Rect, c: { x: number; y: number }, radius: number) => {
-  const nx = Math.min(Math.max(c.x, r.x), r.x + r.width);
-  const ny = Math.min(Math.max(c.y, r.y), r.y + r.height);
-  return Math.hypot(c.x - nx, c.y - ny) < radius - 1e-9;
-};
-/** §11 Q3 ③: 다른 핀과는 맞닿음(간격 0)도 겹침 */
+/** §11 Q3 ③ · §12 Q5: 다른 핀(+4)·내 위치 점과는 맞닿음(간격 0)도 겹침 */
 const rectTouchesCircle = (r: Rect, c: { x: number; y: number }, radius: number) => {
   const nx = Math.min(Math.max(c.x, r.x), r.x + r.width);
   const ny = Math.min(Math.max(c.y, r.y), r.y + r.height);
   return Math.hypot(c.x - nx, c.y - ny) <= radius + 1e-9;
 };
-const rectsOverlap = (a: Rect, b: Rect) => a.x < b.x + b.width - 1e-9 && b.x < a.x + a.width - 1e-9 && a.y < b.y + b.height - 1e-9 && b.y < a.y + a.height - 1e-9;
+/** §12 Q5: 떠 있는 판과는 맞닿음(간격 0)도 겹침 (이전: 넓이가 겹칠 때만) */
+const rectsTouch = (a: Rect, b: Rect) => a.x <= b.x + b.width + 1e-9 && b.x <= a.x + a.width + 1e-9 && a.y <= b.y + b.height + 1e-9 && b.y <= a.y + a.height + 1e-9;
 
 describe('§B6 속성', () => {
   test('T15_B6_P_모든_핀은_보이거나_한_핀에_묶여_정확히_한_번_나온다', () => {
@@ -577,8 +652,8 @@ describe('§B6 속성', () => {
         expect(r.x + r.width).toBeLessThanOrEqual(SCREEN.width - 8);
         expect(r.y + r.height).toBeLessThanOrEqual(SCREEN.height - 8);
         for (const other of result.pins) if (other.id !== label.pinId) expect(rectTouchesCircle(r, other, other.size / 2 + 4)).toBe(false);
-        if (input.me && result.meDot) expect(rectHitsCircle(r, input.me, input.me.size / 2)).toBe(false);
-        for (const panel of input.panels ?? []) expect(rectsOverlap(r, panel)).toBe(false);
+        if (input.me && result.meDot) expect(rectTouchesCircle(r, input.me, input.me.size / 2)).toBe(false); // §12 Q5 맞닿음도 겹침
+        for (const panel of input.panels ?? []) expect(rectsTouch(r, panel)).toBe(false); // §12 Q5 맞닿음도 겹침
       }),
     );
   });
