@@ -530,17 +530,26 @@ describe('§10 Q13 연습 시계 · E2 누르는 영역', () => {
     expect(at.startsWith(`${PLANNED_DATE}T${plannedDay.start}`)).toBe(true);
   });
 
-  /** 시각 막대를 비율(0~1) 자리로 누른다 (막대 폭을 먼저 알려 준다) */
-  async function barTo(ratio: number) {
+  // TASK-015 §B5·§17 · task-014-design §11-4·§12-1: 손잡이는 막대 안쪽 14에서 시작·멈춤. 막대 242, 이동 범위 242 − 28 = 214.
+  // (이전: 막대 폭 1000을 알리고 locationX = 비율 × 1000 — 손잡이 중심이 막대 끝까지였다)
+  const BAR_WIDTH = 242;
+  const THUMB_INSET = 14;
+  const BAR_TRAVEL = BAR_WIDTH - 2 * THUMB_INSET; // 214
+
+  /** 시각 막대의 x(막대 기준 pt)를 누른다 (막대 폭 242를 먼저 알려 준다) */
+  async function barAtX(x: number) {
     const bar = await screen.findByTestId('demo-bar');
     await act(async () => {
-      fireEvent(bar, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 1000, height: 44 } } });
+      fireEvent(bar, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: BAR_WIDTH, height: 44 } } });
     });
     await act(async () => {
-      fireEvent(bar, 'responderGrant', { nativeEvent: { locationX: ratio * 1000 } });
+      fireEvent(bar, 'responderGrant', { nativeEvent: { locationX: x } });
     });
     await settleAll();
   }
+
+  /** 시각 막대를 비율(0~1) 자리로 누른다: 0 = 안쪽 14, 1 = 끝 − 14 */
+  const barTo = (ratio: number) => barAtX(THUMB_INSET + ratio * BAR_TRAVEL);
 
   const lastAt = () => String(body(checks()[checks().length - 1]).at);
 
@@ -582,6 +591,42 @@ describe('§10 Q13 연습 시계 · E2 누르는 영역', () => {
     await waitFor(() => expect(lastAt() <= `${PLANNED_DATE}T${plannedDay.end}:00`).toBe(true));
     await barTo(-0.5);
     await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T${plannedDay.start}:00`));
+  });
+
+  // ---------- TASK-015 §B5 손잡이 범위 경계 (안쪽 14 ~ 끝 − 14) ----------
+  test.each([
+    ['막대 맨 앞 0', 0, plannedDay.start],
+    ['안쪽 14 바로 앞 13', THUMB_INSET - 1, plannedDay.start],
+    ['안쪽 14 정각', THUMB_INSET, plannedDay.start],
+  ])('T15_B5_%s을_누르면_하루_시작', async (_name, x, clock) => {
+    await toRehearsal();
+    await barTo(0.5); // 먼저 다른 시각으로 옮겨 둔다
+    await barAtX(x as number);
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T${clock}:00`));
+  });
+
+  test.each([
+    ['끝 − 14 정각', BAR_WIDTH - THUMB_INSET, plannedDay.end],
+    ['끝 − 14 바로 뒤', BAR_WIDTH - THUMB_INSET + 1, plannedDay.end],
+    ['막대 맨 끝 242', BAR_WIDTH, plannedDay.end],
+  ])('T15_B5_%s을_누르면_하루_끝', async (_name, x, clock) => {
+    await toRehearsal();
+    await barAtX(x as number);
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T${clock}:00`));
+  });
+
+  test('T15_B5_이동_범위_가운데(14_+_107)는_하루의_가운데_시각', async () => {
+    // 10:00 ~ 20:00 하루의 가운데 = 15:00. 막대 폭 기준(121)이 아니라 이동 범위 기준(14 + 107 = 121)이라 같다 -> 한쪽으로 치우친 자리도 본다
+    await toRehearsal();
+    await barAtX(THUMB_INSET + BAR_TRAVEL / 2);
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T15:00:00`));
+  });
+
+  test('T15_B5_이동_범위_4분의_1_자리는_12:30', async () => {
+    // 14 + 53.5 = 67.5 -> 600분의 1/4 = 150분 -> 12:30 (막대 폭 기준이면 67.5/242 × 600 ≈ 167분 -> 12:45로 달라진다)
+    await toRehearsal();
+    await barAtX(THUMB_INSET + BAR_TRAVEL / 4);
+    await waitFor(() => expect(lastAt()).toBe(`${PLANNED_DATE}T12:30:00`));
   });
 
   test('T14_S13_5_연습_위치는_마지막_장소_뒤_숙소로_돌아간다_TASK_006_Q15', async () => {

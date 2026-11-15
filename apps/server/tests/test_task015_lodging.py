@@ -18,8 +18,10 @@ TASK-015 §11(11-16 PM 답: Q1 INVALID_LODGING + reason too_far·coords_not_allo
     trip.lodging (POST /trips 본문 `lodging`, 응답 Trip.lodging) = null 또는 여섯 칸이 늘 있는 객체
         {"kind": "place"|"address"|"pin", "place_id": str|null, "address_text": str|null, "lat": float|null, "lng": float|null, "label": str|null}
         place   : place_id 필수. address_text·lat·lng null
-        address : address_text 필수(빈 글 안 됨). place_id는 있으면. lat·lng null (좌표는 쓰는 순간 place_id로 불러온다)
-        pin     : lat·lng 필수. place_id·address_text null. 서버가 좌표를 그대로 가지는 것은 pin뿐. city.center(도시 팩 우리 값)에서 50km 밖이면 400 (Q5)
+        address : address_text + place_id 필수(빈 글 안 됨, §17 Q-C — 이전: place_id는 있으면). lat·lng null (좌표는 쓰는 순간 place_id로 불러온다)
+        pin     : lat·lng 필수. place_id·address_text null — 값(글자)이 오면 400 field_not_allowed (§17 Q-D, 이전: 받고 버림).
+                  서버가 좌표를 그대로 가지는 것은 pin뿐. city.center(도시 팩 우리 값)에서 50km 밖이면 400 (Q5)
+        여섯 칸은 요청에서 빠져도 된다(= null). kind마다 필수 값만 있으면 된다 (§17 Q-C)
         label   : 모든 kind 선택. 앞뒤 공백을 자르고 30자까지(31자 이상 = 400 label_too_long, §11 Q2), 자른 뒤 빈 글이면 null (Q5)
         숙소 문제는 한 코드 400 INVALID_LODGING, 이유는 error.detail.reason (§11 Q1, API-001 오류 형식 {error: {code, message, detail}}):
             "coords_not_allowed" = place·address에 lat·lng (Q4)
@@ -27,13 +29,15 @@ TASK-015 §11(11-16 PM 답: Q1 INVALID_LODGING + reason too_far·coords_not_allo
             "label_too_long"     = 앞뒤 공백을 자른 label이 31자 이상 (§11 Q2: 자르지 않는다)
             "missing_field"      = kind·그 kind의 필수 칸이 없음 (null·빈 글 포함). 빈 글 kind("" · 공백·탭·줄바꿈만)도 여기 (§13 Q7)
             "invalid_kind"       = kind가 place·address·pin이 아님 (§12 Q1, 예 "house"). 숫자·참거짓·목록·객체 같은 다른 타입도 여기 (§13 Q7)
+            "field_not_allowed"  = pin에 place_id·address_text 값 (§17 Q-D: 조용히 버리지 않는다, §9 Q4와 같은 이유)
             "invalid_type"       = kind 밖의 칸 타입이 틀림 (§15 Q2): place_id·address_text·label이 글자가 아님, lat·lng가 숫자가 아님(글자·참거짓·목록·객체).
                                    여섯 칸 모두 같은 규칙(= OpenAPI 숙소 스키마 타입, §15 Q3). null은 타입 오류가 아니라 값 없음(필수 칸이면 missing_field)
         50km 경계 (§13 Q2): 거리 >= 50km = too_far (정확히 50km는 밖). 거리 공식은 trip/detect.py와 같은 하버사인 6371km, 앱 @/lib/lodging-pick도 같은 공식
         모르는 kind는 400 INVALID_LODGING · invalid_kind 이고 아무것도 저장하지 않는다 (§12 Q1)
         공백만 있는 address_text = 자른 뒤 빈 글 = missing_field (§12 Q2)
         여러 조건이 겹치면 reason은 하나, 먼저 걸린 것 (§12 Q3):
-            invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> label_too_long -> too_far (§15 Q2로 invalid_type을 끼움)
+            invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> field_not_allowed -> label_too_long -> too_far
+            (§15 Q2로 invalid_type, §17 Q-D로 field_not_allowed를 끼움)
         옛 필드 lodging_place_id만 오면 {"kind": "place", "place_id": 그 값, 나머지 null}로 받는다 (요청에서만)
     Trip 응답(POST /trips · GET /trips/{id} · /trips/current)에 lodging_place_id 칸이 없다 (Q2: 같은 뜻의 값이 두 곳이면 어긋난다)
     place·address 여행의 응답·저장소에 좌표가 없다 (place_id로 그때 불러옴). address인데 place_id가 없거나 좌표를 못 구하면 숙소 없음과 같다(§30 Q6)
@@ -434,7 +438,6 @@ def test_T15_A2_경계_숙소_검색은_지금처럼_lodging_종류로만():
 SHAPES = [
     pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID}, full("place", place_id=GOOGLE_LODGING_ID), id="①이름_place"),
     pytest.param({"kind": "address", "address_text": TYPED, "place_id": ADDR_ID}, full("address", address_text=TYPED, place_id=ADDR_ID), id="②주소_장소ID있음"),
-    pytest.param({"kind": "address", "address_text": TYPED}, full("address", address_text=TYPED), id="②주소_장소ID없음"),
     pytest.param(pin_body(), full("pin", lat=PIN[0], lng=PIN[1]), id="③찍기_이름표없음"),
     pytest.param(pin_body(label=LABEL), full("pin", lat=PIN[0], lng=PIN[1], label=LABEL), id="③찍기_이름표있음"),
 ]
@@ -488,6 +491,16 @@ MISSING = [
     pytest.param({"kind": "address"}, id="address_글_없음"),
     pytest.param({"kind": "address", "address_text": "   "}, id="address_빈_글"),
     pytest.param({"place_id": GOOGLE_LODGING_ID}, id="kind_없음"),
+    # §17 Q-C: address는 address_text + place_id 둘 다 필수 (이전: place_id 없는 address = 받고 숙소 없음으로 계산)
+    pytest.param({"kind": "address", "address_text": TYPED}, id="address_장소ID_칸_없음"),
+    pytest.param({"kind": "address", "address_text": TYPED, "place_id": None}, id="address_장소ID_null"),
+    pytest.param({"kind": "address", "address_text": TYPED, "place_id": ""}, id="address_장소ID_빈_글"),
+    pytest.param({"kind": "address", "address_text": TYPED, "place_id": "   "}, id="address_장소ID_공백만"),
+    pytest.param({"kind": "address", "place_id": ADDR_ID}, id="address_글_칸_없음_장소ID만"),
+    pytest.param({"kind": "address", "address_text": None, "place_id": ADDR_ID}, id="address_글_null_장소ID만"),
+    pytest.param({"kind": "place", "place_id": None}, id="place_장소ID_null"),
+    pytest.param({"kind": "place", "place_id": "  "}, id="place_장소ID_공백만"),
+    pytest.param({"kind": "pin", "lat": PIN[0], "lng": None}, id="pin_lng_null"),
 ]
 
 
@@ -648,7 +661,7 @@ def test_T15_Q4_place·address에_좌표를_실어_보내면_400_INVALID_LODGING
     "sent",
     [
         pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "lat": PIN[0]}, id="place_lat만"),
-        pytest.param({"kind": "address", "address_text": TYPED, "lng": PIN[1]}, id="address_lng만"),
+        pytest.param({"kind": "address", "address_text": TYPED, "place_id": ADDR_ID, "lng": PIN[1]}, id="address_lng만"),  # §17 Q-C: place_id 더함 (없으면 missing_field가 먼저)
     ],
 )
 def test_T15_Q4_경계_좌표_한쪽만_실어도_400_INVALID_LODGING(mem, monkeypatch, sent):
@@ -823,12 +836,22 @@ REASON_ORDER = [
     pytest.param({**pin_body(), "label": LONG, "place_id": 5}, "invalid_type", id="타입+label"),
     pytest.param({**pin_body(FAR), "label": 5}, "invalid_type", id="타입+멀다"),
     pytest.param({**pin_body(FAR), "label": [LONG]}, "invalid_type", id="목록_label+멀다"),
+    # §17 Q-D field_not_allowed는 coords_not_allowed 다음, label_too_long 앞
+    pytest.param({"kind": "pin", "lat": PIN[0], "place_id": GOOGLE_LODGING_ID}, "missing_field", id="필수칸+pin에_place_id"),
+    pytest.param({**pin_body(), "place_id": GOOGLE_LODGING_ID, "label": 5}, "invalid_type", id="타입+pin에_place_id"),
+    pytest.param({**pin_body(), "address_text": TYPED, "lat": "34.6"}, "invalid_type", id="글자_위도+pin에_주소"),
+    pytest.param({**pin_body(), "place_id": GOOGLE_LODGING_ID, "label": LONG}, "field_not_allowed", id="pin에_place_id+label"),
+    pytest.param({**pin_body(), "address_text": TYPED, "label": LONG}, "field_not_allowed", id="pin에_주소+label"),
+    pytest.param({**pin_body(FAR), "place_id": GOOGLE_LODGING_ID}, "field_not_allowed", id="pin에_place_id+멀다"),
+    pytest.param({**pin_body(FAR), "address_text": TYPED, "label": LONG}, "field_not_allowed", id="pin에_주소+label+멀다"),
+    pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "lat": PIN[0], "lng": PIN[1], "label": LONG}, "coords_not_allowed", id="좌표+label(field_not_allowed보다_앞)"),
 ]
 
 
 @pytest.mark.parametrize(("sent", "expected"), REASON_ORDER)
 def test_T15_S12_Q3_여러_조건이_겹치면_먼저_걸린_reason_하나만(request, sent, expected):
-    """§12 Q3 · §15 Q2: invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> label_too_long -> too_far. 모양 오류가 먼저, 거리는 마지막.
+    """§12 Q3 · §15 Q2 · §17 Q-D: invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> field_not_allowed -> label_too_long -> too_far.
+    모양 오류가 먼저, 거리는 마지막.
     먼 좌표가 든 경우만 city.center(v3)가 있는 서버로 (거리를 잴 수 있어야 '먼저 걸린 것'을 가린다)."""
     far = FAR[0] in (sent.get("lat"), sent.get("lng")) or FAR[1] in (sent.get("lat"), sent.get("lng"))
     osaka = request.getfixturevalue("mem_v3" if far else "mem")
@@ -838,6 +861,98 @@ def test_T15_S12_Q3_여러_조건이_겹치면_먼저_걸린_reason_하나만(re
     assert lodging_reason(response) == expected, response.json()
     assert isinstance(response.json()["error"]["detail"]["reason"], str)  # 목록이 아니라 하나
     assert stores(osaka) == before
+
+
+# ---------- §17 Q-D field_not_allowed: pin에 place_id·address_text ----------
+
+FIELD_NOT_ALLOWED = [
+    pytest.param({**pin_body(), "place_id": GOOGLE_LODGING_ID}, id="pin에_place_id"),
+    pytest.param({**pin_body(), "address_text": TYPED}, id="pin에_address_text"),
+    pytest.param({**pin_body(), "place_id": ADDR_ID, "address_text": TYPED}, id="pin에_둘_다"),
+    pytest.param({**pin_body(label=LABEL), "place_id": GOOGLE_LODGING_ID}, id="이름표_있는_pin에_place_id"),
+    pytest.param(full("pin", lat=PIN[0], lng=PIN[1], place_id=GOOGLE_LODGING_ID), id="여섯_칸_pin에_place_id"),
+    pytest.param(full("pin", lat=PIN[0], lng=PIN[1], address_text=TYPED), id="여섯_칸_pin에_address_text"),
+]
+
+
+@pytest.mark.parametrize("sent", FIELD_NOT_ALLOWED)
+def test_T15_S17_QD_pin에_place_id·address_text가_오면_400_field_not_allowed이고_아무것도_저장하지_않는다(mem_v3, sent):
+    """§17 Q-D: 조용히 버리지 않는다 (이전 동작: pin의 글자 place_id·address_text를 받고 버림 -> 201)."""
+    before = stores(mem_v3)
+    response = post_trip(mem_v3, sent)
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "INVALID_LODGING"
+    assert lodging_reason(response) == "field_not_allowed", response.json()
+    assert stores(mem_v3) == before
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param(pin_body(), id="칸_없음"),
+        pytest.param({**pin_body(), "place_id": None, "address_text": None}, id="null"),
+        pytest.param(full("pin", lat=PIN[0], lng=PIN[1]), id="여섯_칸_null"),
+    ],
+)
+def test_T15_S17_QD_경계_pin의_place_id·address_text가_없거나_null이면_받는다(mem_v3, sent):
+    response = post_trip(mem_v3, sent)
+    assert response.status_code == 201, response.text
+    assert response.json()["lodging"] == full("pin", lat=PIN[0], lng=PIN[1])
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "label": LABEL}, id="place"),
+        pytest.param({"kind": "address", "address_text": TYPED, "place_id": ADDR_ID}, id="address에_place_id"),
+    ],
+)
+def test_T15_S17_QD_경계_place·address의_place_id는_field_not_allowed가_아니다(mem_v3, monkeypatch, sent):
+    install_address_search(monkeypatch, mem_v3)
+    response = post_trip(mem_v3, sent)
+    assert response.status_code == 201, response.text
+
+
+@settings(max_examples=80, deadline=None)
+@given(
+    place_id=st.one_of(st.none(), st.text(min_size=1, max_size=20).filter(lambda t: t.strip())),
+    address=st.one_of(st.none(), st.text(min_size=1, max_size=20).filter(lambda t: t.strip())),
+)
+def test_T15_S17_QD_pin에_값_있는_글자_place_id나_address_text가_하나라도_있으면_언제나_field_not_allowed(place_id, address):
+    """trip.lodging.normalize (순수 함수). 맞는 pin(50km 안, 이름표 없음)에 두 칸만 바꾼다. 둘 다 None이면 받는다."""
+    from trip.lodging import LodgingError, normalize
+
+    raw = {"kind": "pin", "lat": PIN[0], "lng": PIN[1], "place_id": place_id, "address_text": address}
+    if place_id is None and address is None:
+        assert normalize(raw, CENTER_V3)["kind"] == "pin"
+        return
+    with pytest.raises(LodgingError) as caught:
+        normalize(raw, CENTER_V3)
+    assert caught.value.reason == "field_not_allowed"
+
+
+@settings(max_examples=60, deadline=None)
+@given(kind=st.sampled_from(["place", "address", "pin"]), drop=st.sampled_from(["place_id", "address_text", "lat", "lng", "label"]))
+def test_T15_S17_QC_여섯_칸은_빠져도_null로_보고_kind의_필수_칸만_본다(kind, drop):
+    """§17 Q-C: 필수 = place: place_id · address: address_text + place_id · pin: lat + lng. 그 밖 칸은 빠져도 된다.
+    맞는 본문에서 한 칸을 빼면: 필수 칸이면 missing_field, 아니면 받는다(빠진 칸은 null)."""
+    from trip.lodging import LodgingError, normalize
+
+    required = {"place": {"place_id"}, "address": {"address_text", "place_id"}, "pin": {"lat", "lng"}}[kind]
+    good = {
+        "place": {"kind": "place", "place_id": GOOGLE_LODGING_ID, "label": LABEL},
+        "address": {"kind": "address", "address_text": TYPED, "place_id": ADDR_ID, "label": LABEL},
+        "pin": {"kind": "pin", "lat": PIN[0], "lng": PIN[1], "label": LABEL},
+    }[kind]
+    raw = {k: v for k, v in good.items() if k != drop}
+    if drop in required:
+        with pytest.raises(LodgingError) as caught:
+            normalize(raw, CENTER_V3)
+        assert caught.value.reason == "missing_field"
+    else:
+        saved = normalize(raw, CENTER_V3)
+        assert set(saved) == FIELDS
+        assert saved[drop] is None
 
 
 # ---------- §15 Q2 invalid_type: 칸 타입이 틀림 ----------
@@ -861,7 +976,7 @@ INVALID_TYPE = [
     *(pytest.param({**_good(k), "label": v}, id=f"{k}_label_{i}") for k in ("place", "address", "pin") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
     *(pytest.param({**_good("place"), "place_id": v}, id=f"place_place_id_{i}") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
     *(pytest.param({**_good("address"), "address_text": v}, id=f"address_address_text_{i}") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
-    *(pytest.param({**_good("address"), "place_id": v}, id=f"address_선택칸_place_id_{i}") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
+    *(pytest.param({**_good("address"), "place_id": v}, id=f"address_필수칸_place_id_{i}") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
     *(pytest.param({**_good("pin"), "lat": v}, id=f"pin_lat_{i}") for v, i in zip(WRONG_NUMBER, WRONG_IDS_NUMBER)),
     *(pytest.param({**_good("pin"), "lng": v}, id=f"pin_lng_{i}") for v, i in zip(WRONG_NUMBER, WRONG_IDS_NUMBER)),
     pytest.param({**_good("pin"), "place_id": 5}, id="pin_쓰지_않는_칸_place_id_숫자"),
@@ -887,7 +1002,7 @@ def test_T15_S15_Q2_칸_타입이_틀리면_400_INVALID_LODGING_invalid_type이�
         pytest.param({**_good("pin"), "label": None}, None, id="label_null은_값_없음"),
         pytest.param({**_good("pin"), "label": ""}, None, id="label_빈_글은_글자"),
         pytest.param({**_good("pin"), "label": "5"}, None, id="label_숫자_모양_글자는_글자"),
-        pytest.param({**_good("address"), "place_id": None}, None, id="address_place_id_null"),
+        pytest.param({**_good("address"), "place_id": None}, "missing_field", id="address_place_id_null은_missing_field"),  # §17 Q-C (이전: 201)
         pytest.param({**_good("pin"), "place_id": None, "address_text": None}, None, id="pin_쓰지_않는_칸_null"),
         pytest.param({"kind": "pin", "lat": None, "lng": PIN[1]}, "missing_field", id="pin_lat_null은_missing_field"),
         pytest.param({**_good("place"), "place_id": None}, "missing_field", id="place_place_id_null은_missing_field"),
@@ -1164,14 +1279,25 @@ def test_T15_A_address는_장소_ID로_그때_불러온_좌표를_모든_곳이_
     assert t08_at_day_end(mem, day_id, date)["lodging"] == latlng(ADDR_AT)
 
 
-def test_T15_A_장소_ID_없는_address는_숙소_없음과_같다(mem):
-    """TASK-014 §30 Q6: 모르는 숙소 = 없는 숙소. 도시 중심을 숙소인 척 내보내지 않는다."""
-    _trip, day_id, date, started = planned(mem, {"kind": "address", "address_text": TYPED})
-    assert all(option["go_home_min"] is None for option in started["options"])
-    for kind, view in every_view(mem, day_id, at_of(date, "12:00")).items():
-        assert view["day"]["lodging"] is None, kind
-    card = t08_at_day_end(mem, day_id, date)
-    assert card["lodging"] is None and card["map_url"] is None and card["go_home_min"] is None
+def test_T15_S17_QC_장소_ID_없는_address는_만들_때_400_missing_field이고_아무것도_저장하지_않는다(mem):
+    """§17 Q-C: address는 address_text + place_id 필수 (이전 단언: 받아서 숙소 없음으로 계산 — §9 "place_id 없는 address = 숙소 없음")."""
+    before = stores(mem)
+    response = post_trip(mem, {"kind": "address", "address_text": TYPED})
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "missing_field", response.json()
+    assert stores(mem) == before
+
+
+def test_T15_S17_QC_경계_이미_저장된_장소_ID_없는_address의_좌표_풀이는_숙소_없음():
+    """TASK-014 §30 Q6(모르는 숙소 = 없는 숙소)은 좌표 풀이 쪽에 그대로: trip.lodging.location은 None, 장소 좌표를 묻지 않는다."""
+    from datetime import UTC, datetime
+
+    from trip.lodging import location
+
+    asked: list[str] = []
+    saved = full("address", address_text=TYPED)
+    assert location(saved, lambda place_id, _now: asked.append(place_id) or ADDR_AT, datetime.now(UTC)) is None
+    assert asked == []
 
 
 SAME_PLACE = [

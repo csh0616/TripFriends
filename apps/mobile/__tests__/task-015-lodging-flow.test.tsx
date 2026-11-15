@@ -289,3 +289,63 @@ describe('§14 Q3 이름 앞뒤 공백을 잘라 보낸다', () => {
     expect((server.sent(CREATE)[0].body as Record<string, unknown>).lodging).toEqual(pinBody(SPOT, '친구 집'));
   });
 });
+
+// ---------- §17 이름 검색 자체가 실패해도 [지도에서 찍기] ----------
+// 근거: TASK-015 §17 "frontend가 문서 없이 정한 것" 표("이름 검색 자체가 실패하면 [지도에서 찍기] 없이 알림만" -> 고친다:
+//       이름 검색 실패도 주소 검색 실패(a3 ②)와 같이 [지도에서 찍기]를 준다. 막히지 않게 §6) · task-015-design §1-4 a3 btn-pick-map
+// 계약: GET /places/lodging-search가 끊김·500·503이면 화면에 `btn-pick-map`이 보이고, 누르면 a2(`pick-map`).
+//       주소 검색을 그때 부르는지는 문서에 없어 보지 않는다(질문). 안내 글은 지금 것(T10_6_Q13 "지금 숙소 검색을 못 해") 그대로 둔다
+
+const NAME_FAILS: [string, Reply][] = [
+  ['연결_끊김', networkDown],
+  ['500', apiError(500, 'INTERNAL', null)],
+  ['503', apiError(503, 'PROVIDER_UNAVAILABLE', null)],
+];
+
+/** beforeEach의 가짜 서버는 이름 검색을 늘 0건으로 답한다(먼저 건 match가 이긴다) -> 이 묶음은 이름 검색 답만 바꾼 새 가짜 서버로 */
+function serverWithNameSearch(reply: () => Reply) {
+  server = new FakeServer();
+  server.on(CURRENT, apiError(404, 'NOT_FOUND', { resource: 'trip' }));
+  server.match('GET /places/lodging-search', reply);
+  server.match('GET /places/address-search', () => json(200, []));
+}
+
+describe('§17 이름 검색이 실패해도 지도에서 찍기로 갈 수 있다', () => {
+  test.each(NAME_FAILS)('T15_S17_이름_검색이_%s이면_지도에서_찍기가_보인다', async (_name, fail) => {
+    serverWithNameSearch(() => fail);
+    server.on(CITY, json(200, { code: 'osaka', name_ko: '오사카', center: OSAKA_CENTER }));
+    await toForm();
+    await fillDates();
+    await fireEvent.changeText(await screen.findByTestId('lodging-search'), '친구 집 근처');
+    await settleAll();
+    expect(await screen.findByTestId('btn-pick-map')).toBeTruthy();
+  });
+
+  test.each(NAME_FAILS)('T15_S17_이름_검색이_%s일_때_지도에서_찍기를_누르면_a2이고_찍은_숙소로_만들_수_있다', async (_name, fail) => {
+    serverWithNameSearch(() => fail);
+    server.on(CITY, json(200, { code: 'osaka', name_ko: '오사카', center: OSAKA_CENTER }));
+    server.on(CREATE, json(201, { ...created, lodging: pinBody(SPOT) }));
+    await toForm();
+    await fillDates();
+    await fireEvent.changeText(await screen.findByTestId('lodging-search'), '친구 집 근처');
+    await settleAll();
+    await tap(await screen.findByTestId('btn-pick-map'));
+    await screen.findByTestId('pick-map');
+    await longPress(SPOT);
+    await tap(screen.getByTestId('pick-confirm'));
+    await tap(await screen.findByTestId('create-trip-submit'));
+    await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
+    expect((server.sent(CREATE)[0].body as Record<string, unknown>).lodging).toEqual(pinBody(SPOT));
+  });
+
+  test('T15_S17_경계_이름_검색이_결과를_주면_지도에서_찍기_대신_결과_줄', async () => {
+    // 실패가 아니면 지금 흐름 그대로: ① 이름 결과 줄이 보이고 a3의 [지도에서 찍기]는 아직 없다
+    serverWithNameSearch(() => json(200, [{ place_id: 'FAKE-lodging-1', name: '난바 테스트 호텔 1', address_short: '가짜구 테스트동 1' }]));
+    await toForm();
+    await fillDates();
+    await fireEvent.changeText(await screen.findByTestId('lodging-search'), '난바');
+    await settleAll();
+    expect(await screen.findByTestId('lodging-result-FAKE-lodging-1')).toBeTruthy();
+    expect(screen.queryByTestId('btn-pick-map')).toBeNull();
+  });
+});

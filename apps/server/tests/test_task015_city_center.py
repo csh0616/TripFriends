@@ -262,3 +262,97 @@ def test_T15_S15_Q1_경계_city_center가_오류여도_숙소_없는_시작점_c
     city = city_with_center({"name_ko": base_center["name_ko"], "place_id": base_center["place_id"]})
     cached = _cached_center(city)
     assert city.center() == (cached["lat"], cached["lng"])
+
+
+# ---------- §17 Q-B 실제 모드에서 팩에 우리 좌표가 없으면 서버 시작 때 멈춘다 ----------
+# 계약 (§17 Q-B, 이 테스트가 제안):
+#   places.city.open_city(env)가 실제 모드(가짜 아님)에서 팩 center에 lat·lng(둘 다)가 없으면 places.city.CityConfigError(RuntimeError)를 낸다
+#     = 설정 오류. 메시지는 한 줄(줄바꿈 없음)이고 center 좌표가 없다는 이유를 담는다. 키 값은 담지 않는다
+#   그래서 서버 lifespan(api.main)이 시작하지 못한다 (TestClient(app)를 여는 순간 실패) — 요청마다 500이 되기 전에 찾는다
+#   팩 center에 lat·lng가 둘 다 있으면 지금처럼 켜진다. 가짜 모드는 이 검사와 상관없이 지금처럼 (가짜 seed에 v3 값이 있다, §16 Q-A)
+#   시험은 실제 Google을 부르지 않는다: make_providers를 "가짜 공급자인데 실제 모드"로 바꿔 끼우고, 팩·캐시는 tmp_path에 쓴다
+
+TEST_ONLY_KEY = "TEST-ONLY-NOT-A-KEY"
+
+
+def real_mode_with_pack(monkeypatch, tmp_path: Path, center_extra: dict | None) -> None:
+    """실제 모드 흉내: 팩 파일(가짜 팩의 center에서 lat·lng를 빼고 center_extra를 더함)과 캐시 파일을 tmp_path에 두고 open_city가 그것을 읽게 한다."""
+    import json as _json
+
+    import places.city
+    from places.cache import save_cache
+    from places.factory import NullSerper
+    from places.provider import FakePlaces
+
+    base = places.city.fake_city()
+    center = {k: v for k, v in base.pack["center"].items() if k not in ("lat", "lng")}
+    pack = {**base.pack, "center": {**center, **(center_extra or {})}}
+    pack_path, cache_path = tmp_path / "packs" / "osaka.json", tmp_path / "cache" / "osaka.json"
+    pack_path.parent.mkdir(parents=True)
+    pack_path.write_text(_json.dumps(pack, ensure_ascii=False), encoding="utf-8")
+    save_cache(cache_path, dict(base.cache))
+    monkeypatch.setattr(places.city, "PACK_PATH", pack_path)
+    monkeypatch.setattr(places.city, "CACHE_PATH", cache_path)
+    monkeypatch.setattr(places.city, "make_providers", lambda env=None: (FakePlaces(), NullSerper(), False))
+
+
+NO_CENTER = [
+    pytest.param({}, id="lat·lng_없음"),
+    pytest.param({"lat": SEED_V3_CENTER["lat"]}, id="lat만"),
+    pytest.param({"lng": SEED_V3_CENTER["lng"]}, id="lng만"),
+]
+
+
+@pytest.mark.parametrize("extra", NO_CENTER)
+def test_T15_S17_QB_실제_모드에서_팩에_우리_좌표가_없으면_open_city가_설정_오류로_멈춘다(monkeypatch, tmp_path, extra):
+    import places.city
+
+    real_mode_with_pack(monkeypatch, tmp_path, extra)
+    error_type = getattr(places.city, "CityConfigError")
+    assert issubclass(error_type, RuntimeError)
+    with pytest.raises(error_type) as caught:
+        places.city.open_city({"GOOGLE_PLACES_API_KEY": TEST_ONLY_KEY})
+    reason = str(caught.value)
+    assert reason.strip() and "\n" not in reason.strip(), reason  # 이유 한 줄
+    assert "center" in reason, reason
+    assert TEST_ONLY_KEY not in reason
+
+
+@pytest.mark.parametrize("extra", NO_CENTER)
+def test_T15_S17_QB_실제_모드에서_좌표_없는_팩으로는_서버가_시작하지_않는다(monkeypatch, tmp_path, extra):
+    import places.city
+    from api.main import app
+
+    server_env(monkeypatch, "memory")
+    real_mode_with_pack(monkeypatch, tmp_path, extra)
+    with pytest.raises(getattr(places.city, "CityConfigError")):
+        with TestClient(app, headers=bearer(ME)):
+            pass
+
+
+def test_T15_S17_QB_경계_실제_모드에서_팩에_우리_좌표가_둘_다_있으면_켜진다(monkeypatch, tmp_path):
+    import places.city
+
+    real_mode_with_pack(monkeypatch, tmp_path, dict(SEED_V3_CENTER))
+    city, fake = places.city.open_city({"GOOGLE_PLACES_API_KEY": TEST_ONLY_KEY})
+    assert fake is False
+    assert city.city_center() == (SEED_V3_CENTER["lat"], SEED_V3_CENTER["lng"])
+
+
+def test_T15_S17_QB_경계_실제_모드_서버는_좌표_있는_팩이면_시작해서_city_center를_준다(monkeypatch, tmp_path):
+    from api.main import app
+
+    server_env(monkeypatch, "memory")
+    real_mode_with_pack(monkeypatch, tmp_path, dict(SEED_V3_CENTER))
+    with TestClient(app, headers=bearer(ME)) as client:
+        osaka = Osaka(client, app)
+        (day_id, date), _ = planned_days(osaka)
+        assert views(osaka, day_id, date)["now"]["city"] == {"code": "osaka", "center": SEED_V3_CENTER}
+
+
+def test_T15_S17_QB_경계_가짜_모드는_지금처럼_켜지고_center는_가짜_seed의_v3_값():
+    import places.city
+
+    city, fake = places.city.open_city({"PLACES_PROVIDER": "fake"})
+    assert fake is True
+    assert city.city_center() == (SEED_V3_CENTER["lat"], SEED_V3_CENTER["lng"])

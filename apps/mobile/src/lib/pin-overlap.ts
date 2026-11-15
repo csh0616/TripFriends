@@ -29,7 +29,17 @@ export type PinOverlapInput = {
   panels?: Rect[];
   /** 계획상 지금 있는 곳이 숙소 (출발 전·귀가 후) */
   stayingAtLodging?: boolean;
+  /**
+   * TASK-015 §17 이름표 모드 (기본 'next'). 'all' = 코스 크게 보기(①-41): 번호 핀이 ALL_LABELS_MAX곳 이하면 보이는 번호 핀마다 이름표,
+   * 그보다 많으면 'next'와 같다(다음 핀 하나). 계약: __tests__/task-015-pin-overlap-all-labels.test.ts
+   */
+  labelMode?: 'next' | 'all';
+  /** 핀 id -> 그 핀 이름표 폭 (화면이 잰 값). 없는 핀은 labelWidth */
+  labelWidths?: Readonly<Record<string, number>>;
 };
+
+/** 놓인 이름표 하나 */
+export type PlacedLabel = { pinId: string; side: LabelSide; rect: Rect };
 
 export type LabelSide = 'top' | 'right' | 'left' | 'bottom';
 
@@ -49,10 +59,15 @@ export type PinOverlapResult = {
   /** 보일 핀. 그리는 순서(아래 -> 위): done, later, lodging, now, next */
   pins: ShownPin[];
   /** 다음 핀의 이름표. 후보 위 -> 오른쪽 -> 왼쪽 -> 아래, 모두 안 되면 null */
-  label: { pinId: string; side: LabelSide; rect: Rect } | null;
+  label: PlacedLabel | null;
+  /** TASK-015 §17: 놓인 이름표 전부 ('next' 모드면 label 하나 또는 빈 목록). frontend가 구현하며 늘 채운다 */
+  labels?: PlacedLabel[];
   /** 내 위치 점(reh-dot 포함)을 그리나. 숙소에 머무는 동안은 false */
   meDot: boolean;
 };
+
+/** TASK-015 §17 "모든 이름표" 모드: 번호 핀이 이 수 이하면 모든 핀에 이름표 (①-41 "5곳 이하") */
+export const ALL_LABELS_MAX = 5;
 
 /** 중심 거리가 이 값 "미만"이면 묶는다 */
 export const GROUP_DISTANCE = 36;

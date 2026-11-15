@@ -31,6 +31,10 @@ FAKE_SEED = testdata_dir() / "osaka-seed-fake.yaml"
 SEARCH_LIMIT = 10  # B4
 
 
+class CityConfigError(RuntimeError):
+    """서버 시작 때 멈추는 도시 데이터 설정 오류 (TASK-015 §17 Q-B: 실제 모드 팩 center에 우리 좌표가 없음). 메시지는 이유 한 줄."""
+
+
 def _no_sleep(_seconds: float) -> None:
     return None
 

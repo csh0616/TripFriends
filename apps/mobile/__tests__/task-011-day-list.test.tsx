@@ -7,7 +7,7 @@
 //   아래 큰 버튼 testID `bottom-primary` (dayListPrimary가 null이면 없음). 글자 = label, 밑 한 줄 = sublabel
 //     누르면 onOpen(그날, dayDestination(그날 state, 고른 코스 있음))
 //   계획 전 카드 안 버튼: [같이 고르기] `card-plan-{day_id}`, [알아서 짜 줘] `card-auto-{day_id}`
-//     [알아서 짜 줘]는 "지금 할 일 카드"(아래 큰 버튼이 가리키는 계획 전 날)에만. 그 밖 계획 전 날은 [같이 고르기]만
+//     [알아서 짜 줘]는 계획 전 날 카드마다 (TASK-015 §C 11-16: 이전엔 "지금 할 일 카드"에만). 다른 날은 작은 버튼 둘
 //     오늘인데 코스 없음 = 계획 전으로 보고 [같이 고르기]가 있다 (PM 답 1). 계획 완료·지난 날·오늘(코스 있음)에는 없다
 //     카드 [같이 고르기]를 누르면 onOpen(그날, 'planning')
 //   알약 아이콘 상자 `day-pill-icon-{day_id}`: 네 알약 모두 알약 안에. 계획 전의 점선 원 `day-pill-dot-{day_id}`는 그 상자 안
@@ -208,15 +208,19 @@ describe('A1 카드 안 버튼', () => {
     expect(within(screen.getByTestId('card-auto-d2')).getByText('알아서 짜 줘')).toBeTruthy();
   });
 
-  test('T11_A1_그_밖의_계획_전_카드는_같이_고르기만', async () => {
+  // TASK-015 §C·§17(11-16): 다른 계획 전 날 카드에도 작은 [같이 고르기]·[알아서 짜 줘] 나란히 (이전: [같이 고르기]만, card-auto 없음)
+  test('T15_C_다른_계획_전_카드에도_같이_고르기와_알아서_짜_줘', async () => {
     await show(MIXED, AT.before);
-    expect(within(screen.getByTestId('day-row-d3')).getByTestId('card-plan-d3')).toBeTruthy();
-    expect(screen.queryByTestId('card-auto-d3')).toBeNull();
+    const row = screen.getByTestId('day-row-d3');
+    expect(within(row).getByTestId('card-plan-d3')).toBeTruthy();
+    expect(within(row).getByTestId('card-auto-d3')).toBeTruthy();
+    expect(within(screen.getByTestId('card-auto-d3')).getByText('알아서 짜 줘')).toBeTruthy();
   });
 
-  test('T11_A1_알아서_짜_줘는_화면에_하나뿐', async () => {
+  // TASK-015 §C·§17: 계획 전 날마다 [알아서 짜 줘] (이전: 화면에 하나뿐 = card-auto-d1)
+  test('T15_C_계획_전_날마다_알아서_짜_줘가_있다', async () => {
     await show(trip(tripDay(1, 'planning'), tripDay(2, 'planning'), tripDay(3, 'planning')), AT.before);
-    expect(screen.queryAllByTestId(/^card-auto-/).map((node) => node.props.testID)).toEqual(['card-auto-d1']);
+    expect(screen.queryAllByTestId(/^card-auto-/).map((node) => node.props.testID)).toEqual(['card-auto-d1', 'card-auto-d2', 'card-auto-d3']);
   });
 
   test.each([
@@ -415,6 +419,23 @@ describe('§9 Q2·Q3 첫 화면 흐름', () => {
     const sent = server.sent('POST /days/d2/planning');
     expect(sent).toHaveLength(1);
     expect(sent[0].body).toMatchObject({ mode: 'auto' });
+  });
+
+  // TASK-015 §C: 다른 계획 전 날의 작은 [알아서 짜 줘]도 한 번에 그날 자동 계획 (AC-6 ②)
+  test('T15_C_다른_날_작은_알아서_짜_줘를_누르면_그날_자동_계획', async () => {
+    resetDevice();
+    freezeDate(AT.before);
+    const server = new FakeServer()
+      .on('GET /trips/current', json(200, MIXED))
+      .on('POST /days/d3/planning', json(201, course()))
+      .on(`GET /planning/${SID}`, json(200, course()));
+    await startHome();
+    await tap(await screen.findByTestId('card-auto-d3'));
+    expect(await screen.findByTestId('option-relaxed')).toBeTruthy();
+    const sent = server.sent('POST /days/d3/planning');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body).toMatchObject({ mode: 'auto' });
+    expect(server.sent('POST /days/d2/planning')).toEqual([]);
   });
 });
 
