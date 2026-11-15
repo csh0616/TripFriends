@@ -17,6 +17,7 @@ import { FriendAvatar } from '@/components/planning/friend-bubble';
 import { LocateIcon } from '@/components/planning/icons';
 import { InputBar } from '@/components/planning/input-bar';
 import { LocationIntroSheet, LocationOffPill, LocationOffSheet } from '@/components/now/location-ui';
+import type { Rect } from '@/lib/pin-overlap';
 import { RehearsalBand, RehearsalNotice, REHEARSAL_FAILED } from '@/components/now/rehearsal-ui';
 import { Notice } from '@/components/planning/notice';
 import { RouteDiagram } from '@/components/planning/route-diagram';
@@ -60,6 +61,8 @@ export type NowRecord = {
   rehearsal?: boolean;
 };
 
+const TOP_ROW = 48; // 위 버튼 줄(프로필·SOS) 높이 (task-014-design §11-1)
+const CLOCK_ABOVE_SHEET = 120; // 연습 시계 판 윗변 = 시트 윗변 − 120 (§12-1)
 const OFFLINE_BAND = '연결이 안 돼, 저장된 일정만 보여';
 const OOPS_BAND = '잠깐 문제가 생겼어';
 const NO_COURSE = '고른 코스가 없어';
@@ -451,11 +454,11 @@ export function TripNowScreen({
 
   // 지도 카메라: 처음 한 번만 코스 전체와 숙소가 보이게 (B10). 시트(중간) 높이만큼 아래 여백
   // 연습 중엔 시트 윗변을 보드 ①-35 자리(874 화면에서 y 434)에 맞추고, 시계 판(112)은 그 위에 뜬다 (§19·§20 Q2)
-  const rehSheetHeight = (area: number) => {
+  const rehSheetHeight = (area: number, topY: number = layout.rehSheetTop) => {
     const boardArea = layout.rehBoardHeight - (space['space-2'] + control.input + layout.rehBoardBottom + space['space-2']);
     const low = area * layout.sheetFractions[0];
     const high = area * layout.sheetFractions[2];
-    return Math.round(Math.min(high - 1, Math.max(low + 1, area - (layout.rehSheetTop * area) / boardArea)));
+    return Math.round(Math.min(high - 1, Math.max(low + 1, area - (topY * area) / boardArea)));
   };
   const sheetMid = rehearsal ? rehSheetHeight(areaHeight || windowHeight) : (areaHeight || windowHeight) * layout.sheetFractions[1];
   const clockRoom = rehearsal ? layout.rehClock + space['space-3'] : 0; // 카메라 아래 여백 = 시트 + 시계 판
@@ -608,7 +611,11 @@ export function TripNowScreen({
   // 연습 중엔 중간 단 윗변이 보드 자리 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
   const snapPoints = useMemo(() => {
     const total = areaHeight || windowHeight;
-    return layout.sheetFractions.map((fraction, index) => (rehearsal && index === 1 ? rehSheetHeight(total) : `${Math.round(fraction * 100)}%`));
+    return layout.sheetFractions.map((fraction, index) => {
+      if (rehearsal && index === 1) return rehSheetHeight(total);
+      if (rehearsal && index === 2) return Math.max(rehSheetHeight(total, layout.rehSheetTopUp), rehSheetHeight(total) + 1); // 위로 끌면 윗변 417 (TASK-015 §B3)
+      return `${Math.round(fraction * 100)}%`;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rehearsal, areaHeight, windowHeight]);
   const sheetTop = useSharedValue(0);
@@ -647,6 +654,14 @@ export function TripNowScreen({
   const showClock = !live && (rehearsal || record.demo || __DEV__);
   const pill = view ? PILL[view.status] ?? PILL.on_track : null;
   const bandTop = insets.top + rehTop + layout.header + space['space-2'];
+  // TASK-015 §17: 화면에 실제로 떠 있는 판 = 위 버튼 줄(48) · 연습 시계 판(시트 윗변 − 120부터 112) · 아래 시트. 지도 화면 pt, 맨 위 0
+  const panelArea = areaHeight || windowHeight;
+  const panelSheetTop = panelArea - sheetMid;
+  const floatingPanels: Rect[] = [
+    { x: 0, y: insets.top + rehTop, width, height: TOP_ROW },
+    ...(rehearsal ? [{ x: 0, y: panelSheetTop - CLOCK_ABOVE_SHEET, width, height: layout.rehClock }] : []),
+    { x: 0, y: panelSheetTop, width, height: sheetMid },
+  ];
 
   return (
     <View testID="trip-now-screen" style={styles.root}>
@@ -680,6 +695,7 @@ export function TripNowScreen({
               position={position ? { latitude: position.lat, longitude: position.lng } : null}
               hollowPosition={rehearsal}
               stayingAtLodging={stayingAtLodging}
+              panels={floatingPanels}
               onReady={() => setMapReady(true)}
               onFail={() => setMapFailed(true)}
             />

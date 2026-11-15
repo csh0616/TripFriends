@@ -1,6 +1,6 @@
 // 여행 만들기 화면의 작은 부품 (DESIGN-001 §4-7·§4-10): 입력 칸, 틀린 칸 문장, 담기 표시, 안내 상자.
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type TextStyle } from 'react-native';
 
 import { Text, TextInput } from '@/components/app-text';
 import { AlertIcon, CheckIcon, PlusIcon, SearchIcon } from '@/components/planning/icons';
@@ -9,15 +9,21 @@ import tokens from 'design-tokens';
 
 import { color, control, fitText, radius, space, text } from '@/planning/theme';
 
-/** TASK-015 §B7: 혼자 값으로 서는 숫자(D-day · "n일 중 k일" 등)는 숫자만 DM Mono 500, 글자는 Noto. 한 글자 줄이라 안쪽 Text로 나눈다 (읽기 도구엔 한 문장) */
-export function MonoDigits({ value, testID }: { value: string; testID?: string }) {
-  const base = text('caption', 'muted');
-  const mono = fitText({ size: base.fontSize as number, lineHeight: base.lineHeight as number, weight: 500, family: tokens.font['font-mono'] }, 'muted');
+/**
+ * TASK-015 §B7·§17 (task-014-design §13-1): 혼자 값으로 서는 숫자(날짜·날짜 범위·D-day·"n일 중 k일" 등)는 숫자(와 숫자 사이 : / –)만 DM Mono 500, 글자는 Noto.
+ * 숫자 덩어리만 안쪽 Text로 나눈다 (읽기 도구엔 한 문장). base = 바깥 글자 모양 (text()·fitText() 결과), 안쪽은 같은 크기·줄 높이·색에 글꼴만 DM Mono
+ */
+export function MonoText({ value, base, testID, numberOfLines }: { value: string; base: TextStyle; testID?: string; numberOfLines?: number }) {
+  const mono = fitText({ size: base.fontSize as number, lineHeight: base.lineHeight as number, weight: 500, family: tokens.font['font-mono'], fg: base.color as string }, 'muted');
   return (
-    <Text testID={testID} style={base}>
-      {value.split(/(\d+)/).map((part, index) => (index % 2 === 1 ? <Text key={index} style={mono}>{part}</Text> : part))}
+    <Text testID={testID} numberOfLines={numberOfLines} style={base}>
+      {value.split(/(\d+(?:[:/–]\d+)*)/).map((part, index) => (index % 2 === 1 ? <Text key={index} style={mono}>{part}</Text> : part))}
     </Text>
   );
+}
+
+export function MonoDigits({ value, testID }: { value: string; testID?: string }) {
+  return <MonoText value={value} testID={testID} base={text('caption', 'muted')} />;
 }
 
 /** 틀린 칸 아래 오류 문장: 색 + 아이콘 + 문장 (field-error) */

@@ -25,10 +25,14 @@ function DemoBar({
   onStep: (direction: 1 | -1) => void;
 }) {
   const [width, setWidth] = useState(0);
+  // 연습 시계(TASK-015 §B5): 손잡이 중심은 막대 안쪽 thumb/2(14)에서 시작해 끝 − 14에서 멈춘다 -> 이동 범위 = 폭 − thumb
+  const inset = reh ? thumb / 2 : 0;
+  const travel = width - 2 * inset;
   const pick = (x: number) => {
-    if (width > 0) onRatio(x / width);
+    if (width > 0) onRatio(reh ? (travel > 0 ? Math.min(1, Math.max(0, (x - inset) / travel)) : 0) : x / width);
   };
   const percent = `${Math.round(ratio * 1000) / 10}%` as const;
+  const at: number | `${number}%` = reh && travel > 0 ? inset + ratio * travel : percent;
   return (
     <View
       testID="demo-bar"
@@ -45,9 +49,9 @@ function DemoBar({
     >
       {/* 안쪽은 터치를 받지 않는다: locationX가 늘 막대 기준이 되게 */}
       <View pointerEvents="none" style={[styles.track, reh && styles.rehTrack]}>
-        <View style={[styles.fill, reh && styles.rehFill, { width: percent }]} />
+        <View style={[styles.fill, reh && styles.rehFill, { width: at }]} />
       </View>
-      <View testID="demo-thumb" pointerEvents="none" style={[styles.thumb, reh && styles.rehThumb, { left: percent, width: thumb, height: thumb, marginLeft: -thumb / 2 }]} />
+      <View testID="demo-thumb" pointerEvents="none" style={[styles.thumb, reh && styles.rehThumb, { left: at, width: thumb, height: thumb, marginLeft: -thumb / 2 }]} />
     </View>
   );
 }

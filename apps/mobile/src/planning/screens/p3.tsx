@@ -67,7 +67,7 @@ export function P3Screen({
 
   const empty = items.length === 0;
 
-  const stops = items.flatMap((item) => (item.lat !== null && item.lng !== null ? [{ seq: item.seq, lat: item.lat, lng: item.lng }] : []));
+  const stops = items.flatMap((item) => (item.lat !== null && item.lng !== null ? [{ seq: item.seq, lat: item.lat, lng: item.lng, name: item.name }] : []));
   const summary = option ? `${items.length}곳 · 이동 ${option.total_travel_min}분` : '';
 
   return (

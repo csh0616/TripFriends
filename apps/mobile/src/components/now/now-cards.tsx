@@ -335,7 +335,7 @@ export function NowCardView({
           <Text style={text('label', 'muted')}>숙소 가는 법</Text>
           <Text style={text('title')}>{minutes != null && minutes > 0 ? `숙소까지 ${minutes}분` : '숙소로 돌아가자'}</Text>
           {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
-          {mapUrl != null ? (
+          {mapUrl != null && !rehearsal ? (
             <SecondaryButton
               small
               testID="home-directions-button"

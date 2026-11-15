@@ -11,7 +11,7 @@ import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { CityCover } from '@/components/trips/city-cover';
-import { AddDot, ChipButton, FieldBox, InfoNotice, SearchInput } from '@/components/trips/parts';
+import { AddDot, ChipButton, FieldBox, InfoNotice, MonoText, SearchInput } from '@/components/trips/parts';
 import { cityToday } from '@/lib/calendar';
 import {
   addMustVisit,
@@ -328,7 +328,13 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
             <SearchInput testID="lodging-search" value={lodgingQuery} placeholder="숙소 이름으로 찾기" onChangeText={onLodgingText} onFocus={() => setFocused('lodging')} onBlur={() => setFocused(null)} />
           )}
         </FieldBox>
-        {lodgingHits.state === 'down' ? <InfoNotice message={LODGING_DOWN} /> : null}
+        {lodgingHits.state === 'down' ? (
+          <>
+            <InfoNotice message={LODGING_DOWN} />
+            {/* §17: 이름 검색이 실패해도 막히지 않게 [지도에서 찍기] (§6) */}
+            <PickMapButton label="지도에서 찍기" busy={opening} onPress={() => void openPick()} />
+          </>
+        ) : null}
         {lodgingHits.state === 'ok' && lodgingQueryReady(lodgingQuery) ? (
           lodgingHits.items.kind === 'none' ? (
             <LodgingNone addressDown={lodgingHits.items.addressDown} busy={opening} onPick={() => void openPick()} onSkip={() => { setLodgingQuery(''); searchLodging(null); }} />
@@ -455,7 +461,7 @@ function Empty() {
 function DateField({ testID, value, placeholder, onPress }: { testID: string; value: string | null; placeholder: string; onPress: () => void }) {
   return (
     <Pressable testID={testID} accessibilityRole="button" onPress={onPress} style={styles.dateField}>
-      <Text style={text('body', value ? 'ink' : 'muted')}>{value ? dayLabel(value) : placeholder}</Text>
+      {value ? <MonoText base={text('body', 'ink')} value={dayLabel(value)} /> : <Text style={text('body', 'muted')}>{placeholder}</Text>}
     </Pressable>
   );
 }

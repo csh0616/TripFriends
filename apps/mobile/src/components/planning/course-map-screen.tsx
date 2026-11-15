@@ -1,7 +1,7 @@
 // TASK-015 §D · task-015-design §2: 코스 카드를 누르면 실제 지도 위 경로·핀·축척을 크게 보기. 카드마다 지도를 띄우면 무거워 누른 카드 하나만.
 // 지도를 못 불러오면(그리다 던지거나 8초 안에 준비 신호 없음) onFail로 닫고 도식 카드 그대로 (§6). 장소 정보는 쓰는 순간 보이기만 (저장 없음).
 import { Component, useContext, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/app-text';
@@ -57,6 +57,12 @@ export function CourseMapScreen({
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, bottom: 0, left: 0, right: 0 };
   const [sosOpen, setSosOpen] = useState(false);
   const sheet = SHEET_HEIGHT + insets.bottom;
+  const { width, height } = useWindowDimensions();
+  // 떠 있는 판 = 위 버튼 줄 · 아래 course-bar (이름표가 피한다, TASK-015 §17)
+  const panels = [
+    { x: 0, y: insets.top + space['space-2'], width, height: control['touch-min'] },
+    { x: 0, y: height - sheet, width, height: sheet },
+  ];
   return (
     <View testID="course-map-screen" style={styles.root}>
       <MapGuard onError={onFail}>
@@ -65,6 +71,7 @@ export function CourseMapScreen({
           home={home ? { latitude: home.lat, longitude: home.lng } : null}
           padding={{ top: insets.top + layout.header + LABEL_ROOM, bottom: sheet + LOGO_ROOM, left: SIDE, right: SIDE }}
           scaleBottom={sheet + space['space-2'] + 2}
+          panels={panels}
           onReady={() => undefined}
           onFail={onFail}
         />

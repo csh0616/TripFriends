@@ -9,7 +9,7 @@ import mapStyleFile from '../../../assets/map/google-map-style.json';
 import { Text } from '@/components/app-text';
 import { metersPerPoint as metersPerPointOf, project, scaleBar, unproject, type Region } from '@/lib/map-project';
 import type { NowPin } from '@/lib/now-api';
-import { resolvePinOverlap, type Badge, type PinOverlapResult, type ScreenPin } from '@/lib/pin-overlap';
+import { resolvePinOverlap, type Badge, type PinOverlapResult, type Rect, type ScreenPin } from '@/lib/pin-overlap';
 import { layout } from '@/planning/layout';
 import tokens from 'design-tokens';
 import { color, control, motion, radius, shadow, space, text } from '@/planning/theme';
@@ -345,7 +345,7 @@ export function PickMap({
 }
 
 // ---------- TASK-015 §D: 코스 크게 보기 (실제 지도 위 경로·핀·축척) ----------
-export type CourseStop = { seq: number; lat: number; lng: number };
+export type CourseStop = { seq: number; lat: number; lng: number; /** 이름표에 쓴다. 없으면 그 핀은 이름표 없음 */ name?: string };
 
 /** 축척 막대 (react-native-maps의 showsScale은 Apple 지도 전용이라 Google 지도에서는 직접 그린다): 위 글자, 아래 L자 눈금 */
 function MapScale({ region, width }: { region: Region; width: number }) {
@@ -368,6 +368,7 @@ export function CourseMap({
   home,
   padding,
   scaleBottom,
+  panels = [],
   onReady,
   onFail,
 }: {
@@ -378,6 +379,8 @@ export function CourseMap({
   padding: { top: number; bottom: number; left: number; right: number };
   /** 축척 막대의 아래 자리 (시트 위 10) */
   scaleBottom: number;
+  /** TASK-015 §17: 떠 있는 판(위 버튼 줄·아래 시트)의 사각형 — 이름표가 피한다. 지도 화면 pt, 맨 위 0 */
+  panels?: Rect[];
   onReady: () => void;
   onFail: () => void;
 }) {
@@ -406,7 +409,15 @@ export function CourseMap({
     try {
       const screenPins: ScreenPin[] = stops.map((stop) => ({ id: `p${stop.seq}`, kind: 'later', ...project(region, size, { latitude: stop.lat, longitude: stop.lng }), size: layout.pinLater, seq: stop.seq }));
       if (home) screenPins.push({ id: 'home', kind: 'lodging', ...project(region, size, home), size: layout.homePin, seq: null });
-      rules = resolvePinOverlap({ pins: screenPins, screen: size, labelWidth: 0 });
+      const named = stops.filter((stop) => stop.name);
+      rules = resolvePinOverlap({
+        pins: screenPins,
+        screen: size,
+        labelWidth: 0,
+        panels,
+        labelMode: 'all',
+        labelWidths: Object.fromEntries(named.map((stop) => [`p${stop.seq}`, labelWidthOf(stop.name as string)])),
+      });
     } catch {
       rules = null; // 규칙 없이 지금처럼 (§6)
     }
@@ -448,6 +459,14 @@ export function CourseMap({
             />
           );
         })}
+        {region && rules
+          ? (rules.labels ?? []).map((placed) => {
+              const stop = stops.find((candidate) => `p${candidate.seq}` === placed.pinId);
+              if (!stop?.name) return null;
+              const at = unproject(region, size, { x: placed.rect.x + placed.rect.width / 2, y: placed.rect.y + placed.rect.height / 2 });
+              return <NameTag key={placed.pinId} coordinate={at} name={stop.name} width={placed.rect.width} />;
+            })
+          : null}
       </MapView>
       {region ? (
         <View pointerEvents="none" style={[styles.scaleSlot, { bottom: scaleBottom }]}>
@@ -471,6 +490,7 @@ export function MapAdapter({
   position,
   hollowPosition = false,
   stayingAtLodging = false,
+  panels,
   onReady,
   onFail,
 }: {
@@ -487,6 +507,8 @@ export function MapAdapter({
   hollowPosition?: boolean;
   /** TASK-015 §B6: 계획상 지금 있는 곳이 숙소 (출발 전·귀가 후) -> 숙소 마커가 "지금 핀" 모양, 내 위치 점은 그리지 않는다 */
   stayingAtLodging?: boolean;
+  /** TASK-015 §17: 화면에 실제로 떠 있는 판(위 버튼 줄·연습 시계 판·아래 시트) 사각형. 지도 화면 pt, 맨 위 0. 이름표가 피한다 */
+  panels?: Rect[];
   onReady: () => void;
   onFail: () => void;
 }) {
@@ -547,7 +569,7 @@ export function MapAdapter({
       if (home) screenPins.push({ id: 'home', kind: 'lodging', ...at(home), size: layout.homePin, seq: null });
       const me = position ? { ...at(position), size: hollowPosition ? layout.rehDot : layout.positionDot } : null;
       const nextName = pins.find((pin) => pin.state === 'next')?.name ?? '';
-      rules = resolvePinOverlap({ pins: screenPins, screen: size, labelWidth: labelWidthOf(nextName), me, stayingAtLodging });
+      rules = resolvePinOverlap({ pins: screenPins, screen: size, labelWidth: labelWidthOf(nextName), me, panels, stayingAtLodging });
     } catch {
       rules = null;
     }

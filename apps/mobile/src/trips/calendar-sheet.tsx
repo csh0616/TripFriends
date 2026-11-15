@@ -11,6 +11,7 @@ import { addDays, daysBetween, endSelectable, monthGrid, pickDate, startSelectab
 import { layout } from '@/planning/layout';
 import { color, control, radius, shadow, space, text } from '@/planning/theme';
 
+import { MonoText } from '@/components/trips/parts';
 import { dayLabel, monthLabel, WEEKDAYS } from './format';
 
 const START_WINDOW_DAYS = 180;
@@ -67,11 +68,11 @@ export function CalendarSheet({
           <View style={styles.fields}>
             <View style={[styles.field, range.end === null && styles.fieldActive]}>
               <Text style={text('label', 'muted')}>가는 날</Text>
-              <Text style={text('body')}>{range.start ? dayLabel(range.start) : '—'}</Text>
+              <MonoText base={text('body')} value={range.start ? dayLabel(range.start) : '—'} />
             </View>
             <View style={[styles.field, range.start !== null && range.end === null && styles.fieldActive]}>
               <Text style={text('label', 'muted')}>오는 날</Text>
-              <Text style={text('body')}>{range.end ? dayLabel(range.end) : '—'}</Text>
+              <MonoText base={text('body')} value={range.end ? dayLabel(range.end) : '—'} />
             </View>
           </View>
 
@@ -79,7 +80,7 @@ export function CalendarSheet({
             <NavButton testID="cal-prev" label="이전 달" off={month <= firstMonth} onPress={() => setMonth(shiftMonth(month, -1))}>
               <BackIcon color={month <= firstMonth ? color.muted : color.ink} size={control.icon - 6} />
             </NavButton>
-            <Text style={text('heading')}>{monthLabel(month)}</Text>
+            <MonoText base={text('heading')} value={monthLabel(month)} />
             <NavButton testID="cal-next" label="다음 달" off={month >= lastMonth} onPress={() => setMonth(shiftMonth(month, 1))}>
               <NextIcon color={month >= lastMonth ? color.muted : color.ink} size={control.icon - 6} />
             </NavButton>

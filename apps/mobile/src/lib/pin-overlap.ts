@@ -169,21 +169,27 @@ export function resolvePinOverlap(input: PinOverlapInput): PinOverlapResult {
   // ④ 내 위치 점: 숙소에 머무는 동안은 그리지 않는다 (숙소 마커가 "지금 핀")
   const meDot = me !== null && !stayingAtLodging;
 
-  // ⑤ 이름표: 다음 핀 하나. 위 -> 오른쪽 -> 왼쪽 -> 아래, 다 안 되면 뺀다 (이름표 때문에 핀을 빼지 않는다)
-  let label: PinOverlapResult['label'] = null;
+  // ⑤ 이름표: 'next' = 다음 핀 하나, 'all'(번호 핀 5곳 이하) = 보이는 번호 핀 모두. 위 -> 오른쪽 -> 왼쪽 -> 아래, 다 안 되면 그 이름표만 뺀다 (이름표 때문에 핀을 빼지 않는다)
+  const allMode = input.labelMode === 'all' && pins.filter((p) => p.kind !== 'lodging').length <= ALL_LABELS_MAX;
   const next = shown.find((p) => p.kind === 'next');
-  if (next) {
+  // 다음 핀을 먼저, 나머지는 코스 번호 순
+  const targets = allMode ? [...shown.filter((p) => p.shape === 'pin')].sort((a, b) => (a === next ? -1 : b === next ? 1 : bySeq(a, b))) : next ? [next] : [];
+  const labels: PlacedLabel[] = [];
+  for (const target of targets) {
     const free = (rect: Rect): boolean =>
       rect.x >= SCREEN_MARGIN &&
       rect.y >= SCREEN_MARGIN &&
       rect.x + rect.width <= screen.width - SCREEN_MARGIN &&
       rect.y + rect.height <= screen.height - SCREEN_MARGIN &&
-      shown.every((other) => other.id === next.id || !touchesCircle(rect, other, other.size / 2 + PIN_MARGIN)) &&
+      shown.every((other) => other.id === target.id || !touchesCircle(rect, other, other.size / 2 + PIN_MARGIN)) &&
       !(meDot && me && touchesCircle(rect, me, me.size / 2)) &&
-      panels.every((panel) => !touchesRect(rect, panel));
-    const found = labelRects(next, labelWidth).find(([, rect]) => free(rect));
-    if (found) label = { pinId: next.id, side: found[0], rect: found[1] };
+      panels.every((panel) => !touchesRect(rect, panel)) &&
+      labels.every((placed) => !touchesRect(rect, placed.rect));
+    const width = input.labelWidths?.[target.id] ?? labelWidth;
+    const found = labelRects(target, width).find(([, rect]) => free(rect));
+    if (found) labels.push({ pinId: target.id, side: found[0], rect: found[1] });
   }
+  const label = next ? (labels.find((l) => l.pinId === next.id) ?? null) : null;
 
-  return { pins: shown, label, meDot };
+  return { pins: shown, label, labels, meDot };
 }

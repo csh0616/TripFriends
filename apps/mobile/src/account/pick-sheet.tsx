@@ -12,6 +12,7 @@ import type { Choice } from '@/lib/account-link';
 import { maskEmail } from '@/lib/mask-email';
 import { layout } from '@/planning/layout';
 import { account, color, fit, fitText, radius, space } from '@/planning/theme';
+import { MonoText } from '@/components/trips/parts';
 import { periodLabel } from '@/trips/format';
 
 import { SheetFrame, sheetStyles } from './sheet-frame';
@@ -61,9 +62,7 @@ export function PickSheet({
                 <Text numberOfLines={1} style={fitText(PICK.name, 'ink')}>
                   {choice.name}
                 </Text>
-                <Text numberOfLines={1} style={fitText(PICK.meta)}>
-                  {`${periodLabel(choice.start_date, choice.end_date)} · ${choice.total_days}일 중 ${choice.planned_days}일 계획 완료`}
-                </Text>
+                <MonoText numberOfLines={1} base={fitText(PICK.meta)} value={`${periodLabel(choice.start_date, choice.end_date)} · ${choice.total_days}일 중 ${choice.planned_days}일 계획 완료`} />
               </View>
               <View style={[styles.radio, on && styles.radioOn]}>{on ? <CheckIcon color={color['on-brand']} size={layout.checkSmall} /> : null}</View>
             </Pressable>

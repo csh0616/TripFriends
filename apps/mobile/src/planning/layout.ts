@@ -159,8 +159,9 @@ export const layout = {
   statusPill: 36, // 이동 상태 알약 높이 (pill-off 자리 계산용)
   rehBand: 52, // reh-band 높이
   rehClock: 112, // reh-clock 판 높이
-  rehSheetTop: 434, // 연습 카드 시트(중간 단) 윗변 y: 보드 ①-35, 화면 874 기준 (TASK-014 §20 Q2). 다른 화면 높이는 이 비율로 줄인다
-  rehBoardHeight: 874, // 보드 ①-35 화면 높이
+  rehSheetTop: 546, // 연습 카드 시트 기본 윗변 y: 앱 844 기준 (TASK-015 §B3 · task-014-design §12-1, 이전 874 화면 434). 다른 화면 높이는 이 비율로 줄인다
+  rehSheetTopUp: 417, // 위로 끌었을 때 윗변 y (같은 곳, 844 기준)
+  rehBoardHeight: 844, // 기준 화면 높이
   rehBoardBottom: 34, // 보드 아래 안전 영역
   rehPlusWidth: 84, // reh-clock [+10분] 폭
   rehPlayWidth: 96, // reh-clock [재생] 폭
