@@ -178,4 +178,13 @@ export const layout = {
   rehRowExtra: 40, // row-done-rehearse: 84 + 버튼 줄 40 = 124
   chipSmIcon: 16, // btn-chip-sm 아이콘
   noticeInfoHeight: 44, // notice-info
+  // TASK-015 task-015-design §1-3·§2 (docs/design/reviews/task-015-design.md V129)
+  titlePill: 36, // 지도 위 제목 알약 높이 (a2 "지도에서 찍기" · 크게 보기)
+  expandPill: 28, // btn-expand-map 알약 높이 (눌러지는 영역은 도식 전체)
+  mapOffCircle: 56, // a4 지도 꺼짐 원
+  scaleWidth: 96, // map-scale 폭
+  scaleHeight: 30, // map-scale 높이
+  scaleBarHeight: 8, // L자 눈금 막대의 세로 눈금
+  scaleLine: 2, // 눈금 선 굵기
+  scaleGap: 2, // 글자와 막대 사이
 } as const;

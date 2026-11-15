@@ -46,3 +46,6 @@ export const RouteIcon = (p: Props) => <Icon {...p} d="M6 19a2 2 0 1 0 0-.01M18 
 // 연습 시계 [재생]·[멈춤] (DESIGN-001 §4-13 reh-clock)
 export const PlayIcon = (p: Props) => <Icon {...p} d="M8 5.5v13l10-6.5z" />;
 export const PauseIcon = (p: Props) => <Icon {...p} d="M9 5.5v13M15 5.5v13" />;
+
+// TASK-015 §D 코스 크게 보기 알약
+export const ExpandIcon = (p: Props) => <Icon {...p} d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />;

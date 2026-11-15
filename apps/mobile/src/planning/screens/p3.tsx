@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { CourseMapScreen } from '@/components/planning/course-map-screen';
+import { ExpandIcon } from '@/components/planning/icons';
 import { Notice } from '@/components/planning/notice';
 import { RouteDiagram } from '@/components/planning/route-diagram';
 import { PrimaryButton } from '@/components/planning/primary-button';
@@ -44,6 +46,8 @@ export function P3Screen({
   const { width } = useWindowDimensions();
   const [label, setLabel] = useState<'relaxed' | 'packed'>('relaxed');
   const [open, setOpen] = useState<string | null>(null);
+  const [bigMap, setBigMap] = useState(false); // TASK-015 §D: 코스 카드를 눌러 실제 지도로 크게 보기
+  const [mapNotice, setMapNotice] = useState<string | null>(null);
 
   // Q14: 보던 label의 안을 보여 주고, 없으면 첫 안
   const option = course.options.find((o) => o.label === label) ?? course.options[0];
@@ -63,7 +67,11 @@ export function P3Screen({
 
   const empty = items.length === 0;
 
+  const stops = items.flatMap((item) => (item.lat !== null && item.lng !== null ? [{ seq: item.seq, lat: item.lat, lng: item.lng }] : []));
+  const summary = option ? `${items.length}곳 · 이동 ${option.total_travel_min}분` : '';
+
   return (
+    <View style={styles.grow}>
     <ScreenFrame
       title="코스 짜 봤어"
       // §13 Q33: P3 부제는 "{날 이름} · {n}곳"
@@ -100,6 +108,7 @@ export function P3Screen({
       {notice ? (
         <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} retryDisabled={busy} />
       ) : null}
+      {mapNotice ? <Notice message={mapNotice} /> : null}
 
       {course.options.length > 1 ? (
         <View style={styles.toggle}>
@@ -127,13 +136,27 @@ export function P3Screen({
 
       {option ? (
         <>
-          <RouteDiagram
-            width={width - 2 * layout.screenMargin}
-            home={day.lodging}
-            stops={items.flatMap((item) =>
-              item.lat !== null && item.lng !== null ? [{ seq: item.seq, lat: item.lat, lng: item.lng }] : [],
-            )}
-          />
+          {stops.length > 0 ? (
+            // 도식은 그대로 가볍게 비교하고, 통째로 버튼: 누르면 실제 지도로 크게 (aria "코스 지도 크게 보기")
+            <Pressable
+              testID="btn-expand-map"
+              accessibilityRole="button"
+              accessibilityLabel="코스 지도 크게 보기"
+              style={styles.expandHit}
+              onPress={() => {
+                setMapNotice(null);
+                setBigMap(true);
+              }}
+            >
+              <RouteDiagram width={width - 2 * layout.screenMargin} home={day.lodging} stops={stops} />
+              <View pointerEvents="none" style={styles.expandPill}>
+                <ExpandIcon color={color.ink} size={layout.pillIcon} />
+                <Text style={text('label', 'ink')}>크게 보기</Text>
+              </View>
+            </Pressable>
+          ) : (
+            <RouteDiagram width={width - 2 * layout.screenMargin} home={day.lodging} stops={stops} />
+          )}
           <Text style={text('caption', 'muted')}>{`${items.length}곳 · 이동 ${option.total_travel_min}분`}</Text>
 
           {empty ? <Text style={text('body', 'muted')}>담은 곳이 없어서 코스가 비었어</Text> : null}
@@ -168,6 +191,24 @@ export function P3Screen({
         </>
       ) : null}
     </ScreenFrame>
+    {bigMap && option ? (
+      <CourseMapScreen
+        dayNumber={day.day_number}
+        labelText={LABEL_TEXT[option.label]}
+        stops={stops}
+        home={day.lodging}
+        summary={summary}
+        busy={busy}
+        onClose={() => setBigMap(false)}
+        onPick={select}
+        onFail={() => {
+          // §6: 크게 보기를 닫고 도식 카드 그대로, 알림 한 줄
+          setBigMap(false);
+          setMapNotice('지도를 못 불러왔어');
+        }}
+      />
+    ) : null}
+    </View>
   );
 }
 
@@ -304,6 +345,8 @@ export function ReadRow({ item, must }: { item: CourseItem; must: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  expandHit: { minHeight: layout.routeDiagram },
+  expandPill: { position: 'absolute', right: space['space-2'], bottom: space['space-2'], height: layout.expandPill, paddingHorizontal: space['space-3'], flexDirection: 'row', alignItems: 'center', gap: space['space-1'], borderRadius: radius['r-full'], backgroundColor: color.surface, ...shadow.float },
   readRow: {
     minHeight: fit['row-read'].minHeight,
     paddingHorizontal: space['space-3'],

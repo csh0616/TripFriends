@@ -14,6 +14,7 @@ import { PrimaryButton } from '@/components/planning/primary-button';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { lodgingError, trimLabel } from '@/lib/create-trip';
 import { canConfirmPin, isTooFar } from '@/lib/lodging-pick';
+import { layout } from '@/planning/layout';
 import { control, color, radius, shadow, space, text } from '@/planning/theme';
 
 /** 찍은 숙소 (kind: pin). 좌표는 사용자가 지도를 길게 눌러 찍은 값, label은 이름 칸에 친 글 */
@@ -172,7 +173,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color['bg-2'] },
   top: { position: 'absolute', left: space['space-4'], right: space['space-4'], flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { width: control['touch-min'], height: control['touch-min'], borderRadius: radius['r-full'], backgroundColor: color.surface, alignItems: 'center', justifyContent: 'center', ...shadow.float },
-  titlePill: { height: 36, paddingHorizontal: space['space-4'], borderRadius: radius['r-full'], backgroundColor: color.surface, alignItems: 'center', justifyContent: 'center', ...shadow.float },
+  titlePill: { height: layout.titlePill, paddingHorizontal: space['space-4'], borderRadius: radius['r-full'], backgroundColor: color.surface, alignItems: 'center', justifyContent: 'center', ...shadow.float },
   sheet: {
     position: 'absolute',
     left: 0,
@@ -189,6 +190,6 @@ const styles = StyleSheet.create({
   labelBox: { gap: space['space-2'], marginTop: space['space-2'] },
   labelInput: { ...text('body'), minHeight: control.input, paddingHorizontal: space['space-4'], borderRadius: radius['r-md'], backgroundColor: color['bg-2'] },
   failMap: { ...StyleSheet.absoluteFill, backgroundColor: color['bg-2'], alignItems: 'center', justifyContent: 'center' },
-  failIcon: { width: 56, height: 56, borderRadius: radius['r-full'], backgroundColor: color.surface, ...shadow.float },
+  failIcon: { width: layout.mapOffCircle, height: layout.mapOffCircle, borderRadius: radius['r-full'], backgroundColor: color.surface, ...shadow.float },
   failButtons: { gap: space['space-2'], marginTop: space['space-3'] },
 });

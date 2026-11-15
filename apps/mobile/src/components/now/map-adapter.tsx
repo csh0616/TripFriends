@@ -7,7 +7,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewProps } from 'r
 
 import mapStyleFile from '../../../assets/map/google-map-style.json';
 import { Text } from '@/components/app-text';
-import { metersPerPoint as metersPerPointOf, project, unproject, type Region } from '@/lib/map-project';
+import { metersPerPoint as metersPerPointOf, project, scaleBar, unproject, type Region } from '@/lib/map-project';
 import type { NowPin } from '@/lib/now-api';
 import { resolvePinOverlap, type Badge, type PinOverlapResult, type ScreenPin } from '@/lib/pin-overlap';
 import { layout } from '@/planning/layout';
@@ -344,6 +344,120 @@ export function PickMap({
   );
 }
 
+// ---------- TASK-015 §D: 코스 크게 보기 (실제 지도 위 경로·핀·축척) ----------
+export type CourseStop = { seq: number; lat: number; lng: number };
+
+/** 축척 막대 (react-native-maps의 showsScale은 Apple 지도 전용이라 Google 지도에서는 직접 그린다): 위 글자, 아래 L자 눈금 */
+function MapScale({ region, width }: { region: Region; width: number }) {
+  const bar = scaleBar(metersPerPointOf(region, width));
+  if (!bar) return null;
+  const digits = bar.label.match(/^(\d+)(.*)$/);
+  return (
+    <View testID="map-scale" accessible accessibilityLabel={`축척 ${bar.label}`} style={styles.scale}>
+      <Text style={text('label', 'ink')}>
+        {digits ? <Text style={text('num-sm', 'ink')}>{digits[1]}</Text> : null}
+        {digits ? digits[2] : bar.label}
+      </Text>
+      <View style={[styles.scaleBar, { width: bar.width }]} />
+    </View>
+  );
+}
+
+export function CourseMap({
+  stops,
+  home,
+  padding,
+  scaleBottom,
+  onReady,
+  onFail,
+}: {
+  stops: CourseStop[];
+  /** 숙소가 없으면 null */
+  home: LatLng | null;
+  /** 경로 전체가 보이게 맞출 때의 여백 (위: 머리줄, 아래: 시트 + 로고) */
+  padding: { top: number; bottom: number; left: number; right: number };
+  /** 축척 막대의 아래 자리 (시트 위 10) */
+  scaleBottom: number;
+  onReady: () => void;
+  onFail: () => void;
+}) {
+  const map = useRef<MapView>(null);
+  const ready = useRef(false);
+  const { width, height } = useWindowDimensions();
+  const [region, setRegion] = useState<Region | null>(null);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!ready.current) onFail();
+    }, MAP_READY_LIMIT_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const path = [...(home ? [home] : []), ...stops.map((stop) => ({ latitude: stop.lat, longitude: stop.lng })), ...(home ? [home] : [])];
+  const signalReady = () => {
+    if (ready.current) return;
+    ready.current = true;
+    onReady();
+    map.current?.fitToCoordinates(path, { edgePadding: padding, animated: false });
+  };
+
+  let rules: PinOverlapResult | null = null;
+  const size = { width, height };
+  if (region) {
+    try {
+      const screenPins: ScreenPin[] = stops.map((stop) => ({ id: `p${stop.seq}`, kind: 'later', ...project(region, size, { latitude: stop.lat, longitude: stop.lng }), size: layout.pinLater, seq: stop.seq }));
+      if (home) screenPins.push({ id: 'home', kind: 'lodging', ...project(region, size, home), size: layout.homePin, seq: null });
+      rules = resolvePinOverlap({ pins: screenPins, screen: size, labelWidth: 0 });
+    } catch {
+      rules = null; // 규칙 없이 지금처럼 (§6)
+    }
+  }
+  const shown = new Map(rules ? rules.pins.map((pin) => [pin.id, pin]) : []);
+  const drawn = (id: string) => !rules || shown.has(id);
+
+  return (
+    <>
+      <MapView
+        ref={map}
+        testID="course-map"
+        provider={PROVIDER_GOOGLE}
+        customMapStyle={MAP_STYLE}
+        style={StyleSheet.absoluteFill}
+        initialRegion={{ ...(home ?? (stops[0] ? { latitude: stops[0].lat, longitude: stops[0].lng } : NO_CENTER)), latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
+        mapPadding={{ top: 0, left: 0, right: 0, bottom: padding.bottom - 40 > 0 ? padding.bottom - 40 : 0 }}
+        toolbarEnabled={false}
+        onRegionChangeComplete={setRegion}
+        onMapReady={signalReady}
+        onMapLoaded={signalReady}
+      >
+        {path.length >= 2 ? (
+          <>
+            {/* 도식과 같은 실선 (점선은 Google iOS에서 안 그려질 수 있다, ADR-014 A1) */}
+            <Polyline testID="course-route-casing" coordinates={path} strokeColor={color.surface} strokeWidth={tokens.map['route-casing']} lineCap="round" zIndex={1} />
+            <Polyline testID="course-route" coordinates={path} strokeColor={color.brand} strokeWidth={tokens.map['route-width']} lineCap="round" zIndex={2} />
+          </>
+        ) : null}
+        {home && drawn('home') ? <HomePin coordinate={home} badges={shown.get('home')?.badges} a11yLabel={shown.get('home')?.a11yLabel} /> : null}
+        {stops.map((stop) => {
+          if (!drawn(`p${stop.seq}`)) return null; // 다른 핀에 묶여 빠짐 (+N 배지가 대신 알린다)
+          const rule = shown.get(`p${stop.seq}`);
+          return (
+            <NumberPin
+              key={stop.seq}
+              pin={{ seq: stop.seq, place_id: '', name: '', lat: stop.lat, lng: stop.lng, start: '', end: '', travel_min: 0, state: 'later' } as NowPin}
+              rules={rule ? { badges: rule.badges, a11yLabel: rule.a11yLabel, showBubble: false } : undefined}
+            />
+          );
+        })}
+      </MapView>
+      {region ? (
+        <View pointerEvents="none" style={[styles.scaleSlot, { bottom: scaleBottom }]}>
+          <MapScale region={region} width={width} />
+        </View>
+      ) : null}
+    </>
+  );
+}
+
 const NO_CENTER: LatLng = { latitude: 36.2, longitude: 138.25 }; // 첫 응답 전 숙소·핀이 없을 때만 (곧 카메라가 옮긴다)
 const MAP_STYLE = mapStyleFile as unknown as MapViewProps['customMapStyle']; // 원본: docs/design/google-map-style.json (§13 E1)
 
@@ -494,15 +608,19 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', minWidth: BADGE, height: BADGE, paddingHorizontal: 3, borderRadius: radius['r-full'], backgroundColor: color.ink, alignItems: 'center', justifyContent: 'center' },
   badgeHome: { backgroundColor: color.surface, borderWidth: layout.routeHomeStroke, borderColor: color.ink },
   tagText: { textAlign: 'center' },
+  scaleSlot: { position: 'absolute', right: space['space-4'], alignItems: 'flex-end' },
+  scale: { minWidth: layout.scaleWidth, height: layout.scaleHeight, alignItems: 'flex-start', gap: layout.scaleGap },
+  scaleBar: { height: layout.scaleBarHeight, borderLeftWidth: layout.scaleLine, borderRightWidth: layout.scaleLine, borderBottomWidth: layout.scaleLine, borderColor: color['ink-strong'] },
   homeGlyph: { alignItems: 'center', justifyContent: 'center' },
   pickArea: {
     width: PICK_AREA_RADIUS * 2,
     height: PICK_AREA_RADIUS * 2,
     borderRadius: radius['r-full'],
-    backgroundColor: 'rgba(26,26,26,0.06)', // ink 6% (새 토큰 아님, 기존 ink에 투명도만)
     borderWidth: layout.emptyBorder,
     borderStyle: 'dashed',
     borderColor: color.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pickFace: {
     width: PICK_FACE,
