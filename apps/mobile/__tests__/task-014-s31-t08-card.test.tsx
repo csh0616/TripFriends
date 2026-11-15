@@ -6,7 +6,7 @@
 // 계약 (승인 대기):
 //   서버의 숙소 없는 T-08 = { type: 'T-08', go_home_min, lodging: null, map_url: null } (api-types는 백엔드 뒤 생성 — 여기서는 as never로 넘긴다)
 //   NowCardView(T-08, lodging null) -> card-T-08 안에 "오늘 일정 끝"(제목)·"오늘 일정이 끝났어. 오늘도 수고했어!"(본문), '숙소' 글자 없음, home-directions-button 없음
-//   메인이든 보조 자리든(main true/false) 같다. go_home_min 값과 상관없다 (0·25)
+//   메인이든 보조 자리든(main true/false) 같다. go_home_min 값과 상관없다 (0·25·null — §31 답 1: 서버는 숙소 없으면 null을 준다)
 //   숙소 있음(lodging {lat,lng}, map_url 문자열) -> 지금 모양 그대로: home-directions-button 있음, 위 두 문구 없음
 import { render, screen, within } from '@testing-library/react-native';
 
@@ -23,6 +23,8 @@ async function show(card: object, main = true) {
 
 describe('§31 Q2 숙소 없는 T-08 모양', () => {
   test.each([
+    [true, null],
+    [false, null],
     [true, 25],
     [true, 0],
     [false, 25],
@@ -33,6 +35,8 @@ describe('§31 Q2 숙소 없는 T-08 모양', () => {
   });
 
   test.each([
+    [true, null],
+    [false, null],
     [true, 25],
     [true, 0],
     [false, 25],

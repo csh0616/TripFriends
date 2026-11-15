@@ -8,8 +8,8 @@ Q4("1번 장소 전 위치를 경로 선에: 넣는다 ('지금 위치 → 1번'
 
 계약 (이 테스트가 정한 것, 승인 대기):
     응답 모양 — 숙소 없는 T-08 (문서에 칸 이름이 없어 가장 단순한 안: 기존 칸을 null 허용으로):
-        main = {"type": "T-08", "go_home_min": (정하지 않음 — 질문), "lodging": null, "map_url": null}
-        OpenAPI NowCardT08.lodging·map_url은 null을 받는다 (숙소가 있으면 지금처럼 {lat, lng}·문자열)
+        main = {"type": "T-08", "go_home_min": null, "lodging": null, "map_url": null}  (go_home_min null: §31 답 1, 계획 화면 §10 Q27과 같게)
+        OpenAPI NowCardT08.go_home_min·lodging·map_url은 null을 받는다 (숙소가 있으면 지금처럼 정수·{lat, lng}·문자열)
     숙소 없음(lodging_known=False, 좌표 못 찾은 숙소 포함) + 마지막 장소 끝(정각 포함) 뒤:
         main = 숙소 없는 T-08, reason = "오늘 일정이 끝났어. 오늘도 수고했어!", subs = [], status_text = "오늘 일정 끝"
     숙소 없음 + 빈 코스 날: main = 숙소 없는 T-08, reason = "오늘 코스가 비어 있어" 그대로 (안내 글이 함께)
@@ -19,7 +19,7 @@ Q4("1번 장소 전 위치를 경로 선에: 넣는다 ('지금 위치 → 1번'
     Q4 숙소 없음 + 1번 장소로 이동 중(1번 출발 시각 10:00 ~ 1번 시작 10:12 전) + 위치를 실음(check·연습 check):
         done + remaining을 이어 연달아 같은 점을 줄이면 [지금 위치, P1, P2, P3], remaining[0] = 지금 위치, done이 있으면 done[-1] = 지금 위치
         위치를 안 실으면 [P1, P2, P3] (§30 그대로). 1번 시작 정각(10:12)부터는 위치를 실어도 [P1, P2, P3] (이동 중이 아님, R2)
-        "1번 출발 시각 전"(예: 09:59)에 위치를 실은 경우는 문서가 갈리지 않게 정하지 않는다 (질문)
+        1번 출발 시각 전(예: 09:00·09:59)은 위치를 실어도 [P1, P2, P3] (§31 답 4: 이동 중 = 출발 시각 ≤ 지금 < 1번 시작일 때만)
     Q4 경계 숙소 있음: [숙소, 지금 위치, P1, P2, P3, 숙소] (지금 그대로)
 """
 
@@ -242,3 +242,72 @@ def test_T14_S31_Q4_경계_숙소_있으면_1번으로_이동_중_경로는_숙�
     for kind in ("check", "rehearsal"):
         view = views(env, day_id, clock, position=TOWARD_P1)[kind]
         assert collapsed(view["route"]) == [HOME, TOWARD_P1, *pin_coords(view), HOME], (kind, clock, view["route"])
+
+
+# =====================================================================
+# §31 답 1: 숙소 없는 T-08의 go_home_min = null (숙소 있으면 지금 값)
+# =====================================================================
+
+
+@pytest.mark.parametrize("clock", ["19:00", "19:01", "23:59"])
+def test_T14_S31_A1_숙소_모름_하루_끝_T_08의_go_home_min은_null(no_lodging_day, clock):
+    env, day_id = no_lodging_day
+    for kind, view in views(env, day_id, clock).items():
+        assert view["main"]["type"] == "T-08", (kind, clock)
+        assert "go_home_min" in view["main"] and view["main"]["go_home_min"] is None, (kind, clock, view["main"])
+
+
+@pytest.mark.parametrize("clock", ["09:00", "19:00"])
+def test_T14_S31_A1_빈_코스_날_숙소_없으면_T_08의_go_home_min은_null(empty_no_lodging, clock):
+    env, day_id = empty_no_lodging
+    for kind, view in views(env, day_id, clock).items():
+        assert view["main"]["type"] == "T-08", (kind, clock)
+        assert view["main"]["go_home_min"] is None, (kind, clock, view["main"])
+
+
+def test_T14_S31_A1_좌표를_못_찾은_숙소도_T_08의_go_home_min은_null(mem, monkeypatch):  # noqa: F811
+    hit = lodging_hit(mem)
+    monkeypatch.setattr(mem.app.state.city, "lodging_location", lambda place_id, now: None)
+    day_id, date = planned_day(mem, lodging=hit["place_id"])
+    end = last_end(get_now(mem, day_id, at_of(date, "12:00")))
+    for kind, view in every_view(mem, day_id, at_of(date, hhmm(min(end + 1, 23 * 60 + 59)))).items():
+        assert view["main"]["type"] == "T-08", kind
+        assert view["main"]["go_home_min"] is None, (kind, view["main"])
+
+
+@pytest.mark.parametrize("clock", ["19:00", "23:59"])
+def test_T14_S31_A1_경계_숙소_있으면_T_08의_go_home_min은_지금_값_그대로(env, clock):
+    day_id = plain_day(env)  # trip_helpers.plant go_home=25
+    for kind, view in views(env, day_id, clock).items():
+        assert view["main"]["type"] == "T-08", (kind, clock)
+        assert type(view["main"]["go_home_min"]) is int and view["main"]["go_home_min"] == 25, (kind, clock)
+
+
+def test_T14_S31_A1_경계_빈_코스_날_숙소_있으면_go_home_min_0_그대로(env):
+    day_id = plant(env, [], places={"P01": place("P01", hours=week_hours())}, go_home=0)
+    for kind, view in views(env, day_id, "13:00").items():
+        assert view["main"]["go_home_min"] == 0 and type(view["main"]["go_home_min"]) is int, kind
+
+
+def test_T14_S31_A1_OpenAPI의_NowCardT08_go_home_min은_null을_받고_정수_모양도_그대로():
+    from api.main import app
+
+    spec = app.openapi()
+    go_home = spec["components"]["schemas"]["NowCardT08"]["properties"]["go_home_min"]
+    assert _allows_null(spec, go_home)
+    assert _has_option(spec, go_home, lambda s: s.get("type") == "integer")
+
+
+# =====================================================================
+# §31 답 4: 1번 출발 시각 전은 위치를 실어도 선에 넣지 않는다 (이동 중일 때만)
+# =====================================================================
+
+
+@pytest.mark.parametrize("clock", ["00:00", "09:00", "09:59"])
+def test_T14_S31_A4_숙소_없고_1번_출발_시각_전은_위치를_실어도_경로는_P1부터(no_lodging_day, clock):
+    env, day_id = no_lodging_day  # 1번 출발 10:00 (시작 10:12 - 이동 12)
+    for kind in ("check", "rehearsal"):
+        view = views(env, day_id, clock, position=TOWARD_P1)[kind]
+        route = view["route"]
+        assert collapsed(route) == pin_coords(view), (kind, clock, route)
+        assert TOWARD_P1 not in [tuple(p) for p in (*route["done"], *route["remaining"])], (kind, clock)
