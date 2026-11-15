@@ -109,7 +109,7 @@ def assert_event(event: dict) -> None:
 
 
 def assert_view(view: dict) -> None:
-    assert set(view) == NOW_KEYS
+    assert set(view) - {"city"} == NOW_KEYS  # TASK-015 §E ③: city(도시 중심) 칸이 더해진다 (있는지는 test_task015_city_center)
     if view["event"] is not None:
         assert_event(view["event"])
     for card in [view["main"], *view["subs"]]:

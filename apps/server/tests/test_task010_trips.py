@@ -560,7 +560,10 @@ def test_T10_B5_고른_숙소는_place_id만_여행에_저장(osaka):
     hit = lodging(osaka, "호텔").json()[0]
     trip = osaka.make_trip(lodging=hit["place_id"])
     assert trip["lodging_place_id"] == hit["place_id"]
-    assert not {"lodging_lat", "lodging_lng", "lodging", "lodging_location"} & set(trip)
+    assert not {"lodging_lat", "lodging_lng", "lodging_location"} & set(trip)
+    # TASK-015 §A: 응답에 trip.lodging 칸이 생긴다 (이전 단언은 "lodging" 칸 자체를 금지했다). 고른 숙소(place)는 여전히 좌표를 갖지 않는다
+    shape = trip.get("lodging")
+    assert shape is None or (shape.get("lat") is None and shape.get("lng") is None), shape
 
 
 # ---------- §K·§6 키 없음 = 가짜 공급자 + 경고 한 줄 ----------

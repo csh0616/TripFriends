@@ -236,7 +236,7 @@ def assert_card_shape(card: dict) -> None:
 
 
 def assert_now_shape(view: dict) -> None:
-    assert set(view) == NOW_KEYS
+    assert set(view) - {"city"} == NOW_KEYS  # TASK-015 §E ③: city(도시 중심) 칸이 더해진다 (있는지는 test_task015_city_center)
     DaySummary.model_validate(view["day"])
     assert view["status"] in {"on_track", "delayed", "free"}
     assert type(view["reason"]) is str and view["reason"]
