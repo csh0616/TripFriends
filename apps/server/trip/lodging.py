@@ -20,7 +20,7 @@ def _limits() -> dict[str, int]:
 
 
 class LodgingError(Exception):
-    """400 INVALID_LODGING의 이유 하나 (§11 Q1). 순서: invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> label_too_long -> too_far."""
+    """400 INVALID_LODGING의 이유 하나 (§11 Q1). 순서: invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> field_not_allowed -> label_too_long -> too_far."""
 
     def __init__(self, reason: str):
         super().__init__(reason)
@@ -50,7 +50,7 @@ def normalize(raw: dict[str, Any], center: tuple[float, float] | None) -> dict[s
     place_id, address, lat, lng, label = raw.get("place_id"), raw.get("address_text"), raw.get("lat"), raw.get("lng"), raw.get("label")
     if kind == "place" and _blank(place_id):  # 없음·빈 글만 missing_field. 값이 있는데 글자가 아니면 invalid_type (§15 Q2)
         raise LodgingError("missing_field")
-    if kind == "address" and _blank(address):
+    if kind == "address" and (_blank(address) or _blank(place_id)):  # 주소는 글과 place_id 둘 다 필수 (§17 Q-C)
         raise LodgingError("missing_field")
     if kind == "pin" and (lat is None or lng is None):
         raise LodgingError("missing_field")
@@ -59,6 +59,8 @@ def normalize(raw: dict[str, Any], center: tuple[float, float] | None) -> dict[s
         raise LodgingError("invalid_type")
     if kind != "pin" and (lat is not None or lng is not None):
         raise LodgingError("coords_not_allowed")  # 조용히 버리지 않는다 (§9 Q4)
+    if kind == "pin" and (not _blank(place_id) or not _blank(address)):
+        raise LodgingError("field_not_allowed")  # pin은 place_id·address_text 값을 받지 않는다 (§17 Q-D)
     text = label.strip() if isinstance(label, str) else None
     if text is not None and len(text) > _limits()["label_max"]:
         raise LodgingError("label_too_long")  # 자르지 않는다 (§11 Q2)

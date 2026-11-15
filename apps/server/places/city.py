@@ -144,7 +144,11 @@ def open_city(env: Mapping[str, str] | None = None, *, now: datetime | None = No
     if not PACK_PATH.is_file():
         log.warning("도시 팩이 없어 가짜 장소로 켬 (uv run python -m places build osaka 필요). %s", FAKE_WARNING)
         return fake_city(), True
-    city = CityData(json.loads(PACK_PATH.read_text(encoding="utf-8")), load_cache(CACHE_PATH), provider, cache_path=CACHE_PATH)
+    pack = json.loads(PACK_PATH.read_text(encoding="utf-8"))
+    center = pack.get("center") or {}
+    if center.get("lat") is None or center.get("lng") is None:  # 지도 시작 좌표가 없으면 요청마다 500이 되기 전에 시작 때 멈춘다 (§17 Q-B)
+        raise CityConfigError("도시 팩 center에 lat·lng가 없습니다 (uv run python -m places build osaka 다시 실행)")
+    city = CityData(pack, load_cache(CACHE_PATH), provider, cache_path=CACHE_PATH)
     try:
         city.refresh(now or datetime.now(UTC))  # 서버 시작 때 오래된 것을 다시 부른다 (A5)
     except Exception as error:
