@@ -240,6 +240,13 @@ const shortView = (depart: number) =>
       [[480, depart, 12], [depart + 20, 720, 20], [750, 960, 30]],
     ),
   });
+// TASK-015 §17 B3: 연습 시트 기본 윗변이 내려가(844 546 · 874 약 563) 보이는 띠가 높아졌다 -> D01 -> D20(남북 1.1km)은 띠에 넣어도 3km 상한에 안 걸린다(약 2.6km).
+// 3km로 묶이는 구간이 필요한 시험(아래 두 개)은 D01에서 정북 3.9km(위도 +0.035)의 긴 구간을 쓴다. 시각(MOVE_TIMES)은 그대로.
+// 3km 폭(402pt)이면 10:10 점(50/80)은 띠 가운데에서 약 65pt 위 = 줄어든 띠 안, 10:20 점(60/80)은 약 130pt 위 = 줄어든 띠 위로 벗어남
+const LONG_TO = { lat: SPOT.D01.lat + 0.035, lng: SPOT.D01.lng };
+const LONG_POSITION = along(SPOT.D01, LONG_TO, 0.5); // 10:00 앱 점 (절반, 이전 POSITION 자리)
+const longDotAt = (clock: number) => along(SPOT.D01, LONG_TO, (clock - MOVE_DEPART) / MOVE_TRAVEL);
+const longMoveView = () => moveView({ pins: timed([MOVE_PINS[0], { ...MOVE_PINS[1], lat: LONG_TO.lat, lng: LONG_TO.lng }, MOVE_PINS[2]], MOVE_TIMES) });
 const snapPx = (point: unknown, area: number) => {
   if (typeof point === 'number') return point <= 1 ? point * area : point;
   const text = String(point);
@@ -312,13 +319,13 @@ describe('§21 1·§24 연습 지도 카메라 (화면)', () => {
   });
 
   test('T14_S24_S25_화면_이동_중_3km로_묶고_reh_dot이_보이는_띠_가운데', async () => {
-    // D01 -> D20은 남북 약 1.1km: 띠 높이에 넣으면 3km를 넘는다
-    rehReply = () => moveView();
+    // 긴 구간(LONG_TO, 정북 3.9km): 띠 높이에 넣으면 3km를 넘는다 (TASK-015 §17: 이전 D01 -> D20은 새 띠에서 약 2.6km)
+    rehReply = () => longMoveView();
     const box = await toRehearsalOnBoard();
     const region = lastRegion();
     expect(spanEW(region)).toBeLessThanOrEqual(MOVE_CAP_M * (1 + STAY_TOLERANCE));
     expect(spanEW(region)).toBeGreaterThanOrEqual(MOVE_CAP_M * (1 - STAY_TOLERANCE)); // 묶였다
-    const { x, y } = project(region, box, POSITION);
+    const { x, y } = project(region, box, LONG_POSITION);
     expect(Math.abs(y - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1); // §25 Q2 띠 가운데 (±1pt)
     expect(Math.abs(x - box.width / 2)).toBeLessThanOrEqual(1);
   });
@@ -435,18 +442,18 @@ describe('§26 연습 카메라 (화면)', () => {
   }
 
   test('T14_S26_1_화면_묶인_구간은_reh_dot이_줄어든_띠_안이면_그대로_벗어나면_한_번', async () => {
-    rehReply = () => moveView(); // D01 -> D20 (남북 1.1km): 보드 띠에서 3km로 묶인다. 같은 응답, 시계만 간다
+    rehReply = () => longMoveView(); // 긴 구간(TASK-015 §17, 이전 D01 -> D20): 보드 띠에서 3km로 묶인다. 같은 응답, 시계만 간다
     const box = await toRehearsalOnBoard();
     const first = lastRegion();
     expect(spanEW(first)).toBeGreaterThanOrEqual(MOVE_CAP_M * (1 - STAY_TOLERANCE)); // 시험 자체 확인: 묶였다
     expect(mapControl.regions).toHaveLength(1);
-    const inside = moveDotAt(CLOCK_START + 10); // 10:10 앱 점 (북쪽으로 50/80)
-    const outside = moveDotAt(CLOCK_START + 20); // 10:20 앱 점 (60/80)
+    const inside = longDotAt(CLOCK_START + 10); // 10:10 앱 점 (북쪽으로 50/80)
+    const outside = longDotAt(CLOCK_START + 20); // 10:20 앱 점 (60/80)
     expect(inBand(project(first, box, inside).y, box)).toBe(true); // 시험 자체 확인: 10:10 점은 줄어든 띠 안
     expect(project(first, box, outside).y).toBeLessThan(box.top + PIN_INSET); // 시험 자체 확인: 10:20 점은 줄어든 띠 위로 벗어남
-    await plus(() => moveView());
+    await plus(() => longMoveView());
     expect(mapControl.regions).toHaveLength(1); // 벗어나기 전엔 그대로
-    await plus(() => moveView());
+    await plus(() => longMoveView());
     expect(mapControl.regions).toHaveLength(2); // 벗어나는 순간 한 번
     const { x, y } = project(lastRegion(), box, outside);
     expect(Math.abs(y - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1);
