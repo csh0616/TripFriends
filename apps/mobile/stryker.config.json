@@ -68,7 +68,17 @@
         "<rootDir>/__tests__/task-014-location.test.tsx",
         "<rootDir>/__tests__/task-014-rehearsal.test.tsx",
         "<rootDir>/__tests__/task-014-s24-camera.test.ts",
-        "<rootDir>/__tests__/task-014-s21.test.tsx"
+        "<rootDir>/__tests__/task-014-s21.test.tsx",
+        "<rootDir>/__tests__/task-014-s19-design.test.tsx",
+        "<rootDir>/__tests__/task-014-s21-dev-reset.test.tsx",
+        "<rootDir>/__tests__/task-014-s29-position.test.ts",
+        "<rootDir>/__tests__/task-014-s29-screen.test.tsx",
+        "<rootDir>/__tests__/task-014-s30-position.test.ts",
+        "<rootDir>/__tests__/task-014-s30-screen.test.tsx",
+        "<rootDir>/__tests__/task-014-s31-t08-card.test.tsx",
+        "<rootDir>/__tests__/task-015-action-replies.test.tsx",
+        "<rootDir>/__tests__/task-015-city-center.test.tsx",
+        "<rootDir>/__tests__/task-015-pin-overlap.test.ts"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",
