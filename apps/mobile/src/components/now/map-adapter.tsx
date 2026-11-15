@@ -215,6 +215,7 @@ function RemainingRoute({ path, metersPerPoint }: { path: LatLng[]; metersPerPoi
   );
 }
 
+const NO_CENTER: LatLng = { latitude: 36.2, longitude: 138.25 }; // 첫 응답 전 숙소·핀이 없을 때만 (곧 카메라가 옮긴다)
 const MAP_STYLE = mapStyleFile as unknown as MapViewProps['customMapStyle']; // 원본: docs/design/google-map-style.json (§13 E1)
 
 export function MapAdapter({
@@ -230,8 +231,10 @@ export function MapAdapter({
   onFail,
 }: {
   ref?: Ref<MapAdapterHandle>;
-  center: LatLng;
-  home: LatLng;
+  /** 숙소도 핀도 없으면 null (일본 가운데에서 시작) */
+  center: LatLng | null;
+  /** 숙소가 없으면 null: 집 표시를 그리지 않는다 (§29 ④) */
+  home: LatLng | null;
   pins: NowPin[];
   routeDone: LatLng[];
   routeRemaining: LatLng[];
@@ -286,7 +289,7 @@ export function MapAdapter({
       provider={PROVIDER_GOOGLE}
       customMapStyle={MAP_STYLE}
       style={StyleSheet.absoluteFill}
-      initialRegion={{ ...center, latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
+      initialRegion={{ ...(center ?? NO_CENTER), latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
       toolbarEnabled={false}
       onRegionChangeComplete={(region) => {
         // 화면 가로 한 점이 몇 m인지: 경도 폭(도) -> m, 위도에 따라 줄어든다
@@ -308,7 +311,7 @@ export function MapAdapter({
         />
       ) : null}
       {routeRemaining.length >= 2 ? <RemainingRoute path={routeRemaining} metersPerPoint={metersPerPoint} /> : null}
-      <HomePin coordinate={home} />
+      {home ? <HomePin coordinate={home} /> : null}
       {pins.map((pin) => (
         <NumberPin key={pin.seq} pin={pin} />
       ))}

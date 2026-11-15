@@ -53,7 +53,7 @@ function project(region: CameraRegion, box: ViewBox, at: At) {
 export function rehearsalCamera(
   pins: NowPin[],
   position: At | null,
-  lodging: At,
+  lodging: At | null,
   fullBox: ViewBox,
   previous?: RehearsalCameraResult,
 ): RehearsalCameraResult {
@@ -75,8 +75,10 @@ export function rehearsalCamera(
   const done = pins.filter((pin) => pin.state === 'done');
   const from = done.length > 0 ? done.reduce((a, b) => (b.seq > a.seq ? b : a)) : null;
   const to = pins.find((pin) => pin.state === 'next') ?? null;
-  const start: At = from ?? lodging;
-  const end: At = to ?? lodging;
+  // 숙소가 없으면 첫 구간 출발 = 1번 장소, 마지막 구간 도착 = 마지막 장소 (§29 ④)
+  const sorted = [...pins].sort((a, b) => a.seq - b.seq);
+  const start: At = from ?? lodging ?? sorted[0];
+  const end: At = to ?? lodging ?? sorted[sorted.length - 1];
   const key = `move-${from ? from.seq : 'home'}-${to ? to.seq : 'home'}`;
 
   const points = position ? [position, start, end] : [start, end];
