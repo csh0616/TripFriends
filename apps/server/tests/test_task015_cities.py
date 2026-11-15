@@ -18,17 +18,17 @@ API-001 §1(인증 Bearer · 404 NOT_FOUND · 공통 오류 형식).
         OpenAPI에 모양이 있어 packages/api-types로 앱 타입이 생긴다
 """
 
-import uuid
-
 import pytest
 from fastapi.testclient import TestClient
 
 from auth_helpers import bearer
 from storage_helpers import server_env
 from test_task010_trips import Osaka
+from test_task015_city_center import ME as TRIP_OWNER
 from test_task015_city_center import SEED_V3_CENTER, center_of, planned_days, use_v3_center, views
 
-ME = f"user-T15-cities-{uuid.uuid4().hex[:8]}"
+# §15 ③: planned_days가 test_task015_city_center.ME로 여행을 만든다 -> 이 파일의 요청도 같은 사용자 (남의 여행이면 404, TASK-012 §11 Q3)
+ME = TRIP_OWNER
 
 
 @pytest.fixture

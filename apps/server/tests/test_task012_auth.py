@@ -142,7 +142,7 @@ def test_T12_Q4_health·catalog는_토큰_없이_된다(osaka, path):  # noqa: F
     assert osaka.anon.get(path).status_code == 200
 
 
-PUBLIC = {("GET", "/health"), ("GET", "/catalog")}
+PUBLIC = {("GET", "/health"), ("GET", "/catalog"), ("GET", "/cities/{city_code}")}  # /cities: TASK-015 §14 Q1 · §15 ① 공개 값 (/catalog와 같음)
 DOCS = {"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"}  # §12 2: 개발에서만 열린 API 문서 길
 
 

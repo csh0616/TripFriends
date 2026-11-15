@@ -38,6 +38,8 @@ from pathlib import Path
 import httpx
 import pytest
 import yaml
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from engine.models import Place
 
@@ -174,6 +176,27 @@ def keys_anywhere(node) -> set[str]:
     if isinstance(node, list):
         return {k for v in node for k in keys_anywhere(v)}
     return set()
+
+
+# TASK-015 §9 Q6 · §15 Q1 ①: 팩에서 허용하는 좌표는 center.lat·center.lng 둘이 시드 v3 우리 값과 정확히 같을 때뿐
+OUR_CENTER = (34.6662, 135.5010)
+
+
+def _is_our_center(center) -> bool:
+    if not isinstance(center, dict) or "lat" not in center or "lng" not in center:
+        return False
+    lat, lng = center["lat"], center["lng"]
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in (lat, lng)):
+        return False
+    return (lat, lng) == OUR_CENTER
+
+
+def google_keys_in_pack(pack) -> set[str]:
+    """팩 안의 Google 값 키 (AC-2). §15 Q1: center.lat·lng가 우리 값과 정확히 같으면 그 두 칸만 뺀다.
+    값이 다르거나 한쪽만 있거나 다른 자리(장소 줄·지역·맨 위 등)에 있는 lat·lng는 그대로 센다."""
+    if isinstance(pack, dict) and _is_our_center(pack.get("center")):
+        pack = {**pack, "center": {k: v for k, v in pack["center"].items() if k not in ("lat", "lng")}}
+    return keys_anywhere(pack) & GOOGLE_KEYS
 
 
 # ---------- 가짜 데이터 자체 (AC-2: 테스트 데이터도 손으로 만든 가짜) ----------
@@ -323,7 +346,7 @@ def test_T10_Q10_팩의_center는_이름과_place_id만_좌표는_캐시에():
 
 def test_T10_A2_AC2_팩에_Google_값이_하나도_없다():
     pack = build().pack
-    assert not keys_anywhere(pack) & GOOGLE_KEYS
+    assert not google_keys_in_pack(pack)
     text = json.dumps(pack, ensure_ascii=False)
     assert "example.invalid" not in text  # 사이트·지도 링크
     for detail in FAKE["details"].values():
@@ -809,7 +832,62 @@ def test_T10_AC2_저장소의_도시_팩에_Google_값이_없다():
         pytest.skip("도시 팩이 아직 없음 (§A2를 실제 키로 돌린 뒤 생김, §0 순서 4)")
     for path in packs:
         data = json.loads(path.read_text(encoding="utf-8"))
-        assert not keys_anywhere(data) & GOOGLE_KEYS, path.name
+        assert not google_keys_in_pack(data), path.name  # §15 Q1: center 우리 값 lat·lng만 허용
+
+
+REPO_PACK = REPO / "apps" / "server" / "places" / "packs" / "osaka.json"
+
+
+def _pack_with_center(**center) -> dict:
+    return {"city_code": "osaka", "timezone": "Asia/Tokyo", "center": {"name_ko": "난바역", "place_id": "FAKE-x", **center}, "areas": [], "places": []}
+
+
+def test_T15_S15_Q1_팩_검사는_center의_우리_값_lat·lng만_허용한다():
+    from test_task015_city_center import SEED_V3_CENTER
+
+    assert OUR_CENTER == (SEED_V3_CENTER["lat"], SEED_V3_CENTER["lng"])  # 정본 seed v3 값과 같은 수 (그 파일이 정본과 대조)
+    assert google_keys_in_pack(_pack_with_center(lat=34.6662, lng=135.5010)) == set()
+    assert google_keys_in_pack(_pack_with_center(lat=34.6662, lng=135.501)) == set()  # 같은 수 (JSON에 135.501로 써도)
+
+
+@pytest.mark.parametrize(
+    "pack",
+    [
+        pytest.param(_pack_with_center(lat=34.6663, lng=135.5010), id="위도_다름"),
+        pytest.param(_pack_with_center(lat=34.6662, lng=135.5011), id="경도_다름"),
+        pytest.param(_pack_with_center(lat=34.66620001, lng=135.5010), id="위도_아주_조금_다름"),
+        pytest.param(_pack_with_center(lat=135.5010, lng=34.6662), id="위도·경도_뒤바뀜"),
+        pytest.param(_pack_with_center(lat="34.6662", lng="135.5010"), id="글자"),
+        pytest.param(_pack_with_center(lat=34.6662), id="lat만"),
+        pytest.param(_pack_with_center(lng=135.5010), id="lng만"),
+        pytest.param(_pack_with_center(lat=34.669, lng=135.501), id="가짜_캐시_center_값"),
+        pytest.param(_pack_with_center(lat=34.6662, lng=135.5010, location={"lat": 34.6662, "lng": 135.5010}), id="center에_location도"),
+        pytest.param(_pack_with_center(lat=34.6662, lng=135.5010, opening_hours=[]), id="center에_다른_Google_칸"),
+        pytest.param({**_pack_with_center(), "places": [{"id": "x", "lat": 34.6662, "lng": 135.5010}]}, id="장소_줄에_같은_값"),
+        pytest.param({**_pack_with_center(), "areas": [{"id": "namba", "lat": 34.6662, "lng": 135.5010}]}, id="지역에_같은_값"),
+        pytest.param({**_pack_with_center(lat=34.6662, lng=135.5010), "lat": 34.6662, "lng": 135.5010}, id="맨_위에_같은_값"),
+        pytest.param({**_pack_with_center(), "center": {"name_ko": "난바역", "place_id": "FAKE-x", "here": {"lat": 34.6662, "lng": 135.5010}}}, id="center_안쪽_깊이"),
+    ],
+)
+def test_T15_S15_Q1_경계_우리_값과_다르거나_다른_칸의_좌표는_여전히_Google_값(pack):
+    assert google_keys_in_pack(pack) & {"lat", "lng", "location", "opening_hours"}, pack
+
+
+@settings(max_examples=60, deadline=None)
+@given(lat=st.floats(-90, 90, allow_nan=False), lng=st.floats(-180, 180, allow_nan=False))
+def test_T15_S15_Q1_우리_값이_아닌_center_좌표는_언제나_걸린다(lat, lng):
+    if (lat, lng) == OUR_CENTER:
+        return
+    assert {"lat", "lng"} <= google_keys_in_pack(_pack_with_center(lat=lat, lng=lng))
+
+
+def test_T15_S15_Q1_저장소의_도시_팩_center에_시드_v3_우리_값이_있다():
+    """§15 Q1 ②: 팩을 다시 만든다 (backend). city_center()가 쓰는 값이 팩에 있어야 한다."""
+    assert REPO_PACK.is_file(), "도시 팩이 없다"
+    center = json.loads(REPO_PACK.read_text(encoding="utf-8"))["center"]
+    assert ("lat" in center and "lng" in center), center
+    assert (center["lat"], center["lng"]) == OUR_CENTER, center
+    assert not google_keys_in_pack(json.loads(REPO_PACK.read_text(encoding="utf-8")))
 
 
 # ---------- §9 Q21 명령은 얇게: 가짜 공급자로 한 번 ----------
@@ -827,6 +905,6 @@ def test_T10_A2_Q21_명령을_가짜_공급자로_한_번_돌리면_팩과_캐�
     pack = json.loads((packs / "osaka.json").read_text(encoding="utf-8"))
     cache = json.loads((caches / "osaka.json").read_text(encoding="utf-8"))
     assert {row["id"] for row in pack["places"]} == {row["id"] for row in seed_rows()} - set(EXCLUDED)
-    assert not keys_anywhere(pack) & GOOGLE_KEYS
+    assert not google_keys_in_pack(pack)
     assert all("fetched_at" in entry for entry in cache.values())
     assert all(set(entry) <= DISK_KEYS for entry in cache.values())  # §11 H1: 명령이 쓴 파일도

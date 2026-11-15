@@ -200,3 +200,65 @@ def test_T15_E3_OpenAPI의_NowView에_city_center_칸():
     city = resolve(schemas["NowView"]["properties"]["city"])
     center = resolve(city["properties"]["center"])
     assert {"lat", "lng"} <= set(center["properties"])
+
+
+# ---------- §15 Q1 ③ city_center()는 Google 좌표 캐시로 되돌아가지 않는다 ----------
+# 계약 (§15 Q1 ③ 제안): CityData.city_center()는 팩 center의 우리 값 lat·lng만 쓴다.
+#   팩 center에 lat·lng(둘 다)가 없으면 ValueError (캐시에 center 좌표가 있어도 쓰지 않는다, 공급자도 부르지 않는다).
+#   서버 내부의 숙소 없는 시작점 CityData.center()는 §9 Q6대로 그대로 캐시 값 (위 test_T15_Q6_서버_내부의_숙소_없는_시작점은_지금처럼_캐시_값).
+
+
+def city_with_center(center: dict):
+    """팩 center만 바꾼 CityData. 캐시에는 Google에서 받은 것으로 치는 center 좌표가 있다 (가짜 공급자 값)."""
+    from places.city import CityData, fake_city
+
+    base = fake_city()
+    pack = {**base.pack, "center": center}
+    return CityData(pack, dict(base.cache), base.provider)
+
+
+def _cached_center(city) -> dict:
+    return city.cache[city.pack["center"]["place_id"]]["location"]
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param({}, id="lat·lng_없음"),
+        pytest.param({"lat": 34.6662}, id="lat만"),
+        pytest.param({"lng": 135.5010}, id="lng만"),
+    ],
+)
+def test_T15_S15_Q1_팩에_우리_lat·lng가_없으면_city_center는_ValueError이고_캐시로_되돌아가지_않는다(extra, monkeypatch):
+    from places.city import fake_city
+
+    base_center = fake_city().pack["center"]
+    city = city_with_center({"name_ko": base_center["name_ko"], "place_id": base_center["place_id"], **extra})
+    assert _cached_center(city), "시험 자체 확인: 캐시에 center 좌표가 있어야 '되돌아가지 않음'을 가린다"
+    called: list[str] = []
+    for name in ("details", "resolve", "search_lodging", "search_address"):
+        if hasattr(city.provider, name):
+            monkeypatch.setattr(city.provider, name, lambda *a, _n=name, **k: called.append(_n))
+    with pytest.raises(ValueError):
+        city.city_center()
+    assert called == []  # 공급자(Google)도 부르지 않는다
+
+
+def test_T15_S15_Q1_경계_팩에_우리_lat·lng가_있으면_캐시와_달라도_그_값(monkeypatch):
+    from places.city import fake_city
+
+    base_center = fake_city().pack["center"]
+    city = city_with_center({**base_center, **SEED_V3_CENTER})
+    cached = _cached_center(city)
+    assert (cached["lat"], cached["lng"]) != (SEED_V3_CENTER["lat"], SEED_V3_CENTER["lng"]), "시험 자체 확인"
+    assert city.city_center() == (SEED_V3_CENTER["lat"], SEED_V3_CENTER["lng"])
+
+
+def test_T15_S15_Q1_경계_city_center가_오류여도_숙소_없는_시작점_center는_그대로_캐시_값():
+    """§9 Q6: 서버 내부의 숙소 없는 계산은 바꾸지 않는다."""
+    from places.city import fake_city
+
+    base_center = fake_city().pack["center"]
+    city = city_with_center({"name_ko": base_center["name_ko"], "place_id": base_center["place_id"]})
+    cached = _cached_center(city)
+    assert city.center() == (cached["lat"], cached["lng"])

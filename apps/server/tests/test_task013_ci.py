@@ -75,6 +75,7 @@ OUTSIDE_READS: dict[str, set[str]] = {
     },
     "apps/mobile/__tests__/task-012-link-lib.test.ts": set(),  # REPO_ROOT를 가져오기만 하고 쓰지 않는다
     "apps/mobile/__tests__/task-013-toolchain.test.ts": {".node-version", "pnpm-workspace.yaml", "package.json"},
+    "apps/mobile/__tests__/task-015-lodging-pick-lib.test.ts": {"apps/server/trip/detect.py"},  # TASK-015 §15 ②: 서버 거리 공식과 같은지 본다
 }
 
 
@@ -100,7 +101,7 @@ SERVER_PATHS = A6_SERVER | {
     "docs/poc/poc_c.json", "docs/data/osaka-seed.yaml", "docs/tasks/TASK-013_CI.md",
 }
 MOBILE_PATHS = A6_MOBILE | {
-    "testdata/particles.json", "apps/server/trip/link.py",
+    "testdata/particles.json", "apps/server/trip/link.py", "apps/server/trip/detect.py",
     ".node-version", "pnpm-workspace.yaml",
     "docs/DESIGN-001_Brand-Tokens.md",
     "docs/design/logo-ink.png", "docs/design/app-icon-1024.png", "docs/design/google-map-style.json",

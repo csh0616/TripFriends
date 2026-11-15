@@ -27,11 +27,13 @@ TASK-015 §11(11-16 PM 답: Q1 INVALID_LODGING + reason too_far·coords_not_allo
             "label_too_long"     = 앞뒤 공백을 자른 label이 31자 이상 (§11 Q2: 자르지 않는다)
             "missing_field"      = kind·그 kind의 필수 칸이 없음 (null·빈 글 포함). 빈 글 kind("" · 공백·탭·줄바꿈만)도 여기 (§13 Q7)
             "invalid_kind"       = kind가 place·address·pin이 아님 (§12 Q1, 예 "house"). 숫자·참거짓·목록·객체 같은 다른 타입도 여기 (§13 Q7)
+            "invalid_type"       = kind 밖의 칸 타입이 틀림 (§15 Q2): place_id·address_text·label이 글자가 아님, lat·lng가 숫자가 아님(글자·참거짓·목록·객체).
+                                   여섯 칸 모두 같은 규칙(= OpenAPI 숙소 스키마 타입, §15 Q3). null은 타입 오류가 아니라 값 없음(필수 칸이면 missing_field)
         50km 경계 (§13 Q2): 거리 >= 50km = too_far (정확히 50km는 밖). 거리 공식은 trip/detect.py와 같은 하버사인 6371km, 앱 @/lib/lodging-pick도 같은 공식
         모르는 kind는 400 INVALID_LODGING · invalid_kind 이고 아무것도 저장하지 않는다 (§12 Q1)
         공백만 있는 address_text = 자른 뒤 빈 글 = missing_field (§12 Q2)
         여러 조건이 겹치면 reason은 하나, 먼저 걸린 것 (§12 Q3):
-            invalid_kind -> missing_field -> coords_not_allowed -> label_too_long -> too_far
+            invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> label_too_long -> too_far (§15 Q2로 invalid_type을 끼움)
         옛 필드 lodging_place_id만 오면 {"kind": "place", "place_id": 그 값, 나머지 null}로 받는다 (요청에서만)
     Trip 응답(POST /trips · GET /trips/{id} · /trips/current)에 lodging_place_id 칸이 없다 (Q2: 같은 뜻의 값이 두 곳이면 어긋난다)
     place·address 여행의 응답·저장소에 좌표가 없다 (place_id로 그때 불러옴). address인데 place_id가 없거나 좌표를 못 구하면 숙소 없음과 같다(§30 Q6)
@@ -48,6 +50,8 @@ from pathlib import Path
 
 import httpx
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from fastapi.testclient import TestClient
 
 from auth_helpers import bearer
@@ -809,12 +813,22 @@ REASON_ORDER = [
     pytest.param({**pin_body(FAR), "label": LONG}, "label_too_long", id="label+멀다"),
     pytest.param({"kind": "house", "lat": FAR[0], "label": LONG}, "invalid_kind", id="kind+필수칸+label+멀다"),
     pytest.param({"kind": "place", "lat": FAR[0], "lng": FAR[1], "label": LONG}, "missing_field", id="필수칸+좌표+label+멀다"),
+    # §15 Q2 invalid_type은 missing_field 다음, coords_not_allowed 앞
+    pytest.param({"kind": "house", "label": 5}, "invalid_kind", id="kind+타입"),
+    pytest.param({"kind": "place", "label": 5}, "missing_field", id="필수칸+타입"),
+    pytest.param({"kind": "address", "address_text": "   ", "label": 5}, "missing_field", id="공백주소+타입"),
+    pytest.param({"kind": "pin", "lat": "34.657913"}, "missing_field", id="필수칸+글자_위도"),
+    pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "lat": "34.6", "lng": "135.5"}, "invalid_type", id="타입+좌표_글자"),
+    pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "lat": PIN[0], "lng": PIN[1], "label": 5}, "invalid_type", id="타입+좌표"),
+    pytest.param({**pin_body(), "label": LONG, "place_id": 5}, "invalid_type", id="타입+label"),
+    pytest.param({**pin_body(FAR), "label": 5}, "invalid_type", id="타입+멀다"),
+    pytest.param({**pin_body(FAR), "label": [LONG]}, "invalid_type", id="목록_label+멀다"),
 ]
 
 
 @pytest.mark.parametrize(("sent", "expected"), REASON_ORDER)
 def test_T15_S12_Q3_여러_조건이_겹치면_먼저_걸린_reason_하나만(request, sent, expected):
-    """§12 Q3: invalid_kind -> missing_field -> coords_not_allowed -> label_too_long -> too_far. 모양 오류가 먼저, 거리는 마지막.
+    """§12 Q3 · §15 Q2: invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> label_too_long -> too_far. 모양 오류가 먼저, 거리는 마지막.
     먼 좌표가 든 경우만 city.center(v3)가 있는 서버로 (거리를 잴 수 있어야 '먼저 걸린 것'을 가린다)."""
     far = FAR[0] in (sent.get("lat"), sent.get("lng")) or FAR[1] in (sent.get("lat"), sent.get("lng"))
     osaka = request.getfixturevalue("mem_v3" if far else "mem")
@@ -824,6 +838,251 @@ def test_T15_S12_Q3_여러_조건이_겹치면_먼저_걸린_reason_하나만(re
     assert lodging_reason(response) == expected, response.json()
     assert isinstance(response.json()["error"]["detail"]["reason"], str)  # 목록이 아니라 하나
     assert stores(osaka) == before
+
+
+# ---------- §15 Q2 invalid_type: 칸 타입이 틀림 ----------
+
+WRONG_TEXT = [5, 0, 1.5, True, False, ["친구 집"], {"name": "친구 집"}]  # 글자 칸(place_id·address_text·label)에 온 다른 타입
+WRONG_NUMBER = ["34.657913", "", True, False, [34.657913], {"lat": 34.657913}]  # 숫자 칸(lat·lng)에 온 다른 타입 (참거짓은 숫자가 아님)
+WRONG_IDS_TEXT = ["숫자_5", "숫자_0", "소수", "참", "거짓", "목록", "객체"]
+WRONG_IDS_NUMBER = ["글자", "빈_글", "참", "거짓", "목록", "객체"]
+
+
+def _good(kind: str) -> dict:
+    """그 kind로 맞는 본문 (mem_v3에서 201)."""
+    return {
+        "place": {"kind": "place", "place_id": GOOGLE_LODGING_ID},
+        "address": {"kind": "address", "address_text": TYPED, "place_id": ADDR_ID},
+        "pin": pin_body(),
+    }[kind]
+
+
+INVALID_TYPE = [
+    *(pytest.param({**_good(k), "label": v}, id=f"{k}_label_{i}") for k in ("place", "address", "pin") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
+    *(pytest.param({**_good("place"), "place_id": v}, id=f"place_place_id_{i}") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
+    *(pytest.param({**_good("address"), "address_text": v}, id=f"address_address_text_{i}") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
+    *(pytest.param({**_good("address"), "place_id": v}, id=f"address_선택칸_place_id_{i}") for v, i in zip(WRONG_TEXT, WRONG_IDS_TEXT)),
+    *(pytest.param({**_good("pin"), "lat": v}, id=f"pin_lat_{i}") for v, i in zip(WRONG_NUMBER, WRONG_IDS_NUMBER)),
+    *(pytest.param({**_good("pin"), "lng": v}, id=f"pin_lng_{i}") for v, i in zip(WRONG_NUMBER, WRONG_IDS_NUMBER)),
+    pytest.param({**_good("pin"), "place_id": 5}, id="pin_쓰지_않는_칸_place_id_숫자"),
+    pytest.param({**_good("pin"), "address_text": 5}, id="pin_쓰지_않는_칸_address_text_숫자"),
+    pytest.param({**_good("place"), "lat": "34.6", "lng": "135.5"}, id="place_좌표_글자"),
+]
+
+
+@pytest.mark.parametrize("sent", INVALID_TYPE)
+def test_T15_S15_Q2_칸_타입이_틀리면_400_INVALID_LODGING_invalid_type이고_아무것도_저장하지_않는다(mem_v3, monkeypatch, sent):
+    """§15 Q2 (이전 backend 동작: 글자가 아닌 label · 숫자가 아닌 좌표 · 글자가 아닌 place_id·address_text = missing_field)."""
+    install_address_search(monkeypatch, mem_v3)
+    before = stores(mem_v3)
+    response = post_trip(mem_v3, sent)
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "invalid_type", response.json()
+    assert stores(mem_v3) == before
+
+
+@pytest.mark.parametrize(
+    ("sent", "expected"),
+    [
+        pytest.param({**_good("pin"), "label": None}, None, id="label_null은_값_없음"),
+        pytest.param({**_good("pin"), "label": ""}, None, id="label_빈_글은_글자"),
+        pytest.param({**_good("pin"), "label": "5"}, None, id="label_숫자_모양_글자는_글자"),
+        pytest.param({**_good("address"), "place_id": None}, None, id="address_place_id_null"),
+        pytest.param({**_good("pin"), "place_id": None, "address_text": None}, None, id="pin_쓰지_않는_칸_null"),
+        pytest.param({"kind": "pin", "lat": None, "lng": PIN[1]}, "missing_field", id="pin_lat_null은_missing_field"),
+        pytest.param({**_good("place"), "place_id": None}, "missing_field", id="place_place_id_null은_missing_field"),
+        pytest.param({**_good("address"), "address_text": ""}, "missing_field", id="address_빈_글은_missing_field"),
+    ],
+)
+def test_T15_S15_Q2_경계_null·빈_글은_타입_오류가_아니다(mem_v3, monkeypatch, sent, expected):
+    install_address_search(monkeypatch, mem_v3)
+    response = post_trip(mem_v3, sent)
+    if expected is None:
+        assert response.status_code == 201, response.text
+    else:
+        assert response.status_code == 400, response.text
+        assert lodging_reason(response) == expected, response.json()
+
+
+@pytest.mark.parametrize(
+    "at",
+    [pytest.param((34, 135), id="정수_좌표_멀다"), pytest.param((35, 136), id="정수_좌표_멀다_2")],
+)
+def test_T15_S15_Q2_경계_정수_좌표는_숫자라_타입_오류가_아니고_거리로_가린다(mem_v3, at):
+    """정수도 숫자 (OpenAPI number). 이 두 점은 v3 중심에서 50km 밖이라 too_far — invalid_type이 아님을 본다."""
+    response = post_trip(mem_v3, pin_body(at))
+    assert lodging_reason(response) == "too_far", response.json()
+
+
+def test_T15_S15_Q2_경계_정수_좌표가_50km_안이면_받는다(mem_v3):
+    """정수 위도도 숫자로 받는다 (50km 안의 점이 되게 위도만 정수)."""
+    response = post_trip(mem_v3, {"kind": "pin", "lat": 35, "lng": 135.5010})  # 위도 차 0.3338도 ≈ 37km
+    assert response.status_code == 201, response.text
+
+
+_ANY_NOT_TEXT = st.one_of(
+    st.integers(), st.floats(allow_nan=False), st.booleans(),
+    st.lists(st.text(max_size=3), max_size=2), st.dictionaries(st.text(max_size=2), st.integers(), max_size=2),
+)
+_ANY_NOT_NUMBER = st.one_of(
+    st.text(max_size=8), st.booleans(), st.lists(st.floats(allow_nan=False), max_size=2), st.dictionaries(st.text(max_size=2), st.integers(), max_size=2),
+)
+
+
+@settings(max_examples=80, deadline=None)
+@given(label=_ANY_NOT_TEXT)
+def test_T15_S15_Q2_글자가_아닌_label은_언제나_invalid_type(label):
+    """trip.lodging.normalize (순수 함수). 맞는 pin에 label만 다른 타입."""
+    from trip.lodging import LodgingError, normalize
+
+    with pytest.raises(LodgingError) as caught:
+        normalize({"kind": "pin", "lat": PIN[0], "lng": PIN[1], "label": label}, CENTER_V3)
+    assert caught.value.reason == "invalid_type"
+
+
+@settings(max_examples=80, deadline=None)
+@given(lat=_ANY_NOT_NUMBER)
+def test_T15_S15_Q2_숫자가_아닌_lat은_언제나_invalid_type(lat):
+    from trip.lodging import LodgingError, normalize
+
+    with pytest.raises(LodgingError) as caught:
+        normalize({"kind": "pin", "lat": lat, "lng": PIN[1]}, CENTER_V3)
+    assert caught.value.reason == "invalid_type"
+
+
+# ---------- §15 Q3 OpenAPI 숙소 입력 스키마 = 실제 검사 = 생성된 앱 타입 ----------
+# 계약: POST /trips 본문 TripCreate.lodging = LodgingInput | null. LodgingInput의 칸은 여섯 칸 그대로, 타입·nullable은 아래 표.
+#   kind = 글자 enum [place, address, pin], null 아님 (null kind = missing_field로 거절)
+#   place_id·address_text·label = 글자 또는 null / lat·lng = 숫자 또는 null (null = 값 없음, §15 Q2)
+#   스키마가 거절하는 값  <=>  서버가 거절: kind는 400(어떤 reason이든), 그 밖 칸은 reason invalid_type
+#   packages/api-types/openapi.json의 LodgingInput = 서버 app.openapi()의 것, index.ts LodgingInput 칸 타입도 같은 표
+
+SCHEMA_TABLE = {
+    "kind": ({"string"}, ["place", "address", "pin"]),
+    "place_id": ({"string", "null"}, None),
+    "address_text": ({"string", "null"}, None),
+    "lat": ({"number", "null"}, None),
+    "lng": ({"number", "null"}, None),
+    "label": ({"string", "null"}, None),
+}
+TS_TABLE = {
+    "kind": '"place" | "address" | "pin"',
+    "place_id": "string | null",
+    "address_text": "string | null",
+    "lat": "number | null",
+    "lng": "number | null",
+    "label": "string | null",
+}
+
+
+def _lodging_input(spec: dict) -> dict:
+    schemas = spec["components"]["schemas"]
+    node = schemas["TripCreate"]["properties"]["lodging"]
+    members = node.get("anyOf", [node])
+    refs = [m["$ref"] for m in members if "$ref" in m]
+    assert len(refs) == 1 and {m.get("type") for m in members if "$ref" not in m} <= {"null"}, node
+    return schemas[refs[0].split("/")[-1]]
+
+
+def _types(prop: dict) -> tuple[set[str], list | None]:
+    """칸 하나의 (타입 집합, enum). "type" 글자·목록이나 anyOf 둘 다 읽는다."""
+    members = prop.get("anyOf", [prop])
+    types: set[str] = set()
+    enum = prop.get("enum")
+    for member in members:
+        kind = member.get("type")
+        types |= set(kind) if isinstance(kind, list) else ({kind} if kind else set())
+        enum = enum or member.get("enum")
+    return types, enum
+
+
+def _fits(value, prop: dict) -> bool:
+    """스키마 칸 하나가 이 값을 받는가 (이 표의 타입만: string·number·null·enum). JSON Schema대로 참거짓은 숫자가 아니다."""
+    types, enum = _types(prop)
+    if value is None:
+        return "null" in types
+    if enum is not None and value not in enum:
+        return False
+    if isinstance(value, bool):
+        return "boolean" in types
+    if isinstance(value, str):
+        return "string" in types
+    if isinstance(value, (int, float)):
+        return "number" in types or ("integer" in types and float(value).is_integer())
+    return False
+
+
+def test_T15_S15_Q3_OpenAPI_숙소_입력_스키마의_칸·타입·nullable이_서버_검사와_같다():
+    from api.main import app
+
+    schema = _lodging_input(app.openapi())
+    assert set(schema["properties"]) == set(SCHEMA_TABLE), sorted(schema["properties"])
+    got = {name: _types(prop) for name, prop in schema["properties"].items()}
+    assert got == {name: (types, enum) for name, (types, enum) in SCHEMA_TABLE.items()}, got
+
+
+FULL_SHAPES = [
+    pytest.param(full("place", place_id=GOOGLE_LODGING_ID), id="place"),
+    pytest.param(full("address", address_text=TYPED, place_id=ADDR_ID), id="address"),
+    pytest.param(full("pin", lat=PIN[0], lng=PIN[1], label=LABEL), id="pin"),
+]
+
+
+@pytest.mark.parametrize("sent", FULL_SHAPES)
+def test_T15_S15_Q3_스키마에_맞는_6칸_모양_세_가지는_201(mem_v3, monkeypatch, sent):
+    from api.main import app
+
+    schema = _lodging_input(app.openapi())
+    assert all(_fits(sent[name], prop) for name, prop in schema["properties"].items()), "시험 자체 확인: 스키마에 맞는 본문"
+    install_address_search(monkeypatch, mem_v3)
+    response = post_trip(mem_v3, sent)
+    assert response.status_code == 201, response.text
+    assert response.json()["lodging"] == sent
+
+
+SAMPLES = [None, "글", "", 5, 1.5, True, False, [], {}]
+SAMPLE_IDS = ["null", "글자", "빈_글", "정수", "소수", "참", "거짓", "목록", "객체"]
+BASE_FOR = {"kind": "pin", "place_id": "place", "address_text": "address", "label": "pin", "lat": "pin", "lng": "pin"}
+
+
+@pytest.mark.parametrize("value", SAMPLES, ids=SAMPLE_IDS)
+@pytest.mark.parametrize("name", list(SCHEMA_TABLE))
+def test_T15_S15_Q3_스키마가_거절하는_값과_서버가_거절하는_값이_같다(mem_v3, monkeypatch, name, value):
+    """그 칸을 쓰는 kind의 맞는 6칸 본문에서 한 칸만 바꾼다. 스키마가 거절 <=> 서버도 거절(kind) / invalid_type(그 밖 칸)."""
+    from api.main import app
+
+    schema = _lodging_input(app.openapi())
+    kind = BASE_FOR[name]
+    base = {"place": full("place", place_id=GOOGLE_LODGING_ID), "address": full("address", address_text=TYPED, place_id=ADDR_ID), "pin": full("pin", lat=PIN[0], lng=PIN[1])}[kind]
+    sent = {**base, name: value}
+    install_address_search(monkeypatch, mem_v3)
+    response = post_trip(mem_v3, sent)
+    allowed = _fits(value, schema["properties"][name])
+    if name == "kind":
+        assert (response.status_code == 400) is (not allowed), (allowed, response.text)
+    else:
+        assert (lodging_reason(response) == "invalid_type") is (not allowed), (allowed, response.text)
+
+
+def _ts_block(source: str, name: str) -> dict[str, str]:
+    start = source.index(f"        {name}: {{\n")
+    end = source.index("\n        };", start)
+    found = {}
+    for line in source[start:end].splitlines()[1:]:
+        match = re.match(r"^\s*(\w+)\??:\s*(.+);$", line)
+        if match:
+            found[match.group(1)] = match.group(2)
+    return found
+
+
+def test_T15_S15_Q3_생성된_앱_타입의_숙소_입력이_서버_스키마와_같다():
+    """앱 타입(packages/api-types)은 서버 OpenAPI에서 생성 (손으로 고치지 않음, ADR-013). 어긋나면 `pnpm --filter api-types generate`."""
+    from api.main import app
+    from test_planning_api import API_TYPES
+
+    generated = json.loads((API_TYPES / "openapi.json").read_text(encoding="utf-8"))
+    assert _lodging_input(generated) == _lodging_input(app.openapi())
+    assert _ts_block((API_TYPES / "index.ts").read_text(encoding="utf-8"), "LodgingInput") == TS_TABLE
 
 
 def test_T15_S12_Q3_경계_겹치지_않으면_too_far는_홀로_걸린다(mem_v3):
