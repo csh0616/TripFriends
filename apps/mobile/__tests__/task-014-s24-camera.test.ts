@@ -447,3 +447,35 @@ describe('§26 1 묶인 구간은 벗어날 때만 다시', () => {
     expect(near(spanEW(arrived.region), STAY_M)).toBe(true);
   });
 });
+
+// =====================================================================
+// §28: 살아남은 돌연변이 잡기 (rehearsal-camera.ts 구간 키 비교 · 띠 높이 하한)
+// =====================================================================
+
+describe('§28 돌연변이', () => {
+  test('T14_S28_1_previous가_있어도_3km_미만_다른_구간이면_새로_계산', () => {
+    const a = { lat: 35.0, lng: 135.01 };
+    const b = east(a, 700);
+    const c = east(b, 700);
+    const legA = [pin(1, a, 'done'), pin(2, b, 'next'), pin(3, c, 'later')];
+    const legB = [pin(1, a, 'done'), pin(2, b, 'done'), pin(3, c, 'next')];
+    const first = camera(legA, mid(a, b), LODGING, BOX);
+    expect(spanEW(first.region)).toBeLessThan(MOVE_CAP_M); // 시험 자체 확인: 묶이지 않은 구간
+    const next = camera(legB, mid(b, c), LODGING, BOX, first);
+    expect(next).not.toBe(first);
+    expect(next.key).not.toBe(first.key);
+    expect(next).toEqual(camera(legB, mid(b, c), LODGING, BOX)); // B 기준으로 새로 계산한 것과 같다
+    expect(project(next.region, BOX, c).x).toBeLessThanOrEqual(BOX.width - MAP_EDGE + 0.5); // 도착할 곳 c가 보인다
+  });
+
+  test('T14_S28_2_세로가_먼저_막히는_3km_미만_구간은_동서_폭이_필요한_폭_그대로', () => {
+    // 남북 200m를 줄어든 띠(120 − 60 = 60pt)에 넣는 폭 = 200 × 390 / 60 = 1300m (동서는 거의 0이라 세로가 정한다)
+    const from = { lat: 35.0, lng: 135.01 };
+    const to = north(from, 200);
+    const { region } = camera([pin(1, from, 'done'), pin(2, to, 'next')], mid(from, to), LODGING, BOX);
+    const need = (200 * BOX.width) / (BOX.bottom - BOX.top - 2 * PIN_INSET);
+    expect(need).toBeLessThan(MOVE_CAP_M); // 시험 자체 확인: 묶이지 않는다
+    expect(need).toBeGreaterThan(STAY_M); // 시험 자체 확인: 800m 하한도 아니다
+    expect(near(spanEW(region), need)).toBe(true);
+  });
+});
