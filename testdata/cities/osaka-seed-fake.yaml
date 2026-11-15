@@ -3,7 +3,7 @@
 # 지역 4곳(namba·shinsaibashi·umeda·osakajo, §12), 카테고리 8종을 모두 포함한다.
 # 공급자 응답(가짜)은 testdata/cities/osaka-fake.json 에 있다. 아래 query가 그 파일의 resolve 표 키다.
 # 맨 위 city_code·timezone·center는 이 테스트가 정한 모양 (질문: 정본 seed에도 있는지). center = 숙소가 없을 때 시작점(§9 Q10 난바역).
-# center도 장소처럼 query로 resolve -> place_id만 팩에, 좌표는 캐시에 (AC-2: 팩에 좌표 없음).
+# center도 장소처럼 query로 resolve -> place_id는 팩에, Google 좌표는 캐시에. center.lat·lng는 정본 seed v3와 같은 우리 값(TASK-015 §9 Q6 · §16 Q-A 1안) — 팩에 그대로 들어가는 유일한 좌표 자리.
 # 일부러 넣은 경우:
 #   osaka-fake-not-found  : resolve 0곳 -> 팩에서 빠지고 보고 (§A2)
 #   osaka-fake-ambiguous  : resolve 여러 곳 -> 팩에서 빠지고 보고 (§A2)
@@ -17,12 +17,14 @@
 #   osaka-fake-park-google : open_space인데 Google에 영업시간이 있음 -> Google이 먼저 (O1·O3)
 #   osaka-fake-night-street: curated_hours 17:00~24:00 (O2). Serper에도 다른 시각이 있음 -> curated가 Serper보다 먼저 (O3)
 # areas(지역 중심)는 정본과 같은 목록 모양. center처럼 이름 + query, 좌표는 캐시에만. osakajo는 §12로 더한 넷째 지역 (지역 3곳을 가정하지 않게)
-version: 2
+version: 3   # 정본 seed v3와 같은 모양 (v2 + center lat·lng, TASK-015 §16 Q-A)
 city_code: osaka
 timezone: Asia/Tokyo
 center:
   name_ko: 난바역
   query: 難波駅 Osaka
+  lat: 34.6662   # 우리 값 (정본 docs/data/osaka-seed.yaml v3와 같은 수). Google 값 아님
+  lng: 135.5010
 areas:   # 정본(docs/data/osaka-seed.yaml)과 같은 목록 모양 {id, name_ko, query}. 지역은 데이터 (TASK-010 §12: 4곳)
   - {id: namba, name_ko: 난바역, query: 難波駅 Osaka}
   - {id: shinsaibashi, name_ko: 신사이바시역, query: 心斎橋駅 Osaka}
