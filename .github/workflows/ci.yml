@@ -39,6 +39,7 @@ jobs:
         .npmrc
         testdata/particles.json
         apps/server/trip/link.py
+        apps/server/trip/detect.py
         .node-version
         pnpm-workspace.yaml
         docs/DESIGN-001_Brand-Tokens.md
