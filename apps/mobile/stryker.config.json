@@ -79,7 +79,9 @@
         "<rootDir>/__tests__/task-014-s31-t08-card.test.tsx",
         "<rootDir>/__tests__/task-015-action-replies.test.tsx",
         "<rootDir>/__tests__/task-015-city-center.test.tsx",
-        "<rootDir>/__tests__/task-015-pin-overlap.test.ts"
+        "<rootDir>/__tests__/task-015-pin-overlap.test.ts",
+        "<rootDir>/__tests__/task-015-lodging-lib.test.ts",
+        "<rootDir>/__tests__/task-015-lodging-pick.test.tsx"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",
