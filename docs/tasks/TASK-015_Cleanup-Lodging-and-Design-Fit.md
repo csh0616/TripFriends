@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-16 |
-| 상태 | **v1.10** — §16 backend §15 보고 답(`35d9d9e`·`d921bff`·`e66855f`) · v1.9 §15 backend 보고 답(`ea580a5`·`64a8d4e`) · v1.8 §14 test-writer 답(`1ba11ea`·`7eba928` 승인) · v1.7 §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
+| 상태 | **v1.11** — §17 frontend 1차 보고 답 · v1.10 §16 backend §15 보고 답(`35d9d9e`·`d921bff`·`e66855f`) · v1.9 §15 backend 보고 답(`ea580a5`·`64a8d4e`) · v1.8 §14 test-writer 답(`1ba11ea`·`7eba928` 승인) · v1.7 §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
 | 관련 | TASK-010 §B5(숙소 검색)·C4 · TASK-014 §28·§29·§34(넘어온 것) · `docs/design/reviews/task-014-design.md` §9-4·§10·§11·§12·§13 · DESIGN-001 v2.8 §4-6·§4-9·§4-11·§4-13 · API-001(`/places/lodging-search`·`POST /trips`·`NowView`) · ADR-015(Google 약관·좌표 30일) · HISTORY 11-15·11-16 결정권자 의견 · ADR-019(배포는 이 TASK 밖) |
 | 브랜치 | `feat/task-015-cleanup` |
 | 다음 | TASK-016 장소 데이터 확장(ADR-018) → TASK-017 SOS·오프라인·알림·출발 전 점검 |
@@ -207,6 +207,43 @@
 - 보고에 나온 Q-B~Q-E는 PM이 받은 보고에 없었음 → **다음 보고에 다시 적어 줘**(막지 않으면 frontend와 같이 진행)
 
 - 다음: test-writer(가짜 시드 · `T10_Q10` · 자리 기준 검사) → backend(`city_center()` 오류, 서버 전체 통과) → **서버 전체 통과면 `frontend` 시작**(§A · §B · §C · §D · §E 앱 몫, `task-015-design.md` V129 값)
+
+## 17. frontend 1차 보고 답 (11-16, test-writer `9e5f202` · backend `e30bf13` · frontend 6커밋 `00d61cf`~`76d006d`)
+- 서버 4393 통과 · 0 실패. 앱 3101 통과 · 2 실패(`task-012-auth` `DATES_BODY`에 `lodging: null` 없음 — §13 Q5 규칙과 어긋난 **옛 테스트**). tsc 0
+- **축척**: Google iOS는 SDK가 안 줌 → 순수 함수 `scaleBar`로 직접(100 · 200 · 500m · 1km 중 120pt 안에 드는 가장 긴 것) — 승인
+- **REASONS 표** 받음(`Claude outputs/PR-TASK-015-draft.md`) → 디자이너에게 넘김(①-29~31). 관찰: T-02 "곧 다음 장소로 출발할 때야", T-07 "고정 일정 출발까지 15분 이하야"는 **규칙 설명처럼 읽힌다** — 친구 말투로 다듬기는 다음 디자인 맞추기 백로그(RESEARCH-003 "말투는 친구")
+
+**옛 테스트와 부딪혀 보류한 4건 → 옛 단언을 test-writer가 고친다** (TASK-015가 일부러 바꾼 디자인이라 옛 테스트가 낡은 것)
+| 항목 | 고칠 옛 테스트 |
+|---|---|
+| §C 다른 날 작은 [알아서 짜 줘] | `task-011-day-list.test.tsx:214 · 219` (`card-auto` 없음 → 다른 계획 전 날엔 있음) |
+| B3 연습 시트 윗변 546 / 417 | `task-014-s19-design.test.tsx` `REH_SHEET_TOP = 434` → 546 |
+| B5 시계 손잡이 안쪽 14 | `task-014-rehearsal.test.tsx` `barTo` (이동 범위 214로 다시 계산) |
+| B4 연습 중 [길 안내] 없음 | `task-014-s29-screen.test.tsx:463 · 572` — **연습 중에는 T-08 [숙소로 길 안내]도 없음**, 실제 여행은 그대로 |
+- 같이: `task-012-auth` `DATES_BODY`에 `lodging: null`
+
+**과정 예외: frontend가 테스트 파일 `task-015-map-project.test.ts`를 씀** → **test-writer가 검토해 넘겨받는다**(그대로 두거나 고쳐서 test-writer 커밋으로). 지우고 처음부터 다시 쓰지는 않음(화면 좌표 · 축척 계산 테스트 자체는 필요). 기록: 다음부터 frontend는 테스트가 필요하면 **멈추고 묻는다**
+
+| # | 남은 질문 | 답 |
+|---|---|---|
+| Q-B | 실제 모드에서 팩에 우리 좌표가 없으면 | **서버 시작 때 멈춘다**(설정 오류, 이유 한 줄) — 요청마다 500보다 빨리 찾는다. 그래서 `/cities` · NowView가 그 상태를 만날 일이 없다. 테스트: 좌표 없는 팩으로 시작하면 실패 |
+| Q-C | 숙소 입력에서 필수 칸 | 6칸은 요청에서 빠져도 됨(= null). **kind마다 필수 값**은 있어야 함: place → `place_id`, address → `address_text` + `place_id`, pin → `lat` · `lng`. 없으면 `missing_field` — 지금 받아 주는 것은 고친다 |
+| Q-D | pin에 글자 `place_id`가 오면 받아 주고 버림 | **조용히 버리지 않는다**(§9 Q4와 같은 이유) → 새 reason **`field_not_allowed`**: pin에 `place_id` · `address_text`. 순서: `invalid_kind` → `missing_field` → `invalid_type` → `coords_not_allowed` → **`field_not_allowed`** → `label_too_long` → `too_far` |
+| Q-E | `too_far` 밖 reason의 앱 문구 | frontend 임시 문구 **승인**: a2 "숙소를 다시 확인해 줘", 여행 만들기 화면 "숙소를 다시 골라 줘". 앱이 정상이면 나오지 않는 오류라 하나로 충분(개발 경고 로그는 남김) |
+| tw-Q1 | Google 값 검사는 자리만, center 값 일치는 따로 | **승인** |
+| tw-Q2 | 가짜 시드 버전 3 | **승인** |
+
+**frontend가 문서 없이 정한 것**
+| 정한 것 | 답 |
+|---|---|
+| 문구 · `addr-row-{place_id}` · a3 [건너뛰기] · `fitToCoordinates` · "숙소에 머무는 중" 정의(첫 이동 출발 전 · 마지막에 숙소 도착 뒤) · 이유 줄은 숙소 없는 T-08 본문과 같을 때만 숨김 | **승인** |
+| `pick-area` 면 없이 점선만(투명도 금지 규칙) | **승인** — 디자이너도 "면 없이 점선만으로 줄일 수 있다"고 함 |
+| **이름 검색 자체가 실패하면 [지도에서 찍기] 없이 알림만** | **고친다** — 이름 검색 실패도 주소 검색 실패(a3 ②)와 같이 **[지도에서 찍기]**를 준다. 막히지 않게(§6) |
+| **크게 보기에 이름표 없음**(겹침 함수가 다음 핀에만 이름표) | **고친다** — 디자인(①-41)대로 5곳 이하면 **모든 핀에 이름표**. 겹침 함수에 "모든 이름표" 모드 추가: 같은 자리 후보 순서(위 → 오른쪽 → 왼쪽 → 아래), 겹치면 그 이름표만 뺌, 6곳 이상이면 다음 핀 규칙. test-writer 테스트 먼저 |
+| 떠 있는 판을 겹침 함수에 안 넘김(빈 목록) | **고친다** — 화면에 실제로 떠 있는 판(연습 시계 판 · 아래 시트 · 위 버튼 줄)의 사각형을 넘긴다 |
+| B7 숫자 글꼴은 날짜 목록 머리만 | **나머지도 한다** — `task-014-design.md` §13-1 규칙 목록 전부(AC-4) |
+
+- 다음: test-writer(옛 단언 4건 + `DATES_BODY` · `map-project` 넘겨받기 · Q-B · Q-C · Q-D · "모든 이름표" 모드 · 떠 있는 판 입력) → backend(Q-B · Q-C · Q-D) → frontend(보류 4건 · 이름 검색 실패 [지도에서 찍기] · 모든 이름표 · 떠 있는 판 · B7 나머지) → 서버 · 앱 전체 통과 → `reviewer`(시뮬레이터 스크린샷: a3 → a2 찍기 + 50km 안내 · 크게 보기 · +N 배지 · 집 배지 · 빈 코스 날 오사카 · 연습 화면)
 
 ## 6. 실패하면
 | 상황 | 결과 |
