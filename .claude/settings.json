@@ -18,7 +18,11 @@
       "Bash(*apps/server/.env)",
       "Bash(*apps/server/.env *)",
       "Bash(*apps/mobile/.env.local)",
-      "Bash(*apps/mobile/.env.local *)"
+      "Bash(*apps/mobile/.env.local *)",
+      "Read(~/.config/tripfriends/server.env)",
+      "Edit(~/.config/tripfriends/server.env)",
+      "Bash(*.config/tripfriends/server.env)",
+      "Bash(*.config/tripfriends/server.env *)"
     ]
   }
 }

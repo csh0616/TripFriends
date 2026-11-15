@@ -32,7 +32,8 @@
 **문서에 없는 규칙을 지어내지 않는다.** 문서끼리 다르거나 비어 있으면 멈추고 승현에게 묻는다.
 
 ## 절대 규칙
-1. **비밀값**: API 키는 `apps/server/.env`에만. `apps/mobile`에 절대 두지 않는다 (`EXPO_PUBLIC_`은 앱에 그대로 들어감). 키 값을 화면에 출력하지 않는다. `.env`는 커밋하지 않고 `.env.example`만 커밋
+1. **비밀값**: API 키는 서버 비밀 파일에만. `apps/mobile`에 절대 두지 않는다 (`EXPO_PUBLIC_`은 앱에 그대로 들어감). 키 값을 화면에 출력하지 않는다. `.env`는 커밋하지 않고 `.env.example`만 커밋
+   - 서버 비밀 파일은 저장소 밖 `~/.config/tripfriends/server.env` (`apps/server/.env`는 쓰지 않는다). 읽지 않고, `--env-file`로만 넘긴다
    - 예외: Google 지도 iOS 키는 앱에 들어가는 공개 키(번들 ID 제한, ADR-014). `apps/mobile/.env.local`에만 두고 커밋·로그·PR에 남기지 않는다.
 2. **사실 값**: 영업시간·가격 등은 엔진·DB 결과만 쓴다. LLM이 사실 값을 만들지 않는다. 장소에는 확인 상태(확인됨/미확인/모름) 필수
 3. **일정 변경**: 사용자가 고르기 전에는 일정을 바꾸지 않는다 (interrupt)
@@ -51,6 +52,7 @@
 
 ## 자주 쓰는 명령 (생기면 갱신)
 - 서버 테스트: `cd apps/server && uv run pytest`
-- 서버 실행: `cd apps/server && uv run fastapi dev api/main.py`
+- 서버 실행: `cd apps/server && uv run --env-file ~/.config/tripfriends/server.env fastapi dev api/main.py`
+- 장소 팩 만들기: `cd apps/server && uv run --env-file ~/.config/tripfriends/server.env python -m places build osaka`
 - 앱 테스트: `pnpm --filter mobile test`
 - 타입 생성: `pnpm --filter api-types generate`
