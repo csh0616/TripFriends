@@ -54,3 +54,32 @@ describe('§31 Q2 숙소 없는 T-08 모양', () => {
     expect(card.queryByText(DAY_OVER_TITLE)).toBeNull();
   });
 });
+
+// ---------- §33: 카드 모양은 lodging == null만으로 가른다 ----------
+// 근거: TASK-014 §32 권고 ②("카드 모양은 카드의 lodging == null로 결정")
+//       · §33 "T-08 숙소 없는 모양의 판정: lodging == null만. lodging은 있는데 map_url만 null이면 숙소 줄은 보이고 [숙소로 길 안내] 버튼만 숨김"
+// 계약: lodging 있음 + map_url null -> "숙소 가는 법"·"숙소까지 N분"(go_home_min > 0) 줄 있음, home-directions-button 없음, "오늘 일정 끝"·수고했어 문구 없음
+//   go_home_min이 0·null이면 제목은 지금 모양 그대로 "숙소로 돌아가자" (숙소 있음 모양의 기존 규칙)
+describe('§33 숙소는 있는데 길찾기 주소만 없는 T-08', () => {
+  test.each([true, false])('T14_S33_lodging_있고_map_url_null이면_숙소_줄은_보이고_길_안내_버튼만_없다 (main=%s)', async (main) => {
+    const card = await show(t08({ map_url: null, go_home_min: 25 }), main);
+    expect(card.getByText('숙소 가는 법')).toBeTruthy();
+    expect(card.getByText('숙소까지 25분')).toBeTruthy();
+    expect(card.queryByTestId('home-directions-button')).toBeNull();
+    expect(card.queryByText('숙소로 길 안내')).toBeNull();
+  });
+
+  test.each([true, false])('T14_S33_lodging_있고_map_url_null이면_오늘_일정_끝·수고했어_문구가_없다 (main=%s)', async (main) => {
+    const card = await show(t08({ map_url: null, go_home_min: 25 }), main);
+    expect(card.queryByText(DAY_OVER_TITLE)).toBeNull();
+    expect(card.queryByText(NO_LODGING_BODY)).toBeNull();
+  });
+
+  test.each([0, null])('T14_S33_경계_lodging_있고_map_url_null·go_home_min_%s이면_제목은_숙소로_돌아가자', async (goHome) => {
+    const card = await show(t08({ map_url: null, go_home_min: goHome }));
+    expect(card.getByText('숙소 가는 법')).toBeTruthy();
+    expect(card.getByText('숙소로 돌아가자')).toBeTruthy();
+    expect(card.queryByText(DAY_OVER_TITLE)).toBeNull();
+    expect(card.queryByTestId('home-directions-button')).toBeNull();
+  });
+});

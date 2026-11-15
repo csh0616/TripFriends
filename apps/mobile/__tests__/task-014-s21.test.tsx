@@ -5,7 +5,10 @@
 // 계약 (이 테스트가 정한 것, 승인 대기 — 질문 목록 참고):
 //   연습 카메라 = MapAdapter.fit 한 번(fitToCoordinates + edgePadding). 처음 맞출 때 animateToRegion·animateCamera(옮기기)는 없다
 //     머무는 중(핀 중 state "now"가 있음): 맞춤 좌표의 상자 가운데 = 그 장소(1m 안), 상자 동서 폭 = 800m ± 5% (§21 "가설: 화면에 약 800m")
-//     이동 중(state "now"가 없고 "next"가 있음): 맞춤 좌표 = { 지금 자리(응답 position = reh-dot), 출발(마지막 done 핀), 도착(next 핀) } 정확히 이 셋
+//     이동 중(state "now"가 없고 "next"가 있음): 맞춤 좌표 = { 지금 자리(reh-dot), 출발(마지막 done 핀), 도착(next 핀) } 정확히 이 셋
+//   §29 ②·§33: reh-dot = 앱이 연습 시계·화면 응답의 pins·day.lodging으로 바로 계산한 자리(fake-position). 서버 응답 position은 쓰지 않는다
+//     -> 응답 position은 일부러 엉뚱한 곳(SERVER_POSITION)으로 두고, 핀 시각을 잡아 시계 10:00(응답 day.start, §10 Q13)·10:10·10:20에 점이 원하는 자리에 오게 한다
+//     장소 사이 점 = 출발 시각(다음 시작 − 이동 시간)까지 제자리, 그 뒤 이동 시간 동안 직선 이동 (§29 ③)
 //     둘 다 아래 여백 >= 연습 시트 440 + 시계 판 112 (§19 하한 그대로)
 //   실제 여행(연습 아님) 카메라는 그대로: 처음 맞출 때 모든 핀 + 숙소 (TASK-006 B10)
 //   D6 날짜: 숫자 Text("12/11")와 요일 Text("금")가 같은 부모 아래 나란한 별도 Text. 숫자 Text는 다른 Text 안에 없다. 숫자 = DM Mono 13/18
@@ -22,7 +25,7 @@ import { locationFake } from '../test-support/expo-location-mock';
 import { mapControl } from '../test-support/maps-mock';
 import { resetDevice, tap } from '../test-support/planning-driver';
 import { day as demoDay, SPOT } from '../test-support/planning-fixtures';
-import { nowView, pins as basePins, POSITION, t02, t03 } from '../test-support/trip-now-fixtures';
+import { nowView, pins as basePins, POSITION, t02, t03, t08 } from '../test-support/trip-now-fixtures';
 
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
@@ -68,9 +71,30 @@ const MOVE_PINS = [
 ];
 const LODGING = demoDay.lodging;
 
+// ---------- §29 ②·§33: 앱 점이 원하는 자리에 오도록 핀 시각을 잡는다 ----------
+const CLOCK_START = 10 * 60; // 연습 시계 시작 = 응답 day.start 10:00 (§10 Q13). [10분] 한 번 = 10:10, 두 번 = 10:20
+const SERVER_POSITION = { lat: 35.05, lng: 135.05 }; // 서버 응답 position: 앱이 쓰면 안 되는 엉뚱한 자리 (§29 ②)
+const hm = (min: number) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+type Pin = (typeof basePins)[number];
+/** 핀 셋의 [시작, 끝, 이동 분] (분) */
+const timed = (pins: Pin[], times: [number, number, number][]) =>
+  pins.map((pin, i) => ({ ...pin, start: hm(times[i][0]), end: hm(times[i][1]), travel_min: times[i][2] }));
+const along = (a: { lat: number; lng: number }, b: { lat: number; lng: number }, ratio: number) => ({
+  lat: a.lat + (b.lat - a.lat) * ratio,
+  lng: a.lng + (b.lng - a.lng) * ratio,
+});
+// 머묾: 10:00·10:10 모두 2번(D20, 09:20~11:00) 안
+const STAY_TIMES: [number, number, number][] = [[480, 540, 12], [560, 660, 20], [690, 960, 30]];
+// 이동: 1번 끝 09:20 = 출발(2번 시작 10:40 − 이동 80분). 10:00 = 절반(POSITION), 10:10 = 50/80, 10:20 = 60/80
+const MOVE_DEPART = 560;
+const MOVE_TRAVEL = 80;
+const MOVE_TIMES: [number, number, number][] = [[480, MOVE_DEPART, 12], [MOVE_DEPART + MOVE_TRAVEL, 720, MOVE_TRAVEL], [750, 960, 30]];
+const moveDotAt = (clock: number) => along(SPOT.D01, SPOT.D20, (clock - MOVE_DEPART) / MOVE_TRAVEL);
+
 const plannedDay = { ...demoDay, day_id: PLANNED, date: '2026-12-03' };
-const stayView = (over: object = {}) => nowView({ day: plannedDay, pins: STAY_PINS, position: SPOT.D20, ...over });
-const moveView = (over: object = {}) => nowView({ day: plannedDay, pins: MOVE_PINS, position: POSITION, main: t02(), subs: [t03()], ...over });
+const stayView = (over: object = {}) => nowView({ day: plannedDay, pins: timed(STAY_PINS, STAY_TIMES), position: SERVER_POSITION, ...over });
+const moveView = (over: object = {}) =>
+  nowView({ day: plannedDay, pins: timed(MOVE_PINS, MOVE_TIMES), position: SERVER_POSITION, main: t02(), subs: [t03()], ...over });
 
 // ---------- 화면 나무 도구 ----------
 
@@ -157,16 +181,24 @@ afterEach(() => {
 });
 
 const mid = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => ({ lat: (a.lat + b.lat) / 2, lng: (a.lng + b.lng) / 2 });
-// 첫 구간: 숙소 -> 1번. 지난 핀 없음, 1 다음 · 2·3 나중
-const FIRST_LEG_PINS = [
-  { ...basePins[0], state: 'next' },
-  { ...basePins[1], state: 'later' },
-  { ...basePins[2], state: 'later' },
-];
+// 첫 구간: 숙소 -> 1번. 지난 핀 없음, 1 다음 · 2·3 나중. 1번 10:10 시작 − 이동 20분 = 09:50 출발 -> 10:00 = 절반
+const FIRST_LEG_PINS = timed(
+  [
+    { ...basePins[0], state: 'next' },
+    { ...basePins[1], state: 'later' },
+    { ...basePins[2], state: 'later' },
+  ],
+  [[610, 720, 20], [740, 840, 20], [870, 1140, 30]],
+);
 const FIRST_LEG_AT = mid(LODGING, SPOT.D01);
-// 마지막 구간: 3번 -> 숙소. 모두 지남
-const LAST_LEG_PINS = basePins.map((pin) => ({ ...pin, state: 'done' }));
+// 마지막 구간: 3번 -> 숙소. 모두 지남. 3번 끝 09:50, 숙소까지 20분(T-08 go_home_min) -> 10:00 = 절반
+const LAST_LEG_PINS = timed(
+  basePins.map((pin) => ({ ...pin, state: 'done' })),
+  [[420, 480, 12], [500, 540, 20], [560, 590, 20]],
+);
 const LAST_LEG_AT = mid(SPOT.D30, LODGING);
+// 다음 이동 구간(2번 -> 3번): 2번 끝 10:00 = 출발(3번 10:20 − 20분) -> 10:10 = 절반
+const NEXT_LEG_TIMES: [number, number, number][] = [[420, 480, 12], [500, 600, 20], [620, 960, 20]];
 
 // =====================================================================
 // 1 연습 지도 = 지금 구간만 (TASK-014 §21 1) -> §24: fit 대신 우리가 계산한 영역(animateToRegion)
@@ -193,24 +225,20 @@ const nearRatio = (value: number, target: number) => value >= target * (1 - STAY
 const PIN_INSET = 30; // §26: 핀 반지름 22 + 여백 8. 화면은 띠 전체를 넘기고 함수가 안에서 줄인다
 /** 줄어든 띠 [top + 30, bottom − 30] 안인가 (§26) */
 const inBand = (y: number, box: Box) => y >= box.top + PIN_INSET - 0.5 && y <= box.bottom - PIN_INSET + 0.5;
-/** 영역에서 화면 y가 target이 되는 위도 (메르카토르 역산) */
-function latAtY(region: Region, box: Box, y: number) {
-  const top = mercY(region.latitude + region.latitudeDelta / 2);
-  const bottom = mercY(region.latitude - region.latitudeDelta / 2);
-  const m = top - (y / box.height) * (top - bottom);
-  return ((2 * Math.atan(Math.exp(m)) - Math.PI / 2) * 180) / Math.PI;
-}
 const eastOf = (from: { lat: number; lng: number }, m: number) => ({ lat: from.lat, lng: from.lng + m / (METERS_PER_DEGREE * Math.cos((from.lat * Math.PI) / 180)) });
 // 3km 미만 짧은 구간: 1번(D01) -> 동쪽 500m·북쪽 150m의 2번. 150m는 띠 전체(120)엔 800m 폭으로 들어가지만 줄어든 띠(60)엔 안 들어가 약 1km가 된다
 const SHORT_TO = { lat: SPOT.D01.lat + 150 / METERS_PER_DEGREE, lng: eastOf(SPOT.D01, 500).lng };
-const shortView = (position: { lat: number; lng: number }) =>
+/** 짧은 구간 1 -> 2. depart = 1번 끝(= 출발), 이동 20분 */
+const shortView = (depart: number) =>
   moveView({
-    pins: [
-      { ...basePins[0], state: 'done' },
-      { ...basePins[1], lat: SHORT_TO.lat, lng: SHORT_TO.lng, state: 'next' },
-      { ...basePins[2], state: 'later' },
-    ],
-    position,
+    pins: timed(
+      [
+        { ...basePins[0], state: 'done' },
+        { ...basePins[1], lat: SHORT_TO.lat, lng: SHORT_TO.lng, state: 'next' },
+        { ...basePins[2], state: 'later' },
+      ],
+      [[480, depart, 12], [depart + 20, 720, 20], [750, 960, 30]],
+    ),
   });
 const snapPx = (point: unknown, area: number) => {
   if (typeof point === 'number') return point <= 1 ? point * area : point;
@@ -261,8 +289,9 @@ function sameRegion(a: Region, b: Region) {
   expect(Math.abs(a.longitudeDelta / b.longitudeDelta - 1)).toBeLessThanOrEqual(0.01);
   expect(Math.abs(a.latitudeDelta / b.latitudeDelta - 1)).toBeLessThanOrEqual(0.01);
 }
-const expected = (view: { pins: unknown[]; position: unknown }, box: Box): Region =>
-  require('@/now/rehearsal-camera').rehearsalCamera(view.pins, view.position ?? null, LODGING, box).region;
+/** 기대 영역: 응답 핀 + 이 테스트가 정한 앱 점(dot). 서버 position이 아니다 (§29 ②) */
+const expected = (view: { pins: unknown[] }, dot: { lat: number; lng: number }, box: Box): Region =>
+  require('@/now/rehearsal-camera').rehearsalCamera(view.pins, dot, LODGING, box).region;
 
 describe('§21 1·§24 연습 지도 카메라 (화면)', () => {
   test('T14_S24_화면_연습_카메라는_fit이_아니라_계산한_영역_하나', async () => {
@@ -295,14 +324,14 @@ describe('§21 1·§24 연습 지도 카메라 (화면)', () => {
   });
 
   test.each([
-    ['머무는 중', () => stayView()],
-    ['이동 중', () => moveView()],
-    ['첫 구간', () => nowView({ day: plannedDay, pins: FIRST_LEG_PINS, position: FIRST_LEG_AT, main: t02(), subs: [t03()] })],
-    ['마지막 구간', () => nowView({ day: plannedDay, pins: LAST_LEG_PINS, position: LAST_LEG_AT })],
-  ])('T14_S24_화면_%s_영역은_보이는_띠로_계산한_rehearsalCamera와_같다', async (_name, reply) => {
+    ['머무는 중', () => stayView(), SPOT.D20],
+    ['이동 중', () => moveView(), POSITION],
+    ['첫 구간', () => nowView({ day: plannedDay, pins: FIRST_LEG_PINS, position: SERVER_POSITION, main: t02(), subs: [t03()] }), FIRST_LEG_AT],
+    ['마지막 구간', () => nowView({ day: plannedDay, pins: LAST_LEG_PINS, position: SERVER_POSITION, subs: [t08({ go_home_min: 20 })] }), LAST_LEG_AT],
+  ])('T14_S24_화면_%s_영역은_보이는_띠로_계산한_rehearsalCamera와_같다', async (_name, reply, dot) => {
     rehReply = reply;
     const box = await toRehearsalOnBoard();
-    sameRegion(lastRegion(), expected(reply() as never, box));
+    sameRegion(lastRegion(), expected(reply() as never, dot, box));
   });
 });
 
@@ -334,17 +363,22 @@ describe('§21 1 경계 실제 여행(연습 아님) 카메라는 그대로', ()
 // =====================================================================
 
 describe('§22 Q2·§24 연습 중 구간이 바뀌면 카메라를 다시 계산한다', () => {
+  // §29 ①: [10분]을 누르면 점은 바로(화면의 이전 응답으로) 움직이고, 새 응답이 오면 다시 계산한다 -> 새 응답이 화면에 온 뒤를 본다
   async function jump(next: () => object) {
     const before = mapControl.regions.length;
+    const checks = () => server.sent(`POST /days/${PLANNED}/check`).length;
+    const sentBefore = checks();
     rehReply = next;
     await tap(screen.getByTestId('demo-plus-10'));
-    await waitFor(() => expect(mapControl.regions.length).toBeGreaterThan(before));
+    await waitFor(() => expect(checks()).toBeGreaterThan(sentBefore)); // 시험 자체 확인: 새 응답을 받았다
+    await settleAll();
+    expect(mapControl.regions.length).toBeGreaterThan(before);
   }
 
   test('T14_S22_S24_머묾에서_이동으로_바뀌면_이동_구간으로_다시_계산', async () => {
     const box = await toRehearsalOnBoard();
     await jump(() => moveView());
-    sameRegion(lastRegion(), expected(moveView() as never, box));
+    sameRegion(lastRegion(), expected(moveView() as never, moveDotAt(CLOCK_START + 10), box));
   });
 
   test('T14_S22_S24_이동에서_도착해_머물면_그_장소로_다시_계산', async () => {
@@ -359,27 +393,30 @@ describe('§22 Q2·§24 연습 중 구간이 바뀌면 카메라를 다시 계�
   test('T14_S22_S24_다음_이동_구간으로_건너뛰면_새_구간으로_다시_계산', async () => {
     rehReply = () => moveView();
     const box = await toRehearsalOnBoard();
-    const between = mid(SPOT.D20, SPOT.D30);
-    const nextLeg = [
-      { ...basePins[0], state: 'done' },
-      { ...basePins[1], state: 'done' },
-      { ...basePins[2], state: 'next' },
-    ];
-    const next = () => moveView({ pins: nextLeg, position: between });
+    const between = mid(SPOT.D20, SPOT.D30); // 10:10의 앱 점 (NEXT_LEG_TIMES)
+    const nextLeg = timed(
+      [
+        { ...basePins[0], state: 'done' },
+        { ...basePins[1], state: 'done' },
+        { ...basePins[2], state: 'next' },
+      ],
+      NEXT_LEG_TIMES,
+    );
+    const next = () => moveView({ pins: nextLeg });
     await jump(next);
-    sameRegion(lastRegion(), expected(next() as never, box));
+    sameRegion(lastRegion(), expected(next() as never, between, box));
   });
 
   test('T14_S23_S24_S26_3km_미만_같은_구간에서_시각만_바뀌면_카메라는_그대로', async () => {
     // §26: 묶인 구간은 벗어날 때 다시 맞추므로, 이 경계는 3km 미만 구간으로 본다
-    rehReply = () => shortView(eastOf(SPOT.D01, 100));
+    rehReply = () => shortView(CLOCK_START - 5); // 10:00 = 1/4, 10:10 = 3/4 (같은 응답, 시계만 바뀐다)
     await toRehearsalOnBoard();
     const before = mapControl.regions.length;
     expect(before).toBe(1); // 처음 한 번은 계산했다
     expect(spanEW(lastRegion())).toBeLessThan(MOVE_CAP_M); // 시험 자체 확인: 묶이지 않았다
     const checks = () => server.sent(`POST /days/${PLANNED}/check`).length;
     const sentBefore = checks();
-    rehReply = () => shortView(eastOf(SPOT.D01, 400)); // 같은 1 -> 2 구간, 지금 자리만 앞으로
+    rehReply = () => shortView(CLOCK_START - 5); // 같은 1 -> 2 구간, 지금 자리만 앞으로
     await tap(screen.getByTestId('demo-plus-10'));
     await waitFor(() => expect(checks()).toBeGreaterThan(sentBefore)); // 시험 자체 확인: 새 응답을 받았다
     await settleAll();
@@ -398,16 +435,18 @@ describe('§26 연습 카메라 (화면)', () => {
   }
 
   test('T14_S26_1_화면_묶인_구간은_reh_dot이_줄어든_띠_안이면_그대로_벗어나면_한_번', async () => {
-    rehReply = () => moveView(); // D01 -> D20 (남북 1.1km): 보드 띠에서 3km로 묶인다
+    rehReply = () => moveView(); // D01 -> D20 (남북 1.1km): 보드 띠에서 3km로 묶인다. 같은 응답, 시계만 간다
     const box = await toRehearsalOnBoard();
     const first = lastRegion();
     expect(spanEW(first)).toBeGreaterThanOrEqual(MOVE_CAP_M * (1 - STAY_TOLERANCE)); // 시험 자체 확인: 묶였다
     expect(mapControl.regions).toHaveLength(1);
-    const inside = { lat: latAtY(first, box, box.top + PIN_INSET + 2), lng: POSITION.lng };
-    await plus(() => moveView({ position: inside }));
+    const inside = moveDotAt(CLOCK_START + 10); // 10:10 앱 점 (북쪽으로 50/80)
+    const outside = moveDotAt(CLOCK_START + 20); // 10:20 앱 점 (60/80)
+    expect(inBand(project(first, box, inside).y, box)).toBe(true); // 시험 자체 확인: 10:10 점은 줄어든 띠 안
+    expect(project(first, box, outside).y).toBeLessThan(box.top + PIN_INSET); // 시험 자체 확인: 10:20 점은 줄어든 띠 위로 벗어남
+    await plus(() => moveView());
     expect(mapControl.regions).toHaveLength(1); // 벗어나기 전엔 그대로
-    const outside = { lat: latAtY(first, box, box.top + PIN_INSET - 4), lng: POSITION.lng };
-    await plus(() => moveView({ position: outside }));
+    await plus(() => moveView());
     expect(mapControl.regions).toHaveLength(2); // 벗어나는 순간 한 번
     const { x, y } = project(lastRegion(), box, outside);
     expect(Math.abs(y - (box.top + box.bottom) / 2)).toBeLessThanOrEqual(1);
@@ -415,8 +454,8 @@ describe('§26 연습 카메라 (화면)', () => {
   });
 
   test('T14_S26_2_화면_짧은_구간은_세_곳이_줄어든_띠_안_핀_전체가_보인다', async () => {
-    const dot = mid(SPOT.D01, SHORT_TO);
-    rehReply = () => shortView(dot);
+    const dot = mid(SPOT.D01, SHORT_TO); // 10:00 앱 점: 09:50 출발, 20분 중 10분
+    rehReply = () => shortView(CLOCK_START - 10);
     const box = await toRehearsalOnBoard();
     const region = lastRegion();
     for (const at of [SPOT.D01, dot, SHORT_TO]) expect(inBand(project(region, box, at).y, box)).toBe(true);
