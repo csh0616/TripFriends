@@ -12,11 +12,13 @@ TASK-007 F1(알약 "오늘 일정 끝").
         둘 다 비어 있지 않으면 done의 끝 = remaining의 시작 (Q11 그대로). 빈 코스 날은 done = remaining = []
     Q4 경계: 숙소 있음 -> done[0] = 숙소, remaining[-1] = 숙소 (지금 그대로)
     Q3 숙소 없음 -> 같은 시각 숙소 있는 날과 비교해: 보조 = 숙소 있는 날 보조에서 T-08만 뺀 것,
-        숙소 있는 날 메인이 T-08이 아니면 메인 종류·이유가 같다. 메인이 T-08인 자리(마지막 뒤·빈 코스)는 T-08이 아니라는 것만 본다 (무엇인지는 질문)
+        숙소 있는 날 메인이 T-08이 아니면 메인 종류·이유가 같다.
+        (§31 Q2로 바뀜) 메인이 T-08인 자리(마지막 뒤·빈 코스)는 숙소 없는 날도 T-08 "숙소 없는 모양"(lodging·map_url = null),
+        하루 끝 이유는 §31 Q3 "오늘 일정이 끝났어. 오늘도 수고했어!" (빈 코스 날 이유는 "오늘 코스가 비어 있어" 그대로)
     Q3 마지막 장소 끝 뒤·빈 코스 날: status_text = "오늘 일정 끝" (숙소와 상관없이)
-    Q3 빈 코스 날 + 숙소 없음: reason = "오늘 코스가 비어 있어" 그대로, subs·pins = [], 메인은 T-08이 아니다
+    Q3 빈 코스 날 + 숙소 없음: reason = "오늘 코스가 비어 있어" 그대로, subs·pins = [], 메인은 숙소 없는 T-08 (§31 Q2로 바뀜)
     Q6 POST /trips에 lodging_place_id를 줬지만 좌표를 못 구한 여행(city.lodging_location이 None) -> 숙소 없는 여행과 같다:
-        trip.lodging_place_id는 준 값 그대로, now·실제 check·연습 check의 day.lodging = null, 마지막 뒤 T-08 없음, 경로에 도시 중심 없음
+        trip.lodging_place_id는 준 값 그대로, now·실제 check·연습 check의 day.lodging = null, 마지막 뒤 숙소 없는 T-08(§31 Q2), 경로에 도시 중심 없음
         (§29 심은 하루 테스트 test_T14_S29_4_심은_하루_lodging_known_False…가 저장소 쪽을 이미 덮는다. 이 파일은 POST /trips 길로 한 번 더)
     빈 시간 < 이동 시간(Q7)은 앱의 가짜 위치 몫이라 서버 테스트는 없다
 """
@@ -26,11 +28,12 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from test_task014_s29_no_lodging import (
+    NO_LODGING_DAY_OVER,
     at_of,
-    card_types,
     every_view,
     get_now,
     hhmm,
+    is_no_lodging_t08,
     last_end,
     lodging_hit,
     mem,  # noqa: F401  (pytest 픽스처를 이 파일에서도 쓴다)
@@ -43,6 +46,7 @@ from trip_helpers import at_place, at_time, plain_day, plant
 
 HOME = (35.0, 135.0)  # trip_helpers: 심은 하루의 출발점(숙소 자리) = 숙소 모름이면 도시 중심 같은 출발점
 DAY_OVER_PILL = "오늘 일정 끝"
+DAY_OVER_WITH_LODGING = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # TASK-006 §12 R1 (숙소 있음은 그대로, §31 Q3)
 EMPTY_REASON = "오늘 코스가 비어 있어"
 
 
@@ -170,7 +174,7 @@ def test_T14_S30_Q4_속성_숙소_없으면_어느_분이든_경로는_핀_좌�
 
 @settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(minutes=st.integers(min_value=0, max_value=23 * 60 + 59))
-def test_T14_S30_Q3_속성_숙소_없으면_숙소_있는_날에서_T_08만_빠진_카드(pair, minutes):
+def test_T14_S30_Q3_속성_숙소_없으면_숙소_있는_날과_같은_카드_T_08은_숙소_없는_모양(pair, minutes):
     env, known, unknown = pair
     clock = hhmm(minutes)
     with_home, without = views(env, known, clock), views(env, unknown, clock)
@@ -180,8 +184,10 @@ def test_T14_S30_Q3_속성_숙소_없으면_숙소_있는_날에서_T_08만_빠�
         if a["main"]["type"] != "T-08":
             assert b["main"]["type"] == a["main"]["type"], (kind, clock)
             assert b["reason"] == a["reason"], (kind, clock)
-        else:
-            assert b["main"]["type"] != "T-08", (kind, clock)
+        else:  # §31 Q2: 숨기지 않고 숙소 없는 모양, Q3 문구
+            assert is_no_lodging_t08(b["main"]), (kind, clock, b["main"])
+            assert a["reason"] == DAY_OVER_WITH_LODGING, (kind, clock)
+            assert b["reason"] == NO_LODGING_DAY_OVER, (kind, clock)
         assert b["status_text"] == a["status_text"], (kind, clock)
 
 
@@ -190,7 +196,7 @@ def test_T14_S30_Q3_숙소_없어도_마지막_장소_끝_뒤_알약은_오늘_�
     env, day_id = no_lodging_day
     for kind, view in views(env, day_id, clock).items():
         assert view["status_text"] == DAY_OVER_PILL, (kind, clock)
-        assert "T-08" not in card_types(view), (kind, clock)
+        assert is_no_lodging_t08(view["main"]), (kind, clock, view["main"])  # §31 Q2
 
 
 @pytest.mark.parametrize("clock", ["18:59", "13:00"])
@@ -208,11 +214,11 @@ def empty_no_lodging(env):
 
 
 @pytest.mark.parametrize("clock", ["09:00", "13:00", "18:00", "19:00", "23:59"])
-def test_T14_S30_Q3_빈_코스_날_숙소_없으면_안내_글은_남고_T_08은_없다(empty_no_lodging, clock):
+def test_T14_S30_Q3_빈_코스_날_숙소_없으면_안내_글은_남고_T_08은_숙소_없는_모양(empty_no_lodging, clock):
     env, day_id = empty_no_lodging
     for kind, view in views(env, day_id, clock).items():
         assert view["reason"] == EMPTY_REASON, (kind, clock)  # §11 Q13 안내 글 그대로
-        assert "T-08" not in card_types(view), (kind, clock)
+        assert is_no_lodging_t08(view["main"]), (kind, clock, view["main"])  # §31 Q2
         assert view["subs"] == [] and view["pins"] == [], (kind, clock)
         assert view["status_text"] == DAY_OVER_PILL, (kind, clock)
         assert view["day"]["lodging"] is None, (kind, clock)
@@ -249,12 +255,13 @@ def test_T14_S30_Q6_좌표를_못_찾은_숙소면_now·check·연습_모두_day
             assert view["day"]["lodging"] is None, (kind, clock, view["day"]["lodging"])
 
 
-def test_T14_S30_Q6_좌표를_못_찾은_숙소면_마지막_뒤에도_T_08이_없고_경로에_도시_중심이_없다(unlocated_day):
+def test_T14_S30_Q6_좌표를_못_찾은_숙소면_마지막_뒤_T_08은_숙소_없는_모양이고_경로에_도시_중심이_없다(unlocated_day):
     osaka, day_id, date = unlocated_day
     center = tuple(osaka.app.state.city.center())
     end = last_end(get_now(osaka, day_id, at_of(date, "12:00")))
     for minutes in (end, end + 1, 23 * 60 + 59):
         for kind, view in every_view(osaka, day_id, at_of(date, hhmm(min(minutes, 23 * 60 + 59)))).items():
-            assert "T-08" not in card_types(view), (kind, hhmm(minutes))
+            assert is_no_lodging_t08(view["main"]), (kind, hhmm(minutes), view["main"])  # §31 Q2
+            assert view["reason"] == NO_LODGING_DAY_OVER, (kind, hhmm(minutes))  # §31 Q3
             assert center not in points(view["route"]), (kind, hhmm(minutes))
             assert view["status_text"] == DAY_OVER_PILL, (kind, hhmm(minutes))

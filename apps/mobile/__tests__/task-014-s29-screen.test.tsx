@@ -11,7 +11,9 @@
 //      돌아온 응답은 화면에 반영한다 (보낸 뒤 시계가 바뀌었어도). 응답 뒤 다음 check가 나가기까지 기다림은 300ms 디바운스 이하로 본다(400ms 안)
 //   ② 연습 중 지도 점(map-reh-dot) = fakePosition(지금 시계, 화면에 있는 응답의 핀·day.lodging) — 시계가 바뀐 그 차례에(서버 응답 전) 바뀐다.
 //      서버 응답의 position 칸은 연습 점에 쓰지 않는다. 연습 카메라(rehearsalCamera)의 둘째 인자도 그 점. 카드·이유 줄은 응답이 와야 바뀐다
-//   ④ 응답 day.lodging = null: 카드 T-08(testID card-T-08)을 그리지 않는다 · 지도 map-home 없음 · 실제 여행 첫 fit 좌표 = 핀만 ·
+//   ④ 응답 day.lodging = null: (§31 Q2로 바뀜: 숨김 -> 숙소 없는 모양) 카드 T-08(card-T-08)의 lodging·map_url이 null이면
+//      제목 "오늘 일정 끝" + 본문 "오늘 일정이 끝났어. 오늘도 수고했어!"(§31 Q3), 카드 안에 '숙소' 글자 없음, [숙소로 길 안내](home-directions-button) 없음 ·
+//      빈 코스 날은 이유 줄(now-reason)에 "오늘 코스가 비어 있어"가 함께 · 지도 map-home 없음 · 실제 여행 첫 fit 좌표 = 핀만 ·
 //      지도 실패 대체 그림(route-diagram)은 집 그림(route-home) 없이 핀만 · 연습 첫 check 위치 = 1번 장소(첫 일정 전)
 //   가짜 서버 응답에서 lodging: null을 쓴다 (api-types는 백엔드 뒤 생성, 손으로 고치지 않는다)
 //   재생·응답 지연은 jest 가짜 시계로 돌린다(실제로 몇 초 기다리지 않음). 연습에 들어가기까지는 진짜 시계 + 바로 오는 응답
@@ -65,6 +67,19 @@ const hhmmOf = (at: unknown) => {
 };
 const reasonFor = (at: unknown) => `서버_이유_${hhmmOf(at)}`;
 const minutesOf = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+// §31 Q2·Q3: 숙소 없는 T-08 (서버가 lodging·map_url을 null로 준다)
+const DAY_OVER_TITLE = '오늘 일정 끝';
+const NO_LODGING_BODY = '오늘 일정이 끝났어. 오늘도 수고했어!';
+const EMPTY_REASON = '오늘 코스가 비어 있어';
+const t08NoLodging = () => t08({ lodging: null, map_url: null });
+function expectNoLodgingT08() {
+  const card = within(screen.getByTestId('card-T-08'));
+  expect(card.getByText(DAY_OVER_TITLE)).toBeTruthy();
+  expect(card.getByText(NO_LODGING_BODY)).toBeTruthy();
+  expect(card.queryByText(/숙소/)).toBeNull(); // 숙소 줄·[숙소로 길 안내] 없음
+  expect(card.queryByTestId('home-directions-button')).toBeNull();
+  expect(screen.queryByTestId('home-directions-button')).toBeNull();
+}
 
 // ---------- 공용 ----------
 
@@ -425,26 +440,29 @@ describe('§29 ④ 연습: 숙소 없음', () => {
     expect(dot.longitude).toBeCloseTo(SPOT.D01.lng, 9);
   });
 
-  test('T14_S29_4_숙소_없으면_T_08을_그리지_않는다_보조든_메인이든', async () => {
-    viewOver = () => ({ subs: [t02(), t08()] });
+  test('T14_S31_Q2_연습_숙소_없는_하루_끝_T_08은_오늘_일정_끝·수고했어이고_숙소_줄·길_안내가_없다', async () => {
+    viewOver = () => ({ main: t08NoLodging(), subs: [], reason: NO_LODGING_BODY });
     await toRehearsal();
-    expect(screen.queryByTestId('card-T-08')).toBeNull();
-    expect(screen.getByTestId('now-main')).toBeTruthy();
+    expect(within(screen.getByTestId('now-main')).getByTestId('card-T-08')).toBeTruthy();
+    expectNoLodgingT08();
   });
 
-  test('T14_S29_4_숙소_없으면_메인이_T_08이어도_그리지_않고_화면은_깨지지_않는다', async () => {
-    viewOver = () => ({ main: t08(), subs: [] });
+  test('T14_S31_Q2_연습_숙소_없는_빈_코스_날은_숙소_없는_T_08과_빈_코스_안내_글이_함께', async () => {
+    viewOver = () => ({ main: t08NoLodging(), subs: [], pins: [], route: { done: [], remaining: [] }, reason: EMPTY_REASON });
     await toRehearsal();
-    expect(screen.queryByTestId('card-T-08')).toBeNull();
-    expect(screen.getByTestId('now-reason')).toBeTruthy();
+    expectNoLodgingT08();
+    expect(within(screen.getByTestId('now-reason')).getByText(EMPTY_REASON)).toBeTruthy();
   });
 
   test('T14_S29_4_경계_숙소가_있으면_T_08은_그대로_보이고_집_표시도_있다', async () => {
     dayOver = {};
-    viewOver = () => ({ subs: [t02(), t08()] });
+    viewOver = () => ({ main: t08(), subs: [] });
     withMap();
     await toRehearsal();
-    expect(screen.getByTestId('card-T-08')).toBeTruthy();
+    const card = within(screen.getByTestId('card-T-08'));
+    expect(card.getByTestId('home-directions-button')).toBeTruthy();
+    expect(card.queryByText(NO_LODGING_BODY)).toBeNull(); // §31 Q3 경계: 숙소 있음은 지금 모양 그대로
+    expect(card.queryByText(DAY_OVER_TITLE)).toBeNull();
     expect(screen.getByTestId('map-home')).toBeTruthy();
   });
 
@@ -525,11 +543,33 @@ describe('§29 ④ 실제 여행(live): 숙소 없음', () => {
     expect(screen.queryByTestId('map-home')).toBeNull();
   });
 
-  test('T14_S29_4_숙소_없으면_실제_여행에서도_T_08을_그리지_않는다', async () => {
+  test('T14_S31_Q2_실제_여행_숙소_없는_하루_끝_T_08은_오늘_일정_끝·수고했어이고_숙소_줄·길_안내가_없다', async () => {
+    const over = { day: todayDay, at: '2026-12-02T20:00:00', main: t08NoLodging(), subs: [], reason: NO_LODGING_BODY };
     server = new FakeServer().on(CURRENT, json(200, trip()));
-    server.match(`GET /days/${TODAY}/now`, () => json(200, nowView({ day: todayDay, subs: [t02(), t08()] })));
-    server.match(`POST /days/${TODAY}/check`, () => json(200, nowView({ day: todayDay, subs: [t02(), t08()] })));
+    server.match(`GET /days/${TODAY}/now`, () => json(200, nowView(over)));
+    server.match(`POST /days/${TODAY}/check`, () => json(200, nowView(over)));
     await openToday();
-    expect(screen.queryByTestId('card-T-08')).toBeNull();
+    expectNoLodgingT08();
+  });
+
+  test('T14_S31_Q2_실제_여행_숙소_없는_빈_코스_날은_숙소_없는_T_08과_빈_코스_안내_글이_함께', async () => {
+    const over = { day: todayDay, main: t08NoLodging(), subs: [], pins: [], route: { done: [], remaining: [] }, reason: EMPTY_REASON };
+    server = new FakeServer().on(CURRENT, json(200, trip()));
+    server.match(`GET /days/${TODAY}/now`, () => json(200, nowView(over)));
+    server.match(`POST /days/${TODAY}/check`, () => json(200, nowView(over)));
+    await openToday();
+    expectNoLodgingT08();
+    expect(within(screen.getByTestId('now-reason')).getByText(EMPTY_REASON)).toBeTruthy();
+  });
+
+  test('T14_S31_Q2_경계_실제_여행_숙소_있는_하루_끝_T_08은_지금_모양_길_안내_버튼이_있다', async () => {
+    const over = { day: { ...todayDay, lodging: LODGING }, at: '2026-12-02T20:00:00', main: t08(), subs: [] };
+    server = new FakeServer().on(CURRENT, json(200, trip()));
+    server.match(`GET /days/${TODAY}/now`, () => json(200, nowView(over)));
+    server.match(`POST /days/${TODAY}/check`, () => json(200, nowView(over)));
+    await openToday();
+    const card = within(screen.getByTestId('card-T-08'));
+    expect(card.getByTestId('home-directions-button')).toBeTruthy();
+    expect(card.queryByText(NO_LODGING_BODY)).toBeNull();
   });
 });

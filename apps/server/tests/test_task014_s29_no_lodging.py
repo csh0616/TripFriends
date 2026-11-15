@@ -1,4 +1,4 @@
-"""TASK-014 §29 ④ 숙소 없는 여행 (서버): 응답 `day.lodging`은 null, T-08 "숙소 가는 길"은 나오지 않는다.
+"""TASK-014 §29 ④ 숙소 없는 여행 (서버): 응답 `day.lodging`은 null, T-08은 "숙소 없는 모양"(§31 Q2: 숨김 -> 숙소 없는 모양으로 바꿔 읽음).
 
 근거: TASK-014 §29 표 ④("오늘·연습 응답에서 day.lodging: null — 도시 중심을 숙소인 척 내보내지 않음. 서버 내부 계산에 도시 중심을 쓰는 건 그대로 가능.
 숙소가 없으면 T-08 숨김") · API-001 §2-3 (11-15 TASK-014 §29) `NowView.day.lodging` 줄("숙소를 입력하지 않은 여행이면 null") ·
@@ -7,7 +7,9 @@
 계약 (이 테스트가 정한 것, 승인 대기):
     "숙소 없는 여행" = POST /trips에 lodging_place_id를 주지 않은 여행 (저장소의 DayRecord.lodging_known = False)
         -> GET /days/{id}/now · POST /days/{id}/check(실제) · POST /days/{id}/check(본문 rehearsal: true) 응답의 day.lodging = null
-        -> 그날 어느 시각이든 main·subs 어디에도 type "T-08" 카드가 없다 (마지막 장소 뒤 시각 포함). 대신 무엇이 나오는지는 정하지 않는다 (질문)
+        -> (§31 Q2로 바뀜) T-08은 숨기지 않는다: 마지막 장소 뒤(끝 정각 포함)는 main = T-08 "숙소 없는 모양"
+           (lodging = null, map_url = null), 이유 = §31 Q3 "오늘 일정이 끝났어. 오늘도 수고했어!". subs에는 T-08이 없다 (짝 표 그대로)
+           자세한 것은 test_task014_s31_no_lodging_t08.py
     "숙소 있는 여행" = 숙소 검색(가짜 공급자) 첫 결과의 place_id로 만든 여행 -> day.lodging = 그 숙소 좌표 {lat, lng} (지금 그대로), 마지막 장소 뒤 T-08 그대로
     OpenAPI: NowView.day의 lodging 칸은 null을 받는다 (required 칸으로 남아도 되고, 값으로 null 허용)
     도시 중심을 서버 안 계산(출발점)에 쓰는 것은 그대로 둔다 — 이 파일은 응답의 day.lodging과 카드만 본다
@@ -170,25 +172,40 @@ def test_T14_S29_4_경계_숙소_있는_여행은_day_lodging이_그_숙소_좌�
 
 
 # =====================================================================
-# ④ T-08 숨김
+# ④ T-08 (§31 Q2: 숨김 -> 숙소 없는 모양)
 # =====================================================================
+
+NO_LODGING_DAY_OVER = "오늘 일정이 끝났어. 오늘도 수고했어!"  # §31 Q3
+
+
+def is_no_lodging_t08(card: dict) -> bool:
+    """§31 Q2: 숙소 없는 모양의 T-08 = 숙소 좌표·길 안내 주소가 없다"""
+    return card["type"] == "T-08" and card.get("lodging") is None and card.get("map_url") is None
+
+
+def t08_ok_without_lodging(view: dict) -> bool:
+    """보조에 T-08 없음, main이 T-08이면 숙소 없는 모양"""
+    subs_ok = all(card["type"] != "T-08" for card in view["subs"])
+    return subs_ok and (view["main"]["type"] != "T-08" or is_no_lodging_t08(view["main"]))
 
 
 @pytest.mark.parametrize("kind", ["now", "check", "rehearsal"])
-def test_T14_S29_4_숙소_없는_여행은_어느_시각에도_T_08이_main·subs에_없다_마지막_장소_뒤_포함(mem, kind):
+def test_T14_S29_4_숙소_없는_여행은_어느_시각에도_T_08이_보조에_없고_main_T_08이면_숙소_없는_모양(mem, kind):
     day_id, date = planned_day(mem, lodging=None)
     sample = get_now(mem, day_id, at_of(date, "12:00"))
     for clock in interesting_times(sample):
         view = every_view(mem, day_id, at_of(date, clock))[kind]
-        assert "T-08" not in card_types(view), (kind, clock, card_types(view))
+        assert t08_ok_without_lodging(view), (kind, clock, view["main"], card_types(view))
 
 
-def test_T14_S29_4_숙소_없는_여행_마지막_장소_끝_정각·1분_뒤·그날_끝에도_T_08이_없다(mem):
+def test_T14_S29_4_숙소_없는_여행_마지막_장소_끝_정각·1분_뒤·그날_끝은_숙소_없는_T_08과_수고했어_문구(mem):
     day_id, date = planned_day(mem, lodging=None)
     end = last_end(get_now(mem, day_id, at_of(date, "12:00")))
     for minutes in (end, end + 1, end + 30, 23 * 60 + 59):
         for kind, view in every_view(mem, day_id, at_of(date, hhmm(min(minutes, 23 * 60 + 59)))).items():
-            assert "T-08" not in card_types(view), (kind, hhmm(minutes))
+            assert is_no_lodging_t08(view["main"]), (kind, hhmm(minutes), view["main"])
+            assert view["reason"] == NO_LODGING_DAY_OVER, (kind, hhmm(minutes))
+            assert "T-08" not in [card["type"] for card in view["subs"]], (kind, hhmm(minutes))
 
 
 def test_T14_S29_4_경계_숙소_있는_여행은_마지막_장소_뒤_T_08이_그대로_main이고_숙소_좌표(mem):
@@ -202,7 +219,7 @@ def test_T14_S29_4_경계_숙소_있는_여행은_마지막_장소_뒤_T_08이_�
 
 
 def test_T14_S29_4_숙소_없는_여행도_마지막_장소_뒤_응답은_200이고_main이_있다(mem):
-    """T-08을 빼도 화면은 깨지지 않는다 (무슨 카드가 main인지는 문서에 없어 정하지 않음 — 질문)."""
+    """화면은 깨지지 않는다 (§31 Q2: main은 숙소 없는 T-08 — 위 테스트)."""
     day_id, date = planned_day(mem, lodging=None)
     end = last_end(get_now(mem, day_id, at_of(date, "12:00")))
     for kind, view in every_view(mem, day_id, at_of(date, hhmm(end + 1))).items():
@@ -239,11 +256,12 @@ def env_views(env, day_id: str, clock: str) -> dict[str, dict]:
     return out
 
 
-def test_T14_S29_4_심은_하루_lodging_known_False면_19시_1분에_T_08이_없고_lodging_null(no_lodging_day):
+def test_T14_S29_4_심은_하루_lodging_known_False면_19시_1분에_숙소_없는_T_08이고_lodging_null(no_lodging_day):
     env, day_id = no_lodging_day
     for kind, view in env_views(env, day_id, "19:01").items():
         assert view["day"]["lodging"] is None, kind
-        assert "T-08" not in card_types(view), kind
+        assert is_no_lodging_t08(view["main"]), (kind, view["main"])
+        assert view["reason"] == NO_LODGING_DAY_OVER, kind
 
 
 def test_T14_S29_4_경계_심은_하루_lodging_known_True면_19시_1분에_T_08(env):
@@ -255,11 +273,13 @@ def test_T14_S29_4_경계_심은_하루_lodging_known_True면_19시_1분에_T_08
 
 @settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
 @given(minutes=st.integers(min_value=0, max_value=23 * 60 + 59))
-def test_T14_S29_4_속성_숙소_모름이면_어느_분이든_T_08_없음·lodging_null(no_lodging_day, minutes):
-    env, day_id = no_lodging_day
+def test_T14_S29_4_속성_숙소_모름이면_어느_분이든_lodging_null·T_08은_19시부터_숙소_없는_모양(no_lodging_day, minutes):
+    env, day_id = no_lodging_day  # 마지막 장소(3번) 끝 19:00
     for kind, view in env_views(env, day_id, hhmm(minutes)).items():
         assert view["day"]["lodging"] is None, (kind, hhmm(minutes))
-        assert "T-08" not in card_types(view), (kind, hhmm(minutes))
+        assert t08_ok_without_lodging(view), (kind, hhmm(minutes), view["main"])
+        assert (view["main"]["type"] == "T-08") == (minutes >= 19 * 60), (kind, hhmm(minutes))
+        assert (view["reason"] == NO_LODGING_DAY_OVER) == (minutes >= 19 * 60), (kind, hhmm(minutes))
 
 
 # =====================================================================
