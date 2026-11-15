@@ -6,7 +6,7 @@ DESIGN-001 §4-9(R1은 여행 하나), TASK-005 A3(하루 꼭 갈 곳 5).
 계약 (이 테스트가 정한 이름, 승인 대기):
     PLACES_PROVIDER=fake -> app.state.places_provider 는 FakePlaces, 도시 팩은 testdata/cities/osaka-seed-fake.yaml + FakePlaces로 시작 때 만든다
     app.state.clock: () -> 시간대 있는 datetime. 테스트는 서버 시작 뒤 바꿔 넣는다 (도시 시간대 오늘은 이 값으로)
-    Trip = {trip_id, city_code, start_date, end_date, lodging_place_id, status(active|archived, §9 Q2),
+    Trip = {trip_id, city_code, start_date, end_date, lodging, status(active|archived, §9 Q2),   (TASK-015 §9 Q2: 응답의 lodging_place_id -> lodging{kind, place_id, ...} 또는 null)
             trip_days: [{day_id, date, state, chosen_option_id(없으면 null, §9 Q6), fixed_events: [FixedEvent]}]}  (§9 Q12 승인)
     FixedEvent = {fixed_event_id, trip_day_id, title, start_at, end_at, place_id}
     오류는 공통 형식 {"error": {code, message, detail}} (API-001 §1).
@@ -559,11 +559,12 @@ def test_T10_B5_Q13_숙소_검색_3초_넘으면_503(osaka, monkeypatch):
 def test_T10_B5_고른_숙소는_place_id만_여행에_저장(osaka):
     hit = lodging(osaka, "호텔").json()[0]
     trip = osaka.make_trip(lodging=hit["place_id"])
-    assert trip["lodging_place_id"] == hit["place_id"]
+    # TASK-015 §9 Q2: 응답에서 lodging_place_id를 뺐다 -> 고른 숙소는 lodging.place_id
+    assert trip["lodging"]["kind"] == "place" and trip["lodging"]["place_id"] == hit["place_id"]
+    assert "lodging_place_id" not in trip
     assert not {"lodging_lat", "lodging_lng", "lodging_location"} & set(trip)
-    # TASK-015 §A: 응답에 trip.lodging 칸이 생긴다 (이전 단언은 "lodging" 칸 자체를 금지했다). 고른 숙소(place)는 여전히 좌표를 갖지 않는다
-    shape = trip.get("lodging")
-    assert shape is None or (shape.get("lat") is None and shape.get("lng") is None), shape
+    # 고른 숙소(place)는 여전히 좌표를 갖지 않는다 (TASK-015 §A)
+    assert trip["lodging"]["lat"] is None and trip["lodging"]["lng"] is None, trip["lodging"]
 
 
 # ---------- §K·§6 키 없음 = 가짜 공급자 + 경고 한 줄 ----------
@@ -735,7 +736,8 @@ def test_T10_AC8_꼭_갈_곳은_그날_코스에_들어간다(osaka):
 
 def test_T10_Q10_숙소가_없어도_계획이_된다_숙소로_돌아가기_없음(osaka):
     trip = osaka.make_trip(days=1, offset=10)
-    assert trip["lodging_place_id"] is None
+    assert trip["lodging"] is None  # TASK-015 §9 Q2 (이전: lodging_place_id is None)
+    assert "lodging_place_id" not in trip
     started = osaka.client.post(f"/days/{trip['trip_days'][0]['day_id']}/planning", json={"mode": "auto"})
     assert started.status_code == 201, started.text
     for option in started.json()["options"]:

@@ -3,10 +3,14 @@
 // 근거: TASK-015 §E ③("지도 시작 가운데 = 여행 도시의 중심(빈 코스 날 일본 전체 대신 오사카). 응답에 city.center 추가") ·
 //       TASK-014 §33("숙소 -> 첫 핀 -> (없으면) 일본 가운데 대신 여행 도시의 중심") · TASK-014 §29 ④(숙소 없으면 집 표시 없음 — 도시 중심은 숙소가 아니다).
 //
-// 계약 (이 테스트가 정한 것, 승인 대기 — 질문 목록 참고):
-//   서버 응답 NowView.city.center = {lat, lng} (test_task015_city_center.py). 가짜 서버 응답에 손으로 넣는다 (api-types는 백엔드 뒤 생성, 손으로 고치지 않는다)
+//       TASK-015 §9 Q7(NowView.city = {code, center: {lat, lng}}, 값은 도시 팩 center의 우리 값 — 시드 v3 34.6662, 135.5010) ·
+//       §9 Q9(숙소·핀이 없을 때 city.center가 첫 응답에 오면 initialRegion이 아니라 카메라 이동(animateCamera 등)으로) · §7 AC-4.
+//
+// 계약 (§9 Q7·Q9 반영):
+//   서버 응답 NowView.city = {code, center: {lat, lng}} (test_task015_city_center.py). 가짜 서버 응답에 손으로 넣는다 (api-types는 백엔드 뒤 생성, 손으로 고치지 않는다)
 //   지도 시작 가운데 순서: day.lodging -> 첫 핀 -> city.center -> (응답에 city가 없으면) 지금처럼 일본 가운데
-//   "시작 가운데" = 지도(map-view)의 initialRegion 가운데, 또는 응답 뒤 카메라를 옮긴 가운데(animateToRegion·animateCamera). 둘 중 하나면 된다
+//   city.center로 갈 때는 응답 뒤 **카메라 이동**(animateToRegion·animateCamera — 가짜 지도 mapControl.moves에 남는다). initialRegion만 바꾸는 것으로는 안 된다
+//     (진짜 지도는 initialRegion을 처음 한 번만 읽어 첫 응답 뒤 바꿔도 움직이지 않는다 — Q9)
 //   도시 중심에는 집 표시(map-home)를 그리지 않는다
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import Constants from 'expo-constants';
@@ -29,7 +33,7 @@ const NOW_ISO = '2026-12-02T03:00:00Z'; // 도시 시간대 2026-12-02 12:00 (da
 const TODAY = 'day-t2';
 const PLANNED = 'day-t3';
 const PLANNED_DATE = '2026-12-03';
-const CITY = { lat: 34.6937, lng: 135.5023 }; // 가짜 서버가 주는 도시 중심 (지어낸 값, 숙소·핀과 다름)
+const CITY = { lat: 34.6662, lng: 135.501 }; // 시드 v3 center (§9 Q6·Q7). 숙소·핀 값과 다르다
 const JAPAN = { latitude: 36.2, longitude: 138.25 }; // 지금의 "일본 가운데"(map-adapter NO_CENTER)
 
 const tripDay = (n: number, state: string) => ({
@@ -44,7 +48,7 @@ const trip = () => ({
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: '2026-12-04',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §9 Q2: 응답에 lodging_place_id 없음
   status: 'active',
   is_demo: false,
   trip_days: [tripDay(1, 'past'), tripDay(2, 'today'), tripDay(3, 'planned'), tripDay(4, 'planning')],
@@ -82,8 +86,8 @@ const initialCenter = () => {
   const region = screen.getByTestId('map-view').props.initialRegion as { latitude: number; longitude: number };
   return { latitude: region.latitude, longitude: region.longitude };
 };
-/** 지도 시작 가운데가 그곳인가: initialRegion 가운데 또는 카메라를 옮긴 가운데 */
-const startsAt = (spot: { lat: number; lng: number }) => near(initialCenter(), spot) || mapControl.moves.some((move) => near(move, spot));
+/** 카메라를 그곳으로 옮겼나 (§9 Q9: 도시 중심은 initialRegion이 아니라 카메라 이동. 이전엔 initialRegion 가운데도 받았다) */
+const cameraMovedTo = (spot: { lat: number; lng: number }) => mapControl.moves.some((move) => near(move, spot));
 
 beforeEach(() => {
   resetDevice();
@@ -109,14 +113,21 @@ const entry = (dayId: string) => (dayId === PLANNED ? `rehearse-${PLANNED}` : `d
 
 describe('§E ③ 숙소도 핀도 없으면 지도는 도시 중심에서 시작한다', () => {
   test.each(PLACES)('T15_E3_%s_숙소·핀_없는_빈_코스_날은_city_center에서_시작', async (_name, dayId, date) => {
-    serve(dayId, date, { ...EMPTY, day: { ...demoDay, day_id: dayId, date, lodging: null }, city: { center: CITY } });
+    serve(dayId, date, { ...EMPTY, day: { ...demoDay, day_id: dayId, date, lodging: null }, city: { code: 'osaka', center: CITY } });
     await open(entry(dayId));
-    await waitFor(() => expect(startsAt(CITY)).toBe(true));
+    await waitFor(() => expect(cameraMovedTo(CITY)).toBe(true));
     expect(screen.queryByTestId('map-home')).toBeNull(); // 도시 중심은 숙소가 아니다 (§29 ④)
   });
 
+  test.each(PLACES)('T15_Q9_%s_도시_중심으로는_첫_응답_뒤_카메라를_옮긴다', async (_name, dayId, date) => {
+    serve(dayId, date, { ...EMPTY, day: { ...demoDay, day_id: dayId, date, lodging: null }, city: { code: 'osaka', center: CITY } });
+    await open(entry(dayId));
+    await waitFor(() => expect(mapControl.moves.some((move) => near(move, CITY))).toBe(true)); // initialRegion만으로는 통과하지 않는다
+    expect(near(mapControl.moves.at(-1)!, CITY)).toBe(true); // 마지막 카메라가 도시 중심 (일본 가운데로 되돌아가지 않는다)
+  });
+
   test.each(PLACES)('T15_E3_%s_빈_코스_날에_일본_가운데에_머물지_않는다', async (_name, dayId, date) => {
-    serve(dayId, date, { ...EMPTY, day: { ...demoDay, day_id: dayId, date, lodging: null }, city: { center: CITY } });
+    serve(dayId, date, { ...EMPTY, day: { ...demoDay, day_id: dayId, date, lodging: null }, city: { code: 'osaka', center: CITY } });
     await open(entry(dayId));
     const last = mapControl.moves.at(-1);
     expect(last ? near(last, { lat: JAPAN.latitude, lng: JAPAN.longitude }) : near(initialCenter(), { lat: JAPAN.latitude, lng: JAPAN.longitude })).toBe(false);
@@ -126,13 +137,13 @@ describe('§E ③ 숙소도 핀도 없으면 지도는 도시 중심에서 시�
 describe('§E ③ 경계: 앞 순서가 있으면 도시 중심을 쓰지 않는다', () => {
   test.each(PLACES)('T15_E3_경계_%s_숙소가_있으면_숙소에서_시작', async (_name, dayId, date) => {
     const lodging = demoDay.lodging;
-    serve(dayId, date, { ...EMPTY, day: { ...demoDay, day_id: dayId, date, lodging }, city: { center: CITY } });
+    serve(dayId, date, { ...EMPTY, day: { ...demoDay, day_id: dayId, date, lodging }, city: { code: 'osaka', center: CITY } });
     await open(entry(dayId));
     await waitFor(() => expect(near(initialCenter(), lodging)).toBe(true));
   });
 
   test.each(PLACES)('T15_E3_경계_%s_숙소가_없고_핀이_있으면_첫_핀에서_시작', async (_name, dayId, date) => {
-    serve(dayId, date, { day: { ...demoDay, day_id: dayId, date, lodging: null }, city: { center: CITY } });
+    serve(dayId, date, { day: { ...demoDay, day_id: dayId, date, lodging: null }, city: { code: 'osaka', center: CITY } });
     await open(entry(dayId));
     await waitFor(() => expect(near(initialCenter(), { lat: basePins[0].lat, lng: basePins[0].lng })).toBe(true));
   });

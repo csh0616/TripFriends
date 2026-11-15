@@ -55,6 +55,7 @@ OUTSIDE_READS: dict[str, set[str]] = {
     "apps/server/tests/test_task010_v14.py": {"docs/data/osaka-seed.yaml"},
     "apps/server/tests/test_task012_schema.py": {"supabase/migrations/**"},
     "apps/server/tests/test_task013_ci.py": {"docs/tasks/TASK-013_CI.md", WORKFLOW_SELF},  # §12: A5 작업에서도 항상 돈다
+    "apps/server/tests/test_task015_city_center.py": {"docs/data/osaka-seed.yaml", "testdata/cities/osaka-seed-fake.yaml"},  # TASK-015 §9 Q6: 정본 v3 center 값을 가짜 seed 사본에 더한다
     # ---- 앱 (apps/mobile) ----
     "apps/mobile/__tests__/design-tokens.test.ts": {"packages/design-tokens/**"},
     "apps/mobile/__tests__/guardrails.test.tsx": {

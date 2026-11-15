@@ -5,19 +5,25 @@
 사용자 주소 글자·찍은 좌표는 여행 데이터로 저장, 숙소는 places에 넣지 않고 trip.lodging에만) · §A "데이터 모양"(test-writer 제안 -> PM 승인) ·
 §A "엔진"(하루 첫·마지막 이동, T-08, 지도 집 표시가 세 종류 모두 같은 값 · kind pin의 T-08 길 안내는 좌표로) · §A "실패"(주소 검색 실패 503 PROVIDER_UNAVAILABLE) ·
 §6(이름·주소 둘 다 못 찾음 -> 지도 찍기, 숙소 없이도 지금처럼) · §7 AC-2 · 결정권자 확인 Q1(주소 글자·찍은 좌표 저장, 실시간 위치는 여전히 0, 두 값을 섞지 않는다) ·
-TASK-014 §30 Q6(모르는 숙소 = 없는 숙소, day.lodging null) · TASK-014 §B B2·B3(DB·로그에 위치 0) · TASK-010 §B5(숙소 검색)·§6 · ADR-015(Google 약관).
+TASK-014 §30 Q6(모르는 숙소 = 없는 숙소, day.lodging null) · TASK-014 §B B2·B3(DB·로그에 위치 0) · TASK-010 §B5(숙소 검색)·§6 · ADR-015(Google 약관) ·
+TASK-015 §9(11-16 PM 답: 모양 승인, Q1 주소 검색 규칙 = 숙소 검색과 같은 상수, Q2 응답에서 lodging_place_id 뺌, Q4 place·address에 좌표 = 400 INVALID_LODGING,
+Q5 label 모든 kind·앞뒤 공백 자르고 30자·빈 글 null, pin이 city.center에서 50km 밖 = 400) · API-001 2-1(11-16).
 
-계약 (이 테스트가 정한 것, 승인 대기 — 질문 목록 참고):
+계약 (§9 승인·반영):
     주소 검색 = GET /places/address-search?city_code&q (Bearer 필요) -> [{place_id, name, address_short}] (숙소 검색과 같은 모양)
         공급자 메서드 PlacesProvider.search_address(q) -> [{place_id, name, address_short}]. GooglePlaces는 includedType 없이(종류 제한 없음), 필드 마스크 필수
-        공급자 실패 -> 503 PROVIDER_UNAVAILABLE (숙소 검색과 같은 공통 오류)
-    trip.lodging (POST /trips 본문 `lodging`, 응답 Trip.lodging) = null 또는 다섯 칸이 늘 있는 객체
+        공급자 실패·시간 초과 -> 503 PROVIDER_UNAVAILABLE (숙소 검색과 같은 공통 오류)
+        글자 수·개수·시간 제한은 숙소 검색과 **같은 상수** api.trips.LODGING_MIN_CHARS(2) · LODGING_LIMIT(5) · LODGING_TIMEOUT(3초) — 앞뒤 공백을 지우고 센다 (Q1)
+    trip.lodging (POST /trips 본문 `lodging`, 응답 Trip.lodging) = null 또는 여섯 칸이 늘 있는 객체
         {"kind": "place"|"address"|"pin", "place_id": str|null, "address_text": str|null, "lat": float|null, "lng": float|null, "label": str|null}
-        place   : place_id 필수. 나머지 null
+        place   : place_id 필수. address_text·lat·lng null
         address : address_text 필수(빈 글 안 됨). place_id는 있으면. lat·lng null (좌표는 쓰는 순간 place_id로 불러온다)
-        pin     : lat·lng 필수, label 선택. place_id·address_text null. 서버가 좌표를 그대로 가지는 것은 pin뿐
-        모양이 틀리면 400 VALIDATION_ERROR, detail.field = "lodging"
-        옛 필드 lodging_place_id만 오면 {"kind": "place", "place_id": 그 값, 나머지 null}로 받는다
+        pin     : lat·lng 필수. place_id·address_text null. 서버가 좌표를 그대로 가지는 것은 pin뿐. city.center(도시 팩 우리 값)에서 50km 밖이면 400 (Q5)
+        label   : 모든 kind 선택. 앞뒤 공백을 자르고 30자까지, 자른 뒤 빈 글이면 null (Q5)
+        place·address에 lat·lng가 오면 400 INVALID_LODGING (Q4)
+        그 밖에 모양이 틀리면 400 VALIDATION_ERROR, detail.field = "lodging"
+        옛 필드 lodging_place_id만 오면 {"kind": "place", "place_id": 그 값, 나머지 null}로 받는다 (요청에서만)
+    Trip 응답(POST /trips · GET /trips/{id} · /trips/current)에 lodging_place_id 칸이 없다 (Q2: 같은 뜻의 값이 두 곳이면 어긋난다)
     place·address 여행의 응답·저장소에 좌표가 없다 (place_id로 그때 불러옴). address인데 place_id가 없거나 좌표를 못 구하면 숙소 없음과 같다(§30 Q6)
     저장: Postgres는 trips.lodging(jsonb) 한 칸. 사용자 주소 글자·찍은 좌표는 그 칸에만. Google 이름·주소 문구는 어느 표·체크포인트·로그·캐시 파일에도 없다
     Google 좌표: 여행 표·사건·체크포인트·로그에 없다 (좌표 캐시 파일의 30일 규칙은 지금 그대로 — 이 파일은 캐시 파일에 이름·주소·찍은 좌표가 없는지만 본다)
@@ -294,6 +300,83 @@ def test_T15_A2_주소_검색도_로그인_토큰이_필요하다(mem, monkeypat
     assert response.status_code == 401, response.text  # API-001 §1: 장소·숙소 검색은 Bearer
 
 
+# ---------- Q1 글자 수·개수·시간 제한 = 숙소 검색과 같은 상수 ----------
+
+
+@pytest.mark.parametrize("q", ["大", " 大 ", "", "   "], ids=["한_글자", "공백_지우면_한_글자", "빈_글", "공백만"])
+def test_T15_Q1_주소_검색_두_글자_미만은_200_빈_목록이고_공급자를_부르지_않는다(mem, monkeypatch, q):
+    asked = install_address_search(monkeypatch, mem)
+    response = address_search(mem, q)
+    assert (response.status_code, response.json()) == (200, [])
+    assert asked == []
+
+
+def test_T15_Q1_경계_주소_검색_두_글자면_부르고_앞뒤_공백은_지운다(mem, monkeypatch):
+    asked = install_address_search(monkeypatch, mem)
+    response = address_search(mem, "  大阪  ")
+    assert response.status_code == 200 and len(response.json()) == 1
+    assert asked == ["大阪"]
+
+
+def many_hits(n: int) -> list[dict]:
+    return [{"place_id": f"FAKE-T15-addr-{i}", "name": f"가짜_주소_이름_{i}", "address_short": f"가짜_주소_{i}"} for i in range(n)]
+
+
+@pytest.mark.parametrize(("found", "shown"), [(7, 5), (5, 5), (4, 4)], ids=["7곳이면_5", "5곳이면_5", "4곳이면_4"])
+def test_T15_Q1_주소_검색은_다섯_개까지(mem, monkeypatch, found, shown):
+    install_address_search(monkeypatch, mem, hits=many_hits(found))
+    response = address_search(mem, TYPED)
+    assert [hit["place_id"] for hit in response.json()] == [f"FAKE-T15-addr-{i}" for i in range(shown)]
+
+
+def test_T15_Q1_주소_검색의_글자_수·개수는_숙소_검색과_같은_상수를_쓴다(mem, monkeypatch):
+    """상수를 바꾸면 두 검색이 같이 바뀐다 (한 검색창에서 이어지므로 따로 정하지 않는다, §9 Q1)."""
+    import api.trips
+
+    monkeypatch.setattr(api.trips, "LODGING_MIN_CHARS", 4)
+    monkeypatch.setattr(api.trips, "LODGING_LIMIT", 2)
+    asked = install_address_search(monkeypatch, mem, hits=many_hits(4))
+    assert address_search(mem, "大阪市").json() == [] and asked == []  # 3글자 < 4
+    assert len(address_search(mem, "大阪市浪").json()) == 2
+    assert lodging_search(mem, "호텔").json() == []  # 시험 자체 확인: 숙소 검색도 같은 상수로 바뀐다
+    assert len(lodging_search(mem, "난바 테스트").json()) <= 2
+
+
+def test_T15_Q1_주소_검색_시간_제한은_숙소_검색과_같은_상수_넘으면_503(mem, monkeypatch):
+    import time
+
+    import api.trips
+
+    monkeypatch.setattr(api.trips, "LODGING_TIMEOUT", 0.2)
+    provider = mem.app.state.places_provider
+
+    def slow(q):
+        time.sleep(1.0)
+        return many_hits(1)
+
+    monkeypatch.setattr(provider, "search_address", slow, raising=False)
+    began = time.monotonic()
+    response = address_search(mem, TYPED)
+    assert response.status_code == 503 and response.json()["error"]["code"] == "PROVIDER_UNAVAILABLE", response.text
+    assert time.monotonic() - began < 0.9
+
+
+def test_T15_Q1_경계_시간_제한_안이면_결과를_준다(mem, monkeypatch):
+    import time
+
+    import api.trips
+
+    monkeypatch.setattr(api.trips, "LODGING_TIMEOUT", 1.0)
+
+    def quick(q):
+        time.sleep(0.05)
+        return many_hits(1)
+
+    monkeypatch.setattr(mem.app.state.places_provider, "search_address", quick, raising=False)
+    response = address_search(mem, TYPED)
+    assert response.status_code == 200 and len(response.json()) == 1
+
+
 def test_T15_A2_Google_주소_검색은_종류_제한_없이_textQuery로_필드_마스크를_붙여_부른다():
     """실제 Google을 부르지 않는다: 가짜 전송이 요청만 받아 적는다."""
     from places.provider import GooglePlaces
@@ -344,7 +427,7 @@ SHAPES = [
 
 
 @pytest.mark.parametrize(("sent", "expected"), SHAPES)
-def test_T15_A_세_경로_모두_여행이_만들어지고_응답_lodging은_다섯_칸_모양(mem, monkeypatch, sent, expected):
+def test_T15_A_세_경로_모두_여행이_만들어지고_응답_lodging은_여섯_칸_모양(mem, monkeypatch, sent, expected):
     install_address_search(monkeypatch, mem)
     trip = made(mem, sent)
     assert trip["lodging"] == expected
@@ -412,16 +495,180 @@ def test_T15_A_틀린_lodging_모양은_400_field_lodging이고_아무것도_저
         pytest.param({"kind": "address", "address_text": TYPED, "place_id": ADDR_ID, "lat": PIN[0], "lng": PIN[1]}, id="address"),
     ],
 )
-def test_T15_A_place·address에_좌표를_실어_보내도_서버는_좌표를_갖지_않는다(mem, monkeypatch, sent):
-    """§A: kind pin만 서버가 좌표를 그대로 가진다. 400으로 거절하든 좌표를 버리고 받든, 응답·저장소에 그 좌표가 없다 (질문 목록)."""
+def test_T15_Q4_place·address에_좌표를_실어_보내면_400_INVALID_LODGING이고_아무것도_저장하지_않는다(mem, monkeypatch, sent):
+    """§9 Q4: 조용히 버리면 앱이 Google 좌표를 보내는 실수를 못 찾는다 -> 거절 (이전 "400이든 버리고 받든" 단언을 바꿈)."""
+    install_address_search(monkeypatch, mem)
+    before = stores(mem)
+    response = post_trip(mem, sent)
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "INVALID_LODGING", response.json()
+    assert stores(mem) == before
+    assert not leaks(repr(stores(mem)["trip_store"]), PIN)
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "lat": PIN[0]}, id="place_lat만"),
+        pytest.param({"kind": "address", "address_text": TYPED, "lng": PIN[1]}, id="address_lng만"),
+    ],
+)
+def test_T15_Q4_경계_좌표_한쪽만_실어도_400_INVALID_LODGING(mem, monkeypatch, sent):
     install_address_search(monkeypatch, mem)
     response = post_trip(mem, sent)
+    assert response.status_code == 400, response.text
+    assert response.json()["error"]["code"] == "INVALID_LODGING", response.json()
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "lat": None, "lng": None}, id="place"),
+        pytest.param({"kind": "address", "address_text": TYPED, "place_id": ADDR_ID, "lat": None, "lng": None}, id="address"),
+    ],
+)
+def test_T15_Q4_경계_lat·lng가_null이면_좌표가_온_것이_아니다(mem, monkeypatch, sent):
+    """6칸 늘 있는 모양(§9)이라 앱이 null을 채워 보낼 수 있다 -> 그대로 받는다."""
+    install_address_search(monkeypatch, mem)
+    response = post_trip(mem, sent)
+    assert response.status_code == 201, response.text
+    assert response.json()["lodging"]["lat"] is None and response.json()["lodging"]["lng"] is None
+
+
+# ---------- Q5 label ----------
+
+LABEL_30 = "가" * 30
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "label": "에어비앤비 난바"}, id="place"),
+        pytest.param({"kind": "address", "address_text": TYPED, "place_id": ADDR_ID, "label": "에어비앤비 난바"}, id="address"),
+        pytest.param({**pin_body(), "label": "에어비앤비 난바"}, id="pin"),
+    ],
+)
+def test_T15_Q5_label은_모든_kind에_받고_저장소를_거쳐도_그대로(mem, monkeypatch, sent):
+    install_address_search(monkeypatch, mem)
+    trip = made(mem, sent)
+    assert trip["lodging"]["label"] == "에어비앤비 난바"
+    assert mem.trip(trip["trip_id"], ME).json()["lodging"]["label"] == "에어비앤비 난바"
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        pytest.param("  친구 집  ", "친구 집", id="앞뒤_공백_자름"),
+        pytest.param("친구  집", "친구  집", id="가운데_공백은_그대로"),
+        pytest.param(LABEL_30, LABEL_30, id="30자_그대로"),
+        pytest.param(f"   {LABEL_30}   ", LABEL_30, id="자른_뒤_30자면_받는다"),
+        pytest.param("", None, id="빈_글은_null"),
+        pytest.param("   ", None, id="공백만은_null"),
+        pytest.param(None, None, id="null은_null"),
+    ],
+)
+def test_T15_Q5_label은_앞뒤_공백을_자르고_빈_글은_null(mem, label, expected):
+    trip = made(mem, {**pin_body(), "label": label})
+    assert trip["lodging"]["label"] == expected
+
+
+def test_T15_Q5_경계_label_31자는_30자를_넘겨_저장하지_않는다(mem):
+    """30자 상한. 넘으면 400으로 거절하는지 30자로 자르는지는 문서에 없다(질문) -> 어느 쪽이든 31자가 저장되지 않는다."""
+    response = post_trip(mem, {**pin_body(), "label": "가" * 31})
     if response.status_code == 400:
         assert response.json()["error"]["detail"]["field"] == "lodging"
+        assert not any("가" * 31 in repr(v) for v in stores(mem).values())
     else:
         assert response.status_code == 201, response.text
-        assert response.json()["lodging"]["lat"] is None and response.json()["lodging"]["lng"] is None
-    assert not leaks(repr(stores(mem)["trip_store"]), PIN)
+        assert len(response.json()["lodging"]["label"]) <= 30
+
+
+# ---------- Q5 pin은 city.center에서 50km 안 ----------
+
+CENTER_V3 = (34.6662, 135.5010)  # TASK-015 §9 Q6, docs/data/osaka-seed.yaml v3
+KM_PER_LAT_DEG = 6371.0 * 3.141592653589793 / 180  # 경도가 같으면 거리 = 위도 차 x 이 값 (지구 반지름 6371km)
+
+
+def north_of_center(km: float) -> tuple[float, float]:
+    return (CENTER_V3[0] + km / KM_PER_LAT_DEG, CENTER_V3[1])
+
+
+def south_of_center(km: float) -> tuple[float, float]:
+    return (CENTER_V3[0] - km / KM_PER_LAT_DEG, CENTER_V3[1])
+
+
+@pytest.fixture
+def mem_v3(monkeypatch, tmp_path):
+    """city.center = 정본 v3 값으로 켠 서버 (test_task015_city_center.use_v3_center)."""
+    from api.main import app
+    from test_task015_city_center import use_v3_center
+
+    server_env(monkeypatch, "memory")
+    use_v3_center(monkeypatch, tmp_path)
+    with TestClient(app, headers=bearer(ME)) as client:
+        yield Osaka(client, app)
+
+
+@pytest.mark.parametrize(
+    "at",
+    [
+        pytest.param(north_of_center(49.5), id="북쪽_49_5km"),
+        pytest.param(south_of_center(49.5), id="남쪽_49_5km"),
+        pytest.param((34.9858, 135.7588), id="교토역_약_42km"),  # §9 Q5: 오사카 여행에 교토 숙소 정도는 들어오게
+        pytest.param(CENTER_V3, id="도시_중심_그_자리"),
+    ],
+)
+def test_T15_Q5_city_center에서_50km_안의_pin은_받는다(mem_v3, at):
+    trip = made(mem_v3, pin_body(at))
+    assert (trip["lodging"]["lat"], trip["lodging"]["lng"]) == at
+
+
+@pytest.mark.parametrize(
+    "at",
+    [
+        pytest.param(north_of_center(50.5), id="북쪽_50_5km"),
+        pytest.param(south_of_center(50.5), id="남쪽_50_5km"),
+        pytest.param((35.6812, 139.7671), id="도쿄역"),
+    ],
+)
+def test_T15_Q5_city_center에서_50km_밖의_pin은_400이고_아무것도_저장하지_않는다(mem_v3, at):
+    before = stores(mem_v3)
+    response = post_trip(mem_v3, pin_body(at))
+    assert response.status_code == 400, response.text
+    assert stores(mem_v3) == before
+
+
+# ---------- Q2 응답에 lodging_place_id 없음 ----------
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID}, id="place"),
+        pytest.param(pin_body(), id="pin"),
+        pytest.param(None, id="숙소_없음"),
+    ],
+)
+def test_T15_Q2_Trip_응답_세_곳_모두_lodging_place_id_칸이_없다(mem, sent):
+    trip = made(mem, sent)
+    assert "lodging_place_id" not in trip, sorted(trip)
+    assert "lodging_place_id" not in mem.trip(trip["trip_id"], ME).json()
+    assert "lodging_place_id" not in mem.current(ME).json()
+
+
+def test_T15_Q2_옛_필드로_보내도_응답엔_lodging만(mem):
+    body = trip_body(days=2, offset=OFFSET, lodging=GOOGLE_LODGING_ID)  # 요청의 옛 칸 lodging_place_id
+    trip = mem.post_trip(body, ME).json()
+    assert "lodging_place_id" not in trip
+    assert trip["lodging"]["place_id"] == GOOGLE_LODGING_ID
+
+
+def test_T15_Q2_OpenAPI의_Trip에_lodging_place_id가_없다():
+    """앱 타입은 OpenAPI에서 생성한다 (packages/api-types)."""
+    from api.main import app
+
+    trip = app.openapi()["components"]["schemas"]["Trip"]
+    assert "lodging" in trip["properties"] and "lodging_place_id" not in trip["properties"], sorted(trip["properties"])
 
 
 # =====================================================================

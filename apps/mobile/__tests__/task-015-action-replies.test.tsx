@@ -11,6 +11,10 @@
 //     실제 여행 = 그 응답을 화면에 반영한다 (accept면 이유 줄 "바꾼 일정으로 안내할게")
 //     연습 [닫혔어] = 연습 기록에 쌓여 다음 연습 check의 rehearsal_actions에 든다 + "연습이라 저장하지 않았어" 한 줄
 //   (경계) 행동보다 앞서 보낸 check의 응답이 행동 응답 뒤에 오면 지금처럼 버린다 (조회 응답은 최신만, TASK-007 B8)
+// §9 Q8 반영 (11-16):
+//   ① 늦은 행동 응답을 화면에 반영한 뒤, 행동을 보낸 뒤로 시계가 더 갔으면 그 시각으로 check를 **한 번** 보낸다 ("요청 하나씩"은 그대로)
+//      테스트는 그 check를 붙잡아, 붙잡힌 동안 행동 응답이 화면에 있는지 본다. (경계) 시계가 그대로면 더 보내지 않는다
+//   ② 연습 [닫혔어] 응답도 화면에 보인다 (대안 카드 T-06) — 연습은 실제와 같게
 import { act, render, screen, waitFor, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -48,6 +52,25 @@ const accepted = () =>
     event: delayEvent({ state: 'resolved', proposals: [] }),
   });
 const reasonLine = () => within(screen.getByTestId('now-reason'));
+const closedEvent = { event_id: 'ev-closed', type: 'closed', severity: 'high', delay_min: 0, state: 'awaiting', proposals: [] };
+const t06 = { type: 'T-06', event_id: 'ev-closed', closed: { place_id: 'D02', name: '서버_확인할_곳' }, proposals: [] as unknown[] };
+
+/**
+ * §9 Q8 ①: 늦게 온 행동 응답을 풀어 준다. 그 뒤 나갈 check 하나를 미리 붙잡아 두고, 붙잡힌 동안 shown()이 맞는지 본다.
+ * check는 지금 시계(10:10)로 딱 한 번. 풀어 준 뒤에도 더 보내지 않는다.
+ */
+async function releaseLateAction(control: NowControl, release: (reply: Reply) => void, reply: object, shown: () => void) {
+  const before = control.checks().length;
+  const holdCheck = control.defer();
+  await act(async () => release(json(200, reply)));
+  await waitFor(shown);
+  await waitFor(() => expect(control.checks()).toHaveLength(before + 1));
+  expect(control.checks().at(-1)?.at).toBe(AT('10:10'));
+  shown(); // check가 붙잡혀 있는 동안에도 행동 응답이 화면에 있다 (check 응답이 그린 것이 아니다)
+  await act(async () => holdCheck(json(200, { ...reply, at: AT('10:10') })));
+  await act(async () => undefined);
+  expect(control.checks()).toHaveLength(before + 1);
+}
 
 // =====================================================================
 // 실제 여행 화면(데모 시계로 시각을 바꾼다 — 같은 코드 길, TASK-014 §30 Q1)
@@ -82,10 +105,11 @@ describe('§E ② 실제 여행: 행동 응답은 뒤에 보낸 check 응답이 
     await pressId('select-confirm');
     await waitFor(() => expect(control.server.sent(ACCEPT_ROUTE('prop-relaxed'))).toHaveLength(1));
     await laterCheckArrivesFirst(control);
-    await act(async () => release(json(200, accepted())));
-    await waitFor(() => expect(screen.queryByTestId('card-T-07')).toBeNull());
-    expect(screen.getByTestId('card-T-01')).toBeTruthy();
-    expect(reasonLine().getByText(ACCEPTED_NOTE)).toBeTruthy();
+    await releaseLateAction(control, release, accepted(), () => {
+      expect(screen.queryByTestId('card-T-07')).toBeNull();
+      expect(screen.getByTestId('card-T-01')).toBeTruthy();
+      expect(reasonLine().getByText(ACCEPTED_NOTE)).toBeTruthy();
+    });
     expect(control.server.sent(ACCEPT_ROUTE('prop-relaxed'))).toHaveLength(1); // 다시 보내지 않는다 (TASK-007 §6)
   });
 
@@ -96,9 +120,10 @@ describe('§E ② 실제 여행: 행동 응답은 뒤에 보낸 check 응답이 
     await pressId('event-dismiss');
     await waitFor(() => expect(control.server.sent(DISMISS_ROUTE('ev-1'))).toHaveLength(1));
     await laterCheckArrivesFirst(control);
-    await act(async () => release(json(200, nowView({ reason: '서버_그대로_이유' }))));
-    await waitFor(() => expect(reasonLine().getByText('서버_그대로_이유')).toBeTruthy());
-    expect(screen.queryByTestId('card-T-07')).toBeNull();
+    await releaseLateAction(control, release, nowView({ reason: '서버_그대로_이유' }), () => {
+      expect(reasonLine().getByText('서버_그대로_이유')).toBeTruthy();
+      expect(screen.queryByTestId('card-T-07')).toBeNull();
+    });
   });
 
   test.each([
@@ -112,9 +137,14 @@ describe('§E ② 실제 여행: 행동 응답은 뒤에 보낸 check 응답이 
     await waitFor(() => expect(control.server.sent(VISIT_ROUTE)).toHaveLength(1));
     expect((control.server.sent(VISIT_ROUTE)[0].body as Record<string, unknown>).was_open).toBe(wasOpen);
     await laterCheckArrivesFirst(control);
-    await act(async () => release(json(200, nowView({ main: t01(), subs: [], reason: '서버_영업_확인_응답' }))));
-    await waitFor(() => expect(reasonLine().getByText('서버_영업_확인_응답')).toBeTruthy());
-    expect(screen.queryByTestId('card-T-07')).toBeNull();
+    const reply = wasOpen
+      ? nowView({ main: t01(), subs: [], reason: '서버_영업_확인_응답' })
+      : nowView({ main: t06, subs: [t03()], reason: '서버_영업_확인_응답', event: closedEvent });
+    await releaseLateAction(control, release, reply, () => {
+      expect(reasonLine().getByText('서버_영업_확인_응답')).toBeTruthy();
+      expect(screen.queryByTestId('card-T-07')).toBeNull();
+      if (!wasOpen) expect(screen.getByTestId('card-T-06')).toBeTruthy();
+    });
   });
 
   test('T15_E2_경계_행동보다_앞서_보낸_check_응답이_뒤에_오면_지금처럼_버린다', async () => {
@@ -125,6 +155,7 @@ describe('§E ② 실제 여행: 행동 응답은 뒤에 보낸 check 응답이 
     const releaseCheck = control.defer(); // 다음 check 하나를 붙잡는다
     await pressId('demo-plus-10');
     await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('10:10')));
+    const checksBeforeAction = control.checks().length;
     await pressId('proposal-prop-relaxed');
     await pressId('select-confirm');
     await screen.findByTestId('card-T-01');
@@ -133,6 +164,7 @@ describe('§E ② 실제 여행: 행동 응답은 뒤에 보낸 check 응답이 
     await act(async () => undefined);
     expect(screen.queryByTestId('card-T-07')).toBeNull(); // 조회 응답은 최신만 (TASK-007 B8 그대로)
     expect(screen.getByTestId('card-T-01')).toBeTruthy();
+    expect(control.checks()).toHaveLength(checksBeforeAction); // §9 Q8 ① 경계: 행동 뒤 시계가 그대로면 check를 더 보내지 않는다
   });
 });
 
@@ -156,7 +188,7 @@ const trip = () => ({
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: '2026-12-04',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §9 Q2: 응답에 lodging_place_id 없음
   status: 'active',
   is_demo: false,
   trip_days: [tripDay(1, 'past'), tripDay(2, 'today'), tripDay(3, 'planned'), tripDay(4, 'planning')],
@@ -166,7 +198,7 @@ const rehearsalView = (over: object = {}) => nowView({ day: plannedDay, ...over 
 
 describe('§E ② 연습: [닫혔어] 응답은 뒤에 보낸 check 응답이 먼저 와도 연습 기록에 남는다 (AC-3)', () => {
   let server: FakeServer;
-  let checkReply: (sent: Sent) => Reply;
+  let checkReply: (sent: Sent) => Reply | Promise<Reply>;
   const body = (sent: Sent) => (sent.body ?? {}) as Record<string, unknown>;
   const sentTo = (prefix: string) => server.requests.filter((r) => `${r.method} ${r.path}`.startsWith(prefix));
   const checks = () => sentTo(`POST /days/${PLANNED}/check`);
@@ -221,10 +253,24 @@ describe('§E ② 연습: [닫혔어] 응답은 뒤에 보낸 check 응답이 �
     await tap(await screen.findByTestId('demo-plus-10'));
     await waitFor(() => expect(checks().length).toBeGreaterThan(before));
     await screen.findByTestId('card-T-07'); // 시험 자체 확인
-    // 늦게 온 [닫혔어] 응답
-    await act(async () => release(json(200, rehearsalView({ main: t01(), subs: [], reason: '서버_닫힘_대안_응답' }))));
+    // 늦게 온 [닫혔어] 응답 (§9 Q8 ②: 대안 카드 T-06이 화면에 보인다). 그 뒤 나갈 check(§9 Q8 ①)는 붙잡아 둔다
+    const closedReply = rehearsalView({ main: t06, subs: [t03()], reason: '서버_닫힘_대안_응답', event: closedEvent });
+    let releaseFollow!: (reply: Reply) => void;
+    const follow = new Promise<Reply>((done) => (releaseFollow = done));
+    const beforeRelease = checks().length;
+    checkReply = () => follow;
+    await act(async () => release(json(200, closedReply)));
+    await screen.findByTestId('card-T-06');
+    expect(screen.queryByTestId('card-T-07')).toBeNull();
+    expect(reasonLine().getByText('서버_닫힘_대안_응답')).toBeTruthy();
+    // §9 Q8 ①: 행동 뒤 시계가 10분 갔으니 check 한 번 — 연습 기록에 [닫혔어]가 들어 있다
+    await waitFor(() => expect(checks()).toHaveLength(beforeRelease + 1));
+    expect(hasClosed(checks()[checks().length - 1])).toBe(true);
+    expect(screen.getByTestId('card-T-06')).toBeTruthy(); // 붙잡힌 동안에도 [닫혔어] 응답이 화면에 있다
+    await act(async () => releaseFollow(json(200, { ...closedReply, at: body(checks()[checks().length - 1]).at })));
     await act(async () => undefined);
-    // 다음 연습 check에 [닫혔어]가 기록으로 함께 간다
+    expect(checks()).toHaveLength(beforeRelease + 1); // 한 번만
+    // 다음 연습 check에도 [닫혔어]가 기록으로 함께 간다
     checkReply = (sent) => json(200, { ...rehearsalView(), at: body(sent).at });
     const afterRelease = checks().length;
     await tap(await screen.findByTestId('demo-plus-10'));
@@ -245,5 +291,17 @@ describe('§E ② 연습: [닫혔어] 응답은 뒤에 보낸 check 응답이 �
     await waitFor(() => expect(checks().length).toBeGreaterThan(before));
     await waitFor(() => expect(hasClosed(checks()[checks().length - 1])).toBe(true));
     expect(actionsOf(checks()[checks().length - 1])).toEqual([{ type: 'visit_check', place_id: 'D02', day_id: PLANNED, at: pressedAt, was_open: false }]);
+  });
+
+  test('T15_Q8_2_연습_닫혔어_응답의_대안_카드_T_06이_화면에_보이고_시계가_그대로면_check를_더_보내지_않는다', async () => {
+    server.on(VISIT_ROUTE, json(200, rehearsalView({ main: t06, subs: [t03()], reason: '서버_연습_닫힘_대안', event: closedEvent })));
+    await toRehearsal();
+    const before = checks().length;
+    await tap(await screen.findByTestId('visit-closed'));
+    await screen.findByTestId('card-T-06');
+    expect(screen.queryByTestId('card-T-05')).toBeNull();
+    expect(within(screen.getByTestId('now-reason')).getByText('서버_연습_닫힘_대안')).toBeTruthy();
+    await act(async () => undefined);
+    expect(checks()).toHaveLength(before); // §9 Q8 ① 경계: 시계가 그대로
   });
 });
