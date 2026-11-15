@@ -12,7 +12,13 @@
       "Edit(./.env.production)",
       "Edit(./**/.env)",
       "Edit(./**/.env.local)",
-      "Edit(./**/.env.production)"
+      "Edit(./**/.env.production)",
+      "Read(./apps/server/.env)",
+      "Read(./apps/mobile/.env.local)",
+      "Bash(*apps/server/.env)",
+      "Bash(*apps/server/.env *)",
+      "Bash(*apps/mobile/.env.local)",
+      "Bash(*apps/mobile/.env.local *)"
     ]
   }
 }
