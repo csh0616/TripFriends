@@ -982,15 +982,15 @@ export interface components {
              */
             kind?: "place" | "address" | "pin";
             /** Place Id */
-            place_id?: string;
+            place_id?: string | null;
             /** Address Text */
-            address_text?: string;
+            address_text?: string | null;
             /** Lat */
-            lat?: number;
+            lat?: number | null;
             /** Lng */
-            lng?: number;
+            lng?: number | null;
             /** Label */
-            label?: string;
+            label?: string | null;
         };
         /** MustVisit */
         MustVisit: {

@@ -20,7 +20,7 @@ def _limits() -> dict[str, int]:
 
 
 class LodgingError(Exception):
-    """400 INVALID_LODGING의 이유 하나 (§11 Q1). 순서: invalid_kind -> missing_field -> coords_not_allowed -> label_too_long -> too_far."""
+    """400 INVALID_LODGING의 이유 하나 (§11 Q1). 순서: invalid_kind -> missing_field -> invalid_type -> coords_not_allowed -> label_too_long -> too_far."""
 
     def __init__(self, reason: str):
         super().__init__(reason)
@@ -48,17 +48,18 @@ def normalize(raw: dict[str, Any], center: tuple[float, float] | None) -> dict[s
     """요청 본문의 숙소 -> 저장 모양. 틀리면 LodgingError(reason). center = 도시 중심 (pin 거리 검사용)."""
     kind = _kind(raw)
     place_id, address, lat, lng, label = raw.get("place_id"), raw.get("address_text"), raw.get("lat"), raw.get("lng"), raw.get("label")
-    if kind == "place" and (not isinstance(place_id, str) or not place_id.strip()):
+    if kind == "place" and _blank(place_id):  # 없음·빈 글만 missing_field. 값이 있는데 글자가 아니면 invalid_type (§15 Q2)
         raise LodgingError("missing_field")
-    if kind == "address" and (not isinstance(address, str) or not address.strip()):
+    if kind == "address" and _blank(address):
         raise LodgingError("missing_field")
-    if kind == "pin" and not (_number(lat) and _number(lng)):
+    if kind == "pin" and (lat is None or lng is None):
         raise LodgingError("missing_field")
+    # kind 밖 여섯 칸 타입 오류: 글자 칸은 str·null, 좌표 칸은 숫자(bool 제외)·null (§15 Q1). null은 타입 오류가 아니다
+    if any(v is not None and not isinstance(v, str) for v in (place_id, address, label)) or any(v is not None and not _number(v) for v in (lat, lng)):
+        raise LodgingError("invalid_type")
     if kind != "pin" and (lat is not None or lng is not None):
         raise LodgingError("coords_not_allowed")  # 조용히 버리지 않는다 (§9 Q4)
-    text = label.strip() if isinstance(label, str) else label
-    if text is not None and not isinstance(text, str):
-        raise LodgingError("missing_field")
+    text = label.strip() if isinstance(label, str) else None
     if text is not None and len(text) > _limits()["label_max"]:
         raise LodgingError("label_too_long")  # 자르지 않는다 (§11 Q2)
     if kind == "pin" and center is not None:

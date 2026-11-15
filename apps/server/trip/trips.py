@@ -115,11 +115,11 @@ class LodgingInput(BaseModel):
     """요청의 숙소. 값 검사는 trip.lodging.normalize가 해서 400 INVALID_LODGING(reason)으로 돌려준다 (타입이 틀려도 같은 코드)."""
 
     kind: Any = Field(None, json_schema_extra={"enum": ["place", "address", "pin"], "type": "string"})
-    place_id: Any = Field(None, json_schema_extra={"type": "string"})
-    address_text: Any = Field(None, json_schema_extra={"type": "string"})
-    lat: Any = Field(None, json_schema_extra={"type": "number"})
-    lng: Any = Field(None, json_schema_extra={"type": "number"})
-    label: Any = Field(None, json_schema_extra={"type": "string"})
+    place_id: Any = Field(None, json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]})
+    address_text: Any = Field(None, json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]})
+    lat: Any = Field(None, json_schema_extra={"anyOf": [{"type": "number"}, {"type": "null"}]})
+    lng: Any = Field(None, json_schema_extra={"anyOf": [{"type": "number"}, {"type": "null"}]})
+    label: Any = Field(None, json_schema_extra={"anyOf": [{"type": "string"}, {"type": "null"}]})
 
 
 class TripCreate(BaseModel):
