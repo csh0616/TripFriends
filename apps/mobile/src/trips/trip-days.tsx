@@ -14,6 +14,7 @@ import { ScreenFrame } from '@/components/planning/screen-frame';
 import { CityCover } from '@/components/trips/city-cover';
 import { DayPill } from '@/components/trips/day-pill';
 import { cityClock, cityToday } from '@/lib/calendar';
+import { MonoDigits } from '@/components/trips/parts';
 import { dayDestination, dayListPrimary, shortDateLabel, tripHeader, type DayDestination } from '@/lib/day-list';
 import { fixedEventError } from '@/lib/create-trip';
 import { send } from '@/lib/planning-api';
@@ -117,7 +118,7 @@ export function TripDays({
                 <View key={index} style={[styles.dotMark, dot === FILLED ? styles.dotFilled : styles.dotEmpty]} />
               ))}
             </View>
-            <Text style={text('caption', 'muted')}>{header.line}</Text>
+            <MonoDigits value={header.line} />
           </View>
         </View>
         <View style={styles.days}>

@@ -17,6 +17,13 @@ import { color, googleText, radius, space, text } from '@/planning/theme';
 
 const ALWAYS_OPEN_TEXT = '늘 열려 있어';
 
+/** 숙소 없는 하루 끝 T-08 본문 (§31 Q3). 서버 이유 줄이 같은 문장이면 한 번만 보이게 화면이 이유 줄을 숨긴다 (TASK-015 §E ①) */
+export const NO_LODGING_BODY = '오늘 일정이 끝났어. 오늘도 수고했어!';
+
+/** 카드 본문과 같은 문장이면 이유 줄을 숨긴다. 줄 자리(위 8 + 22)도 함께 없앤다 */
+export const reasonHidden = (card: NowCard | null, reason: string): boolean =>
+  card !== null && card.type === 'T-08' && card.lodging == null && reason.trim() === NO_LODGING_BODY;
+
 /** 영업시간 칩 자리 (TASK-011 §9 Q10, §14 N9): 확인 상태 칩 / curated 시간대는 "추천 시간대" / 늘 열림은 그 status 칩(보통 확인됨) + "늘 열려 있어" */
 function FactChip({ facts }: { facts: NowCourseItem['facts'] }) {
   if (facts.length === 0) return null;
@@ -150,6 +157,7 @@ export function NowCardView({
   onDismiss,
   onVisit,
   lateAt = null,
+  rehearsal = false,
 }: {
   card: NowCard;
   main: boolean;
@@ -162,6 +170,8 @@ export function NowCardView({
   onVisit?: (placeId: string, wasOpen: boolean) => void;
   /** 늦은 상태(delayed)일 때만 지금 시각. G4: 출발 시각이 지났으면 몇 분 지났는지 */
   lateAt?: string | null;
+  /** TASK-015 §B4: 연습 중에는 실제 위치에서 길을 여는 [길 안내]를 그리지 않는다 */
+  rehearsal?: boolean;
 }) {
   switch (card.type) {
     case 'T-01':
@@ -203,7 +213,7 @@ export function NowCardView({
                 : `${card.leave_at}에 출발, 지금 나서자`}
           </Text>
           <Text style={text('caption', 'muted')}>{`이동 ${card.travel_min}분`}</Text>
-          {url !== null ? <SecondaryButton small testID="directions-button" label="길 안내" onPress={open} /> : null}
+          {url !== null && !rehearsal ? <SecondaryButton small testID="directions-button" label="길 안내" onPress={open} /> : null}
         </Shell>
       );
     }
@@ -315,7 +325,7 @@ export function NowCardView({
         return (
           <Shell id="card-T-08" main={main}>
             <Text style={text('title')}>오늘 일정 끝</Text>
-            <Text style={text('body')}>오늘 일정이 끝났어. 오늘도 수고했어!</Text>
+            <Text style={text('body')}>{NO_LODGING_BODY}</Text>
           </Shell>
         );
       }

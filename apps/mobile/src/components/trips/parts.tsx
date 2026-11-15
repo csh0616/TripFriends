@@ -7,7 +7,18 @@ import { AlertIcon, CheckIcon, PlusIcon, SearchIcon } from '@/components/plannin
 import { layout } from '@/planning/layout';
 import tokens from 'design-tokens';
 
-import { color, control, radius, space, text } from '@/planning/theme';
+import { color, control, fitText, radius, space, text } from '@/planning/theme';
+
+/** TASK-015 §B7: 혼자 값으로 서는 숫자(D-day · "n일 중 k일" 등)는 숫자만 DM Mono 500, 글자는 Noto. 한 글자 줄이라 안쪽 Text로 나눈다 (읽기 도구엔 한 문장) */
+export function MonoDigits({ value, testID }: { value: string; testID?: string }) {
+  const base = text('caption', 'muted');
+  const mono = fitText({ size: base.fontSize as number, lineHeight: base.lineHeight as number, weight: 500, family: tokens.font['font-mono'] }, 'muted');
+  return (
+    <Text testID={testID} style={base}>
+      {value.split(/(\d+)/).map((part, index) => (index % 2 === 1 ? <Text key={index} style={mono}>{part}</Text> : part))}
+    </Text>
+  );
+}
 
 /** 틀린 칸 아래 오류 문장: 색 + 아이콘 + 문장 (field-error) */
 export function FieldError({ message }: { message: string }) {

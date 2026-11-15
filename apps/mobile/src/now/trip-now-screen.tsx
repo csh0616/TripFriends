@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/app-text';
 import { DemoPanel } from '@/components/now/demo-panel';
 import { MapAdapter, type MapAdapterHandle } from '@/components/now/map-adapter';
-import { NowCardView } from '@/components/now/now-cards';
+import { NowCardView, reasonHidden } from '@/components/now/now-cards';
 import { ProfileMenu } from '@/account/profile-menu';
 import { FriendAvatar } from '@/components/planning/friend-bubble';
 import { LocateIcon } from '@/components/planning/icons';
@@ -810,13 +810,15 @@ export function TripNowScreen({
             {view ? (
               <>
                 <View testID="now-main" style={styles.mainBox}>
-                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} /> : null}
-                  <View testID="now-reason">
-                    <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
-                  </View>
+                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} rehearsal={rehearsal} /> : null}
+                  {note === null && reasonHidden(mainCard, view.reason) ? null : (
+                    <View testID="now-reason">
+                      <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
+                    </View>
+                  )}
                 </View>
                 {subCards.map((card, index) => (
-                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} />
+                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} rehearsal={rehearsal} />
                 ))}
               </>
             ) : problem === null ? (

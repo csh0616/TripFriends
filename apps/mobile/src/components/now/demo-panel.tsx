@@ -125,7 +125,11 @@ export function DemoPanel({
       <DemoBar ratio={ratio} onRatio={(value) => onMinutes(toMinutes(barTime(value, start, end)))} onStep={step} />
       <View style={styles.buttons}>
         <View style={styles.grow}>
-          <SecondaryButton small testID="demo-plus-10" label="+10분" onPress={onPlus} />
+          {/* TASK-015 §B8: 아이콘 + "10분" (글자에 +가 겹치지 않게, 연습 시계와 같은 모양) */}
+          <Pressable testID="demo-plus-10" accessibilityRole="button" accessibilityLabel="10분 앞으로" onPress={onPlus} style={styles.plusSmall}>
+            <PlusIcon color={color.ink} size={layout.chipSmIcon} />
+            <Text style={text('caption', 'ink')}>10분</Text>
+          </Pressable>
         </View>
         <View style={styles.grow}>
           <SecondaryButton small testID="demo-play" label={playing ? '멈춤' : '재생'} onPress={onTogglePlay} />
@@ -170,6 +174,7 @@ const styles = StyleSheet.create({
   rehEnd: text('num-sm', 'muted'),
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   grow: { flex: 1 },
+  plusSmall: { minHeight: control['btn-sm'], minWidth: control['touch-min'], flexDirection: 'row', gap: space['space-1'], alignItems: 'center', justifyContent: 'center', borderRadius: radius['r-md'], backgroundColor: color['bg-2'] },
   buttons: { flexDirection: 'row', gap: space['space-2'] },
   hit: { minHeight: control['touch-min'], justifyContent: 'center' },
   track: { height: layout.barHeight, borderRadius: radius['r-full'], backgroundColor: color['bg-2'], overflow: 'hidden' },
