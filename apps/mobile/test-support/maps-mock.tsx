@@ -12,6 +12,8 @@ export const mapControl = {
   ready: () => undefined as void, // silent일 때 시험이 직접 준비 신호를 준다
   fits: [] as { coordinates: { latitude: number; longitude: number }[]; options?: { edgePadding?: { bottom?: number } } }[],
   moves: [] as { latitude: number; longitude: number }[], // animateToRegion·animateCamera의 가운데
+  // TASK-014 §24: animateToRegion에 넘긴 영역 전체 (연습 카메라를 직접 계산한 값)
+  regions: [] as { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }[],
   reset() {
     this.failRender = false;
     this.silent = false;
@@ -19,6 +21,7 @@ export const mapControl = {
     this.ready = () => undefined;
     this.fits = [];
     this.moves = [];
+    this.regions = [];
   },
 };
 
@@ -28,8 +31,9 @@ const MapView = forwardRef<unknown, Props>(function MapView(props, ref) {
     fitToCoordinates: (coordinates: never, options: never) => {
       mapControl.fits.push({ coordinates, options });
     },
-    animateToRegion: (region: { latitude: number; longitude: number }) => {
+    animateToRegion: (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => {
       mapControl.moves.push({ latitude: region.latitude, longitude: region.longitude });
+      mapControl.regions.push({ ...region });
     },
     animateCamera: (camera: { center: { latitude: number; longitude: number } }) => {
       mapControl.moves.push(camera.center);

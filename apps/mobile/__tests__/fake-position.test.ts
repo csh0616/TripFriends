@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 // fakePosition 순수 함수. 근거: TASK-006 B7, §8 AC-5 (일정 안 = 그 장소, 이동 중 = 두 점 사이, 시각 단조).
-// §11 Q15·§12 R6: 핀에 start·end·travel_min이 생겼다. 출발 전 = 숙소, 출발 뒤 1번 전 = 숙소 → 1번 보간, 일정 사이 = 빈 시간 전체를 분모로 보간, 마지막 뒤 = go_home_min 동안 숙소로, 그 뒤 숙소.
+// §11 Q15·§12 R6: 핀에 start·end·travel_min이 생겼다. 출발 전 = 숙소, 출발 뒤 1번 전 = 숙소 → 1번 보간, 일정 사이 = (TASK-014 §29 ③로 바뀜) 출발 시각(다음 시작 − travel_min)까지 앞 장소 제자리, 그 뒤 travel_min을 분모로 보간, 마지막 뒤 = go_home_min 동안 숙소로, 그 뒤 숙소.
 import fc from 'fast-check';
 
 type Spot = { lat: number; lng: number };
@@ -152,7 +152,8 @@ describe('§11 Q15', () => {
     expectAt(fakePosition(at(min(time)), COURSE), HOME);
   });
 
-  test('T6_Q15_기다림이_있어도_비율의_분모는_빈_시간_전체', () => {
+  // TASK-014 §29 ③ (R6 변경 승인): 예전 "빈 시간 전체를 분모로" -> 출발 시각(13:00 − 20 = 12:40)까지 1번, 그 뒤 20분 동안 이동
+  test('T6_Q15_S29_기다림이_있으면_출발_시각까지_앞_장소_그_뒤_이동_시간이_분모', () => {
     const waiting: Course = {
       lodging: HOME,
       go_home_min: 25,
@@ -161,7 +162,8 @@ describe('§11 Q15', () => {
         { ...B, start: '13:00', end: '14:00', travel_min: 20 },
       ],
     };
-    expectAt(fakePosition(at(min('12:30')), waiting), { lat: (A.lat + B.lat) / 2, lng: (A.lng + B.lng) / 2 });
+    expectAt(fakePosition(at(min('12:30')), waiting), A);
+    expectAt(fakePosition(at(min('12:50')), waiting), { lat: (A.lat + B.lat) / 2, lng: (A.lng + B.lng) / 2 });
   });
 
   test('T6_Q15_마지막_일정_끝_정각은_마지막_장소', () => {

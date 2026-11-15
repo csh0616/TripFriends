@@ -4,6 +4,7 @@
 //   new      : 브라우저·linkIdentity 없이 익명 사용자에 테스트 이메일·비밀번호를 붙인다 (같은 user_id, 연결과 같은 결과)
 //   existing : 브라우저 없이 시드된 테스트 계정으로 로그인한다 (그 뒤는 진짜 /account/claim 경로)
 import { authClient } from './auth';
+import { send } from './planning-api';
 
 /** 릴리스 번들에 이 파일이 들어갔는지 찾는 표시 글자 (이 파일에만 있다) */
 export const DEV_FAKE_LOGIN = 'DEV_FAKE_LOGIN';
@@ -21,6 +22,9 @@ export function devLoginMode(): DevLoginMode | null {
 }
 
 export async function devLinkNew(): Promise<boolean> {
+  // TASK-014 §21: 연결 직전에 로컬 테스트 계정을 지운다 (서버가 로컬 DB일 때만 지움). 실패하면 연결하지 않는다. 이메일은 서버가 안다 (본문 없음)
+  const reset = await send({ method: 'POST', path: '/debug/reset-test-account' });
+  if (!reset.ok) return false;
   const result = await authClient.updateUser({ email: NEW_EMAIL, password: DEV_PASSWORD });
   return !result.error;
 }

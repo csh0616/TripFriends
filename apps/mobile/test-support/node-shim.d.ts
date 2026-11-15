@@ -5,6 +5,17 @@ declare module 'node:fs' {
   export function readFileSync(path: string): { equals(other: unknown): boolean };
   export function readdirSync(path: string): string[];
   export function statSync(path: string): { isDirectory(): boolean };
+  // TASK-014 §16 Q2: 최종 Info.plist를 임시 파일로 써서 개발 런처의 릴리스 빌드 단계를 돌려 보는 테스트
+  export function mkdtempSync(prefix: string): string;
+  export function writeFileSync(path: string, data: string): void;
+  export function rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
+}
+declare module 'node:os' {
+  export function tmpdir(): string;
+}
+declare module 'node:child_process' {
+  export function execFileSync(file: string, args: string[], options?: { env?: Record<string, string> }): unknown;
+  export function execFileSync(file: string, args: string[], options: { encoding: 'utf8'; env?: Record<string, string> }): string;
 }
 declare module 'node:path' {
   export const sep: string;

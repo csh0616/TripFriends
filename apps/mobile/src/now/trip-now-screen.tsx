@@ -2,6 +2,7 @@
 // 앱은 그리기만 한다: 카드를 고르지 않고(서버 main이 이긴다, §6) 일정을 바꾸지 않는다. 시각은 데모 시계만 쓴다 (실제 시계는 쓰지 않는다).
 import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import Constants from 'expo-constants';
+import { StatusBar } from 'expo-status-bar';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
@@ -15,19 +16,37 @@ import { ProfileMenu } from '@/account/profile-menu';
 import { FriendAvatar } from '@/components/planning/friend-bubble';
 import { LocateIcon } from '@/components/planning/icons';
 import { InputBar } from '@/components/planning/input-bar';
+import { LocationIntroSheet, LocationOffPill, LocationOffSheet } from '@/components/now/location-ui';
+import { RehearsalBand, RehearsalNotice, REHEARSAL_FAILED } from '@/components/now/rehearsal-ui';
 import { Notice } from '@/components/planning/notice';
 import { RouteDiagram } from '@/components/planning/route-diagram';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { SosButton } from '@/components/planning/sos-button';
 import { SosSheet } from '@/components/planning/sos-sheet';
 import { failureText } from '@/lib/auth-messages';
+import { isFresh } from '@/lib/live-location';
 import { atOf, DEMO_PLUS_MIN, DEMO_STEP_MIN, DEMO_TICK_MS, minutesOfAt, NOW_DEBOUNCE_MS, toMinutes } from '@/lib/demo-clock';
 import { cityClock } from '@/lib/calendar';
+import { dayHeading } from '@/lib/day-list';
 import { delayedPosition } from '@/lib/fake-position';
-import { acceptRequest, checkRequest, dismissRequest, nowRequest, visitCheckRequest, type NowCard, type NowParams, type NowView } from '@/lib/now-api';
+import { rehearsalCamera, type RehearsalCameraResult } from './rehearsal-camera';
+import {
+  acceptRequest,
+  checkRequest,
+  dismissRequest,
+  nowRequest,
+  rehearsalVisitCheckRequest,
+  visitCheckRequest,
+  type NowCard,
+  type NowParams,
+  type NowView,
+  type RehearsalAction,
+} from '@/lib/now-api';
 import { send, type DaySummary, type Request, type Result } from '@/lib/planning-api';
 import { layout } from '@/planning/layout';
 import { color, control, radius, shadow, space, text } from '@/planning/theme';
+
+import { useLiveLocation } from './use-live-location';
 
 /** 기기에 저장해 다시 켜도 이 화면으로 돌아오는 값 (§11 Q16, §12 R10) */
 export type NowRecord = {
@@ -37,6 +56,8 @@ export type NowRecord = {
   demo: boolean;
   /** TASK-010 C4·C7: 실제 여행의 오늘. 시계는 도시 시간대의 지금, 위치·데모 시계·데모 버튼 없음. day는 첫 응답 전까지의 임시 값 */
   live?: boolean;
+  /** TASK-014 §C: 계획 완료 날 "미리 걸어 보기". check·[닫혔어]는 rehearsal: true, 고르기·그대로 갈래·열었어는 서버에 보내지 않는다. day는 첫 응답 전까지의 임시 값 */
+  rehearsal?: boolean;
 };
 
 const OFFLINE_BAND = '연결이 안 돼, 저장된 일정만 보여';
@@ -51,6 +72,7 @@ const STALE_NOTE = '시간이 지나서 다시 찾아봤어'; // §6: accept 409
 const DELAY_STEP_MIN = 10; // C2
 const DELAY_MAX_MIN = 60;
 const LIVE_END_MIN = 23 * 60 + 59; // 실제 여행의 오늘은 하루 전체가 시계 범위
+const QUEUE_GAP_MS = 100; // 응답이 온 뒤 기다리던 최신 요청을 보내기까지 (§29 ①, 400ms 안)
 const LIVE_TICK_MS = 30000; // 실제 시계를 다시 읽는 간격
 
 /** 시각이 바뀔 때는 POST check(위치는 본문), 재실행·되돌림은 GET now (위치 없음). C1 */
@@ -122,17 +144,19 @@ export function TripNowScreen({
   onExit: () => void;
 }) {
   const live = record.live === true;
+  const rehearsal = record.rehearsal === true;
+  const rehTop = rehearsal ? layout.rehBand : 0; // 연습 띠만큼 상단 줄·지도 여백이 내려간다
   const insets = useSafeAreaInsets();
   const { width, height: windowHeight } = useWindowDimensions();
 
   const [view, setView] = useState<NowView | null>(null);
   // 실제 여행의 오늘은 첫 응답의 day(서버가 정한 하루 요약)를 쓴다. 그 전까지는 임시 값
-  const day = live && view ? view.day : record.day;
+  const day = (live || rehearsal) && view ? view.day : record.day;
   const [startMin, endMin] = live ? [0, LIVE_END_MIN] : [toMinutes(day.start), toMinutes(day.end)];
 
   const [minutes, setMinutes] = useState(() => Math.min(endMin, Math.max(startMin, minutesOfAt(record.at) ?? startMin)));
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [oopsText, setOopsText] = useState(OOPS_BAND);
+  const [oopsText, setOopsText] = useState(rehearsal ? REHEARSAL_FAILED : OOPS_BAND);
   const [demoOpen, setDemoOpen] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [mapFailed, setMapFailed] = useState(() => !hasMapKey());
@@ -145,10 +169,16 @@ export function TripNowScreen({
   const [note, setNote] = useState<string | null>(null);
   const [sheetIndex, setSheetIndex] = useState(1);
   const [chosen, setChosen] = useState<string | null>(null); // TASK-009 A1: 고른 제안 id. 화면에만 있고 서버에는 보내지 않는다
+  const [rehearsalInfo, setRehearsalInfo] = useState(false); // §9 답 7: "연습이라 저장하지 않았어" 한 줄
 
   const alive = useRef(true);
   const signals = useRef(new Set<AbortController>());
-  const seq = useRef(0); // 마지막으로 보낸 요청 번호: 앞 요청의 늦은 응답은 버린다 (B8)
+  const seq = useRef(0); // 마지막으로 보낸 요청 번호 (보낸 순서)
+  const shownSeq = useRef(0); // 지금 화면에 있는 응답의 요청 번호: 이보다 오래된 응답만 버린다 (§29 ①)
+  const floorSeq = useRef(0); // [이걸로]·[닫혔어]를 보낸 때의 번호: 그보다 앞서 보낸 시계·위치 응답은 버린다 (B8)
+  const inFlight = useRef(false); // 시계·위치 check(·now)는 동시에 하나만 (§29 ①)
+  const queueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queued = useRef<{ call: Call; note: string | null } | null>(null); // 기다리는 동안 바뀐 최신 하나
   const last = useRef<Call | null>(null);
   const lastCheck = useRef<NowParams | null>(null); // accept 409 stale 뒤 같은 시각·위치로 다시 묻는다
   const delayRef = useRef(0);
@@ -157,7 +187,13 @@ export function TripNowScreen({
   const homeMin = useRef<number | null>(null);
   const positioned = useRef(false); // §12 R7: 첫 응답 뒤 위치를 넣어 한 번 더
   const fitted = useRef(false);
+  const cameraRef = useRef<RehearsalCameraResult | null>(null); // 연습: 마지막 카메라 결과
+  const fittedLeg = useRef<string | null>(null); // 연습: 마지막으로 맞춘 구간
   const currentAt = useRef('');
+  const rehearsalLog = useRef<RehearsalAction[]>([]); // §11 연습 기록: 앱 메모리에만. 끝내거나 화면을 떠나면 사라진다
+  const skipAt = useRef<string | null>(null); // 연습 첫 응답 뒤 이미 바로 보낸 시각
+  const noteShown = useRef(false); // 연습 한 번에 처음 한 번만
+  const sentSpot = useRef<{ lat: number; lng: number; timestamp: number } | null>(null); // 실제 위치: 마지막으로 보낸 곳과 잰 시각 (시계로 다시 물을 때도 같이 보낸다, 120초 넘게 오래되면 뺀다)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<MapAdapterHandle>(null);
 
@@ -172,25 +208,42 @@ export function TripNowScreen({
       alive.current = false;
       pending.forEach((controller) => controller.abort());
       if (toastTimer.current) clearTimeout(toastTimer.current);
+      if (queueTimer.current) clearTimeout(queueTimer.current);
     };
   }, []);
 
   /** 코스대로 걷는 위치 (B7). 핀이 아직 없으면 보내지 않는다 */
   const positionFor = useCallback(
     (when: string): { lat?: number; lng?: number } => {
-      if (live) return {}; // C4: 실제 위치는 아직 없다. 위치가 필요한 늦어짐 감지는 꺼져 있다
+      // TASK-014 A3: 실제 여행은 기기가 잰 위치(마지막으로 보낸 곳)를 쓴다. 아직 없거나 쓸 수 없으면 시계만
+      if (live) {
+        const sent = sentSpot.current;
+        // §13 7·§10 Q7: 잰 지 120초보다 오래된 위치는 싣지 않는다 (시계만)
+        return sent && isFresh({ ...sent, accuracy: 0 }, Date.now()) ? { lat: sent.lat, lng: sent.lng } : {};
+      }
       const now = viewRef.current;
       if (!now || now.pins.length === 0) return {};
       // C2·§14: 지연 중이면 길 위가 아니라 "아직 머무는" 장소 (일정 안 = 그 장소, 이동 중 = 앞 장소, 첫 일정 전 = 숙소)
       const spot = delayedPosition(when, delayRef.current, {
-        lodging: day.lodging,
+        lodging: rehearsal ? now.day.lodging : day.lodging, // 연습은 첫 응답 전까지 임시 숙소라 응답의 값을 쓴다
         go_home_min: homeMin.current,
         items: now.pins.map((pin) => ({ lat: pin.lat, lng: pin.lng, start: pin.start, end: pin.end, travel_min: pin.travel_min })),
       });
       return spot ? { lat: spot.lat, lng: spot.lng } : {};
     },
-    [day.lodging, day.date, live],
+    [day.lodging, day.date, live, rehearsal],
   );
+
+  // §29 ②: 연습 점은 서버 position이 아니라 앱이 지금 시계로 바로 계산한다 (화면에 있는 응답의 핀·day.lodging). 카드만 응답을 기다린다
+  const rehPosition = useMemo(() => {
+    if (!rehearsal || !view || view.pins.length === 0) return null;
+    const goHome = [view.main, ...view.subs].find((card) => card.type === 'T-08');
+    return delayedPosition(at, delay, {
+      lodging: view.day.lodging ?? null,
+      go_home_min: goHome && goHome.type === 'T-08' ? goHome.go_home_min : null,
+      items: view.pins.map((pin) => ({ lat: pin.lat, lng: pin.lng, start: pin.start, end: pin.end, travel_min: pin.travel_min })),
+    });
+  }, [rehearsal, view, at, delay]);
 
   /** 응답(성공·실패)을 화면에 반영한다. 반영했으면 true */
   const show = useCallback((result: Result, shownNote: string | null): boolean => {
@@ -200,8 +253,12 @@ export function TripNowScreen({
         onExit(); // 이 날이 서버에 없다: 저장값을 지우고 S0, 안내 없음
         return false;
       }
-      if (failure.kind === 'network') setProblem('offline');
-      else if (failure.kind === 'not_found' && failure.resource === 'course') setProblem('no_course');
+      if (failure.kind === 'not_found' && failure.resource === 'course') setProblem('no_course');
+      else if (rehearsal) {
+        // §10 Q12: 연습 중에는 끊김도 오류도 "지금 연습을 못 해" + [다시]. 실제 여행은 그대로
+        setOopsText(REHEARSAL_FAILED);
+        setProblem('oops');
+      } else if (failure.kind === 'network') setProblem('offline');
       else {
         setOopsText(failureText(failure, OOPS_BAND));
         setProblem('oops'); // 500, 400, course가 아닌 404, 409 (§11 Q22)
@@ -227,17 +284,59 @@ export function TripNowScreen({
 
   const fetchNow = useCallback(
     async (call: Call, shownNote: string | null = null): Promise<void> => {
+      last.current = call;
+      // §29 ① 응답을 기다리는 동안 바뀐 시각·위치는 최신 하나만 들고 있다가 응답이 오면 한 번 보낸다
+      if (inFlight.current) {
+        queued.current = { call, note: shownNote };
+        return;
+      }
+      inFlight.current = true;
       seq.current += 1;
       const mine = seq.current;
-      last.current = call;
       if (call.kind === 'check') lastCheck.current = call.params;
-      const request = call.kind === 'check' ? checkRequest(record.day_id, call.params) : nowRequest(record.day_id, call.params.at);
+      const request =
+        call.kind === 'check' ? checkRequest(record.day_id, call.params, rehearsal ? [...rehearsalLog.current] : undefined) : nowRequest(record.day_id, call.params.at);
       const result = await send(request, signals.current);
-      if (!alive.current || mine !== seq.current) return;
-      if (!show(result, shownNote)) return;
+      inFlight.current = false;
+      if (!alive.current) return;
+      // 응답은 버리지 않는다. 보낸 순서상 화면에 있는 것보다 오래된 것(또는 [이걸로] 앞서 보낸 것)만 버린다
+      if (mine >= Math.max(shownSeq.current, floorSeq.current) && show(result, shownNote)) {
+        shownSeq.current = mine;
+        followUp(call);
+      }
+      // 기다리는 동안 바뀐 최신 하나가 있으면 잠깐 뒤 한 번 보낸다 (그 사이 새 요청은 그 하나를 대신한다)
+      if (!inFlight.current && queued.current) {
+        inFlight.current = true;
+        queueTimer.current = setTimeout(() => {
+          queueTimer.current = null;
+          inFlight.current = false;
+          const next = queued.current;
+          queued.current = null;
+          if (alive.current && next) void fetchNow(next.call, next.note);
+        }, QUEUE_GAP_MS);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [record.day_id, positionFor, show],
+  );
+
+  /** 첫 응답 뒤 위치를 넣어 한 번 더 (§12 R7) */
+  const followUp = useCallback(
+    (call: Call) => {
       const data = viewRef.current;
       if (!positioned.current && data) {
         positioned.current = true;
+        if (rehearsal) {
+          // §10 Q13: 연습 시계는 하루 시작 시각부터. 시각이 바뀌면 아래 효과가 check를 보낸다. 이미 그 시각이면 지금 바로
+          const start = toMinutes(data.day.start);
+          const startAt = atOf(data.day.date, start);
+          if (start !== minutesOfAt(call.params.at)) {
+            skipAt.current = startAt; // 시각이 바뀌어도 아래 효과가 같은 시각을 한 번 더 묻지 않게
+            setMinutes(start);
+          }
+          void fetchNow({ kind: 'check', params: { at: startAt, ...positionFor(startAt) } });
+          return;
+        }
         // §11 Q5·§12 R7: GET /now로 화면을 받은 뒤, 같은 시각으로 위치를 넣어 check를 한 번 (같은 시각이 아직 화면에 남아 있을 때만)
         if (call.kind === 'now' && data.pins.length > 0 && call.params.at === currentAt.current) {
           const position = positionFor(call.params.at);
@@ -246,7 +345,7 @@ export function TripNowScreen({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [record.day_id, positionFor, show],
+    [positionFor],
   );
 
   /** [이걸로]·[그대로 갈래]: 같은 요청을 다시 보내지 않는다 (이미 반영됐을 수 있다, §6) */
@@ -255,12 +354,13 @@ export function TripNowScreen({
     busy.current = true;
     seq.current += 1;
     const mine = seq.current;
+    floorSeq.current = mine;
     const result = await send(request, signals.current);
     busy.current = false;
     setChosen(null); // §6: 확정이 성공하든 stale이든 끊기든 고른 상태는 지운다
-    if (!alive.current || mine !== seq.current) return;
+    if (!alive.current || mine < shownSeq.current) return;
     if (result.ok) {
-      show(result, accepted ? ACCEPTED_NOTE : null);
+      if (show(result, accepted ? ACCEPTED_NOTE : null)) shownSeq.current = mine;
       return;
     }
     const failure = result.failure;
@@ -284,6 +384,10 @@ export function TripNowScreen({
     if (firstRun.current) {
       firstRun.current = false;
       void fetchNow({ kind: 'now', params: { at } });
+      return undefined;
+    }
+    if (skipAt.current === at) {
+      skipAt.current = null;
       return undefined;
     }
     const run = () => void fetchNow({ kind: 'check', params: { at, ...positionFor(at) } });
@@ -314,32 +418,140 @@ export function TripNowScreen({
   }, [playing, minutes, endMin]);
 
   // 지도 카메라: 처음 한 번만 코스 전체와 숙소가 보이게 (B10). 시트(중간) 높이만큼 아래 여백
-  const sheetMid = (areaHeight || windowHeight) * layout.sheetFractions[1];
+  // 연습 중엔 시트 윗변을 보드 ①-35 자리(874 화면에서 y 434)에 맞추고, 시계 판(112)은 그 위에 뜬다 (§19·§20 Q2)
+  const rehSheetHeight = (area: number) => {
+    const boardArea = layout.rehBoardHeight - (space['space-2'] + control.input + layout.rehBoardBottom + space['space-2']);
+    const low = area * layout.sheetFractions[0];
+    const high = area * layout.sheetFractions[2];
+    return Math.round(Math.min(high - 1, Math.max(low + 1, area - (layout.rehSheetTop * area) / boardArea)));
+  };
+  const sheetMid = rehearsal ? rehSheetHeight(areaHeight || windowHeight) : (areaHeight || windowHeight) * layout.sheetFractions[1];
+  const clockRoom = rehearsal ? layout.rehClock + space['space-3'] : 0; // 카메라 아래 여백 = 시트 + 시계 판
   useEffect(() => {
-    if (!mapReady || fitted.current || !view || view.pins.length === 0) return;
+    if (!mapReady || !view || view.pins.length === 0) return;
+    // 연습: 지금 구간만 직접 계산한 영역(보이는 띠 기준), 구간이 바뀔 때만 다시 (같은 구간 안에서 시각만 바뀌면 그대로)
+    if (rehearsal) {
+      // 시트 영역 높이(onLayout)를 알기 전에는 계산하지 않는다. 안 뒤 결과 객체가 바뀔 때만 한 번 (§26)
+      if (areaHeight <= 0) return;
+      const camera = rehearsalCamera(
+        view.pins,
+        rehPosition,
+        day.lodging ?? null,
+        {
+          width,
+          height: areaHeight,
+          top: insets.top + rehTop + layout.header + layout.pinBubble,
+          bottom: areaHeight - sheetMid - clockRoom,
+        },
+        cameraRef.current ?? undefined,
+      );
+      if (cameraRef.current === camera) return;
+      cameraRef.current = camera;
+      fitted.current = true;
+      fittedLeg.current = camera.key;
+      mapRef.current?.showRegion(camera.region);
+      return;
+    }
+    // 실제 여행: 처음 한 번 모든 핀 + 숙소 (B10)
+    if (fitted.current) return;
     fitted.current = true;
+    fittedLeg.current = null;
     mapRef.current?.fit(
-      [...view.pins.map((pin) => ({ latitude: pin.lat, longitude: pin.lng })), { latitude: day.lodging.lat, longitude: day.lodging.lng }],
+      [...view.pins.map((pin) => ({ latitude: pin.lat, longitude: pin.lng })), ...(day.lodging ? [{ latitude: day.lodging.lat, longitude: day.lodging.lng }] : [])],
       {
         // 위: 알약·프로필·SOS 줄 + 다음 핀의 이름 말풍선 + 핀 반쪽이 가려지지 않게. 아래: 시트 윗면 + 핀 반쪽
-        top: insets.top + layout.header + layout.pinBubble + control['touch-min'] + space['space-2'],
-        bottom: sheetMid + control['touch-min'] / 2 + space['space-2'],
+        top: insets.top + rehTop + layout.header + layout.pinBubble + control['touch-min'] + space['space-2'],
+        bottom: sheetMid + clockRoom + control['touch-min'] / 2 + space['space-2'],
       },
     );
-  }, [mapReady, view, day.lodging, insets.top, sheetMid]);
+  }, [mapReady, view, rehearsal, rehPosition, day.lodging, insets.top, sheetMid, clockRoom, areaHeight, width]);
 
   const retry = () => {
     if (last.current) void fetchNow(last.current);
   };
 
+  /** 실제 여행 오늘의 "지금": 도시 시간대의 지금 시각 (아래 시계 효과와 같은 셈) */
+  const liveAt = (): string => {
+    const clock = cityClock(Date.now());
+    const next = clock.date === record.day.date ? clock.minutes : clock.date > record.day.date ? LIVE_END_MIN : 0;
+    return atOf(record.day.date, Math.min(LIVE_END_MIN, next));
+  };
+  // TASK-014 A3: 좋은 위치가 보낼 만하면 check 본문에 싣는다 (주소창 아님)
+  const location = useLiveLocation({
+    enabled: live,
+    onSend: (spot, timestamp) => {
+      sentSpot.current = { ...spot, timestamp };
+      void fetchNow({ kind: 'check', params: { at: liveAt(), lat: spot.lat, lng: spot.lng } });
+    },
+  });
+  useEffect(() => {
+    if (!live) sentSpot.current = null;
+  }, [live]);
+  // 읽기가 멈추면(백그라운드·거절·꺼짐) 그 위치는 더 쓰지 않는다 — 시계로 다시 물을 때도 싣지 않는다
+  useEffect(() => {
+    if (!location.active) sentSpot.current = null;
+  }, [location.active]);
+
+  /** 연습 중 고르기·그대로 갈래·열었어: 서버에 쓰지 않고 연습 기록에 쌓은 뒤, 같은 계산(rehearsal: true)으로 화면을 다시 받는다 (§11) */
+  const rehearse = (action: RehearsalAction) => {
+    rehearsalLog.current.push(action);
+    announceRehearsal();
+    setChosen(null);
+    void fetchNow({ kind: 'check', params: { at: currentAt.current, ...positionFor(currentAt.current) } });
+  };
+  const announceRehearsal = () => {
+    if (noteShown.current) return;
+    noteShown.current = true;
+    setRehearsalInfo(true);
+  };
+  /** 연습 중 [닫혔어]: 대안을 계산하는 요청이라 서버에 보내되 rehearsal: true. 성공하면 연습 기록에 쌓는다 */
+  const rehearseClosed = async (placeId: string) => {
+    if (busy.current) return;
+    busy.current = true;
+    seq.current += 1;
+    const mine = seq.current;
+    floorSeq.current = mine;
+    const at = currentAt.current;
+    last.current = { kind: 'check', params: { at, ...positionFor(at) } }; // 실패하면 [다시]는 지금 시각으로 다시 묻는다
+    const body = { day_id: record.day_id, at, was_open: false };
+    const result = await send(rehearsalVisitCheckRequest(placeId, body, [...rehearsalLog.current]), signals.current);
+    busy.current = false;
+    setChosen(null);
+    if (!alive.current || mine < shownSeq.current) return;
+    if (show(result, null)) {
+      shownSeq.current = mine;
+      rehearsalLog.current.push({ type: 'visit_check', place_id: placeId, ...body });
+      announceRehearsal();
+    }
+  };
+
   const choose = (proposalId: string) => setChosen((now) => (now === proposalId ? null : proposalId));
   const confirm = () => {
-    if (chosen !== null) void decide(acceptRequest(chosen), true);
+    if (chosen === null) return;
+    if (rehearsal) {
+      const event = viewRef.current?.event;
+      if (event) rehearse({ type: 'accept', event, proposal_id: chosen });
+      return;
+    }
+    void decide(acceptRequest(chosen), true);
   };
-  const dismiss = (eventId: string) => void decide(dismissRequest(eventId), false);
+  const dismiss = (eventId: string) => {
+    if (rehearsal) {
+      const event = viewRef.current?.event;
+      if (event) rehearse({ type: 'dismiss', event });
+      return;
+    }
+    void decide(dismissRequest(eventId), false);
+  };
   // T-05 [열었어]/[닫혔어]: 다시 보내지 않는다. 끊기거나 409면 GET /now로 지금 상태를 받는다 (§6)
-  const visit = (placeId: string, wasOpen: boolean) =>
+  const visit = (placeId: string, wasOpen: boolean) => {
+    if (rehearsal) {
+      if (wasOpen) rehearse({ type: 'visit_check', place_id: placeId, day_id: record.day_id, at: currentAt.current, was_open: true });
+      else void rehearseClosed(placeId);
+      return;
+    }
     void decide(visitCheckRequest(placeId, { day_id: record.day_id, at: currentAt.current, was_open: wasOpen }), false);
+  };
   const lateAt = view?.status === 'delayed' ? view.at : null;
 
   const showToast = () => {
@@ -349,11 +561,16 @@ export function TripNowScreen({
   };
 
   // ---------- 시트 ----------
-  const snapPoints = useMemo(() => layout.sheetFractions.map((fraction) => `${Math.round(fraction * 100)}%`), []);
+  // 연습 중엔 중간 단 윗변이 보드 자리 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
+  const snapPoints = useMemo(() => {
+    const total = areaHeight || windowHeight;
+    return layout.sheetFractions.map((fraction, index) => (rehearsal && index === 1 ? rehSheetHeight(total) : `${Math.round(fraction * 100)}%`));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rehearsal, areaHeight, windowHeight]);
   const sheetTop = useSharedValue(0);
   const gap = space['space-3'];
   // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)
-  const topLimit = insets.top + layout.header;
+  const topLimit = insets.top + rehTop + layout.header;
   const floatMin = control['touch-min'];
   const floatStyle = useAnimatedStyle(() => {
     const follow = sheetTop.value > 0 ? areaHeight - sheetTop.value + gap : gap;
@@ -366,12 +583,22 @@ export function TripNowScreen({
   const subCards = view ? view.subs.filter(visible).slice(0, MAX_CARDS - (mainCard ? 1 : 0)) : [];
 
   const choiceCount = proposalIdsOf([...(mainCard ? [mainCard] : []), ...subCards]).length; // Q5: 제안 0개면 확정 줄을 숨긴다
-  const position = view?.position ?? null;
+  // 실제 여행: 기기가 잰 좋은 위치만 (위치를 모르면 점도 [내 위치]도 없다, §9 답 4). 데모·연습: 서버가 코스대로 돌려준 자리
+  const position = live ? (location.spot ? { lat: location.spot.lat, lng: location.spot.lng } : null) : rehearsal ? rehPosition : (view?.position ?? null);
+  // 숙소가 없으면 첫 핀이 지도 처음 중심 (§29 ④)
+  const firstPin = view?.pins[0];
+  const mapCenter = day.lodging
+    ? { latitude: day.lodging.lat, longitude: day.lodging.lng }
+    : firstPin
+      ? { latitude: firstPin.lat, longitude: firstPin.lng }
+      : null;
+  const showClock = !live && (rehearsal || record.demo || __DEV__);
   const pill = view ? PILL[view.status] ?? PILL.on_track : null;
-  const bandTop = insets.top + layout.header + space['space-2'];
+  const bandTop = insets.top + rehTop + layout.header + space['space-2'];
 
   return (
     <View testID="trip-now-screen" style={styles.root}>
+      {rehearsal ? <StatusBar style="light" /> : null}
       <View style={styles.area} onLayout={(event) => setAreaHeight(event.nativeEvent.layout.height)}>
         {live && view === null ? null : mapFailed ? (
           <View testID="map-fallback" style={[styles.fallback, { paddingTop: bandTop + space['space-10'] }]}>
@@ -381,17 +608,25 @@ export function TripNowScreen({
               home={day.lodging}
               stops={(view?.pins ?? []).map((pin) => ({ seq: pin.seq, lat: pin.lat, lng: pin.lng }))}
             />
+            {/* 지도가 없어도 어디를 가는지 읽을 수 있게 핀 이름을 순서대로 (번호만 있는 그림은 코스를 못 읽는다) */}
+            {(view?.pins ?? []).map((pin) => (
+              <View key={pin.seq} testID={`fallback-stop-${pin.seq}`} style={styles.stopLine}>
+                <Text style={text('num-md', 'muted')}>{String(pin.seq)}</Text>
+                <Text style={text('caption', 'muted')}>{pin.name}</Text>
+              </View>
+            ))}
           </View>
         ) : (
           <MapGuard onError={() => setMapFailed(true)}>
             <MapAdapter
               ref={mapRef}
-              center={{ latitude: day.lodging.lat, longitude: day.lodging.lng }}
-              home={{ latitude: day.lodging.lat, longitude: day.lodging.lng }}
+              center={mapCenter}
+              home={day.lodging ? { latitude: day.lodging.lat, longitude: day.lodging.lng } : null}
               pins={view?.pins ?? []}
               routeDone={(view?.route.done ?? []).map(([latitude, longitude]) => ({ latitude, longitude }))}
               routeRemaining={(view?.route.remaining ?? []).map(([latitude, longitude]) => ({ latitude, longitude }))}
               position={position ? { latitude: position.lat, longitude: position.lng } : null}
+              hollowPosition={rehearsal}
               onReady={() => setMapReady(true)}
               onFail={() => setMapFailed(true)}
             />
@@ -399,7 +634,10 @@ export function TripNowScreen({
         )}
 
         {/* 지도 위 고정: 프로필 · 이동 상태 알약 · SOS (SCREEN-001 §2) */}
-        <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top }]}>
+        {rehearsal ? (
+          <RehearsalBand top={insets.top} label={view ? dayHeading(view.day.day_number - 1, view.day.date) : ''} onEnd={onExit} />
+        ) : null}
+        <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + rehTop }]}>
           <View style={styles.topRow} pointerEvents="box-none">
             <View style={styles.side}>
               <Pressable
@@ -426,6 +664,12 @@ export function TripNowScreen({
             </View>
           </View>
         </View>
+
+        {/* TASK-014 D2: 위치를 못 쓰는 동안 "위치 꺼짐" 알약. 끊김 띠가 있는 동안은 숨긴다 (한 번에 경고 하나, §9 답 3) */}
+        {live && location.off && problem !== 'offline' ? (
+          <LocationOffPill top={insets.top + (layout.header + layout.statusPill) / 2 + layout.pillOffGap} onPress={location.pillPressed} />
+        ) : null}
+        {rehearsalInfo ? <RehearsalNotice top={bandTop + control.sos} onClose={() => setRehearsalInfo(false)} /> : null}
 
         {/* 알림 띠: 끊김·오류·코스 없음·길 안내 실패 */}
         <View pointerEvents="box-none" style={[styles.bands, { top: bandTop + control.sos }]}>
@@ -454,9 +698,10 @@ export function TripNowScreen({
 
         {/* 시트 위에 떠 있는 것: 데모 시계 패널·버튼, [내 위치] */}
         <Animated.View pointerEvents="box-none" style={[styles.float, floatStyle]}>
-          {!live && (record.demo || __DEV__) ? (
-            demoOpen ? (
+          {showClock ? (
+            demoOpen || rehearsal ? (
               <DemoPanel
+                rehearsal={rehearsal}
                 start={day.start}
                 end={day.end}
                 minutes={minutes}
@@ -471,13 +716,14 @@ export function TripNowScreen({
             ) : null
           ) : null}
           {/* F3: 시트가 가장 높을 때 [데모]·[내 위치]는 숨긴다 (열린 패널은 시트 뒤로 간다) */}
-          {sheetIndex < snapPoints.length - 1 ? (
+          {sheetIndex < snapPoints.length - 1 && !rehearsal ? (
             <View pointerEvents="box-none" style={styles.floatRow}>
-              {!live && (record.demo || __DEV__) ? (
+              {showClock ? (
                 <SecondaryButton small testID="demo-toggle" label={demoOpen ? '데모 접기' : '데모'} onPress={() => setDemoOpen((now) => !now)} />
               ) : (
                 <View />
               )}
+              {live && position === null ? null : (
               <Pressable
                 testID="my-location-button"
                 accessibilityRole="button"
@@ -490,6 +736,7 @@ export function TripNowScreen({
               >
                 <LocateIcon color={position === null ? color.muted : color.ink} />
               </Pressable>
+              )}
             </View>
           ) : null}
         </Animated.View>
@@ -546,7 +793,9 @@ export function TripNowScreen({
       {profileOpen ? (
         <ProfileMenu restartLabel={live ? '날짜 목록으로' : '처음부터 다시'} onRestart={onExit} onClose={() => setProfileOpen(false)} />
       ) : null}
-      {sosOpen ? <SosSheet onClose={() => setSosOpen(false)} /> : null}
+      {sosOpen ? <SosSheet located={live ? location.spot !== null : position !== null} onClose={() => setSosOpen(false)} /> : null}
+      {location.sheet === 'intro' ? <LocationIntroSheet onTurnOn={() => void location.turnOn()} onLater={location.later} /> : null}
+      {location.sheet === 'off' ? <LocationOffSheet onSettings={location.openSettings} onClose={location.closeSheet} /> : null}
     </View>
   );
 }
@@ -554,6 +803,7 @@ export function TripNowScreen({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color.surface },
   area: { flex: 1, backgroundColor: color['bg-2'] },
+  stopLine: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },
   fallback: { ...StyleSheet.absoluteFill, backgroundColor: color['bg-2'], alignItems: 'center', gap: space['space-4'] },
   // 상단 줄(SOS)은 시트·떠 있는 줄보다 항상 위에 그린다: zIndex, Android는 elevation도 시트(sh-sheet)와 같거나 높게
   top: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2, elevation: shadow.sheet.elevation },

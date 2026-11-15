@@ -6,4 +6,4 @@
 - Jev는 `JevDecider`로만 부른다. 시간 제한 0.8초, 확신 0.6 미만이면 되묻기, 실패하면 대체 Decider (ADR-011). Jev 전용 타입은 `deciders` 밖으로 내보내지 않음
 - Jev `score`의 `criteria`는 **순서 있는 척도 배열**이다 (평가 항목 목록 아님, POC 측정에서 확인)
 - 테스트: pytest + Hypothesis(속성) + mutmut(돌연변이). 실제 Jev를 부르는 테스트는 `@pytest.mark.live`로 분리, 기본 실행에서 제외
-- 키는 이 폴더의 `.env`의 `AI_GATEWAY_API_KEY`. 없으면 이해할 수 있는 오류로 멈춤. 값 출력 금지
+- 키는 저장소 밖 `~/.config/tripfriends/server.env`의 `AI_GATEWAY_API_KEY` (`--env-file`로 넘김, 루트 CLAUDE.md 규칙 1). 없으면 이해할 수 있는 오류로 멈춤. 값 출력 금지

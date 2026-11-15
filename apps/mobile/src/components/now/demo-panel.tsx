@@ -1,9 +1,10 @@
 // TASK-006 B7: 데모 시계 패널. 시각 막대(하루 시작~끝, 5분 단위), [+10분], [재생](1초 = 5분).
 // 이 부품은 시각만 바꾼다. 카드·지도는 바뀐 시각으로 서버에 다시 물어서 그린다 (B8).
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { PauseIcon, PlayIcon, PlusIcon } from '@/components/planning/icons';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { barTime, DEMO_STEP_MIN, toClock, toMinutes } from '@/lib/demo-clock';
 import { layout } from '@/planning/layout';
@@ -13,7 +14,12 @@ function DemoBar({
   ratio,
   onRatio,
   onStep,
+  thumb = layout.demoThumb,
+  reh = false,
 }: {
+  thumb?: number;
+  /** 연습 시계 막대: 두께 6 · 모서리 3 · line 바탕 · 손잡이 흰 테두리 3 (reh-clock) */
+  reh?: boolean;
   ratio: number;
   onRatio: (ratio: number) => void;
   onStep: (direction: 1 | -1) => void;
@@ -38,10 +44,10 @@ function DemoBar({
       style={styles.hit}
     >
       {/* 안쪽은 터치를 받지 않는다: locationX가 늘 막대 기준이 되게 */}
-      <View pointerEvents="none" style={styles.track}>
-        <View style={[styles.fill, { width: percent }]} />
+      <View pointerEvents="none" style={[styles.track, reh && styles.rehTrack]}>
+        <View style={[styles.fill, reh && styles.rehFill, { width: percent }]} />
       </View>
-      <View pointerEvents="none" style={[styles.thumb, { left: percent }]} />
+      <View testID="demo-thumb" pointerEvents="none" style={[styles.thumb, reh && styles.rehThumb, { left: percent, width: thumb, height: thumb, marginLeft: -thumb / 2 }]} />
     </View>
   );
 }
@@ -57,6 +63,7 @@ export function DemoPanel({
   delay,
   onDelay,
   onDelayReset,
+  rehearsal = false,
 }: {
   start: string;
   end: string;
@@ -69,10 +76,43 @@ export function DemoPanel({
   delay: number;
   onDelay: () => void;
   onDelayReset: () => void;
+  /** TASK-014 §D4: 연습 시계 = 같은 부품, 이름만 다르고 늦어짐 흉내 버튼은 없다 */
+  rehearsal?: boolean;
 }) {
   const [from, to] = [toMinutes(start), toMinutes(end)];
   const ratio = to > from ? Math.min(1, Math.max(0, (minutes - from) / (to - from))) : 0;
   const step = (direction: 1 | -1) => onMinutes(Math.min(to, Math.max(from, minutes + direction * DEMO_STEP_MIN)));
+
+  if (rehearsal) {
+    // DESIGN-001 §4-13 reh-clock: 높이 112 · 안쪽 12/16 · 모서리 24. 윗줄 44(이름+시각 · [+10분] 84 · [재생] 96), 아랫줄 44(시작 · 막대 · 끝)
+    return (
+      <View testID="demo-panel" style={styles.rehPanel}>
+        <View style={styles.rehRow}>
+          <View style={styles.rehHead}>
+            <Text style={text('label', 'muted')}>연습 시계</Text>
+            <View testID="demo-time">
+              <Text style={styles.rehTime}>{toClock(minutes)}</Text>
+            </View>
+          </View>
+          <Pressable testID="demo-plus-10" accessibilityRole="button" accessibilityLabel="10분 앞으로" onPress={onPlus} style={[styles.rehButton, styles.rehPlus]}>
+            <PlusIcon color={color.ink} size={layout.rehButtonIcon} />
+            <Text style={text('caption', 'ink')}>10분</Text>
+          </Pressable>
+          <Pressable testID="demo-play" accessibilityRole="button" onPress={onTogglePlay} style={[styles.rehButton, styles.rehPlay]}>
+            {playing ? <PauseIcon color={color.surface} size={layout.rehButtonIcon} /> : <PlayIcon color={color.surface} size={layout.rehButtonIcon} />}
+            <Text style={text('caption', 'surface')}>{playing ? '멈춤' : '재생'}</Text>
+          </Pressable>
+        </View>
+        <View style={styles.rehRow}>
+          <Text style={styles.rehEnd}>{start}</Text>
+          <View style={styles.rehBar}>
+            <DemoBar reh thumb={layout.rehThumb} ratio={ratio} onRatio={(value) => onMinutes(toMinutes(barTime(value, start, end)))} onStep={step} />
+          </View>
+          <Text style={styles.rehEnd}>{end}</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View testID="demo-panel" style={styles.panel}>
@@ -112,11 +152,30 @@ const styles = StyleSheet.create({
     gap: space['space-3'],
     ...shadow.float,
   },
+  rehPanel: {
+    height: layout.rehClock,
+    backgroundColor: color.surface,
+    borderRadius: radius['r-xl'],
+    paddingVertical: space['space-3'],
+    paddingHorizontal: space['space-4'],
+    ...shadow.float,
+  },
+  rehRow: { height: control['touch-min'], flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  rehHead: { flex: 1, height: control['touch-min'], justifyContent: 'center' },
+  rehTime: text('num-lg'),
+  rehButton: { height: control['touch-min'], flexDirection: 'row', gap: space['space-1'], alignItems: 'center', justifyContent: 'center', borderRadius: radius['r-md'] },
+  rehPlus: { width: layout.rehPlusWidth, backgroundColor: color['bg-2'] },
+  rehPlay: { width: layout.rehPlayWidth, backgroundColor: color.ink },
+  rehBar: { flex: 1 },
+  rehEnd: text('num-sm', 'muted'),
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   grow: { flex: 1 },
   buttons: { flexDirection: 'row', gap: space['space-2'] },
   hit: { minHeight: control['touch-min'], justifyContent: 'center' },
   track: { height: layout.barHeight, borderRadius: radius['r-full'], backgroundColor: color['bg-2'], overflow: 'hidden' },
+  rehTrack: { height: layout.rehBar, borderRadius: layout.rehBar / 2, backgroundColor: color.line },
+  rehFill: { height: layout.rehBar },
+  rehThumb: { borderWidth: layout.rehThumbBorder },
   fill: { height: layout.barHeight, backgroundColor: color.ink },
   thumb: {
     position: 'absolute',

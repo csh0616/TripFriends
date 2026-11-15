@@ -33,7 +33,8 @@
 | `supabase` 명령이 로컬 DB를 건드리거나 "로컬이 안 켜져 있다"고 함 | Supabase CLI는 기본이 **로컬**이다 | 클라우드에는 `supabase link --project-ref <ref>`로 연결한 뒤 명령마다 **`--remote`**를 붙인다 (예: `supabase migration list --remote`, `supabase db push --remote`). project-ref는 프로젝트 URL `https://<ref>.supabase.co` 가운데의 **20글자** |
 | Google 연결에서 개발 빌드 경고 `LINK_FAILED link manual_linking_disabled` (2단계) | 익명 계정에 Google을 붙이는 수동 연결이 꺼져 있음 | Supabase 화면 → Authentication → Sign In / Providers → **Allow manual linking** 켜고 **Save** |
 | Google 로그인 뒤 `unexpected_failure`, Supabase Auth 로그에 `invalid client` (2단계) | Supabase Google 공급자에 넣은 Client Secret이 틀리거나 만료됨 | Google Cloud에서 OAuth 클라이언트의 Client Secret을 다시 만들어 Supabase Authentication → Google 공급자에 넣고 Save |
-| 앱은 붙는데 가짜 장소만 나오고 로그인 요청이 401 | 서버가 `apps/server/.env`를 읽지 않고 켜짐 (`DATABASE_URL`·`SUPABASE_URL`·장소 키가 비어 메모리·가짜 공급자로 켜짐) | `apps/server`에서 `uv run --env-file .env fastapi dev api/main.py`처럼 **`--env-file .env`**를 붙여 켠다 |
+| 앱은 붙는데 가짜 장소만 나오고 로그인 요청이 401 | 서버가 비밀 파일(`~/.config/tripfriends/server.env`)을 읽지 않고 켜짐 (`DATABASE_URL`·`SUPABASE_URL`·장소 키가 비어 메모리·가짜 공급자로 켜짐) | `apps/server`에서 `uv run --env-file ~/.config/tripfriends/server.env fastapi dev api/main.py`처럼 **`--env-file ~/.config/tripfriends/server.env`**를 붙여 켠다 (비밀 파일은 저장소 밖, CLAUDE.md 규칙 1) |
+| `app.json`(권한 문구·플러그인)을 고쳤는데 폰·시뮬레이터 앱에 예전 설정이 남아 있음 (TASK-014 §18) | 예전에 만든 `apps/mobile/ios` 폴더가 남아 있으면 빌드가 설정을 다시 읽지 않는다 | `cd apps/mobile && npx expo prebuild --clean --platform ios`로 iOS 폴더를 새로 만든 뒤 빌드 (루트 README "폰 확인 때 막히는 곳") |
 
 클라우드에 마이그레이션을 적용하는 순서 (저장소 맨 위에서):
 1. `supabase login` — 브라우저로 로그인

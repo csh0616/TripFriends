@@ -308,22 +308,36 @@ export function NowCardView({
           {card.leave_in_min > 0 ? <BigMinutes value={card.leave_in_min} unit="분 뒤" /> : <Text style={text('heading')}>지금 출발해</Text>}
         </Shell>
       );
-    case 'T-08':
+    case 'T-08': {
+      const mapUrl = card.map_url;
+      // §31 Q2·Q3: 숙소가 없으면(서버가 lodging·map_url을 null로 준다) 숙소 줄·길 안내 없이 "오늘 일정 끝"
+      if (card.lodging == null) {
+        return (
+          <Shell id="card-T-08" main={main}>
+            <Text style={text('title')}>오늘 일정 끝</Text>
+            <Text style={text('body')}>오늘 일정이 끝났어. 오늘도 수고했어!</Text>
+          </Shell>
+        );
+      }
+      const minutes = card.go_home_min;
       return (
         <Shell id="card-T-08" main={main}>
           <Text style={text('label', 'muted')}>숙소 가는 법</Text>
-          <Text style={text('title')}>{card.go_home_min > 0 ? `숙소까지 ${card.go_home_min}분` : '숙소로 돌아가자'}</Text>
+          <Text style={text('title')}>{minutes != null && minutes > 0 ? `숙소까지 ${minutes}분` : '숙소로 돌아가자'}</Text>
           {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
-          <SecondaryButton
-            small
-            testID="home-directions-button"
-            label="숙소로 길 안내"
-            onPress={() => {
-              Linking.openURL(card.map_url).catch(onOpenFailed);
-            }}
-          />
+          {mapUrl != null ? (
+            <SecondaryButton
+              small
+              testID="home-directions-button"
+              label="숙소로 길 안내"
+              onPress={() => {
+                Linking.openURL(mapUrl).catch(onOpenFailed);
+              }}
+            />
+          ) : null}
         </Shell>
       );
+    }
   }
 }
 

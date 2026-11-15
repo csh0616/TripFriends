@@ -86,7 +86,7 @@ def _misses_fixed(stops: list[DelayStop], shift: int, left_at: int) -> bool:
     ready = left_at  # 앞 일정이 끝나 이동을 시작하는 시각
     for stop in stops:
         start, end = _minutes(stop.start), _minutes(stop.end)
-        new_start = max(start, ready + stop.travel_min)
+        new_start = max(start, ready + (stop.travel_min if stop.lat is not None else 0))  # §14 Q1: 위치 없는 일정은 이동 분 없이 시작 시각만
         if stop.is_fixed:
             if new_start > start:
                 return True
@@ -97,15 +97,25 @@ def _misses_fixed(stops: list[DelayStop], shift: int, left_at: int) -> bool:
 
 
 def detect_delay(course: DelayCourse, at: datetime, position: tuple[float, float] | None) -> DelayFinding | None:
-    """A1~A5. 위치가 없거나, 150m 안에 코스 장소가 없거나(이동 중), 마지막 장소이거나, 10분 미만이면 None."""
+    """A1~A5. 위치가 없거나, 150m 안에 코스 장소가 없거나(이동 중), 마지막 장소이거나, 위치 없는 일정 묶음 안이거나, 10분 미만이면 None."""
     if position is None:
         return None
     index = _at_place(course, position)
     if index is None or index + 1 >= len(course.stops):
         return None  # 지킬 다음 일정이 없으면 늦어짐도 없다 (A2)
-    here, following = course.stops[index], course.stops[index + 1]
-    leave = _minutes(following.start) - following.travel_min  # 예정 출발 시각
+    here, following_index = course.stops[index], index + 1
     now_seconds = at.hour * 3600 + at.minute * 60 + at.second
+    if course.stops[following_index].lat is None:
+        # TASK-014 §14~§17: 위치 없는 고정 일정이 (연달아) 있으면 사이에 위치 있는 장소가 없는 묶음 전체(첫 시작~마지막 끝, 빈 시간 포함, 끝 정각 포함)
+        # 동안은 판단하지 않는다 (T-07이 시각으로 알림). 묶음 중간에 위치 모르는 일정을 거쳐 가니 "지금 자리 -> 다음 장소" 이동 시간을 믿을 수 없다
+        while following_index < len(course.stops) and course.stops[following_index].lat is None:
+            following_index += 1
+        if now_seconds <= _minutes(course.stops[following_index - 1].end) * 60:
+            return None
+        if following_index >= len(course.stops):
+            return None  # 묶음 뒤에 지킬 장소가 없다
+    following = course.stops[following_index]
+    leave = _minutes(following.start) - following.travel_min  # 예정 출발 시각 (건너뛴 묶음이 있어도 그 장소의 엔진 이동 값)
     late_seconds = now_seconds - leave * 60
     if late_seconds <= 0:
         return None
@@ -113,7 +123,7 @@ def detect_delay(course: DelayCourse, at: datetime, position: tuple[float, float
     lim = _limits()
     if delay < lim.min_delay_min:
         return None
-    high = delay >= lim.high_delay_min or _misses_fixed(course.stops[index + 1 :], delay, leave + delay)
+    high = delay >= lim.high_delay_min or _misses_fixed(course.stops[following_index:], delay, leave + delay)
     return DelayFinding(here.seq, delay, "high" if high else "low", f"delay:{course.day_id}:{here.seq}")
 
 

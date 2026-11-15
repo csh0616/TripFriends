@@ -330,8 +330,8 @@ describe('§14 시드 코스 데모 지연', () => {
 
   test('T7_S14_시드_13시05분_지연_0은_길_위_fakePosition_그대로', async () => {
     const control = await at1305();
-    // 12:40~13:11 사이 25/31 지점 (지연 0은 TASK-006 그대로)
-    const ratio = 25 / 31;
+    // §29 ③·§33: 출발 12:55(3번 13:11 − 이동 16분)까지 2번에 제자리, 그 뒤 이동 16분 동안 -> 13:05 = 10/16 지점 (지연 0은 fakePosition 그대로)
+    const ratio = 10 / 16;
     expectSentAt(control.checks().at(-1), {
       lat: SPOT.D20.lat + (SPOT.D30.lat - SPOT.D20.lat) * ratio,
       lng: SPOT.D20.lng + (SPOT.D30.lng - SPOT.D20.lng) * ratio,

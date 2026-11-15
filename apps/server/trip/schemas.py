@@ -2,7 +2,7 @@
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from planning.schemas import DaySummary, Fact, LatLng
 
@@ -10,6 +10,7 @@ from planning.schemas import DaySummary, Fact, LatLng
 class NowCourseItem(BaseModel):
     """여행 중 화면의 일정 한 개. 기존 CourseItemView(계획 화면)와 별개 (Q8)."""
 
+    model_config = ConfigDict(extra="forbid")  # TASK-014 §12: 연습 기록으로 들어올 때 칸이 더 붙으면 400
     seq: int
     place_id: str | None  # 장소 없는 고정 일정이면 null
     name: str  # 장소 이름, 장소가 없는 고정 일정이면 저장된 title
@@ -52,6 +53,7 @@ class NowCardT03(BaseModel):
 
 
 class NowDropped(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # TASK-014 §12: 연습 기록으로 들어올 때 칸이 더 붙으면 400
     place_id: str
     name: str
 
@@ -59,6 +61,7 @@ class NowDropped(BaseModel):
 class NowProposal(BaseModel):
     """늦어짐 대안 한 개 (TASK-007 B-5). items = 제안대로 바뀌는 남은 일정."""
 
+    model_config = ConfigDict(extra="forbid")  # TASK-014 §12: 연습 기록으로 들어올 때 칸이 더 붙으면 400
     proposal_id: str
     label: Literal["relaxed", "packed"]
     reason: str
@@ -69,6 +72,7 @@ class NowProposal(BaseModel):
 
 
 class NowPlaceRef(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # TASK-014 §12: 연습 기록으로 들어올 때 칸이 더 붙으면 400
     place_id: str
     name: str
 
@@ -76,6 +80,7 @@ class NowPlaceRef(BaseModel):
 class NowClosedInfo(BaseModel):
     """닫힘 대안 한 줄 (TASK-008 §12 Q21). 대안의 사실 칩은 제안 items 안 그 장소 줄의 facts."""
 
+    model_config = ConfigDict(extra="forbid")  # TASK-014 §12: 연습 기록으로 들어올 때 칸이 더 붙으면 400
     alternative: NowPlaceRef | None  # [빼고 가기]면 null
     distance_m: int | None  # 닫힌 곳에서 직선거리 m, [빼고 가기]면 null
     travel_change_min: int  # 남은 이동 분 합(숙소 복귀 포함), 바뀐 뒤 - 바뀌기 전
@@ -89,6 +94,7 @@ class NowT06Proposal(NowProposal):
 
 
 class NowEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # TASK-014 §12: 연습 기록으로 들어올 때 칸이 더 붙으면 400
     event_id: str
     type: Literal["delay", "closed"] = "delay"
     severity: Literal["low", "high"]
@@ -142,9 +148,9 @@ class NowCardT07(BaseModel):
 
 class NowCardT08(BaseModel):
     type: Literal["T-08"] = "T-08"
-    go_home_min: int
-    lodging: LatLng
-    map_url: str
+    go_home_min: int | None  # 숙소 없음(TASK-014 §31): 셋 다 null
+    lodging: LatLng | None
+    map_url: str | None
 
 
 NowCard = Annotated[
@@ -170,8 +176,14 @@ class NowRoute(BaseModel):
     remaining: list[tuple[float, float]]
 
 
+class NowDaySummary(DaySummary):
+    """NowView의 day. 숙소 없는 여행이면 lodging = null (TASK-014 §29). 계획 응답의 DaySummary는 그대로."""
+
+    lodging: LatLng | None
+
+
 class NowView(BaseModel):
-    day: DaySummary
+    day: NowDaySummary
     at: str
     status: Literal["on_track", "delayed", "free"]
     status_text: str

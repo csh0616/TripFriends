@@ -138,6 +138,7 @@ class PlanningSession(BaseModel):
 
 
 class Fact(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # TASK-014 §12: 연습 기록의 사건 안에서도 칸이 더 붙으면 거부
     field: str
     value: str | None
     status: HoursStatus
@@ -239,7 +240,7 @@ class SeedRequest(_Request):
 
     chosen: bool = False
     # TASK-010 §13 PM 답 1: 데모 시계를 N일 뒤로 돌린다 -> 첫 N일이 지난 날 (응답 trip_days의 state, 기존 day_state 규칙)
-    past_days: int = Field(default=0, ge=0, le=2)
+    past_days: int = Field(default=0, ge=0, le=3)  # TASK-014 §14 Q3: 최대 = 데모 여행 일수 (DEMO_DATES 3일, 전부 지난 = 끝난 여행)
     # TASK-012 §11 Q2: 점검(Maestro) 전용. true일 때만 그 사용자의 지금 여행으로 붙이고 이전 여행은 archived. 아니면 지금 여행을 바꾸지 않는다
     as_current: bool = False
 

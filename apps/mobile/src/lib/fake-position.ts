@@ -8,7 +8,8 @@ import { minutesOfAt, toMinutes } from './demo-clock';
 type Spot = { lat: number; lng: number };
 export type FakeCourseItem = Spot & { start: string; end: string; travel_min: number };
 // go_home_min이 null이면(숙소까지 시간을 아직 모름) 마지막 장소에 머문다 // 미정(TASK-006): 문서에 없는 경우
-export type FakeCourse = { lodging: Spot; items: FakeCourseItem[]; go_home_min: number | null };
+// lodging이 null이면(숙소 없는 여행, §29 ④) 첫 일정 전 = 1번 장소, 마지막 뒤 = 마지막 장소
+export type FakeCourse = { lodging: Spot | null; items: FakeCourseItem[]; go_home_min: number | null };
 
 const between = (from: Spot, to: Spot, ratio: number): Spot => ({
   lat: from.lat + (to.lat - from.lat) * ratio,
@@ -22,8 +23,12 @@ export function fakePosition(at: string, course: FakeCourse): Spot | null {
 
   const first = items[0];
   const leave = toMinutes(first.start) - first.travel_min;
-  if (now < leave) return { lat: lodging.lat, lng: lodging.lng };
-  if (now < toMinutes(first.start)) return between(lodging, first, (now - leave) / first.travel_min);
+  if (!lodging) {
+    if (now < toMinutes(first.start)) return { lat: first.lat, lng: first.lng };
+  } else {
+    if (now < leave) return { lat: lodging.lat, lng: lodging.lng };
+    if (now < toMinutes(first.start)) return between(lodging, first, (now - leave) / first.travel_min);
+  }
 
   for (let i = 0; i < items.length; i += 1) {
     const item = items[i];
@@ -31,14 +36,18 @@ export function fakePosition(at: string, course: FakeCourse): Spot | null {
     if (now >= start && now < end) return { lat: item.lat, lng: item.lng };
     const next = items[i + 1];
     if (next && now >= end && now < toMinutes(next.start)) {
-      return between(item, next, (now - end) / (toMinutes(next.start) - end));
+      // §29 ③·§30 Q7: 출발 = 다음 시작 − 이동 시간(빈 시간이 더 짧으면 앞 장소가 끝나자마자). 그 전까지 제자리
+      const nextStart = toMinutes(next.start);
+      const depart = Math.max(end, nextStart - next.travel_min);
+      if (now < depart) return { lat: item.lat, lng: item.lng };
+      return between(item, next, (now - depart) / (nextStart - depart));
     }
   }
 
   const last = items[items.length - 1];
   const passed = now - toMinutes(last.end);
   const home = course.go_home_min;
-  if (home === null) return { lat: last.lat, lng: last.lng };
+  if (home === null || !lodging) return { lat: last.lat, lng: last.lng };
   if (home > 0 && passed < home) return between(last, lodging, passed / home);
   return { lat: lodging.lat, lng: lodging.lng };
 }
@@ -54,7 +63,7 @@ export function delayedPosition(at: string, delayMin: number, course: FakeCourse
   if (now === null || items.length === 0) return null;
   const t = now - delayMin;
   // 시작이 t 이하인 마지막 장소 = 일정 안이면 그 장소, 이동 중이면 막 떠난 앞 장소. 없으면(첫 일정 전) 숙소
-  let staying: Spot = lodging;
+  let staying: Spot = lodging ?? items[0];
   for (const item of items) {
     if (toMinutes(item.start) <= t) staying = item;
   }

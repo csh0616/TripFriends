@@ -37,6 +37,7 @@ from trip.schemas import (
     NowRoute,
     NowT04Fixed,
     NowT06Proposal,
+    NowDaySummary,
     NowView,
 )
 from trip.repo import EventRecord, ProposalRecord
@@ -52,6 +53,7 @@ DAY_OVER_PILL = "오늘 일정 끝"  # TASK-007 F1
 
 def delayed_text(delay_min: int) -> str:
     return f"{delay_min}분 늦어지는 중"  # TASK-007 B-5
+NO_LODGING_DAY_OVER = "오늘 일정이 끝났어. 오늘도 수고했어!"  # TASK-014 §31 Q3: 숙소 없음
 EMPTY_COURSE_REASON = "오늘 코스가 비어 있어"  # §11 Q13
 T01_PAIRS = ("T-02", "T-03")  # SCREEN-001 §5 짝 표: T-01의 보조
 
@@ -305,6 +307,8 @@ def _card(
             leave_in_min=max(0, fixed.leave_min - m.now_min),  # Q4: 출발 시각이 지나도 시작 전이면 0
         )
     if kind == "T-08":
+        if not day.lodging_known:
+            return NowCardT08(go_home_min=None, lodging=None, map_url=None)  # §31 Q2: 숙소 없는 모양
         lat, lng = day.plan.lodging
         return NowCardT08(go_home_min=course.go_home_min, lodging=LatLng(lat=lat, lng=lng), map_url=_transit_url(lat, lng))
     return None
@@ -351,14 +355,28 @@ def _pins(entries: list[_Entry], m: _Moment) -> list[NowPin]:
     return pins
 
 
-def _route(entries: list[_Entry], m: _Moment, home: tuple[float, float], position: tuple[float, float] | None) -> NowRoute:
-    """숙소 -> 1 -> 2 … -> 숙소. 지난 길 끝 = 남은 길 시작 (Q11). 위치는 이동 중일 때만 경계 점 (R2·R3)."""
+def _route(entries: list[_Entry], m: _Moment, home: tuple[float, float] | None, position: tuple[float, float] | None) -> NowRoute:
+    """숙소 -> 1 -> 2 … -> 숙소. 지난 길 끝 = 남은 길 시작 (Q11). 위치는 이동 중일 때만 경계 점 (R2·R3).
+    home이 None(숙소 없음, TASK-014 §30 Q4)이면 첫·마지막 선이 없다: 장소들만 잇는다."""
     placed = [e for e in entries if e.place is not None]
     passed = [e for e in placed if e.end_min <= m.now_min or e is m.current]
     rest = [e for e in placed if e not in passed]
-    done = [home, *[(e.place.lat, e.place.lng) for e in passed if e.place]]
+    done = ([home] if home else []) + [(e.place.lat, e.place.lng) for e in passed if e.place]
+    if not placed:
+        return NowRoute(done=[], remaining=[])  # 빈 코스 날 (숙소 없음)
+    on_the_way = m.traveling and m.following is not None and position is not None
+    if home is None:
+        if on_the_way:
+            assert position is not None
+            done.append(position)
+            boundary = position
+        else:
+            boundary = done[-1] if done else None
+        remaining = ([boundary] if boundary else []) + [(e.place.lat, e.place.lng) for e in rest if e.place]
+        return NowRoute(done=done, remaining=remaining)
     boundary = done[-1]
-    if m.traveling and m.following is not None and position is not None:
+    if on_the_way:
+        assert position is not None
         boundary = position
         done.append(boundary)
     remaining = [boundary, *[(e.place.lat, e.place.lng) for e in rest if e.place], home]
@@ -395,9 +413,11 @@ def build_now_view(
     event = 부르는 쪽이 정한 화면 사건(방금 처리된 사건 등), others = 그 밖에 열려 있는 사건 (종류마다 하나, TASK-008 §7).
     checks = 그날 사용자 영업 확인 기록 (TASK-008 A5)."""
     checks = checks or {}
-    summary = day_summary(day_id, day, stay_overrides)
+    summary = NowDaySummary(**day_summary(day_id, day, stay_overrides).model_dump())
+    if not day.lodging_known:
+        summary.lodging = None  # §29: 도시 중심을 숙소인 척 내보내지 않는다 (서버 안 계산은 그대로 씀)
     weekday = day.plan.date.weekday()
-    home = (day.plan.lodging[0], day.plan.lodging[1])
+    home = (day.plan.lodging[0], day.plan.lodging[1]) if day.lodging_known else None
     now_min = at.hour * 60 + at.minute
     entries = _entries(day, course)
     m = _moment(entries, now_min)
@@ -408,7 +428,7 @@ def build_now_view(
     to_check = check_target(entries, m, weekday, checks)
     screen = compose_screen(_snapshot(m, delay_awaiting is not None, closed_awaiting is not None, to_check))
 
-    main_kind, subs_kinds, reason = _decide(screen, m, entries)
+    main_kind, subs_kinds, reason = _decide(screen, m, entries, day.lodging_known)
     card_event = delay_awaiting if main_kind == "T-04" else closed_awaiting
     main = _card(main_kind, m, entries, course, day, weekday, card_event, checks, to_check, map_id)
     if main is None:  # 만들 수 없는 카드는 T-01로 (A3와 같은 안전장치)
@@ -443,7 +463,7 @@ def _replace_with_t01(kind: str, screen: Screen) -> tuple[str, list[str], str]:
     return "T-01", list(T01_PAIRS), REASONS["T-01"]
 
 
-def _decide(screen: Screen, m: _Moment, entries: list[_Entry]) -> tuple[str, list[str], str]:
+def _decide(screen: Screen, m: _Moment, entries: list[_Entry], lodging_known: bool = True) -> tuple[str, list[str], str]:
     """compose 결과 -> (메인, 보조, 이유). A3 대체와 하루가 끝난 뒤 T-08(Q1·R1·Q13)을 NowView 층에서 처리한다."""
     kind, subs, reason = screen.main, list(screen.subs), screen.reason
     if kind not in SUPPORTED:
@@ -452,7 +472,7 @@ def _decide(screen: Screen, m: _Moment, entries: list[_Entry]) -> tuple[str, lis
     if not entries:
         return "T-08", [], EMPTY_COURSE_REASON  # Q13: 빈 코스를 고른 날
     if day_over and kind in ("T-01", "T-08"):
-        return "T-08", [], DAY_OVER_REASON  # Q1·F2: 마지막 일정이 끝나면 시각과 무관하게 T-08, 이유는 문장 하나 (compose는 18시 전이면 T-01)
+        return "T-08", [], DAY_OVER_REASON if lodging_known else NO_LODGING_DAY_OVER  # Q1·F2: 마지막 일정이 끝나면 시각과 무관하게 T-08, 이유는 문장 하나 (compose는 18시 전이면 T-01)
     return kind, subs, reason
 
 

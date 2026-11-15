@@ -18,13 +18,15 @@ export function RouteDiagram({
   stops,
 }: {
   width: number;
-  home: { lat: number; lng: number };
+  /** 숙소가 없으면 null: 집 그림 없이 핀만 (§29 ④) */
+  home: { lat: number; lng: number } | null;
   stops: { seq: number; lat: number; lng: number }[];
 }) {
   const height = layout.routeDiagram;
-  const points = projectRoute([home, ...stops], width, height, layout.routePad);
-  const homeLines = homeIconLines(points[0].x, points[0].y, layout.routeHomeIcon);
-  const line = points.map((p) => `${p.x},${p.y}`).join(' ');
+  const all = projectRoute(home ? [home, ...stops] : stops, width, height, layout.routePad);
+  const points = home ? all : [{ x: 0, y: 0 }, ...all]; // 아래 코드는 points[0] = 집, points[i + 1] = 핀
+  const homeLines = home ? homeIconLines(points[0].x, points[0].y, layout.routeHomeIcon) : [];
+  const line = all.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
     <View testID="route-diagram" style={[styles.diagram, { width, height }]}>
@@ -40,6 +42,7 @@ export function RouteDiagram({
             strokeLinejoin="round"
           />
         ) : null}
+        {home ? (
         <Circle
           testID="route-home"
           cx={points[0].x}
@@ -49,6 +52,7 @@ export function RouteDiagram({
           stroke={color.ink}
           strokeWidth={layout.routeHomeStroke}
         />
+        ) : null}
         {/* 집 아이콘: 변환 없이 좌표를 직접 계산한 Polyline 2개 (중첩 Svg는 안 그려졌다) */}
         {homeLines.map((points, i) => (
           <Polyline

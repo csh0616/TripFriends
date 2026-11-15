@@ -64,12 +64,13 @@
 
 | 메서드·경로 | 요청 | 응답 | FR·AC |
 |---|---|---|---|
-| GET `/days/{day_id}/now?lat&lng&at` | 현재 위치·시간 (위치는 저장 안 함) | `NowView`: 지금 할 일, 다음 이동, 남은 일정, 숙소 가는 방법, 열린 사건·대안 | FR-10·16 |
+| GET `/days/{day_id}/now?at` | 현재 시간. **위치는 주소창에 싣지 않는다**(모든 길 400, TASK-014 §10 Q2) — 위치는 `POST /check` 본문으로만, 저장 안 함 | `NowView`: 지금 할 일, 다음 이동, 남은 일정, 숙소 가는 방법, 열린 사건·대안 | FR-10·16 |
+| (11-15 TASK-014 §29·§31) `NowView.day.lodging` | 숙소를 입력하지 않았거나 좌표를 못 찾은 여행이면 **`null`** (도시 중심을 숙소처럼 내보내지 않음). 그때 T-08은 숨기지 않고 **숙소 없는 모양**(`lodging: null`, `map_url: null`, `go_home_min: null` → 앱이 "오늘 일정 끝" 카드), 집 표시 없음, 경로 선에 도시 중심 없음 | — | FR-30 관련 |
 | POST `/days/{day_id}/check` | `{lat, lng, at}` | 새 `TripEvent[]` + `RecomposeProposal[]` (같은 사건은 다시 안 만듦) | FR-11·12·19, AC-05·10 |
 | POST `/proposals/{proposal_id}/accept` | — | `TripDay` (반영) | FR-13 |
 | POST `/proposals/{proposal_id}/dismiss` | — | 204 (일정 그대로) | FR-13, AC-06 |
 | POST `/places/{place_id}/visit-checks` | `{trip_day_id, was_open}` | 닫혔으면 대안 3곳 | FR-14·15, AC-07·08 |
-| GET `/sos?lat&lng&trip_id` | — | 긴급 번호, 현재 위치 주소, 숙소 주소 (오프라인 캐시용) | FR-30, AC-11 |
+| POST `/sos` | `{trip_id, lat?, lng?}` (**위치는 본문으로만**, TASK-014 §10 Q2 — 주소창에 `lat`·`lng`면 모든 길 400) | 긴급 번호, 현재 위치 주소, 숙소 주소 (오프라인 캐시용) | FR-30, AC-11 (TASK-015) |
 
 ### 2-4. 대화 (R2)
 | 메서드·경로 | 요청 | 응답 | FR·AC |

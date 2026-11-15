@@ -149,4 +149,33 @@ export const layout = {
   fieldErrorLine: 2,
   // 누르는 영역 보강: 칩 36 -> 44
   chipSlop: (touchMin - chip) / 2,
+  // TASK-014 DESIGN-001 §4-13 위치·연습 모드 (토큰 이름이 없어 문서 숫자 그대로)
+  locIconCircle: 48, // loc-sheet 아이콘 원
+  locIcon: 24, // 원 안 핀
+  factIcon: 16, // fact-line 자물쇠
+  pillOff: 32, // pill-off 보이는 높이 (누르는 44는 hitSlop)
+  pillOffGap: 10, // 이동 상태 알약 아래 간격
+  pillOffIcon: 16,
+  statusPill: 36, // 이동 상태 알약 높이 (pill-off 자리 계산용)
+  rehBand: 52, // reh-band 높이
+  rehClock: 112, // reh-clock 판 높이
+  rehSheetTop: 434, // 연습 카드 시트(중간 단) 윗변 y: 보드 ①-35, 화면 874 기준 (TASK-014 §20 Q2). 다른 화면 높이는 이 비율로 줄인다
+  rehBoardHeight: 874, // 보드 ①-35 화면 높이
+  rehBoardBottom: 34, // 보드 아래 안전 영역
+  rehPlusWidth: 84, // reh-clock [+10분] 폭
+  rehPlayWidth: 96, // reh-clock [재생] 폭
+  rehDot: 20, // reh-dot 바깥 지름
+  rehDotRing: 3, // reh-dot 고리
+  rehIcon: 18, // 띠 아이콘
+  headIcon: 24, // head-avatar 사람 아이콘
+  rehBar: 6, // reh-clock 막대 두께 (모서리 3)
+  rehThumbBorder: 3, // reh-clock 손잡이 흰 테두리
+  rehThumb: 28, // reh-clock 막대 손잡이 (누르는 높이는 막대 줄 44)
+  rehButtonIcon: 16, // reh-clock 버튼 안 아이콘 (문서에 크기가 없어 btn-chip-sm 아이콘 16과 같게)
+  dateNumSize: 13, // D6 날짜 숫자 DM Mono 13/18 (TASK-014 §21 2, 토큰에 13/18 DM Mono가 없어 여기에 둔다)
+  dateNumLine: 18,
+  rehEndHeight: 36, // [연습 끝내기] 보이는 높이 (누르는 44)
+  rehRowExtra: 40, // row-done-rehearse: 84 + 버튼 줄 40 = 124
+  chipSmIcon: 16, // btn-chip-sm 아이콘
+  noticeInfoHeight: 44, // notice-info
 } as const;

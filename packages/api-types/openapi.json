@@ -2250,10 +2250,61 @@
           }
         ]
       }
+    },
+    "/debug/reset-test-account": {
+      "post": {
+        "summary": "Debug Reset Test Account",
+        "description": "개발용(TASK-014 §21): 로컬 DB에서 고정 테스트 계정 하나만 지운다. 본문·쿼리 값은 받지 않는다. 로컬 DB가 아니면 길이 없는 것처럼 404.",
+        "operationId": "debug_reset_test_account_debug_reset_test_account_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "AcceptAction": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "accept",
+            "title": "Type"
+          },
+          "event": {
+            "$ref": "#/components/schemas/NowEvent"
+          },
+          "proposal_id": {
+            "type": "string",
+            "title": "Proposal Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "event",
+          "proposal_id"
+        ],
+        "title": "AcceptAction"
+      },
       "AdjustRequest": {
         "properties": {
           "option_id": {
@@ -2508,6 +2559,49 @@
               }
             ],
             "title": "Lng"
+          },
+          "rehearsal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rehearsal"
+          },
+          "rehearsal_actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AcceptAction"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DismissAction"
+                    },
+                    {
+                      "$ref": "#/components/schemas/VisitCheckAction"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                      "accept": "#/components/schemas/AcceptAction",
+                      "dismiss": "#/components/schemas/DismissAction",
+                      "visit_check": "#/components/schemas/VisitCheckAction"
+                    }
+                  }
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rehearsal Actions"
           }
         },
         "type": "object",
@@ -2997,6 +3091,25 @@
         ],
         "title": "DirectionChoice"
       },
+      "DismissAction": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "dismiss",
+            "title": "Type"
+          },
+          "event": {
+            "$ref": "#/components/schemas/NowEvent"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "event"
+        ],
+        "title": "DismissAction"
+      },
       "DroppedView": {
         "properties": {
           "place_id": {
@@ -3112,6 +3225,7 @@
             "title": "Checked At"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "field",
@@ -3601,14 +3715,35 @@
             "default": "T-08"
           },
           "go_home_min": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Go Home Min"
           },
           "lodging": {
-            "$ref": "#/components/schemas/LatLng"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatLng"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "map_url": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Map Url"
           }
         },
@@ -3652,6 +3787,7 @@
             "title": "Reordered"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "alternative",
@@ -3725,6 +3861,7 @@
             "title": "Facts"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "seq",
@@ -3740,6 +3877,68 @@
         "title": "NowCourseItem",
         "description": "여행 중 화면의 일정 한 개. 기존 CourseItemView(계획 화면)와 별개 (Q8)."
       },
+      "NowDaySummary": {
+        "properties": {
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "day_number": {
+            "type": "integer",
+            "title": "Day Number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "lodging": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatLng"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "must_visits": {
+            "items": {
+              "$ref": "#/components/schemas/DayMustVisit"
+            },
+            "type": "array",
+            "title": "Must Visits"
+          },
+          "fixed": {
+            "items": {
+              "$ref": "#/components/schemas/DayFixed"
+            },
+            "type": "array",
+            "title": "Fixed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_id",
+          "day_number",
+          "date",
+          "start",
+          "end",
+          "lodging",
+          "must_visits",
+          "fixed"
+        ],
+        "title": "NowDaySummary",
+        "description": "NowView의 day. 숙소 없는 여행이면 lodging = null (TASK-014 §29). 계획 응답의 DaySummary는 그대로."
+      },
       "NowDropped": {
         "properties": {
           "place_id": {
@@ -3751,6 +3950,7 @@
             "title": "Name"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "place_id",
@@ -3809,6 +4009,7 @@
             "title": "Proposals"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "event_id",
@@ -3926,6 +4127,7 @@
             "title": "Name"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "place_id",
@@ -3974,6 +4176,7 @@
             "title": "Items"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "proposal_id",
@@ -4093,6 +4296,7 @@
             "$ref": "#/components/schemas/NowClosedInfo"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
           "proposal_id",
@@ -4110,7 +4314,7 @@
       "NowView": {
         "properties": {
           "day": {
-            "$ref": "#/components/schemas/DaySummary"
+            "$ref": "#/components/schemas/NowDaySummary"
           },
           "at": {
             "type": "string",
@@ -4780,7 +4984,7 @@
           },
           "past_days": {
             "type": "integer",
-            "maximum": 2.0,
+            "maximum": 3.0,
             "minimum": 0.0,
             "title": "Past Days",
             "default": 0
@@ -5256,6 +5460,41 @@
         ],
         "title": "ValidationError"
       },
+      "VisitCheckAction": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "visit_check",
+            "title": "Type"
+          },
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "was_open": {
+            "type": "boolean",
+            "title": "Was Open"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "place_id",
+          "day_id",
+          "at",
+          "was_open"
+        ],
+        "title": "VisitCheckAction"
+      },
       "VisitCheckRequest": {
         "properties": {
           "day_id": {
@@ -5269,6 +5508,49 @@
           "was_open": {
             "type": "boolean",
             "title": "Was Open"
+          },
+          "rehearsal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rehearsal"
+          },
+          "rehearsal_actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/AcceptAction"
+                    },
+                    {
+                      "$ref": "#/components/schemas/DismissAction"
+                    },
+                    {
+                      "$ref": "#/components/schemas/VisitCheckAction"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                      "accept": "#/components/schemas/AcceptAction",
+                      "dismiss": "#/components/schemas/DismissAction",
+                      "visit_check": "#/components/schemas/VisitCheckAction"
+                    }
+                  }
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rehearsal Actions"
           }
         },
         "type": "object",

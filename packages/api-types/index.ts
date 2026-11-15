@@ -487,10 +487,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/debug/reset-test-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Debug Reset Test Account
+         * @description 개발용(TASK-014 §21): 로컬 DB에서 고정 테스트 계정 하나만 지운다. 본문·쿼리 값은 받지 않는다. 로컬 DB가 아니면 길이 없는 것처럼 404.
+         */
+        post: operations["debug_reset_test_account_debug_reset_test_account_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptAction */
+        AcceptAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "accept";
+            event: components["schemas"]["NowEvent"];
+            /** Proposal Id */
+            proposal_id: string;
+        };
         /** AdjustRequest */
         AdjustRequest: {
             /** Option Id */
@@ -578,6 +609,10 @@ export interface components {
             lat?: number | null;
             /** Lng */
             lng?: number | null;
+            /** Rehearsal */
+            rehearsal?: boolean | null;
+            /** Rehearsal Actions */
+            rehearsal_actions?: (components["schemas"]["AcceptAction"] | components["schemas"]["DismissAction"] | components["schemas"]["VisitCheckAction"])[] | null;
         };
         /** Choice */
         Choice: {
@@ -746,6 +781,15 @@ export interface components {
             id: "quieter" | "closer" | "cheaper" | "different" | "photo" | "indoor" | "food" | "night";
             /** Label */
             label: string;
+        };
+        /** DismissAction */
+        DismissAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "dismiss";
+            event: components["schemas"]["NowEvent"];
         };
         /**
          * DroppedView
@@ -1001,10 +1045,10 @@ export interface components {
              */
             type: "T-08";
             /** Go Home Min */
-            go_home_min: number;
-            lodging: components["schemas"]["LatLng"];
+            go_home_min: number | null;
+            lodging: components["schemas"]["LatLng"] | null;
             /** Map Url */
-            map_url: string;
+            map_url: string | null;
         };
         /**
          * NowClosedInfo
@@ -1042,6 +1086,30 @@ export interface components {
             is_fixed: boolean;
             /** Facts */
             facts: components["schemas"]["Fact"][];
+        };
+        /**
+         * NowDaySummary
+         * @description NowView의 day. 숙소 없는 여행이면 lodging = null (TASK-014 §29). 계획 응답의 DaySummary는 그대로.
+         */
+        NowDaySummary: {
+            /** Day Id */
+            day_id: string;
+            /** Day Number */
+            day_number: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            lodging: components["schemas"]["LatLng"] | null;
+            /** Must Visits */
+            must_visits: components["schemas"]["DayMustVisit"][];
+            /** Fixed */
+            fixed: components["schemas"]["DayFixed"][];
         };
         /** NowDropped */
         NowDropped: {
@@ -1191,7 +1259,7 @@ export interface components {
         };
         /** NowView */
         NowView: {
-            day: components["schemas"]["DaySummary"];
+            day: components["schemas"]["NowDaySummary"];
             /** At */
             at: string;
             /**
@@ -1658,6 +1726,22 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** VisitCheckAction */
+        VisitCheckAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "visit_check";
+            /** Place Id */
+            place_id: string;
+            /** Day Id */
+            day_id: string;
+            /** At */
+            at: string;
+            /** Was Open */
+            was_open: boolean;
+        };
         /**
          * VisitCheckRequest
          * @description 영업 확인 답 (TASK-008 A5). at은 시간대 없는 그날의 시각.
@@ -1669,6 +1753,10 @@ export interface components {
             at: string;
             /** Was Open */
             was_open: boolean;
+            /** Rehearsal */
+            rehearsal?: boolean | null;
+            /** Rehearsal Actions */
+            rehearsal_actions?: (components["schemas"]["AcceptAction"] | components["schemas"]["DismissAction"] | components["schemas"]["VisitCheckAction"])[] | null;
         };
     };
     responses: never;
@@ -3363,6 +3451,33 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    debug_reset_test_account_debug_reset_test_account_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

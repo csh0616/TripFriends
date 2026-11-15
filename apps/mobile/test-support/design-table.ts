@@ -52,6 +52,10 @@ export const TYPE: Record<string, { size: number; lineHeight: number; weight: nu
   // §4-10 출처 글자 (TASK-010 §13 질문 3)
   src: { size: 12, lineHeight: 16, weight: 500 },
   'src-google': { size: 12, lineHeight: 16, weight: 400, family: 'Roboto', color: '#5E5E5E' },
+  // TASK-014 §14 Q2 · DESIGN-001 §4-13 reh-clock(= task-014-design §2): 연습 시계 시각 DM Mono 22/28·500, 시작·끝 DM Mono 12/16·500 (muted는 쓰는 곳의 색).
+  // 이름은 기존 숫자 글자 규칙 num-xl(44)·num-md(14)에 맞춰 크기 순 num-lg(22)·num-sm(12) (test-writer가 정함, 승인 대기)
+  'num-lg': { size: 22, lineHeight: 28, weight: 500, family: 'DM Mono' },
+  'num-sm': { size: 12, lineHeight: 16, weight: 500, family: 'DM Mono' },
 };
 
 // §4-3 숫자 토큰 (Q15 r-full·icon-stroke, Q28 r-xl·r-tail)

@@ -2,7 +2,7 @@
 // 계획 대화·코스안 머리에는 없다. 머리 왼쪽 끝은 16 (머리 좌우 여백 20보다 4 안쪽으로 당긴다).
 import { Pressable, StyleSheet } from 'react-native';
 
-import { FriendAvatar } from '@/components/planning/friend-bubble';
+import { PersonIcon } from '@/components/planning/icons';
 import { layout } from '@/planning/layout';
 import { account, radius } from '@/planning/theme';
 
@@ -11,7 +11,7 @@ const HEAD = account['head-avatar'];
 export function HeadAvatar({ onPress }: { onPress: () => void }) {
   return (
     <Pressable testID="head-avatar" accessibilityRole="button" accessibilityLabel="내 프로필" onPress={onPress} style={styles.button}>
-      <FriendAvatar testID="head-avatar-icon" />
+      <PersonIcon color={HEAD.fg} size={layout.headIcon} />
     </Pressable>
   );
 }

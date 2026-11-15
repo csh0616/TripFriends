@@ -7,7 +7,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
+from urllib.parse import urlparse
+
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -20,7 +22,7 @@ from api.now import router as now_router
 from api.trip import router as trip_router
 from api.access import UserId
 from api.auth import JwksCache
-from api.gate import Gate, UnitOfWork
+from api.gate import Gate, RejectPositionQuery, UnitOfWork
 from api.trips import api_error_handler, router as trips_router, trip_validation_handler
 from api.planning import _doc, drop_default_422, http_error_response, is_planning_path, is_trip_path, planning_error_handler, planning_validation_handler, router as planning_router
 from engine.compose import Screen, Snapshot, compose_screen
@@ -42,16 +44,17 @@ from planning.seed import DEMO_DATES
 
 log = logging.getLogger(__name__)
 
-# TASK-010 §9 Q19·§E5: 요청 기록 줄(uvicorn.access)은 남기되 쿼리의 위치 값만 가린다 (실제 GPS는 TASK-011, 그 전의 바닥)
-_POSITION_QUERY = re.compile(r"([?&](?:lat|lng|lon|latitude|longitude)=)[^&\s\"]*", re.IGNORECASE)
+# TASK-014 §13 3: 요청 기록 줄(uvicorn.access)에는 길만 남기고 쿼리 문자열을 통째로 지운다 (TASK-010 §E5의 키 가리기를 대체).
+# 막는 쪽(RejectPositionQuery)과 가리는 쪽이 키를 다르게 읽는 문제(%6Cat 등)가 구조적으로 없다. 우리 로그에 쿼리가 필요한 곳은 없다
+_QUERY = re.compile(r"[?#].*", re.DOTALL)
 
 
 class MaskPosition(logging.Filter):
+    """uvicorn 요청 줄의 인자(클라이언트, 메서드, 경로+쿼리, 판, 상태) 중 경로에서 `?` 뒤를 지운다."""
+
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str):
-            record.msg = _POSITION_QUERY.sub(r"\1***", record.msg)
-        if isinstance(record.args, tuple):
-            record.args = tuple(_POSITION_QUERY.sub(r"\1***", a) if isinstance(a, str) else a for a in record.args)
+        if isinstance(record.msg, str) and isinstance(record.args, tuple):
+            record.args = tuple(_QUERY.sub("", a) if isinstance(a, str) and a.startswith("/") else a for a in record.args)
         return True
 
 
@@ -140,6 +143,7 @@ app = FastAPI(
 app.add_exception_handler(PlanningError, planning_error_handler)  # type: ignore[arg-type]
 app.add_exception_handler(ApiError, api_error_handler)  # type: ignore[arg-type]
 app.add_middleware(Gate)  # TASK-012 B2·A3: Bearer 확인 + 요청 하나 = 트랜잭션 하나
+app.add_middleware(RejectPositionQuery)  # TASK-014 B1: 가장 바깥. 쿼리에 lat·lng면 인증 전에 400
 
 
 @app.exception_handler(StorageUnavailable)
@@ -153,8 +157,8 @@ async def storage_unavailable_handler(_request: Request, exc: Exception):
 @app.exception_handler(RequestValidationError)
 async def validation_handler(request: Request, exc: RequestValidationError):
     """TASK-003 §10 Q23: 계획 API의 본문 오류는 400 공통 형식. 그 밖의 API는 FastAPI 기본(422) 그대로."""
-    if is_trip_path(request.url.path):
-        return trip_validation_handler(exc)  # TASK-010 §9 Q13: 여행 API는 400 VALIDATION_ERROR
+    if is_trip_path(request.url.path) or any("rehearsal_actions" in str(e["loc"]) or "rehearsal_actions" in str(e["msg"]) for e in exc.errors()):
+        return trip_validation_handler(exc)  # TASK-014 §12: 연습 기록 오류는 400 VALIDATION_ERROR (check 본문의 다른 오류는 그대로)  # TASK-010 §9 Q13: 여행 API는 400 VALIDATION_ERROR
     if is_planning_path(request.url.path):
         return planning_validation_handler(request, exc)
     return await request_validation_exception_handler(request, exc)
@@ -258,3 +262,30 @@ if os.environ.get("APP_ENV", "development") != "production":
             as_current=bool(body and body.as_current),
         )
         return result
+
+
+_RESET_EMAIL = "link-new@example.test"  # 개발용 계정 초기화가 지우는 유일한 계정. 요청의 어떤 값으로도 바뀌지 않는다
+_LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def _local_database_url() -> str | None:
+    """DATABASE_URL의 호스트가 정확히 로컬 주소일 때만 그 주소를 돌려준다. 없거나 다르면 None (호스트 문자열 일치, 부분 일치 아님)."""
+    url = os.environ.get("DATABASE_URL") or None
+    try:
+        host = urlparse(url).hostname if url else None
+    except ValueError:
+        return None
+    return url if host in _LOCAL_HOSTS else None
+
+
+if os.environ.get("APP_ENV", "development") != "production":
+
+    @app.post("/debug/reset-test-account", status_code=204, responses={404: {"model": ErrorResponse}})
+    def debug_reset_test_account(user: UserId) -> Response:
+        """개발용(TASK-014 §21): 로컬 DB에서 고정 테스트 계정 하나만 지운다. 본문·쿼리 값은 받지 않는다. 로컬 DB가 아니면 길이 없는 것처럼 404."""
+        url = _local_database_url()
+        if url is None:
+            raise HTTPException(status_code=404, detail="Not Found")
+        with psycopg.connect(url, autocommit=True) as conn:
+            conn.execute("delete from auth.users where email = %s", (_RESET_EMAIL,))
+        return Response(status_code=204)

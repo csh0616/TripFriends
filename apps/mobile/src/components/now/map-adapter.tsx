@@ -16,6 +16,8 @@ export type LatLng = { latitude: number; longitude: number };
 export type MapAdapterHandle = {
   /** 모든 점이 보이게 맞춘다. bottom = 시트가 가리는 높이 */
   fit: (coordinates: LatLng[], padding: { top: number; bottom: number }) => void;
+  /** TASK-014 §24: 직접 계산한 영역으로 한 번에 (연습 카메라) */
+  showRegion: (region: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }) => void;
   moveTo: (coordinate: LatLng) => void;
 };
 
@@ -113,11 +115,11 @@ function HomePin({ coordinate }: { coordinate: LatLng }) {
   );
 }
 
-function MyPosition({ coordinate }: { coordinate: LatLng }) {
+function MyPosition({ coordinate, hollow }: { coordinate: LatLng; hollow: boolean }) {
   const tracking = useTrackingBriefly('position');
   return (
-    <Marker testID="map-my-position" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_POSITION}>
-      <View style={styles.position} />
+    <Marker testID={hollow ? 'map-reh-dot' : 'map-my-position'} coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_POSITION}>
+      <View style={hollow ? styles.rehDot : styles.position} />
     </Marker>
   );
 }
@@ -213,6 +215,7 @@ function RemainingRoute({ path, metersPerPoint }: { path: LatLng[]; metersPerPoi
   );
 }
 
+const NO_CENTER: LatLng = { latitude: 36.2, longitude: 138.25 }; // 첫 응답 전 숙소·핀이 없을 때만 (곧 카메라가 옮긴다)
 const MAP_STYLE = mapStyleFile as unknown as MapViewProps['customMapStyle']; // 원본: docs/design/google-map-style.json (§13 E1)
 
 export function MapAdapter({
@@ -223,16 +226,21 @@ export function MapAdapter({
   routeDone,
   routeRemaining,
   position,
+  hollowPosition = false,
   onReady,
   onFail,
 }: {
   ref?: Ref<MapAdapterHandle>;
-  center: LatLng;
-  home: LatLng;
+  /** 숙소도 핀도 없으면 null (일본 가운데에서 시작) */
+  center: LatLng | null;
+  /** 숙소가 없으면 null: 집 표시를 그리지 않는다 (§29 ④) */
+  home: LatLng | null;
   pins: NowPin[];
   routeDone: LatLng[];
   routeRemaining: LatLng[];
   position: LatLng | null;
+  /** TASK-014 §4-13 reh-dot: 연습 중 "계획대로라면 여기" = 속이 빈 점 */
+  hollowPosition?: boolean;
   onReady: () => void;
   onFail: () => void;
 }) {
@@ -247,6 +255,9 @@ export function MapAdapter({
         edgePadding: { top: padding.top, bottom: padding.bottom, left: layout.mapEdge, right: layout.mapEdge },
         animated: false,
       });
+    },
+    showRegion: (region) => {
+      map.current?.animateToRegion(region, 0);
     },
     moveTo: (coordinate) => {
       map.current?.animateToRegion(
@@ -278,7 +289,7 @@ export function MapAdapter({
       provider={PROVIDER_GOOGLE}
       customMapStyle={MAP_STYLE}
       style={StyleSheet.absoluteFill}
-      initialRegion={{ ...center, latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
+      initialRegion={{ ...(center ?? NO_CENTER), latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
       toolbarEnabled={false}
       onRegionChangeComplete={(region) => {
         // 화면 가로 한 점이 몇 m인지: 경도 폭(도) -> m, 위도에 따라 줄어든다
@@ -300,11 +311,11 @@ export function MapAdapter({
         />
       ) : null}
       {routeRemaining.length >= 2 ? <RemainingRoute path={routeRemaining} metersPerPoint={metersPerPoint} /> : null}
-      <HomePin coordinate={home} />
+      {home ? <HomePin coordinate={home} /> : null}
       {pins.map((pin) => (
         <NumberPin key={pin.seq} pin={pin} />
       ))}
-      {position ? <MyPosition coordinate={position} /> : null}
+      {position ? <MyPosition coordinate={position} hollow={hollowPosition} /> : null}
     </MapView>
   );
 }
@@ -384,6 +395,15 @@ const styles = StyleSheet.create({
     borderRightWidth: layout.homeStroke,
     borderBottomWidth: layout.homeStroke,
     borderColor: color.ink,
+  },
+  // reh-dot: 속 흰색 + 고리 3 ink, 바깥 지름 20, 퍼지는 고리 없음
+  rehDot: {
+    width: layout.rehDot,
+    height: layout.rehDot,
+    borderRadius: radius['r-full'],
+    backgroundColor: color.surface,
+    borderWidth: layout.rehDotRing,
+    borderColor: color['ink'],
   },
   position: {
     width: layout.positionDot,

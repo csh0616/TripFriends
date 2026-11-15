@@ -552,7 +552,7 @@ describe('B7 데모 시계', () => {
     await flow(5000);
     expect(demoTime()).toBe('20:00');
     expect(control.requests()).toHaveLength(settled);
-  });
+  }, 20000); // 가짜 시간 130초를 100ms씩 민다(act 약 1300번). 혼자 ~0.4초, 전체 실행 부하에서 5초 기본 제한을 넘어 흔들렸다
 
   // 시각 막대의 끌기 자체는 Maestro 몫. 위치 → 시각 계산만 본다 (함수 이름은 이 테스트가 정한 계약)
   describe('시각 막대 계산', () => {
@@ -695,21 +695,25 @@ describe('B8 시각이 바뀔 때 요청', () => {
     expect(control.requests().at(-1)?.at).toBe(AT('10:30'));
   });
 
-  test('T6_B8_앞_요청이_늦게_와도_마지막_것만_반영', async () => {
+  // TASK-014 §30 Q1·§29 ①: 데모도 요청은 한 번에 하나, 응답은 버리지 않는다. 예전 단언("앞 응답은 버리고 마지막 것만")을 바꿨다 (승인 대기)
+  test('T6_B8_S30_Q1_앞_요청이_늦게_와도_버리지_않고_반영한_뒤_마지막_시각으로_한_번', async () => {
     const control = await ready();
     const release = control.defer();
     await pressId('demo-plus-10');
     await advance(300);
     control.show(nowCard(t08()));
+    const before = control.requests().length;
     await pressId('demo-plus-10');
     await advance(300);
+    expect(control.requests()).toHaveLength(before); // 기다리는 동안 10:20은 들고만 있다
     release(json(200, nowCard(t07())));
     await advance(0);
-    expect(screen.queryByTestId('card-T-07')).toBeNull();
-    await advance(300);
+    expect(screen.getByTestId('card-T-07')).toBeTruthy(); // 늦게 온 10:10 응답도 반영
+    await advance(400);
+    expect(control.requests()).toHaveLength(before + 1);
+    expect(control.requests().at(-1)?.at).toBe(AT('10:20'));
     expect(screen.getByTestId('card-T-08')).toBeTruthy();
     expect(screen.queryByTestId('card-T-07')).toBeNull();
-    expect(control.requests().at(-1)?.at).toBe(AT('10:20'));
   });
 
   test('T6_B8_S6_이번엔_깜빡임_규칙이_없어_짧은_사이에_또_바뀌어도_바로_반영', async () => {

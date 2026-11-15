@@ -2,7 +2,7 @@
 
 기본값: seed = docs/data/osaka-seed.yaml, 팩 = apps/server/places/packs/, 캐시 = apps/server/.cache/places/.
 PLACES_PROVIDER=fake 이거나 키가 없으면 가짜 공급자로 돈다. 키는 환경 변수로만 받는다
-(`uv run --env-file .env python -m places build osaka`). 출력에는 개수·비율만 있고 Google 값·검색 문장은 없다.
+(`uv run --env-file ~/.config/tripfriends/server.env python -m places build osaka`). 출력에는 개수·비율만 있고 Google 값·검색 문장은 없다.
 """
 
 import argparse

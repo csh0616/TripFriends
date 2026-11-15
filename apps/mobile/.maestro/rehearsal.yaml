@@ -1,0 +1,135 @@
+# TASK-014 §C·AC-5 (초안, test-writer): "이 날 미리 걸어 보기" 한 바퀴.
+#   빈 첫 화면 -> 7일 뒤 1박 2일 여행 만들기 -> 첫날 [알아서 짜 줘] -> [이걸로 할래] -> 날짜 목록(계획 완료)
+#   -> [미리 걸어 보기] -> "연습 중" -> 시계 [+10분] -> [연습 끝내기] -> 날짜 목록 그대로(계획 완료, [미리 걸어 보기] 그대로)
+# 초안: 보드(§D3·§D4)·§9·§10 답(v1.2)으로 문구·규칙은 확정. 실제 화면에서 돌려 본 적은 없다 (frontend 구현 뒤 reviewer가 확인).
+#    여기서 쓰는 글자는 문서(TASK-014 §C·§D)에 적힌 것만, 이름(testID)은 __tests__/task-014-rehearsal.test.tsx 머리말의 계약과 같다.
+#    frontend·reviewer가 보드에 맞춰 고치고 스크린샷(§D 목록)을 붙인다.
+# 전제와 실행은 create-trip.yaml과 같다 (로컬 Supabase + 점검 서버 8010, 가짜 오사카, clearState로 매번 새 익명 사용자).
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/rehearsal -e METRO_URL=http://127.0.0.1:8083 .maestro/rehearsal.yaml
+# 스크린샷은 --test-output-dir 아래에 쌓이고 저장소에는 올리지 않는다.
+appId: com.csh0616.tripfriends
+---
+- evalScript: |
+    ${
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const tokyo = (offsetDays) => {
+        const d = new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400 * 1000);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      };
+      output.start = tokyo(7);
+      output.end = tokyo(8);
+    }
+- launchApp:
+    clearState: true
+# TASK-014 §14 ①: 개발 메뉴의 떠 있는 버튼(톱니)이 화면을 덮지 않게 여는 주소에 __expo_disable_fab=1.
+# (§13의 launchApp 실행 인자 EXDevMenuShowFloatingActionButton은 효과가 없어 뺐다, reviewer 재점검)
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1&__expo_disable_fab=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 만들기"
+    timeout: 60000
+- runFlow: common/close-dev-menu.yaml
+
+# 여행 만들기 (create-trip.yaml과 같은 길)
+- tapOn: "여행 만들기"
+- extendedWaitUntil:
+    visible:
+      id: "create-trip-submit"
+    timeout: 30000
+- tapOn:
+    id: "field-start-date"
+- extendedWaitUntil:
+    visible:
+      id: "calendar-sheet"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.start}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.start}"
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.end}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.end}"
+- tapOn:
+    id: "calendar-confirm"
+- tapOn:
+    id: "create-trip-submit"
+- extendedWaitUntil:
+    visible: "계획 전"
+    timeout: 30000
+
+# 첫날 계획: [알아서 짜 줘] -> [이걸로 할래] -> [날짜 목록으로] (account-link.yaml과 같은 길). 저장 권유 시트는 [나중에]
+- tapOn:
+    text: "알아서 짜 줘"
+    index: 0
+- extendedWaitUntil:
+    visible: "이걸로 할래"
+    timeout: 30000
+- tapOn: "이걸로 할래"
+- extendedWaitUntil:
+    visible: "코스 저장했어"
+    timeout: 30000
+- tapOn: "날짜 목록으로"
+- tapOn:
+    id: "save-later"
+    optional: true
+- extendedWaitUntil:
+    visible: "계획 완료"
+    timeout: 15000
+- takeScreenshot: rehearsal-1-day-list-planned
+
+# C1·D3: 계획 완료 줄의 [미리 걸어 보기] (자리는 보드)
+- assertVisible: "미리 걸어 보기"
+- tapOn: "미리 걸어 보기"
+- extendedWaitUntil:
+    visible:
+      id: "now-main"
+    timeout: 30000
+# C2·D4: 같은 여행 중 화면 + "연습 중" + 시계 막대 + [연습 끝내기]. SOS·입력창 고정 (가드레일)
+- assertVisible: "연습 중"
+- assertVisible: "연습 끝내기"
+- assertVisible:
+    id: "sos-button"
+- assertVisible:
+    id: "input-bar"
+# C6: 연습 중에는 위치 안내 시트가 없다
+- assertNotVisible: "위치 켜기"
+- takeScreenshot: rehearsal-2-start
+
+# 시계 막대: 처음부터 펼쳐져 있고 하루 시작 시각부터 (TASK-014 §10 Q13)
+- assertVisible:
+    id: "demo-plus-10"
+- tapOn:
+    id: "demo-plus-10"
+- tapOn:
+    id: "demo-plus-10"
+- tapOn:
+    id: "demo-plus-10"
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: rehearsal-3-clock-moved
+
+# 끝내기 -> 날짜 목록 그대로 (그날은 여전히 계획 완료, [미리 걸어 보기]도 그대로)
+- tapOn: "연습 끝내기"
+- extendedWaitUntil:
+    visible: "계획 완료"
+    timeout: 15000
+- assertVisible: "미리 걸어 보기"
+- assertNotVisible: "연습 중"
+- takeScreenshot: rehearsal-4-day-list-after

@@ -78,6 +78,7 @@ class Request:
     proposal_id: str | None = None
     closes: str | None = None  # 새 사건이 시작되면서 닫을 옛 사건 (§11 Q12)
     last_check_at: datetime | None = None  # 이번 check 직전의 마지막 check 시각
+    preset: tuple[EventRecord, list[ProposalRecord]] | None = None  # TASK-014 §12: 연습 기록의 사건을 계산 없이 그 자리에 놓는다 (연습 요청 안에서만, 끝나면 되돌림)
 
 
 @dataclass
@@ -256,6 +257,13 @@ def _row_refresh_closed(run: _Run, state: TripState, _event: dict[str, Any]) -> 
 
 def _row_start(run: _Run, state: TripState) -> Stage:
     """(없음) × check: 낮음이면 open_low, 높음이면 대안 계산 후 awaiting."""
+    if run.req.preset is not None:
+        record, proposals = run.req.preset
+        response = _view(run, record, proposals)
+        run.trip.put_event(record)
+        run.trip.put_proposals(record.event_id, proposals)
+        run.finish(response)
+        return record.state  # type: ignore[return-value]
     if run.req.closed is not None:
         return _row_start_closed(run, state)
     finding = run.req.finding

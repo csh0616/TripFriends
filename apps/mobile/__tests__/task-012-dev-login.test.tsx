@@ -49,7 +49,10 @@ const press = async (element: Parameters<typeof fireEvent.press>[0]) => {
 };
 
 async function pressGoogleFromMenu(Index: () => React.ReactElement) {
-  const server = new FakeServer().on('GET /trips/current', json(200, TRIP)).on('POST /account/claim', json(200, { result: 'moved' }));
+  const server = new FakeServer()
+    .on('GET /trips/current', json(200, TRIP))
+    .on('POST /account/claim', json(200, { result: 'moved' }))
+    .on('POST /debug/reset-test-account', json(204, null)); // TASK-014 §21: 개발 new는 연결 직전에 로컬 테스트 계정 초기화 (task-014-s21-dev-reset)
   await render(
     <SafeAreaProvider initialMetrics={METRICS}>
       <Index />
