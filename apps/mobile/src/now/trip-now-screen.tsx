@@ -76,7 +76,7 @@ const QUEUE_GAP_MS = 100; // 응답이 온 뒤 기다리던 최신 요청을 보
 const LIVE_TICK_MS = 30000; // 실제 시계를 다시 읽는 간격
 
 /** 시각이 바뀔 때는 POST check(위치는 본문), 재실행·되돌림은 GET now (위치 없음). C1 */
-type Call = { kind: 'now' | 'check'; params: NowParams };
+type Call = { kind: 'now' | 'check'; params: NowParams; /** 행동 응답 뒤 한 번 더: 보내는 순간의 시각으로 다시 정한다 (기다리는 사이 시계가 더 갔을 수 있다) */ latest?: true };
 const MAX_CARDS = 4; // SCREEN-001 §2·§5: 메인 1 + 보조 최대 3
 
 type Problem = 'offline' | 'oops' | 'no_course';
@@ -180,9 +180,12 @@ export function TripNowScreen({
   const queueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queued = useRef<{ call: Call; note: string | null } | null>(null); // 기다리는 동안 바뀐 최신 하나
   const last = useRef<Call | null>(null);
+  const lastSentLatest = useRef(false); // 마지막 check가 행동 응답 뒤 한 번 더였나
+  const lastCheckDelay = useRef(0); // 마지막으로 보낸 check의 지연 (같은 시각·지연을 시계 효과가 또 보내지 않게)
   const lastCheck = useRef<NowParams | null>(null); // accept 409 stale 뒤 같은 시각·위치로 다시 묻는다
   const delayRef = useRef(0);
   const busy = useRef(false); // 이걸로·그대로 갈래 요청 중에는 다시 받지 않는다
+  const debounceActive = useRef(false); // 시계가 바뀌어 곧 check가 나갈 예정 (행동 응답 뒤 한 번 더 보낼 필요가 없다)
   const viewRef = useRef<NowView | null>(null);
   const homeMin = useRef<number | null>(null);
   const positioned = useRef(false); // §12 R7: 첫 응답 뒤 위치를 넣어 한 번 더
@@ -293,7 +296,11 @@ export function TripNowScreen({
       inFlight.current = true;
       seq.current += 1;
       const mine = seq.current;
-      if (call.kind === 'check') lastCheck.current = call.params;
+      if (call.kind === 'check') {
+        lastCheck.current = call.params;
+        lastCheckDelay.current = delayRef.current;
+        lastSentLatest.current = call.latest === true;
+      }
       const request =
         call.kind === 'check' ? checkRequest(record.day_id, call.params, rehearsal ? [...rehearsalLog.current] : undefined) : nowRequest(record.day_id, call.params.at);
       const result = await send(request, signals.current);
@@ -312,7 +319,10 @@ export function TripNowScreen({
           inFlight.current = false;
           const next = queued.current;
           queued.current = null;
-          if (alive.current && next) void fetchNow(next.call, next.note);
+          if (alive.current && next) {
+            const call: Call = next.call.latest ? { kind: 'check', params: { at: currentAt.current, ...positionFor(currentAt.current) }, latest: true } : next.call;
+            void fetchNow(call, next.note);
+          }
         }, QUEUE_GAP_MS);
       }
     },
@@ -348,6 +358,14 @@ export function TripNowScreen({
     [positionFor],
   );
 
+  /** 행동 응답을 반영한 뒤 그 사이 시계가 더 갔으면 check 한 번 (§9 Q8 ①). 진행 중이면 fetchNow가 최신 하나로 합쳐 끝난 뒤 보낸다. 곧 나갈 시계 check가 있으면 그것이 대신한다 */
+  const followLate = (actionAt: string) => {
+    if (!alive.current || debounceActive.current) return;
+    const now = currentAt.current;
+    if (now === actionAt) return;
+    void fetchNow({ kind: 'check', params: { at: now, ...positionFor(now) }, latest: true });
+  };
+
   /** [이걸로]·[그대로 갈래]: 같은 요청을 다시 보내지 않는다 (이미 반영됐을 수 있다, §6) */
   const decide = async (request: Request, accepted: boolean): Promise<void> => {
     if (busy.current) return;
@@ -355,14 +373,20 @@ export function TripNowScreen({
     seq.current += 1;
     const mine = seq.current;
     floorSeq.current = mine;
+    const actionAt = currentAt.current;
     const result = await send(request, signals.current);
     busy.current = false;
     setChosen(null); // §6: 확정이 성공하든 stale이든 끊기든 고른 상태는 지운다
-    if (!alive.current || mine < shownSeq.current) return;
+    if (!alive.current) return;
+    // TASK-015 §E ②: 행동의 응답은 뒤에 보낸 조회(check)의 응답이 먼저 왔어도 버리지 않는다. 오래된 것을 버리는 건 조회 응답뿐
     if (result.ok) {
-      if (show(result, accepted ? ACCEPTED_NOTE : null)) shownSeq.current = mine;
+      if (show(result, accepted ? ACCEPTED_NOTE : null)) {
+        shownSeq.current = Math.max(shownSeq.current, mine);
+        followLate(actionAt);
+      }
       return;
     }
+    if (mine < shownSeq.current) return;
     const failure = result.failure;
     const now: Call = { kind: 'now', params: { at: currentAt.current } };
     if (failure.kind === 'conflict' && failure.reason === 'stale' && accepted) {
@@ -390,9 +414,17 @@ export function TripNowScreen({
       skipAt.current = null;
       return undefined;
     }
-    const run = () => void fetchNow({ kind: 'check', params: { at, ...positionFor(at) } });
+    const run = () => {
+      debounceActive.current = false;
+      // 행동 응답 뒤 check가 이미 이 시각으로 나갔으면 같은 것을 또 보내지 않는다
+      if (lastCheck.current?.at === at && lastCheckDelay.current === delayRef.current && !inFlight.current && queued.current === null && lastSentLatest.current) return;      void fetchNow({ kind: 'check', params: { at, ...positionFor(at) } });
+    };
+    debounceActive.current = true;
     const timer = setTimeout(run, NOW_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      debounceActive.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [at, delay]);
 
@@ -466,6 +498,16 @@ export function TripNowScreen({
     );
   }, [mapReady, view, rehearsal, rehPosition, day.lodging, insets.top, sheetMid, clockRoom, areaHeight, width]);
 
+  // TASK-015 §E ③·§9 Q9: 숙소도 핀도 없는 날은 여행 도시의 중심으로 간다. 진짜 지도는 initialRegion을 처음 한 번만 읽으므로 첫 응답 뒤 카메라를 옮긴다
+  const cityCenter = view?.city?.center ?? null;
+  const movedToCity = useRef(false);
+  useEffect(() => {
+    if (!mapReady || !view || movedToCity.current || !cityCenter) return;
+    if (day.lodging || view.pins.length > 0) return;
+    movedToCity.current = true;
+    mapRef.current?.moveTo({ latitude: cityCenter.lat, longitude: cityCenter.lng });
+  }, [mapReady, view, cityCenter, day.lodging]);
+
   const retry = () => {
     if (last.current) void fetchNow(last.current);
   };
@@ -517,11 +559,13 @@ export function TripNowScreen({
     const result = await send(rehearsalVisitCheckRequest(placeId, body, [...rehearsalLog.current]), signals.current);
     busy.current = false;
     setChosen(null);
-    if (!alive.current || mine < shownSeq.current) return;
+    if (!alive.current || (!result.ok && mine < shownSeq.current)) return;
+    // TASK-015 §E ②: 연습 [닫혔어]의 응답도 버리지 않는다 — 화면에 보이고(대안 카드) 연습 기록에 쌓인다
     if (show(result, null)) {
-      shownSeq.current = mine;
+      shownSeq.current = Math.max(shownSeq.current, mine);
       rehearsalLog.current.push({ type: 'visit_check', place_id: placeId, ...body });
       announceRehearsal();
+      followLate(at);
     }
   };
 
