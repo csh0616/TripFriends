@@ -12,15 +12,18 @@
 //   도시 이름 표 src/lib/day-list.ts CITY_NAME. 서버에도 도시 정보 길이 없다 -> §13 Q2대로 GET /cities/{city_code} 제안 (test_task015_cities.py)
 //
 // 계약 (이 테스트가 정한 것, 승인 대기):
-//   여행 만들기 화면은 a2를 보이기 전에 GET /cities/osaka (Bearer)로 {code, name_ko, center}를 받아 a2의 center로 쓴다 (언제 부르는지는 frontend가 정함)
+//   여행 만들기 화면은 a2를 보이기 전에 GET /cities/osaka (토큰 필요 없음, §14 Q1)로 {code, name_ko, center}를 받아 a2의 center로 쓴다 (언제 부르는지는 frontend가 정함)
 //   숙소 칸 `lodging-search`에 친 글이 이름(GET /places/lodging-search)·주소(GET /places/address-search) 둘 다 0건이면 a3 -> `btn-pick-map`(디자인 부품 이름) -> a2(`pick-map`)
 //   a2에서 [여기로 정했어] -> SC-01로 돌아와 `lodging-picked`에 "지도에서 찍은 곳"(이름표가 없을 때). 이때 서버에 묻지 않는다 (여행이 아직 없다)
 //   POST /trips 본문 lodging = { kind: 'pin', place_id: null, address_text: null, lat, lng, label: null } (6칸 늘 있음)
+//   §14 Q2: 도시 정보를 못 받으면(끊김·500) 조용히 한 번 다시 받는다(GET /cities 모두 2번). 그래도 못 받으면 앱 거리 검사를 건너뛰고 핀이 있으면 [여기로 정했어] 켜짐.
+//           서버(POST /trips)가 too_far면 아래처럼 a2로 돌아와 안내
+//   §14 Q3: 이름 칸 글은 앞뒤 공백을 잘라 label로 보낸다(" 친구 집 " -> "친구 집"), 자른 뒤 빈 글이면 null
 //   POST /trips 400 INVALID_LODGING detail.reason too_far -> a2(`pick-panel`)로 돌아가 "오사카에서 너무 멀어. 여행할 도시 근처로 찍어 줘" + [여기로 정했어] 비활성
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { apiError, FakeServer, json } from '../test-support/fake-server';
+import { apiError, FakeServer, json, networkDown, type Reply } from '../test-support/fake-server';
 import { resetDevice, tap } from '../test-support/planning-driver';
 
 jest.mock('expo-constants', () => {
@@ -33,7 +36,6 @@ const NOW_ISO = '2026-12-02T03:00:00Z';
 const CURRENT = 'GET /trips/current';
 const CREATE = 'POST /trips';
 const CITY = 'GET /cities/osaka';
-const BEARER = /^Bearer \S+$/;
 const TOO_FAR = '오사카에서 너무 멀어. 여행할 도시 근처로 찍어 줘';
 const ROUGHLY = '대략이어도 괜찮아';
 const KM_PER_LAT_DEG = (6371.0 * Math.PI) / 180;
@@ -125,13 +127,13 @@ async function longPress(at: { latitude: number; longitude: number }) {
 const pinBody = (at: { latitude: number; longitude: number }, label: string | null = null) => ({ kind: 'pin', place_id: null, address_text: null, lat: at.latitude, lng: at.longitude, label });
 
 describe('§13 Q2 도시 정보 center를 서버에서 받는다', () => {
-  test('T15_S13_Q2_a2를_보이기_전에_Bearer로_GET_cities_osaka를_부른다', async () => {
+  test('T15_S13_Q2_S14_Q1_a2를_보이기_전에_GET_cities_osaka를_부른다', async () => {
+    // (이전 단언: Bearer 헤더를 붙인다 — §14 Q1 "토큰 필요 없음"으로 뺌. 붙이든 안 붙이든 frontend가 정한다)
     server.on(CITY, json(200, { code: 'osaka', name_ko: '오사카', center: OSAKA_CENTER }));
     await toForm();
     await fillDates();
     await toPick();
     expect(server.sent(CITY).length).toBeGreaterThanOrEqual(1);
-    expect(server.headers(server.sent(CITY)[0]).authorization ?? '').toMatch(BEARER);
   });
 
   test('T15_S13_Q2_a2의_50km_검사는_서버가_준_center로_한다_앱_고정값이_아니다', async () => {
@@ -214,4 +216,76 @@ describe('§13 Q2 POST /trips too_far -> a2로 돌아가 안내', () => {
     expect((server.sent(CREATE)[1].body as Record<string, unknown>).lodging).toEqual(pinBody(moved));
   });
 
+});
+
+const TOKYO_STATION = { latitude: 35.6812, longitude: 139.7671 }; // 오사카 중심에서 약 404km (앱 검사가 있었다면 밖)
+const FAILS: [string, Reply][] = [
+  ['연결_끊김', networkDown],
+  ['500', apiError(500, 'INTERNAL', null)],
+];
+
+describe('§14 Q2 도시 정보를 못 받으면 막지 않는다', () => {
+  test.each(FAILS)('T15_S14_Q2_첫_번째가_%s이면_조용히_한_번_다시_받아_그_center로_검사한다', async (_name, fail) => {
+    server.once(CITY, fail);
+    server.on(CITY, json(200, { code: 'osaka', name_ko: '오사카', center: KYOTO_CENTER }));
+    await toForm();
+    await fillDates();
+    await toPick();
+    await settleAll();
+    expect(server.sent(CITY)).toHaveLength(2);
+    await longPress(OSAKA_SOUTH_45); // 다시 받은 중심(교토)에서 약 84km -> 밖
+    expect(within(screen.getByTestId('pick-panel')).getByText(TOO_FAR)).toBeTruthy();
+    expect(isDisabled('pick-confirm')).toBe(true);
+  });
+
+  test.each(FAILS)('T15_S14_Q2_두_번_다_%s이면_더_부르지_않고_앱_검사를_건너뛰어_먼_핀도_켜진다', async (_name, fail) => {
+    server.on(CITY, fail);
+    await toForm();
+    await fillDates();
+    await toPick();
+    await settleAll();
+    expect(server.sent(CITY)).toHaveLength(2); // 처음 + 다시 한 번
+    expect(isDisabled('pick-confirm')).toBe(true); // 핀이 없으면 그대로 꺼짐 (§12 Q6)
+    await longPress(TOKYO_STATION);
+    expect(within(screen.getByTestId('pick-panel')).queryByText(TOO_FAR)).toBeNull();
+    expect(isDisabled('pick-confirm')).toBe(false);
+    await settleAll();
+    expect(server.sent(CITY)).toHaveLength(2);
+  });
+
+  test('T15_S14_Q2_도시_정보_없이_보낸_먼_핀을_서버가_too_far로_돌려주면_a2로_돌아와_안내한다', async () => {
+    server.on(CITY, networkDown);
+    server.on(CREATE, apiError(400, 'INVALID_LODGING', { reason: 'too_far' }));
+    await toForm();
+    await fillDates();
+    await toPick();
+    await longPress(TOKYO_STATION);
+    await tap(screen.getByTestId('pick-confirm'));
+    await tap(await screen.findByTestId('create-trip-submit'));
+    await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
+    expect((server.sent(CREATE)[0].body as Record<string, unknown>).lodging).toEqual(pinBody(TOKYO_STATION));
+    await settleAll();
+    const panel = await screen.findByTestId('pick-panel');
+    expect(within(panel).getByText(TOO_FAR)).toBeTruthy();
+    expect(isDisabled('pick-confirm')).toBe(true);
+    expect(screen.queryByTestId('day-row-day-t10')).toBeNull();
+  });
+});
+
+describe('§14 Q3 이름 앞뒤 공백을 잘라 보낸다', () => {
+  test('T15_S14_Q3_이름_칸이_공백_친구_집_공백이면_본문_label은_친구_집', async () => {
+    server.on(CITY, json(200, { code: 'osaka', name_ko: '오사카', center: OSAKA_CENTER }));
+    server.on(CREATE, json(201, { ...created, lodging: pinBody(SPOT, '친구 집') }));
+    await toForm();
+    await fillDates();
+    await toPick();
+    await longPress(SPOT);
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('pick-label'), ' 친구 집 ');
+    });
+    await tap(screen.getByTestId('pick-confirm'));
+    await tap(await screen.findByTestId('create-trip-submit'));
+    await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
+    expect((server.sent(CREATE)[0].body as Record<string, unknown>).lodging).toEqual(pinBody(SPOT, '친구 집'));
+  });
 });

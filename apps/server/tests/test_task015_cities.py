@@ -7,10 +7,10 @@
 API-001 §1(인증 Bearer · 404 NOT_FOUND · 공통 오류 형식).
 
 확인한 지금 상태: 앱은 도시 정보를 서버에서 받지 않는다(앱에 고정: apps/mobile/src/trips/api.ts CITY_CODE · create-trip-screen.tsx '오사카').
-서버에도 도시 정보 길이 없다 -> 아래 제안 계약 (승인 대기).
+서버에도 도시 정보 길이 없다 -> 아래 계약 (§14에서 승인, API-001 2-1에 PM이 더함).
 
 계약:
-    GET /cities/{city_code} (Bearer 필요 — 질문: /catalog처럼 토큰 없이 둘지)
+    GET /cities/{city_code} (토큰 필요 없음 — §14 Q1 · API-001 2-1 c6, /catalog와 같음)
         200 {"code": "osaka", "name_ko": "오사카", "center": {"lat": float, "lng": float}} (칸은 이 셋, center 칸은 lat·lng 둘)
             name_ko = trip/link.py CITY_NAMES 표 값 (도시 이름. center 장소 이름 "난바역"이 아니다)
             center  = 그 도시 seed의 center.lat·center.lng 그대로 = NowView.city.center와 같은 값. Google 좌표 캐시가 아니다
@@ -103,9 +103,19 @@ def test_T15_S13_Q2_경계_모르는_도시는_404_NOT_FOUND(mem, code):
     assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
-def test_T15_S13_Q2_토큰이_없으면_401(mem):
+def test_T15_S14_Q1_토큰_없이도_200이고_모양은_같다(mem):
+    """§14 Q1: 공개 값이라 토큰 필요 없음(/catalog와 같다). API-001 2-1 c6: 200 {code, name_ko, center: {lat, lng}}.
+    (이전 단언: 토큰 없으면 401 — §13 제안이었고 §14 Q1로 바뀜)"""
     response = mem.anon.get("/cities/osaka")
-    assert response.status_code == 401, response.text  # API-001 §1 (제안: 장소 검색처럼 Bearer — 질문)
+    assert response.status_code == 200, response.text
+    assert response.json() == {"code": "osaka", "name_ko": "오사카", "center": SEED_V3_CENTER}
+    assert response.json() == city(mem).json()  # 토큰이 있어도 없어도 같은 값
+
+
+def test_T15_S14_Q1_경계_토큰_없이_모르는_도시는_401이_아니라_404(mem):
+    response = mem.anon.get("/cities/tokyo")
+    assert response.status_code == 404, response.text
+    assert response.json()["error"]["code"] == "NOT_FOUND"
 
 
 def test_T15_S13_Q2_OpenAPI에_cities_길과_응답_모양이_있다():

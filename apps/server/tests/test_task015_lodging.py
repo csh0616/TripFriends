@@ -543,6 +543,60 @@ def test_T15_S13_Q7_숫자·다른_타입_kind는_400_INVALID_LODGING_invalid_ki
     assert stores(mem) == before
 
 
+def test_T15_S14_Q4_kind_null은_값_없음이라_400_INVALID_LODGING_missing_field이고_아무것도_저장하지_않는다(mem):
+    """§14 Q4: null = 값 없음 = missing_field (kind 칸이 아예 없는 것과 같다)."""
+    before = stores(mem)
+    response = post_trip(mem, {**pin_body(), "kind": None})
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "missing_field", response.json()
+    assert stores(mem) == before
+
+
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param({**pin_body(), "kind": " pin "}, id="양쪽_공백_pin"),
+        pytest.param({**pin_body(), "kind": "pin "}, id="뒤_공백_pin"),
+        pytest.param({**pin_body(), "kind": " pin"}, id="앞_공백_pin"),
+        pytest.param({**pin_body(), "kind": "\tpin"}, id="앞_탭_pin"),
+        pytest.param({**pin_body(), "kind": "pin\n"}, id="뒤_줄바꿈_pin"),
+        pytest.param({"kind": " place ", "place_id": GOOGLE_LODGING_ID}, id="양쪽_공백_place"),
+        pytest.param({"kind": " address ", "address_text": TYPED}, id="양쪽_공백_address"),
+    ],
+)
+def test_T15_S14_Q4_앞뒤_공백이_붙은_정해진_kind는_자르지_않고_invalid_kind이고_아무것도_저장하지_않는다(mem, sent):
+    """§14 Q4: 정해진 값은 자르지 않고 정확히 일치만. 나머지 칸은 그 kind로 맞는 본문 (자르면 받아질 본문이다)."""
+    before = stores(mem)
+    response = post_trip(mem, sent)
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "invalid_kind", response.json()
+    assert stores(mem) == before
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [
+        pytest.param(None, "missing_field", id="null"),
+        pytest.param("", "missing_field", id="빈_글"),
+        pytest.param("   ", "missing_field", id="공백만"),
+        pytest.param(" \t\n ", "missing_field", id="공백·탭·줄바꿈만"),
+        pytest.param(" pin ", "invalid_kind", id="공백+pin"),
+        pytest.param("p in", "invalid_kind", id="가운데_공백"),
+    ],
+)
+def test_T15_S14_Q4_경계_공백만이면_missing_field_공백에_값이_붙으면_invalid_kind(mem, kind, expected):
+    """§13 Q7(빈 글·공백만 kind = missing_field)과 §14 Q4(" pin " = invalid_kind)가 만나는 경계. 그 밖 칸은 맞는 pin 본문."""
+    response = post_trip(mem, {**pin_body(), "kind": kind})
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == expected, response.json()
+
+
+def test_T15_S14_Q4_경계_공백_없는_pin은_그대로_받는다(mem):
+    """같은 본문에서 kind만 정확한 "pin"이면 201 (위 invalid_kind가 다른 칸 때문이 아님을 확인)."""
+    response = post_trip(mem, pin_body())
+    assert response.status_code == 201, response.text
+
+
 @pytest.mark.parametrize(
     ("sent", "expected"),
     [

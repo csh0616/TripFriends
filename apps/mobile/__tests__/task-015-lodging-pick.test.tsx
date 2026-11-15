@@ -17,6 +17,7 @@
 //     핀이 center에서 50km 이상(경계 50km는 밖)이면 **onConfirm을 부르기 전에** 바로 too_far 안내 + [여기로 정했어] 비활성 (@/lib/lodging-pick)
 //   §13 Q3: too_far 뒤(앱 검사든 onConfirm의 400이든) 핀을 다시 찍거나 옮기면 다시 검사 -> 50km 안이면 켜짐 · 보조 글은 "대략이어도 괜찮아"로
 //   §13 Q4: 이름 칸이 비면 label: null (빈 글을 보내지 않는다). 공백·탭·줄바꿈만이어도 빈 글 (§13 Q7② 서버·앱 같은 자르기)
+//   §14 Q3: 앱도 label 앞뒤 공백을 잘라 보낸다(" 친구 집 " -> "친구 집", 가운데 공백은 그대로). 자른 뒤 빈 글이면 null
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 
 import { LodgingPickScreen, type LodgingPickResult, type PickedLodging } from '@/trips/lodging-pick-screen';
@@ -265,5 +266,24 @@ describe('§13 Q4 이름 칸이 비면 label: null', () => {
     });
     await tap(screen.getByTestId('pick-confirm'));
     expect(confirm.mock.calls[0][0]).toEqual({ lat: SPOT.latitude, lng: SPOT.longitude, label: null });
+  });
+});
+
+describe('§14 Q3 이름 앞뒤 공백을 자른다', () => {
+  test.each<[string, string]>([
+    [' 친구 집 ', '친구 집'],
+    ['친구 집 ', '친구 집'],
+    [' 친구 집', '친구 집'],
+    ['\t친구 집\n', '친구 집'],
+    ['친구  집', '친구  집'],
+    ['친구 집', '친구 집'],
+  ])('T15_S14_Q3_이름_칸이_%j면_label은_%j', async (typed, label) => {
+    await show();
+    await longPress();
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('pick-label'), typed);
+    });
+    await tap(screen.getByTestId('pick-confirm'));
+    expect(confirm.mock.calls[0][0]).toEqual({ lat: SPOT.latitude, lng: SPOT.longitude, label });
   });
 });
