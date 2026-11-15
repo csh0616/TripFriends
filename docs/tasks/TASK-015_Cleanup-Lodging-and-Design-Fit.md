@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-16 |
-| 상태 | **v1.9** — §15 backend 보고 답(`ea580a5`·`64a8d4e`) · v1.8 §14 test-writer 답(`1ba11ea`·`7eba928` 승인) · v1.7 §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
+| 상태 | **v1.10** — §16 backend §15 보고 답(`35d9d9e`·`d921bff`·`e66855f`) · v1.9 §15 backend 보고 답(`ea580a5`·`64a8d4e`) · v1.8 §14 test-writer 답(`1ba11ea`·`7eba928` 승인) · v1.7 §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
 | 관련 | TASK-010 §B5(숙소 검색)·C4 · TASK-014 §28·§29·§34(넘어온 것) · `docs/design/reviews/task-014-design.md` §9-4·§10·§11·§12·§13 · DESIGN-001 v2.8 §4-6·§4-9·§4-11·§4-13 · API-001(`/places/lodging-search`·`POST /trips`·`NowView`) · ADR-015(Google 약관·좌표 30일) · HISTORY 11-15·11-16 결정권자 의견 · ADR-019(배포는 이 TASK 밖) |
 | 브랜치 | `feat/task-015-cleanup` |
 | 다음 | TASK-016 장소 데이터 확장(ADR-018) → TASK-017 SOS·오프라인·알림·출발 전 점검 |
@@ -194,6 +194,19 @@
 | 3 | 타입이 틀려도 `INVALID_LODGING`이 나오게 OpenAPI 숙소 입력 타입을 손으로 씀 | **승인**, 대신 어긋남을 막는 테스트: OpenAPI 숙소 스키마가 실제 검사 규칙과 같은지(스키마에 맞는 6칸 모양 3가지는 201, 생성된 앱 타입과 일치). reviewer가 확인 |
 
 - 다음: test-writer(테스트 3건 · Q1 팩 테스트 · `city_center` 되돌아가기 금지 · Q2 `invalid_type` · Q3 스키마 테스트) → backend(팩 다시 만들기 · `city_center` · `invalid_type`) → 서버 전체 통과 → `frontend`
+
+## 16. backend §15 보고 답 (11-16, test-writer `35d9d9e` · backend `d921bff` · `e66855f`)
+- **승인**: 팩 center에 우리 값(34.6662, 135.501)만 손으로 넣음(다른 칸 그대로, 실제 Google 호출 없음), `invalid_type` 순서, 숙소 입력 스키마를 실제 검사와 맞추고 타입 재생성(tsc 0). 서버 4383 통과 · 3 실패(= 아래 Q-A를 기다린 `city_center()` 오류 테스트)
+- 팩을 실제 키로 다시 만드는 명령은 **지금 하지 않는다** — center 값은 Google 값이 아니라 손으로 넣어도 된다
+
+**Q-A 가짜 시드에 center 좌표가 없음 → 1안(가짜 시드에도 v3 값)**
+- 2안(가짜 모드만 예외)은 쓰지 않는다 — 테스트 길과 실제 길이 갈라지면 "테스트 초록 ≠ 실제"가 다시 생긴다(TASK-014 교훈)
+- 가짜 시드 `osaka-seed-fake.yaml`의 center에 **v3 값(34.6662, 135.5010)**. `T10_Q10`은 새 규칙으로 고침(승인)
+- 겹침 문제: Google 값 검사를 **값이 아니라 자리로** — `center.lat`·`center.lng` 자리만 허용하고, 그 밖의 자리에 좌표가 있으면 실패. 가짜 장소 중 위도 34.6662인 곳은 **가짜 값을 조금 바꿔**(예 34.6663) 우연히 같은 값이 없게
+- 그 뒤 `city_center()`는 우리 값이 없으면 **오류**(Google로 되돌아가지 않음) — 남은 3건 통과
+- 보고에 나온 Q-B~Q-E는 PM이 받은 보고에 없었음 → **다음 보고에 다시 적어 줘**(막지 않으면 frontend와 같이 진행)
+
+- 다음: test-writer(가짜 시드 · `T10_Q10` · 자리 기준 검사) → backend(`city_center()` 오류, 서버 전체 통과) → **서버 전체 통과면 `frontend` 시작**(§A · §B · §C · §D · §E 앱 몫, `task-015-design.md` V129 값)
 
 ## 6. 실패하면
 | 상황 | 결과 |
