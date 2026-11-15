@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-16 |
-| 상태 | **v1.8** — §14 test-writer 답(`1ba11ea`·`7eba928` 승인) · v1.7 §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
+| 상태 | **v1.9** — §15 backend 보고 답(`ea580a5`·`64a8d4e`) · v1.8 §14 test-writer 답(`1ba11ea`·`7eba928` 승인) · v1.7 §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
 | 관련 | TASK-010 §B5(숙소 검색)·C4 · TASK-014 §28·§29·§34(넘어온 것) · `docs/design/reviews/task-014-design.md` §9-4·§10·§11·§12·§13 · DESIGN-001 v2.8 §4-6·§4-9·§4-11·§4-13 · API-001(`/places/lodging-search`·`POST /trips`·`NowView`) · ADR-015(Google 약관·좌표 30일) · HISTORY 11-15·11-16 결정권자 의견 · ADR-019(배포는 이 TASK 밖) |
 | 브랜치 | `feat/task-015-cleanup` |
 | 다음 | TASK-016 장소 데이터 확장(ADR-018) → TASK-017 SOS·오프라인·알림·출발 전 점검 |
@@ -182,6 +182,18 @@
 | 5 | testID `btn-pick-map` · 이름 · 주소 둘 다 0건이면 a3 | **둘 다 승인** |
 
 - 다음: test-writer가 §14 Q1~Q4를 테스트에 반영(작은 변경) → **요약만 남기고 승인 대기 없이 `backend` 시작**(PM 제안: 바꿀 내용을 이 표가 이미 정해서 다시 볼 것이 적음 — 결정권자가 이 순서로 프롬프트를 보내면 승인으로 봄) → `frontend`
+
+## 15. backend 보고 답 (11-16, test-writer `ea580a5` · backend `64a8d4e`)
+- **backend 결과 승인**: 서버 4223 통과 · 3 실패(모두 테스트 쪽 목록 · 준비 데이터), DB 148 통과(새 마이그레이션만 단독 적용, 기존 여행 · 숙소 그대로), 앱 203 실패 = frontend 몫 9개 파일, tsc 0
+- **테스트 3건은 test-writer가 고친다**(규칙 바꾸지 않음): ① `test_task012_auth` 열린 길 목록에 `GET /cities/{city_code}` ② `test_task013_ci` OUTSIDE_READS에 `task-015-lodging-pick-lib.test.ts` ③ `test_task015_cities` 같은 사용자로 여행 만들고 요청
+
+| # | backend가 문서 없이 정한 것 | 답 |
+|---|---|---|
+| 1 | 도시 팩 파일을 다시 만들지 않음 → 실제 모드에서 `city_center()`가 **Google 캐시 중심으로 되돌아감** | **고쳐야 한다** — §9 Q6 결정("`city.center`는 우리 값, Google 값 아님")과 어긋남. ① 팩 검사 테스트를 넓힌다: **`center.lat`·`lng`만, 시드 v3 값과 정확히 같을 때** 허용(그 밖의 좌표는 여전히 0) ② 팩을 다시 만든다 ③ `city_center()`는 **Google로 되돌아가지 않는다** — 우리 값이 없으면 오류(테스트로 고정). 서버 내부의 숙소 없는 계산은 §9 Q6대로 그대로 |
+| 2 | 문자열이 아닌 `label`(숫자 등) → `missing_field` | **새 reason `invalid_type`**: 칸의 타입이 틀림(label이 숫자, lat이 글자 등). 순서는 `invalid_kind` → `missing_field` → **`invalid_type`** → `coords_not_allowed` → `label_too_long` → `too_far` |
+| 3 | 타입이 틀려도 `INVALID_LODGING`이 나오게 OpenAPI 숙소 입력 타입을 손으로 씀 | **승인**, 대신 어긋남을 막는 테스트: OpenAPI 숙소 스키마가 실제 검사 규칙과 같은지(스키마에 맞는 6칸 모양 3가지는 201, 생성된 앱 타입과 일치). reviewer가 확인 |
+
+- 다음: test-writer(테스트 3건 · Q1 팩 테스트 · `city_center` 되돌아가기 금지 · Q2 `invalid_type` · Q3 스키마 테스트) → backend(팩 다시 만들기 · `city_center` · `invalid_type`) → 서버 전체 통과 → `frontend`
 
 ## 6. 실패하면
 | 상황 | 결과 |

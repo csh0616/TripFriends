@@ -27,7 +27,7 @@
 ### 2-1. 여행
 | 메서드·경로 | 요청 | 응답 | FR |
 |---|---|---|---|
-| POST `/trips` | `{city_code, start_date, end_date, lodging?, must_visits: [{date, place_id}]}` (**꼭 갈 곳은 날마다**, 11-09 변경. 정본 TASK-010 §B). **11-16 TASK-015 §A·§9**: `lodging = {kind: "place"\|"address"\|"pin", place_id, address_text, lat, lng, label}`(6칸 늘 있음) 또는 `null`. place=`place_id`, address=`address_text`+`place_id`, pin=`lat`·`lng`. place·address에 lat·lng가 오면 400 `INVALID_LODGING`, pin이 도시 중심에서 50km 밖이면 400. `label`은 모든 kind, 사용자 글 30자. 옛 `lodging_place_id`만 오면 place로 받음(요청만, 응답엔 없음) | 201 `Trip` (trip_days 포함, `lodging` 같은 모양 — place·address엔 좌표 없음) | FR-01 |
+| POST `/trips` | `{city_code, start_date, end_date, lodging?, must_visits: [{date, place_id}]}` (**꼭 갈 곳은 날마다**, 11-09 변경. 정본 TASK-010 §B). **11-16 TASK-015 §A·§9**: `lodging = {kind: "place"\|"address"\|"pin", place_id, address_text, lat, lng, label}`(6칸 늘 있음) 또는 `null`. place=`place_id`, address=`address_text`+`place_id`, pin=`lat`·`lng`. place·address에 lat·lng가 오면 400 `INVALID_LODGING`(`error.detail.reason`: `invalid_kind` → `missing_field` → `invalid_type` → `coords_not_allowed` → `label_too_long` → `too_far` 순으로 하나, TASK-015 §12·§15), pin이 도시 중심에서 50km 밖이면 400. `label`은 모든 kind, 사용자 글 30자. 옛 `lodging_place_id`만 오면 place로 받음(요청만, 응답엔 없음) | 201 `Trip` (trip_days 포함, `lodging` 같은 모양 — place·address엔 좌표 없음) | FR-01 |
 | GET `/trips/{trip_id}` | — | `Trip` + 날짜별 선택 코스 | FR-33 |
 | POST `/trips/{trip_id}/fixed-events` | `{trip_day_id, title, start_at, end_at, place_id?}` | 201 `FixedEvent`. 계획을 고른 날이면 409 `PLAN_EXISTS` (TASK-010) | FR-01 |
 | DELETE `/fixed-events/{id}` | — | 204. 계획을 고른 날이면 409 `PLAN_EXISTS` | FR-01 (TASK-010) |
