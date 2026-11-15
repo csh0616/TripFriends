@@ -148,9 +148,9 @@ class NowCardT07(BaseModel):
 
 class NowCardT08(BaseModel):
     type: Literal["T-08"] = "T-08"
-    go_home_min: int
-    lodging: LatLng
-    map_url: str
+    go_home_min: int | None  # 숙소 없음(TASK-014 §31): 셋 다 null
+    lodging: LatLng | None
+    map_url: str | None
 
 
 NowCard = Annotated[
@@ -176,8 +176,14 @@ class NowRoute(BaseModel):
     remaining: list[tuple[float, float]]
 
 
+class NowDaySummary(DaySummary):
+    """NowView의 day. 숙소 없는 여행이면 lodging = null (TASK-014 §29). 계획 응답의 DaySummary는 그대로."""
+
+    lodging: LatLng | None
+
+
 class NowView(BaseModel):
-    day: DaySummary
+    day: NowDaySummary
     at: str
     status: Literal["on_track", "delayed", "free"]
     status_text: str

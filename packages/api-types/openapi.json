@@ -3715,14 +3715,35 @@
             "default": "T-08"
           },
           "go_home_min": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Go Home Min"
           },
           "lodging": {
-            "$ref": "#/components/schemas/LatLng"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatLng"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "map_url": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Map Url"
           }
         },
@@ -3855,6 +3876,68 @@
         ],
         "title": "NowCourseItem",
         "description": "여행 중 화면의 일정 한 개. 기존 CourseItemView(계획 화면)와 별개 (Q8)."
+      },
+      "NowDaySummary": {
+        "properties": {
+          "day_id": {
+            "type": "string",
+            "title": "Day Id"
+          },
+          "day_number": {
+            "type": "integer",
+            "title": "Day Number"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          },
+          "lodging": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatLng"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "must_visits": {
+            "items": {
+              "$ref": "#/components/schemas/DayMustVisit"
+            },
+            "type": "array",
+            "title": "Must Visits"
+          },
+          "fixed": {
+            "items": {
+              "$ref": "#/components/schemas/DayFixed"
+            },
+            "type": "array",
+            "title": "Fixed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day_id",
+          "day_number",
+          "date",
+          "start",
+          "end",
+          "lodging",
+          "must_visits",
+          "fixed"
+        ],
+        "title": "NowDaySummary",
+        "description": "NowView의 day. 숙소 없는 여행이면 lodging = null (TASK-014 §29). 계획 응답의 DaySummary는 그대로."
       },
       "NowDropped": {
         "properties": {
@@ -4231,7 +4314,7 @@
       "NowView": {
         "properties": {
           "day": {
-            "$ref": "#/components/schemas/DaySummary"
+            "$ref": "#/components/schemas/NowDaySummary"
           },
           "at": {
             "type": "string",

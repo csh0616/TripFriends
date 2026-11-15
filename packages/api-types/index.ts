@@ -1045,10 +1045,10 @@ export interface components {
              */
             type: "T-08";
             /** Go Home Min */
-            go_home_min: number;
-            lodging: components["schemas"]["LatLng"];
+            go_home_min: number | null;
+            lodging: components["schemas"]["LatLng"] | null;
             /** Map Url */
-            map_url: string;
+            map_url: string | null;
         };
         /**
          * NowClosedInfo
@@ -1086,6 +1086,30 @@ export interface components {
             is_fixed: boolean;
             /** Facts */
             facts: components["schemas"]["Fact"][];
+        };
+        /**
+         * NowDaySummary
+         * @description NowView의 day. 숙소 없는 여행이면 lodging = null (TASK-014 §29). 계획 응답의 DaySummary는 그대로.
+         */
+        NowDaySummary: {
+            /** Day Id */
+            day_id: string;
+            /** Day Number */
+            day_number: number;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            lodging: components["schemas"]["LatLng"] | null;
+            /** Must Visits */
+            must_visits: components["schemas"]["DayMustVisit"][];
+            /** Fixed */
+            fixed: components["schemas"]["DayFixed"][];
         };
         /** NowDropped */
         NowDropped: {
@@ -1235,7 +1259,7 @@ export interface components {
         };
         /** NowView */
         NowView: {
-            day: components["schemas"]["DaySummary"];
+            day: components["schemas"]["NowDaySummary"];
             /** At */
             at: string;
             /**
