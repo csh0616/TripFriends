@@ -3,21 +3,29 @@
 // 근거: TASK-015 §B6("가림 순서 · 이름표 자리 후보(위→오른쪽→왼쪽→아래, 다 안 되면 뺌) · 중심 거리 < 36 묶기 +N 배지 · 숙소+번호 핀 집 배지 ·
 //       숙소에 머무는 동안 숙소 마커가 '지금 핀' 모양 · 내 위치 점은 핀 아래 · 계산 순서 ①~⑤. 순수 함수로 — 입력: 핀 화면 좌표·순위, 출력: 보일 핀·배지·이름표 자리") ·
 //       §9 Q10(test-writer가 먼저) · docs/design/reviews/task-014-design.md §11-3 표(값)·§12-3(계산 순서 한 줄 요약) · DESIGN-001 §4-6(핀 크기 28 / 32 / 36) ·
-//       §6("핀 겹침 계산 실패 -> 규칙 없이 지금처럼 그림").
+//       §6("핀 겹침 계산 실패 -> 규칙 없이 지금처럼 그림") ·
+//       TASK-015 §11(11-16 PM 답) Q3(숙소 마커 32 가정·디자이너 확인 중 · 옆 이름표는 핀 중심에 세로 가운데 · 이름표 자리는 다른 핀과 맞닿음(간격 0)도 겹침 · 묶기 < 36) ·
+//       Q4(같은 순위면 코스 번호가 앞선 핀이 남음 · 사슬은 욕심 방식) · Q5(숙소+번호 핀이면 번호 핀이 이김, 순위표는 번호 핀끼리와 그리는 순서에만) ·
+//       Q6(함수는 순수·예외를 잡지 않음, 화면이 감쌈 · 보이는 핀마다 a11yLabel을 함수가 만든다).
 //
 // 계약 (이 테스트가 정한 것, 승인 대기 — 질문 목록 참고):
 //   모듈 '@/lib/pin-overlap'
 //   resolvePinOverlap({ pins, screen, labelWidth, me?, panels?, stayingAtLodging? }) -> { pins: ShownPin[], label, meDot }
-//     입력 pins = [{ id, kind: next|now|lodging|later|done, x, y(핀 중심, pt), size(지름) }] — ① 카메라는 부르는 쪽이 끝낸 뒤의 화면 좌표
-//     출력 pins = 보일 핀만, 그리는 순서(아래 -> 위) done · later · lodging · now · next. 각 핀 { ...입력, shape: pin|home|now, badges, hidden: 묶여 빠진 id[] }
+//     입력 pins = [{ id, kind: next|now|lodging|later|done, x, y(핀 중심, pt), size(지름), seq: 코스 번호(숙소는 null) }] — ① 카메라는 부르는 쪽이 끝낸 뒤의 화면 좌표
+//     출력 pins = 보일 핀만, 그리는 순서(아래 -> 위) done · later · lodging · now · next. 각 핀 { ...입력, shape: pin|home|now, badges, hidden: 묶여 빠진 id[], a11yLabel }
+//     a11yLabel (§11 Q6): 보이는 핀마다 화면 읽기 글. 번호 핀은 "{종류} {번호}번"으로 시작(종류 = 다음·지금·나중·지난), 묶인 번호가 있으면 예 "나중 4번, 5번도 같은 곳".
+//                숙소가 보이거나 집 배지로 묶이면 글에 "숙소"가 든다 (그 밖의 정확한 글은 질문)
 //     badges: { type: 'plus', count, corner } (빠진 번호 핀 수) · { type: 'home', corner: 'top-right' } (숙소가 번호 핀에 묶임). 둘 다면 home 오른쪽 위, plus 오른쪽 아래
 //     label = 다음 핀 하나의 이름표 { pinId, side: top|right|left|bottom, rect } | null
 //   이름표 자리 (§11-3 "높이 28 · 핀과 위 4 · 옆 6"):
 //     top    = { x: cx − w/2, y: cy − size/2 − 4 − 28, w, 28 }      bottom = { x: cx − w/2, y: cy + size/2 + 4, w, 28 }
 //     right  = { x: cx + size/2 + 6, (세로 가운데 맞춤), w, 28 }       left   = { x: cx − size/2 − 6 − w, (세로 가운데 맞춤), w, 28 }
 //     막히는 것: 보이는 다른 핀(원, 반지름 size/2 + 4) · 내 위치 점(원, 반지름 size/2, 숙소에 머무는 동안은 그리지 않아 막지 않음) · 떠 있는 판 ·
-//                화면 가장자리에서 8 안쪽을 벗어남. 겹침 = 넓이가 생기는 겹침 (테스트는 1pt 이상 떨어뜨리거나 겹치게 둔다)
+//                화면 가장자리에서 8 안쪽을 벗어남. 다른 핀(원 + 4)과는 맞닿음(간격 0)도 겹침 (§11 Q3). 판·점과의 맞닿음은 질문 (테스트는 1pt 떨어뜨리거나 겹치게 둔다)
 //   묶기: 중심 거리 < 36(GROUP_DISTANCE)이면 순위가 낮은 핀이 빠진다 (순위 next > now > lodging > later > done). 다만 숙소와 번호 핀이면 번호 핀이 이긴다(집 배지)
+//     욕심 방식 (§11 Q4): 번호 핀을 순위 -> 코스 번호 순으로 하나씩 보며, 이미 남긴 핀 중 36 안의 첫 핀(남긴 순서)에 붙고, 없으면 새로 남는다.
+//     그 뒤 숙소: 남긴 번호 핀 중 36 안의 첫 핀에 집 배지로 붙고, 없으면 숙소 마커로 남는다 (번호 핀은 숙소에 붙지 않는다, Q5). 입력 순서와 상관없다
+//   예외: 함수는 잡지 않는다 (§11 Q6). 화면이 감싸 실패하면 규칙 없이 그린다 (task-015-pin-overlap-fallback.test.tsx)
 //   숙소에 머무는 동안: 숙소 마커 shape 'now'·size 32, meDot false
 import fc from 'fast-check';
 
@@ -26,9 +34,10 @@ import { GROUP_DISTANCE, PIN_STACK, resolvePinOverlap, type PinKind, type PinOve
 const SCREEN = { width: 390, height: 600 };
 const W = 80; // 이름표 폭 (화면이 잰 값으로 친다)
 const H = 28;
-const SIZE: Record<PinKind, number> = { next: 36, now: 32, done: 32, later: 28, lodging: 32 }; // DESIGN-001 §4-6 (숙소는 가정 — 질문)
+// DESIGN-001 §4-6. 보통 숙소 마커 32는 가정 — 디자이너 확인 중 (TASK-015 §11 Q3 ①). 바뀌면 이 값만 고친다
+const SIZE: Record<PinKind, number> = { next: 36, now: 32, done: 32, later: 28, lodging: 32 };
 
-const pin = (id: string, kind: PinKind, x: number, y: number): ScreenPin => ({ id, kind, x, y, size: SIZE[kind] });
+const pin = (id: string, kind: PinKind, x: number, y: number, seq: number | null = kind === 'lodging' ? null : 1): ScreenPin => ({ id, kind, x, y, size: SIZE[kind], seq });
 const NEXT = pin('n', 'next', 195, 300);
 const run = (pins: ScreenPin[], over: Partial<PinOverlapInput> = {}) => resolvePinOverlap({ pins, screen: SCREEN, labelWidth: W, ...over });
 const shownIds = (result: ReturnType<typeof run>) => result.pins.map((p) => p.id);
@@ -161,6 +170,123 @@ describe('§B6 숙소 + 번호 핀 = 집 배지', () => {
 });
 
 // =====================================================================
+// 묶는 순서 (§11 Q4 욕심 방식 · Q5 숙소는 번호 핀에)
+// =====================================================================
+
+describe('§11 Q4 같은 순위·사슬', () => {
+  test.each<PinKind>(['later', 'done'])('T15_S11_Q4_같은_순위_%s면_코스_번호가_앞선_핀이_남는다', (kind) => {
+    for (const pins of [
+      [pin('a', kind, 100, 100, 4), pin('b', kind, 120, 100, 5)],
+      [pin('b', kind, 120, 100, 5), pin('a', kind, 100, 100, 4)],
+      [pin('z', kind, 100, 100, 4), pin('a', kind, 120, 100, 5)], // id 글자 순서가 아니라 번호
+    ]) {
+      const result = run(pins);
+      const keep = pins.find((p) => p.seq === 4)!.id;
+      const gone = pins.find((p) => p.seq === 5)!.id;
+      expect(shownIds(result)).toEqual([keep]);
+      expect(byId(result, keep).hidden).toEqual([gone]);
+      expect(byId(result, keep).badges).toEqual([{ type: 'plus', count: 1, corner: 'top-right' }]);
+    }
+  });
+
+  test('T15_S11_Q4_순위가_번호보다_먼저_번호가_뒤여도_순위_높은_핀이_남는다', () => {
+    const result = run([pin('d', 'done', 100, 100, 1), pin('l', 'later', 120, 100, 6)]);
+    expect(shownIds(result)).toEqual(['l']);
+    expect(byId(result, 'l').hidden).toEqual(['d']);
+  });
+
+  test('T15_S11_Q4_사슬은_이어지지_않는다_A–B_30·B–C_30·A–C_60이면_A가_남고_B는_A에_C는_따로', () => {
+    const chain = [pin('A', 'later', 100, 100, 1), pin('B', 'later', 130, 100, 2), pin('C', 'later', 160, 100, 3)];
+    for (const pins of [chain, [...chain].reverse(), [chain[1], chain[2], chain[0]]]) {
+      const result = run(pins);
+      expect(shownIds(result).sort()).toEqual(['A', 'C']);
+      expect(byId(result, 'A').hidden).toEqual(['B']);
+      expect(byId(result, 'C').hidden).toEqual([]);
+      expect(byId(result, 'C').badges).toEqual([]);
+    }
+  });
+
+  test('T15_S11_Q4_경계_사슬_A–C가_정확히_36이면_C는_따로_35_99면_A에', () => {
+    const at = (cx: number) => [pin('A', 'later', 100, 100, 1), pin('B', 'later', 118, 100, 2), pin('C', 'later', cx, 100, 3)];
+    expect(shownIds(run(at(136))).sort()).toEqual(['A', 'C']);
+    const near = run(at(135.99));
+    expect(shownIds(near)).toEqual(['A']);
+    expect([...byId(near, 'A').hidden].sort()).toEqual(['B', 'C']);
+  });
+
+  test('T15_S11_Q4_두_남은_핀_모두_36_안이면_먼저_남긴_핀에_붙는다', () => {
+    // 지금(100) · 나중 1번(140): 40 떨어져 둘 다 남음. 나중 2번(120)은 둘 다 20 -> 먼저 남긴 지금 핀에
+    const result = run([pin('L1', 'later', 140, 100, 1), pin('L2', 'later', 120, 100, 2), pin('W', 'now', 100, 100, 3)]);
+    expect(shownIds(result).sort()).toEqual(['L1', 'W']);
+    expect(byId(result, 'W').hidden).toEqual(['L2']);
+    expect(byId(result, 'L1').hidden).toEqual([]);
+  });
+
+  test('T15_S11_Q4_같은_순위에서_먼저_남긴_핀_=_번호가_앞선_핀', () => {
+    // 나중 1번(100) · 나중 2번(140) 둘 다 남음. 나중 3번(120)은 둘 다 20 -> 1번에
+    const result = run([pin('c', 'later', 120, 100, 3), pin('b', 'later', 140, 100, 2), pin('a', 'later', 100, 100, 1)]);
+    expect(byId(result, 'a').hidden).toEqual(['c']);
+    expect(byId(result, 'b').hidden).toEqual([]);
+  });
+});
+
+describe('§11 Q5 숙소와 번호 핀', () => {
+  test('T15_S11_Q5_숙소는_순위가_나중보다_높아도_나중_핀에_집_배지로_붙는다', () => {
+    const result = run([pin('h', 'lodging', 100, 100), pin('l', 'later', 110, 100, 3)]);
+    expect(shownIds(result)).toEqual(['l']);
+    expect(byId(result, 'l').badges).toEqual([{ type: 'home', corner: 'top-right' }]);
+  });
+
+  test('T15_S11_Q5_번호_핀은_숙소에_붙지_않는다_숙소_곁_나중_둘은_번호_핀끼리_묶인다', () => {
+    const result = run([pin('h', 'lodging', 100, 100), pin('l1', 'later', 120, 100, 1), pin('l2', 'later', 130, 100, 2)]);
+    expect(shownIds(result)).toEqual(['l1']);
+    expect([...byId(result, 'l1').hidden].sort()).toEqual(['h', 'l2']);
+    expect(byId(result, 'l1').badges).toEqual(expect.arrayContaining([{ type: 'home', corner: 'top-right' }, { type: 'plus', count: 1, corner: 'bottom-right' }]));
+  });
+
+  test('T15_S11_Q5_숙소는_36_안의_남긴_번호_핀_중_먼저_남긴_핀에', () => {
+    // 다음(100) · 나중(140) 둘 다 남음, 숙소(120)는 둘 다 20 -> 먼저 남긴 다음 핀에
+    const result = run([pin('l', 'later', 140, 100, 2), pin('h', 'lodging', 120, 100), pin('n', 'next', 100, 100, 1)]);
+    expect(byId(result, 'n').hidden).toEqual(['h']);
+    expect(byId(result, 'l').hidden).toEqual([]);
+  });
+
+  test('T15_S11_Q5_안_겹치면_숙소는_그리는_순서에서만_나중_위·지금_아래', () => {
+    const result = run([pin('w', 'now', 50, 100, 2), pin('h', 'lodging', 200, 100), pin('l', 'later', 350, 100, 3)]);
+    expect(result.pins.map((p) => p.id)).toEqual(['l', 'h', 'w']);
+  });
+});
+
+// =====================================================================
+// 화면 읽기 글 (§11 Q6: 보이는 핀마다 a11yLabel, 묶음을 아는 함수가 만든다)
+// =====================================================================
+
+describe('§11 Q6 a11yLabel', () => {
+  test('T15_S11_Q6_나중_4번에_5번이_묶이면_나중_4번,_5번도_같은_곳', () => {
+    const result = run([pin('a', 'later', 100, 100, 4), pin('b', 'later', 120, 100, 5)]);
+    expect(byId(result, 'a').a11yLabel).toBe('나중 4번, 5번도 같은 곳');
+  });
+
+  test.each<[PinKind, string]>([
+    ['next', '다음'],
+    ['now', '지금'],
+    ['later', '나중'],
+    ['done', '지난'],
+  ])('T15_S11_Q6_번호_핀_%s의_글은_%s_N번으로_시작', (kind, word) => {
+    const result = run([pin('p', kind, 100, 100, 7)]);
+    expect(byId(result, 'p').a11yLabel.startsWith(`${word} 7번`)).toBe(true);
+  });
+
+  test('T15_S11_Q6_숙소_마커와_집_배지에는_숙소가_든다', () => {
+    expect(byId(run([pin('h', 'lodging', 100, 100)]), 'h').a11yLabel).toContain('숙소');
+    expect(byId(run([pin('h', 'lodging', 100, 100)], { stayingAtLodging: true }), 'h').a11yLabel).toContain('숙소');
+    const home = byId(run([pin('h', 'lodging', 100, 100), pin('l', 'later', 110, 100, 3)]), 'l').a11yLabel;
+    expect(home.startsWith('나중 3번')).toBe(true);
+    expect(home).toContain('숙소');
+  });
+});
+
+// =====================================================================
 // 머무는 동안 = 숙소 (§11-3: 숙소 마커가 "지금 핀" 모양 32, 내 위치 점·reh-dot은 그리지 않음)
 // =====================================================================
 
@@ -232,9 +358,25 @@ describe('§B6 이름표 자리', () => {
 
   test.each([
     [231, 'top'], // 원 아래 끝 231 + 18 = 249 < 250: 1 떨어짐
+    [232, 'right'], // 250 = 250: 맞닿음(간격 0)도 겹침 (§11 Q3 ③)
     [233, 'right'], // 251 > 250: 1 겹침 (핀 원만이면 247로 안 겹친다 -> +4 여유가 있어야 막힌다)
   ])('T15_B6_경계_다른_핀은_4_여유를_두고_잰다_위_핀_중심_y_%d면_%s', (y, side) => {
     expect(run([NEXT, pin('a', 'later', 195, y)]).label?.side).toBe(side);
+  });
+
+  test('T15_S11_Q3_오른쪽_이름표는_핀_중심에_세로_가운데', () => {
+    expect(run([NEXT, ABOVE]).label).toEqual({ pinId: 'n', side: 'right', rect: { x: 195 + 18 + 6, y: 300 - H / 2, width: W, height: H } });
+  });
+
+  test('T15_S11_Q3_왼쪽_이름표는_핀_중심에_세로_가운데', () => {
+    expect(run([NEXT, ABOVE, RIGHT]).label).toEqual({ pinId: 'n', side: 'left', rect: { x: 195 - 18 - 6 - W, y: 300 - H / 2, width: W, height: H } });
+  });
+
+  test.each([
+    [195 + 18 + 6 + W + 1 + 18, 'right'], // 오른쪽 후보 오른쪽 끝 299, 원(나중 14 + 4) 왼쪽 끝 300: 1 떨어짐
+    [195 + 18 + 6 + W + 18, 'left'], // 299 = 299: 맞닿음도 겹침 -> 왼쪽
+  ])('T15_S11_Q3_경계_오른쪽_후보와_다른_핀_맞닿음_핀_중심_x_%d면_%s', (x, side) => {
+    expect(run([NEXT, ABOVE, pin('r', 'later', x, 300)]).label?.side).toBe(side);
   });
 
   test('T15_B6_묶여서_빠진_핀은_이름표를_막지_않는다_핀_자리가_먼저', () => {
@@ -299,15 +441,16 @@ const arbInput: fc.Arbitrary<PinOverlapInput> = fc
     later: fc.integer({ min: 0, max: 4 }),
     done: fc.integer({ min: 0, max: 4 }),
     spots: fc.array(fc.tuple(fc.integer({ min: 0, max: SCREEN.width }), fc.integer({ min: 0, max: SCREEN.height })), { minLength: 11, maxLength: 11 }),
+    seqs: fc.uniqueArray(fc.integer({ min: 1, max: 99 }), { minLength: 11, maxLength: 11 }), // 코스 번호 (순위와 따로 섞는다)
     me: fc.option(fc.tuple(fc.integer({ min: 0, max: SCREEN.width }), fc.integer({ min: 0, max: SCREEN.height })), { nil: null }),
     panel: fc.option(fc.tuple(fc.integer({ min: 0, max: 300 }), fc.integer({ min: 0, max: 500 })), { nil: null }),
     staying: fc.boolean(),
     labelWidth: fc.integer({ min: 30, max: 160 }),
   })
-  .map(({ singles, later, done, spots, me, panel, staying, labelWidth }) => {
+  .map(({ singles, later, done, spots, seqs, me, panel, staying, labelWidth }) => {
     const kinds: PinKind[] = [...singles, ...Array<PinKind>(later).fill('later'), ...Array<PinKind>(done).fill('done')];
     return {
-      pins: kinds.map((kind, i) => pin(`p${i}`, kind, spots[i][0], spots[i][1])),
+      pins: kinds.map((kind, i) => pin(`p${i}`, kind, spots[i][0], spots[i][1], kind === 'lodging' ? null : seqs[i])),
       screen: SCREEN,
       labelWidth,
       me: me ? { x: me[0], y: me[1], size: 22 } : null,
@@ -321,6 +464,12 @@ const rectHitsCircle = (r: Rect, c: { x: number; y: number }, radius: number) =>
   const nx = Math.min(Math.max(c.x, r.x), r.x + r.width);
   const ny = Math.min(Math.max(c.y, r.y), r.y + r.height);
   return Math.hypot(c.x - nx, c.y - ny) < radius - 1e-9;
+};
+/** §11 Q3 ③: 다른 핀과는 맞닿음(간격 0)도 겹침 */
+const rectTouchesCircle = (r: Rect, c: { x: number; y: number }, radius: number) => {
+  const nx = Math.min(Math.max(c.x, r.x), r.x + r.width);
+  const ny = Math.min(Math.max(c.y, r.y), r.y + r.height);
+  return Math.hypot(c.x - nx, c.y - ny) <= radius + 1e-9;
 };
 const rectsOverlap = (a: Rect, b: Rect) => a.x < b.x + b.width - 1e-9 && b.x < a.x + a.width - 1e-9 && a.y < b.y + b.height - 1e-9 && b.y < a.y + a.height - 1e-9;
 
@@ -354,7 +503,11 @@ describe('§B6 속성', () => {
             const gone = original.get(id)!;
             expect(dist(original.get(shown.id)!, gone)).toBeLessThan(GROUP_DISTANCE);
             if (gone.kind === 'lodging') expect(shown.kind).not.toBe('lodging');
-            else expect(RANK.indexOf(shown.kind)).toBeLessThanOrEqual(RANK.indexOf(gone.kind));
+            else {
+              expect(shown.kind).not.toBe('lodging'); // 번호 핀은 숙소에 붙지 않는다 (Q5)
+              expect(RANK.indexOf(shown.kind)).toBeLessThanOrEqual(RANK.indexOf(gone.kind));
+              if (shown.kind === gone.kind) expect(shown.seq!).toBeLessThan(gone.seq!); // 같은 순위면 번호가 앞선 핀이 남는다 (Q4)
+            }
           }
         }
       }),
@@ -423,7 +576,7 @@ describe('§B6 속성', () => {
         expect(r.y).toBeGreaterThanOrEqual(8);
         expect(r.x + r.width).toBeLessThanOrEqual(SCREEN.width - 8);
         expect(r.y + r.height).toBeLessThanOrEqual(SCREEN.height - 8);
-        for (const other of result.pins) if (other.id !== label.pinId) expect(rectHitsCircle(r, other, other.size / 2 + 4)).toBe(false);
+        for (const other of result.pins) if (other.id !== label.pinId) expect(rectTouchesCircle(r, other, other.size / 2 + 4)).toBe(false);
         if (input.me && result.meDot) expect(rectHitsCircle(r, input.me, input.me.size / 2)).toBe(false);
         for (const panel of input.panels ?? []) expect(rectsOverlap(r, panel)).toBe(false);
       }),
@@ -453,4 +606,67 @@ describe('§B6 속성', () => {
       }),
     );
   });
+  test('T15_S11_Q4_P_묶음은_욕심_방식_기준_계산과_같다', () => {
+    fc.assert(
+      fc.property(arbInput, (input) => {
+        const expected = greedy(input.pins);
+        const result = resolvePinOverlap(input);
+        const got = new Map(result.pins.map((p) => [p.id, [...p.hidden].sort()]));
+        expect(new Map([...expected].map(([id, hidden]) => [id, [...hidden].sort()]))).toEqual(got);
+      }),
+    );
+  });
+
+  test('T15_S11_Q4_P_입력_순서를_바꿔도_결과가_같다', () => {
+    fc.assert(
+      fc.property(arbInput, fc.nat(), (input, turn) => {
+        const k = input.pins.length ? turn % input.pins.length : 0;
+        const rotated = { ...input, pins: [...input.pins.slice(k), ...input.pins.slice(0, k)].reverse() };
+        const norm = (r: ReturnType<typeof resolvePinOverlap>) => ({
+          pins: r.pins.map((p) => ({ ...p, hidden: [...p.hidden].sort() })).sort((a, b) => (a.id < b.id ? -1 : 1)),
+          label: r.label,
+          meDot: r.meDot,
+        });
+        expect(norm(resolvePinOverlap(rotated))).toEqual(norm(resolvePinOverlap(input)));
+      }),
+    );
+  });
+
+  test('T15_S11_Q6_P_보이는_핀마다_빈_글이_아닌_a11yLabel_번호_핀은_자기·묶인_번호를_모두_담는다', () => {
+    fc.assert(
+      fc.property(arbInput, (input) => {
+        const seqOf = new Map(input.pins.map((p) => [p.id, p.seq]));
+        for (const shown of resolvePinOverlap(input).pins) {
+          expect(typeof shown.a11yLabel).toBe('string');
+          expect(shown.a11yLabel.trim()).not.toBe('');
+          if (shown.kind !== 'lodging') expect(shown.a11yLabel).toContain(`${shown.seq}번`);
+          for (const id of shown.hidden) {
+            const seq = seqOf.get(id);
+            expect(shown.a11yLabel).toContain(seq === null ? '숙소' : `${seq}번`);
+          }
+        }
+      }),
+    );
+  });
 });
+
+/** §11 Q4·Q5 기준 계산: 번호 핀을 순위 -> 번호 순으로, 남긴 핀 중 36 안의 첫 핀에 붙거나 새로 남는다. 그 뒤 숙소를 남긴 번호 핀에. 보이는 id -> 붙은 id[] */
+function greedy(pins: ScreenPin[]): Map<string, string[]> {
+  const numbered = pins.filter((p) => p.kind !== 'lodging').sort((a, b) => RANK.indexOf(a.kind) - RANK.indexOf(b.kind) || a.seq! - b.seq!);
+  const kept: ScreenPin[] = [];
+  const out = new Map<string, string[]>();
+  for (const p of numbered) {
+    const host = kept.find((k) => dist(k, p) < GROUP_DISTANCE);
+    if (host) out.get(host.id)!.push(p.id);
+    else {
+      kept.push(p);
+      out.set(p.id, []);
+    }
+  }
+  for (const home of pins.filter((p) => p.kind === 'lodging')) {
+    const host = kept.find((k) => dist(k, home) < GROUP_DISTANCE);
+    if (host) out.get(host.id)!.push(home.id);
+    else out.set(home.id, []);
+  }
+  return out;
+}

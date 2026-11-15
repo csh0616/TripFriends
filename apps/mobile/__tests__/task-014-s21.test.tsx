@@ -55,7 +55,7 @@ const trip = () => ({
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: '2026-12-04',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   is_demo: false,
   trip_days: [tripDay(1, 'past'), tripDay(2, 'today'), tripDay(3, 'planned'), tripDay(4, 'planning')],
@@ -530,7 +530,7 @@ describe('§21 2 날짜 목록 숫자와 요일은 나란한 별도 글자', () 
     city_code: 'osaka',
     start_date: DATES[0],
     end_date: DATES[2],
-    lodging_place_id: null,
+    lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
     status: 'active',
     trip_days: days,
   });

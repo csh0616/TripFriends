@@ -53,7 +53,7 @@ const trip = (states: string[] = ['past', 'today', 'planned', 'planning'], over:
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: `2026-12-0${states.length}`,
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   is_demo: false,
   trip_days: states.map((state, index) => tripDay(index + 1, state)),

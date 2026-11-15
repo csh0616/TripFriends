@@ -32,7 +32,7 @@ const TRIP = {
   city_code: 'osaka',
   start_date: '2026-12-11',
   end_date: '2026-12-12',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   is_demo: false,
   trip_days: ['2026-12-11', '2026-12-12'].map((date, i) => ({

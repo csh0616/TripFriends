@@ -15,6 +15,9 @@
 //   ① 늦은 행동 응답을 화면에 반영한 뒤, 행동을 보낸 뒤로 시계가 더 갔으면 그 시각으로 check를 **한 번** 보낸다 ("요청 하나씩"은 그대로)
 //      테스트는 그 check를 붙잡아, 붙잡힌 동안 행동 응답이 화면에 있는지 본다. (경계) 시계가 그대로면 더 보내지 않는다
 //   ② 연습 [닫혔어] 응답도 화면에 보인다 (대안 카드 T-06) — 연습은 실제와 같게
+// §11 Q8 반영 (11-16):
+//   행동 응답이 올 때 check가 이미 진행 중이면 그때 보내지 않고, 그 check가 끝난 뒤 시계가 행동 시각보다 더 갔으면 한 번 더.
+//   기다리는 check는 최대 하나 — 진행 중에 시계가 여러 번 가도 끝난 뒤 최신 시각으로 한 번 (TASK-014 "요청 하나씩 · 최신 시각만")
 import { act, render, screen, waitFor, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -165,6 +168,57 @@ describe('§E ② 실제 여행: 행동 응답은 뒤에 보낸 check 응답이 
     expect(screen.queryByTestId('card-T-07')).toBeNull(); // 조회 응답은 최신만 (TASK-007 B8 그대로)
     expect(screen.getByTestId('card-T-01')).toBeTruthy();
     expect(control.checks()).toHaveLength(checksBeforeAction); // §9 Q8 ① 경계: 행동 뒤 시계가 그대로면 check를 더 보내지 않는다
+  });
+
+  // ---------- §11 Q8: 행동 응답이 올 때 check가 이미 진행 중이면 ----------
+
+  /** [이걸로 할래](10:00)를 붙잡은 채 시계 +10 -> check(10:10)도 붙잡는다. (행동 풀기, check 풀기) */
+  async function actionThenCheckInFlight(control: NowControl) {
+    const releaseAction = control.server.defer(ACCEPT_ROUTE('prop-relaxed'));
+    await toNow(control);
+    await pressId('proposal-prop-relaxed');
+    await pressId('select-confirm');
+    await waitFor(() => expect(control.server.sent(ACCEPT_ROUTE('prop-relaxed'))).toHaveLength(1));
+    await pressId('demo-toggle');
+    const releaseCheck = control.defer();
+    await pressId('demo-plus-10');
+    await waitFor(() => expect(control.checks().at(-1)?.at).toBe(AT('10:10')));
+    return { releaseAction, releaseCheck };
+  }
+
+  test('T15_S11_Q8_행동_응답_때_check가_진행_중이면_보내지_않고_끝난_뒤_시계가_더_갔으면_한_번_더', async () => {
+    const control = nowServer(delayedView());
+    const { releaseAction, releaseCheck } = await actionThenCheckInFlight(control);
+    const inFlight = control.checks().length;
+    await act(async () => releaseAction(json(200, accepted())));
+    await screen.findByTestId('card-T-01');
+    expect(reasonLine().getByText(ACCEPTED_NOTE)).toBeTruthy();
+    await act(async () => undefined);
+    expect(control.checks()).toHaveLength(inFlight); // "요청 하나씩": 진행 중이면 겹쳐 보내지 않는다
+    await act(async () => releaseCheck(json(200, { ...accepted(), at: AT('10:10') })));
+    await waitFor(() => expect(control.checks()).toHaveLength(inFlight + 1)); // 10:10 > 행동 시각 10:00 -> 한 번 더
+    expect(control.checks().at(-1)?.at).toBe(AT('10:10'));
+    await act(async () => undefined);
+    await act(async () => undefined);
+    expect(control.checks()).toHaveLength(inFlight + 1); // 한 번만
+  });
+
+  test('T15_S11_Q8_기다리는_check는_하나뿐_진행_중에_시계가_여러_번_가도_끝난_뒤_최신_시각으로_한_번', async () => {
+    const control = nowServer(delayedView());
+    const { releaseAction, releaseCheck } = await actionThenCheckInFlight(control);
+    const inFlight = control.checks().length;
+    await act(async () => releaseAction(json(200, accepted())));
+    await screen.findByTestId('card-T-01');
+    await pressId('demo-plus-10'); // 10:20
+    await pressId('demo-plus-10'); // 10:30
+    await act(async () => undefined);
+    expect(control.checks()).toHaveLength(inFlight); // 진행 중에는 쌓지 않는다
+    await act(async () => releaseCheck(json(200, { ...accepted(), at: AT('10:10') })));
+    await waitFor(() => expect(control.checks()).toHaveLength(inFlight + 1));
+    expect(control.checks().at(-1)?.at).toBe(AT('10:30')); // 최신 시각으로 합침
+    await act(async () => undefined);
+    await act(async () => undefined);
+    expect(control.checks()).toHaveLength(inFlight + 1); // 10:20 · 10:30 · 행동 뒤 한 번이 따로 나가지 않는다
   });
 });
 

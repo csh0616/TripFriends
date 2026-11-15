@@ -83,7 +83,7 @@ const tripWith = (planned: number[]) => ({
   city_code: 'osaka',
   start_date: DATES[0],
   end_date: DATES[2],
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   is_demo: false,
   trip_days: DATES.map((date, i) => day(i + 1, date, planned.includes(i + 1))),

@@ -7,7 +7,8 @@
 §6(이름·주소 둘 다 못 찾음 -> 지도 찍기, 숙소 없이도 지금처럼) · §7 AC-2 · 결정권자 확인 Q1(주소 글자·찍은 좌표 저장, 실시간 위치는 여전히 0, 두 값을 섞지 않는다) ·
 TASK-014 §30 Q6(모르는 숙소 = 없는 숙소, day.lodging null) · TASK-014 §B B2·B3(DB·로그에 위치 0) · TASK-010 §B5(숙소 검색)·§6 · ADR-015(Google 약관) ·
 TASK-015 §9(11-16 PM 답: 모양 승인, Q1 주소 검색 규칙 = 숙소 검색과 같은 상수, Q2 응답에서 lodging_place_id 뺌, Q4 place·address에 좌표 = 400 INVALID_LODGING,
-Q5 label 모든 kind·앞뒤 공백 자르고 30자·빈 글 null, pin이 city.center에서 50km 밖 = 400) · API-001 2-1(11-16).
+Q5 label 모든 kind·앞뒤 공백 자르고 30자·빈 글 null, pin이 city.center에서 50km 밖 = 400) · API-001 2-1(11-16)
+TASK-015 §11(11-16 PM 답: Q1 INVALID_LODGING + reason too_far·coords_not_allowed·label_too_long·missing_field, Q2 label 31자 이상 = 400 자르지 않음).
 
 계약 (§9 승인·반영):
     주소 검색 = GET /places/address-search?city_code&q (Bearer 필요) -> [{place_id, name, address_short}] (숙소 검색과 같은 모양)
@@ -19,9 +20,13 @@ Q5 label 모든 kind·앞뒤 공백 자르고 30자·빈 글 null, pin이 city.c
         place   : place_id 필수. address_text·lat·lng null
         address : address_text 필수(빈 글 안 됨). place_id는 있으면. lat·lng null (좌표는 쓰는 순간 place_id로 불러온다)
         pin     : lat·lng 필수. place_id·address_text null. 서버가 좌표를 그대로 가지는 것은 pin뿐. city.center(도시 팩 우리 값)에서 50km 밖이면 400 (Q5)
-        label   : 모든 kind 선택. 앞뒤 공백을 자르고 30자까지, 자른 뒤 빈 글이면 null (Q5)
-        place·address에 lat·lng가 오면 400 INVALID_LODGING (Q4)
-        그 밖에 모양이 틀리면 400 VALIDATION_ERROR, detail.field = "lodging"
+        label   : 모든 kind 선택. 앞뒤 공백을 자르고 30자까지(31자 이상 = 400 label_too_long, §11 Q2), 자른 뒤 빈 글이면 null (Q5)
+        숙소 문제는 한 코드 400 INVALID_LODGING, 이유는 error.detail.reason (§11 Q1, API-001 오류 형식 {error: {code, message, detail}}):
+            "coords_not_allowed" = place·address에 lat·lng (Q4)
+            "too_far"            = pin이 city.center에서 50km 밖 (Q5)
+            "label_too_long"     = 앞뒤 공백을 자른 label이 31자 이상 (§11 Q2: 자르지 않는다)
+            "missing_field"      = kind·그 kind의 필수 칸이 없음 (null·빈 글 포함)
+        모르는 kind는 400 이고 아무것도 저장하지 않는다 (코드는 문서에 없음 — 질문)
         옛 필드 lodging_place_id만 오면 {"kind": "place", "place_id": 그 값, 나머지 null}로 받는다 (요청에서만)
     Trip 응답(POST /trips · GET /trips/{id} · /trips/current)에 lodging_place_id 칸이 없다 (Q2: 같은 뜻의 값이 두 곳이면 어긋난다)
     place·address 여행의 응답·저장소에 좌표가 없다 (place_id로 그때 불러옴). address인데 place_id가 없거나 좌표를 못 구하면 숙소 없음과 같다(§30 Q6)
@@ -466,25 +471,38 @@ def test_T15_S6_숙소_없이도_지금처럼_만들어지고_lodging은_null(me
     assert "lodging" in trip and trip["lodging"] is None
 
 
-BAD = [
+MISSING = [
     pytest.param({"kind": "pin", "lng": PIN[1]}, id="pin_lat_없음"),
     pytest.param({"kind": "pin", "lat": PIN[0]}, id="pin_lng_없음"),
     pytest.param({"kind": "pin", "lat": None, "lng": None}, id="pin_좌표_null"),
     pytest.param({"kind": "place"}, id="place_장소ID_없음"),
     pytest.param({"kind": "address"}, id="address_글_없음"),
     pytest.param({"kind": "address", "address_text": "   "}, id="address_빈_글"),
-    pytest.param({"kind": "house", "place_id": GOOGLE_LODGING_ID}, id="모르는_kind"),
     pytest.param({"place_id": GOOGLE_LODGING_ID}, id="kind_없음"),
 ]
 
 
-@pytest.mark.parametrize("sent", BAD)
-def test_T15_A_틀린_lodging_모양은_400_field_lodging이고_아무것도_저장하지_않는다(mem, sent):
+def lodging_reason(response) -> str | None:
+    """400 INVALID_LODGING의 이유 (§11 Q1). 다른 코드면 None."""
+    error = response.json().get("error", {})
+    return (error.get("detail") or {}).get("reason") if error.get("code") == "INVALID_LODGING" else None
+
+
+@pytest.mark.parametrize("sent", MISSING)
+def test_T15_S11_Q1_필수_칸이_빠진_lodging은_400_INVALID_LODGING_missing_field이고_아무것도_저장하지_않는다(mem, sent):
+    """§11 Q1: 숙소 문제는 한 코드, 이유는 reason (이전: 400 VALIDATION_ERROR · detail.field = "lodging")."""
     before = stores(mem)
     response = post_trip(mem, sent)
     assert response.status_code == 400, response.text
-    error = response.json()["error"]
-    assert error["code"] == "VALIDATION_ERROR" and error["detail"]["field"] == "lodging", error
+    assert lodging_reason(response) == "missing_field", response.json()
+    assert stores(mem) == before
+
+
+def test_T15_A_모르는_kind는_400이고_아무것도_저장하지_않는다(mem):
+    """모르는 kind의 코드·reason은 §11 Q1 목록에 없다(질문) -> 400과 저장 0만 본다."""
+    before = stores(mem)
+    response = post_trip(mem, {"kind": "house", "place_id": GOOGLE_LODGING_ID})
+    assert response.status_code == 400, response.text
     assert stores(mem) == before
 
 
@@ -501,7 +519,7 @@ def test_T15_Q4_place·address에_좌표를_실어_보내면_400_INVALID_LODGING
     before = stores(mem)
     response = post_trip(mem, sent)
     assert response.status_code == 400, response.text
-    assert response.json()["error"]["code"] == "INVALID_LODGING", response.json()
+    assert lodging_reason(response) == "coords_not_allowed", response.json()  # §11 Q1
     assert stores(mem) == before
     assert not leaks(repr(stores(mem)["trip_store"]), PIN)
 
@@ -517,7 +535,7 @@ def test_T15_Q4_경계_좌표_한쪽만_실어도_400_INVALID_LODGING(mem, monke
     install_address_search(monkeypatch, mem)
     response = post_trip(mem, sent)
     assert response.status_code == 400, response.text
-    assert response.json()["error"]["code"] == "INVALID_LODGING", response.json()
+    assert lodging_reason(response) == "coords_not_allowed", response.json()  # §11 Q1
 
 
 @pytest.mark.parametrize(
@@ -572,15 +590,24 @@ def test_T15_Q5_label은_앞뒤_공백을_자르고_빈_글은_null(mem, label, 
     assert trip["lodging"]["label"] == expected
 
 
-def test_T15_Q5_경계_label_31자는_30자를_넘겨_저장하지_않는다(mem):
-    """30자 상한. 넘으면 400으로 거절하는지 30자로 자르는지는 문서에 없다(질문) -> 어느 쪽이든 31자가 저장되지 않는다."""
-    response = post_trip(mem, {**pin_body(), "label": "가" * 31})
-    if response.status_code == 400:
-        assert response.json()["error"]["detail"]["field"] == "lodging"
-        assert not any("가" * 31 in repr(v) for v in stores(mem).values())
-    else:
-        assert response.status_code == 201, response.text
-        assert len(response.json()["lodging"]["label"]) <= 30
+@pytest.mark.parametrize(
+    "sent",
+    [
+        pytest.param({**pin_body(), "label": "가" * 31}, id="pin_31자"),
+        pytest.param({**pin_body(), "label": f"  {'가' * 31}  "}, id="pin_자른_뒤_31자"),
+        pytest.param({**pin_body(), "label": "가" * 200}, id="pin_200자"),
+        pytest.param({"kind": "place", "place_id": GOOGLE_LODGING_ID, "label": "가" * 31}, id="place_31자"),
+        pytest.param({"kind": "address", "address_text": TYPED, "place_id": ADDR_ID, "label": "가" * 31}, id="address_31자"),
+    ],
+)
+def test_T15_S11_Q2_경계_label_31자_이상은_400_label_too_long이고_자르지_않고_저장하지_않는다(mem, monkeypatch, sent):
+    """§11 Q2: 조용히 자르지 않는다 (이전 단언: "400이든 30자로 자르든 31자가 저장되지 않는다")."""
+    install_address_search(monkeypatch, mem)
+    before = stores(mem)
+    response = post_trip(mem, sent)
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "label_too_long", response.json()
+    assert stores(mem) == before
 
 
 # ---------- Q5 pin은 city.center에서 50km 안 ----------
@@ -635,6 +662,7 @@ def test_T15_Q5_city_center에서_50km_밖의_pin은_400이고_아무것도_저�
     before = stores(mem_v3)
     response = post_trip(mem_v3, pin_body(at))
     assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "too_far", response.json()  # §11 Q1 (앱은 이 이유로 a2 안내)
     assert stores(mem_v3) == before
 
 

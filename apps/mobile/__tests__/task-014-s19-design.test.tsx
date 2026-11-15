@@ -77,7 +77,7 @@ const trip = (states: string[] = ['past', 'today', 'planned', 'planning']) => ({
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: `2026-12-0${states.length}`,
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   is_demo: false,
   trip_days: states.map((state, index) => tripDay(index + 1, state)),
@@ -395,7 +395,7 @@ describe('§19 날짜 목록 (D6)', () => {
     city_code: 'osaka',
     start_date: DATES[0],
     end_date: DATES[2],
-    lodging_place_id: null,
+    lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
     status: 'active',
     trip_days: days,
   });

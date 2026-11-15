@@ -102,6 +102,9 @@ def schema() -> dict[str, dict]:
         for add in re.finditer(r'add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?\s+([^,]+)', rest):
             if add.group(1) not in CONSTRAINT_WORDS:
                 entry["columns"][add.group(1)] = add.group(2)
+        # TASK-015 §11 Q9: 칸을 옮기고 지우는 마이그레이션 (drop column) -> 그 열은 더 없다 (파일 이름 순서대로 적용)
+        for drop in re.finditer(r'drop\s+column\s+(?:if\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?', rest):
+            entry["columns"].pop(drop.group(1), None)
     return tables
 
 
@@ -120,7 +123,7 @@ def test_T12_A1_DATA_001_R1_표가_있다(table):
 @pytest.mark.parametrize(
     ("table", "columns"),
     [
-        ("trips", {"owner_id", "city_code", "start_date", "end_date", "lodging_place_id", "status"}),
+        ("trips", {"owner_id", "city_code", "start_date", "end_date", "lodging", "status"}),  # TASK-015 §11 Q9 (이전: lodging_place_id)
         ("trip_days", {"trip_id", "day", "start_time", "end_time", "chosen_option_id"}),
         ("fixed_events", {"trip_day_id", "place_id", "title", "start_at", "end_at"}),
         ("must_visits", {"trip_id", "place_id"}),

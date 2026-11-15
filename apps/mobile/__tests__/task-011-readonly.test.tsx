@@ -39,7 +39,7 @@ const FOUR = {
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: '2026-12-04',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   trip_days: [tripDay(1, 'past', true), tripDay(2, 'today', true), tripDay(3, 'planned', true), tripDay(4, 'planning', false)],
 };

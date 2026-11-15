@@ -5,7 +5,15 @@
 export type PinKind = 'next' | 'now' | 'lodging' | 'later' | 'done';
 
 /** 화면 좌표(pt). x·y = 핀 중심, size = 핀 지름(pin-later 28 · pin-done·pin-now 32 · pin-next 36, 숙소는 화면이 정한 값) */
-export type ScreenPin = { id: string; kind: PinKind; x: number; y: number; size: number };
+export type ScreenPin = {
+  id: string;
+  kind: PinKind;
+  x: number;
+  y: number;
+  size: number;
+  /** 코스 번호 (숙소는 null). 같은 순위끼리 묶을 때 번호가 앞선 핀이 남는다 (TASK-015 §11 Q4) */
+  seq: number | null;
+};
 
 export type Rect = { x: number; y: number; width: number; height: number };
 
@@ -33,6 +41,8 @@ export type ShownPin = ScreenPin & {
   badges: Badge[];
   /** 이 핀에 묶여 지도에서 빠진 핀 id (숙소가 집 배지로 들어간 것 포함) */
   hidden: string[];
+  /** 화면 읽기 글. 예 "나중 4번, 5번도 같은 곳" (TASK-015 §11 Q6) */
+  a11yLabel: string;
 };
 
 export type PinOverlapResult = {
@@ -50,7 +60,7 @@ export const GROUP_DISTANCE = 36;
 /** 가림 순서 (위 -> 아래). 위가 보이고 누르기도 위가 받는다 */
 export const PIN_STACK = ['next', 'now', 'lodging', 'later', 'done', 'label', 'me', 'route'] as const;
 
-/** 계산 순서 ②~⑤ (①카메라는 호출하는 쪽이 끝낸 뒤 화면 좌표를 넘긴다) */
+/** 계산 순서 ②~⑤ (①카메라는 호출하는 쪽이 끝낸 뒤 화면 좌표를 넘긴다). 예외를 잡지 않는다 — 화면이 감싼다 (§11 Q6) */
 export function resolvePinOverlap(_input: PinOverlapInput): PinOverlapResult {
   throw new Error('not implemented');
 }

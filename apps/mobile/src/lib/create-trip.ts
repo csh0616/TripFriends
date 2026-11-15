@@ -73,3 +73,8 @@ export const lodgingQueryReady = (q: string): boolean => q.trim().length >= 2;
 export function fixedEventError(status: number, code: string | null): string | null {
   return status === 409 && code === 'PLAN_EXISTS' ? '이미 계획을 고른 날이야. 일정을 바꾸려면 계획을 다시 짜야 해' : null;
 }
+
+/** TASK-015 §11 Q1: 숙소 400 INVALID_LODGING의 reason별 안내 (a2 지도 찍기). too_far면 "{도시}에서 너무 멀어…". 그 밖에는 null. 껍데기 — frontend가 채운다 */
+export function lodgingError(_status: number, _code: string | null, _reason: string | null, _cityCode: string): string | null {
+  throw new Error('not implemented');
+}

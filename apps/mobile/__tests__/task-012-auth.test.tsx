@@ -44,7 +44,7 @@ const TRIP = {
   city_code: 'osaka',
   start_date: '2026-12-11',
   end_date: '2026-12-11',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   trip_days: [{ day_id: 'day-t1', date: '2026-12-11', state: 'planning', chosen_option_id: null, fixed_events: [], summary: null, must_visits: [] }],
 };
