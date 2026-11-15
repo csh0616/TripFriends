@@ -636,6 +636,14 @@ export function TripNowScreen({
     : firstPin
       ? { latitude: firstPin.lat, longitude: firstPin.lng }
       : null;
+  // TASK-015 §B6: 계획상 지금 있는 곳이 숙소 = 첫 이동을 떠나기 전, 또는 마지막 일정 뒤 숙소에 닿은 뒤 (숙소가 있을 때만)
+  const stayingAtLodging = (() => {
+    if (!day.lodging || !view || view.pins.length === 0) return false;
+    const first = view.pins[0];
+    const lastPin = view.pins[view.pins.length - 1];
+    if (minutes < toMinutes(first.start) - first.travel_min) return true;
+    return homeMin.current !== null && minutes >= toMinutes(lastPin.end) + homeMin.current;
+  })();
   const showClock = !live && (rehearsal || record.demo || __DEV__);
   const pill = view ? PILL[view.status] ?? PILL.on_track : null;
   const bandTop = insets.top + rehTop + layout.header + space['space-2'];
@@ -671,6 +679,7 @@ export function TripNowScreen({
               routeRemaining={(view?.route.remaining ?? []).map(([latitude, longitude]) => ({ latitude, longitude }))}
               position={position ? { latitude: position.lat, longitude: position.lng } : null}
               hollowPosition={rehearsal}
+              stayingAtLodging={stayingAtLodging}
               onReady={() => setMapReady(true)}
               onFail={() => setMapFailed(true)}
             />

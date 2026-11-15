@@ -7,7 +7,9 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewProps } from 'r
 
 import mapStyleFile from '../../../assets/map/google-map-style.json';
 import { Text } from '@/components/app-text';
+import { metersPerPoint as metersPerPointOf, project, unproject, type Region } from '@/lib/map-project';
 import type { NowPin } from '@/lib/now-api';
+import { resolvePinOverlap, type Badge, type PinOverlapResult, type ScreenPin } from '@/lib/pin-overlap';
 import { layout } from '@/planning/layout';
 import tokens from 'design-tokens';
 import { color, control, motion, radius, shadow, space, text } from '@/planning/theme';
@@ -42,6 +44,7 @@ const CENTER = { x: 0.5, y: 0.5 } as const;
 const Z_POSITION = 1;
 const PIN_Z = { later: 2, done: 3, now: 5, next: 7 } as const;
 const Z_HOME = 6;
+const Z_LABEL = 4; // 이름표는 핀 아래·내 위치 점 위 (PIN_STACK: 핀 > 이름표 > 내 위치 점)
 
 function PinFace({ pin }: { pin: NowPin }) {
   switch (pin.state) {
@@ -72,9 +75,30 @@ function PinFace({ pin }: { pin: NowPin }) {
   }
 }
 
-function NumberPin({ pin }: { pin: NowPin }) {
-  const tracking = useTrackingBriefly(`${pin.seq}-${pin.state}-${pin.state === 'next' ? pin.name : ''}`);
-  const next = pin.state === 'next';
+const PIN_SIZE: Record<string, number> = { next: layout.pinNext, now: layout.pinNow, later: layout.pinLater, done: layout.pinDone };
+/** 이름표 폭 (글자 수로 어림: 한글 12 · 그 밖 7 + 좌우 8, 최대 pinBubbleMax) */
+const labelWidthOf = (name: string): number =>
+  Math.min(layout.pinBubbleMax, [...name].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 0x7f ? 12 : 7), 0) + space['space-2'] * 2);
+
+const BADGE = 18; // 묶음 +N · 집 배지 지름 (글자 12 이상)
+
+/** 핀 모서리 배지: +N (ink 면 · 흰 글자) 또는 집 (흰 면 · ink 테두리) */
+function PinBadge({ badge, face }: { badge: Badge; face: number }) {
+  const inset = (control['touch-min'] - face) / 2;
+  const place = badge.corner === 'top-right' ? { top: inset - BADGE / 3, right: inset - BADGE / 3 } : { bottom: inset - BADGE / 3, right: inset - BADGE / 3 };
+  return (
+    <View testID={badge.type === 'plus' ? 'pin-badge-plus' : 'pin-badge-home'} style={[styles.badge, badge.type === 'home' && styles.badgeHome, place]}>
+      {badge.type === 'plus' ? <Text style={text('label', 'surface')}>{`+${badge.count}`}</Text> : <HouseGlyph tint={color.ink} scale={0.6} />}
+    </View>
+  );
+}
+
+type Rules = { badges: Badge[]; a11yLabel: string; showBubble: boolean };
+
+function NumberPin({ pin, rules }: { pin: NowPin; rules?: Rules }) {
+  const badgeKey = rules ? rules.badges.map((b) => (b.type === 'plus' ? `+${b.count}` : 'h')).join('') : '';
+  const tracking = useTrackingBriefly(`${pin.seq}-${pin.state}-${pin.state === 'next' ? pin.name : ''}-${badgeKey}-${rules?.showBubble}`);
+  const next = pin.state === 'next' && (rules ? rules.showBubble : true);
   return (
     <Marker
       testID={`map-pin-${pin.seq}`}
@@ -92,8 +116,9 @@ function NumberPin({ pin }: { pin: NowPin }) {
             </Text>
           </View>
         ) : null}
-        <View style={styles.pinTouch}>
+        <View style={styles.pinTouch} accessible={rules !== undefined} accessibilityLabel={rules?.a11yLabel}>
           <PinFace pin={pin} />
+          {rules ? rules.badges.map((badge) => <PinBadge key={badge.type} badge={badge} face={pin.state === 'next' ? layout.pinNext : pin.state === 'now' ? layout.pinNow : layout.pinLater} />) : null}
         </View>
         {/* 말풍선과 같은 높이의 빈 칸: 핀 가운데가 마커의 가운데가 되게 */}
         {next ? <View style={styles.bubbleSpacer} /> : null}
@@ -102,14 +127,38 @@ function NumberPin({ pin }: { pin: NowPin }) {
   );
 }
 
-function HomePin({ coordinate }: { coordinate: LatLng }) {
-  const tracking = useTrackingBriefly('home');
+function HomePin({ coordinate, shape = 'home', badges = [], a11yLabel }: { coordinate: LatLng; shape?: 'home' | 'now'; badges?: Badge[]; a11yLabel?: string }) {
+  const tracking = useTrackingBriefly(`home-${shape}`);
   return (
     <Marker testID="map-home" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_HOME}>
-      <View style={styles.home}>
-        {/* 집 모양: 45도 돌린 네모의 윗변·왼변이 지붕, 아래 네모가 벽 (변환은 View 하나에만) */}
-        <View style={styles.homeRoof} />
-        <View style={styles.homeWall} />
+      <View style={styles.pinTouch} accessible={a11yLabel !== undefined} accessibilityLabel={a11yLabel}>
+        {shape === 'now' ? (
+          // 숙소에 머무는 동안: "지금 핀" 모양 32 (ink 면 · 흰 테두리 3 · 흰 집)
+          <View style={styles.pickFace}>
+            <HouseGlyph tint={color.surface} />
+          </View>
+        ) : (
+          <View style={styles.home}>
+            <HouseGlyph tint={color.ink} />
+          </View>
+        )}
+        {badges.map((badge) => (
+          <PinBadge key={badge.type} badge={badge} face={layout.homePin} />
+        ))}
+      </View>
+    </Marker>
+  );
+}
+
+/** 이름표 (겹침 규칙이 자리를 정한 뒤): 핀과 따로 선 Marker */
+function NameTag({ coordinate, name, width }: { coordinate: LatLng; name: string; width: number }) {
+  const tracking = useTrackingBriefly(`tag-${name}-${width}`);
+  return (
+    <Marker testID="map-pin-label" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_LABEL} tappable={false}>
+      <View style={[styles.bubble, { width, maxWidth: undefined }]}>
+        <Text numberOfLines={1} style={[text('label'), styles.tagText]}>
+          {name}
+        </Text>
       </View>
     </Marker>
   );
@@ -307,6 +356,7 @@ export function MapAdapter({
   routeRemaining,
   position,
   hollowPosition = false,
+  stayingAtLodging = false,
   onReady,
   onFail,
 }: {
@@ -321,11 +371,14 @@ export function MapAdapter({
   position: LatLng | null;
   /** TASK-014 §4-13 reh-dot: 연습 중 "계획대로라면 여기" = 속이 빈 점 */
   hollowPosition?: boolean;
+  /** TASK-015 §B6: 계획상 지금 있는 곳이 숙소 (출발 전·귀가 후) -> 숙소 마커가 "지금 핀" 모양, 내 위치 점은 그리지 않는다 */
+  stayingAtLodging?: boolean;
   onReady: () => void;
   onFail: () => void;
 }) {
   const map = useRef<MapView>(null);
-  const { width: mapWidth } = useWindowDimensions();
+  const { width: mapWidth, height: mapHeight } = useWindowDimensions();
+  const [region, setRegion] = useState<Region | null>(null); // 지도가 알려 준 영역. 모르면(첫 보고 전) 겹침 규칙 없이 그린다
   const [metersPerPoint, setMetersPerPoint] = useState(1);
   const ready = useRef(false);
 
@@ -360,7 +413,34 @@ export function MapAdapter({
     if (ready.current) return;
     ready.current = true;
     onReady();
+    // 첫 영역 보고를 기다리지 않고 지금 보이는 영역을 읽는다 (겹침 규칙의 화면 좌표용)
+    void Promise.resolve(map.current?.getMapBoundaries?.())
+      .then((box) => {
+        if (!box) return;
+        const { northEast: ne, southWest: sw } = box;
+        setRegion((now) => now ?? { latitude: (ne.latitude + sw.latitude) / 2, longitude: (ne.longitude + sw.longitude) / 2, latitudeDelta: ne.latitude - sw.latitude, longitudeDelta: ne.longitude - sw.longitude });
+      })
+      .catch(() => undefined);
   };
+
+  // TASK-015 §B6 핀 겹침 규칙. 계산이 던지면 규칙 없이 지금처럼 그린다 (§6, §11 Q6)
+  let rules: PinOverlapResult | null = null;
+  const size = { width: mapWidth, height: mapHeight };
+  if (region) {
+    try {
+      const at = (c: LatLng) => project(region, size, c);
+      const screenPins: ScreenPin[] = pins.map((pin) => ({ id: `p${pin.seq}`, kind: pin.state, ...at({ latitude: pin.lat, longitude: pin.lng }), size: PIN_SIZE[pin.state] ?? layout.pinLater, seq: pin.seq }));
+      if (home) screenPins.push({ id: 'home', kind: 'lodging', ...at(home), size: layout.homePin, seq: null });
+      const me = position ? { ...at(position), size: hollowPosition ? layout.rehDot : layout.positionDot } : null;
+      const nextName = pins.find((pin) => pin.state === 'next')?.name ?? '';
+      rules = resolvePinOverlap({ pins: screenPins, screen: size, labelWidth: labelWidthOf(nextName), me, stayingAtLodging });
+    } catch {
+      rules = null;
+    }
+  }
+  const shownById = new Map(rules ? rules.pins.map((shown) => [shown.id, shown]) : []);
+  const nextPin = pins.find((pin) => pin.state === 'next');
+  const labelCoord = rules?.label && region ? unproject(region, size, { x: rules.label.rect.x + rules.label.rect.width / 2, y: rules.label.rect.y + rules.label.rect.height / 2 }) : null;
 
   return (
     <MapView
@@ -371,10 +451,10 @@ export function MapAdapter({
       style={StyleSheet.absoluteFill}
       initialRegion={{ ...(center ?? NO_CENTER), latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
       toolbarEnabled={false}
-      onRegionChangeComplete={(region) => {
+      onRegionChangeComplete={(next0) => {
+        setRegion(next0);
         // 화면 가로 한 점이 몇 m인지: 경도 폭(도) -> m, 위도에 따라 줄어든다
-        const meters = region.longitudeDelta * METERS_PER_DEGREE * Math.cos((region.latitude * Math.PI) / 180);
-        const next = meters / mapWidth;
+        const next = metersPerPointOf(next0, mapWidth);
         setMetersPerPoint((now) => (Number.isFinite(next) && next > 0 && Math.abs(next - now) / now > 0.1 ? next : now));
       }}
       onMapReady={signalReady}
@@ -391,16 +471,29 @@ export function MapAdapter({
         />
       ) : null}
       {routeRemaining.length >= 2 ? <RemainingRoute path={routeRemaining} metersPerPoint={metersPerPoint} /> : null}
-      {home ? <HomePin coordinate={home} /> : null}
-      {pins.map((pin) => (
-        <NumberPin key={pin.seq} pin={pin} />
-      ))}
-      {position ? <MyPosition coordinate={position} hollow={hollowPosition} /> : null}
+      {home && (!rules || shownById.has('home')) ? (
+        <HomePin
+          coordinate={home}
+          shape={shownById.get('home')?.shape === 'now' ? 'now' : 'home'}
+          badges={shownById.get('home')?.badges}
+          a11yLabel={shownById.get('home')?.a11yLabel}
+        />
+      ) : null}
+      {pins.map((pin) => {
+        const shown = shownById.get(`p${pin.seq}`);
+        if (rules && !shown) return null; // 다른 핀에 묶여 빠졌다 (+N 배지가 대신 알린다)
+        return <NumberPin key={pin.seq} pin={pin} rules={shown ? { badges: shown.badges, a11yLabel: shown.a11yLabel, showBubble: false } : undefined} />;
+      })}
+      {rules && rules.label && labelCoord && nextPin ? <NameTag coordinate={labelCoord} name={nextPin.name} width={rules.label.rect.width} /> : null}
+      {position && (!rules || rules.meDot) ? <MyPosition coordinate={position} hollow={hollowPosition} /> : null}
     </MapView>
   );
 }
 
 const styles = StyleSheet.create({
+  badge: { position: 'absolute', minWidth: BADGE, height: BADGE, paddingHorizontal: 3, borderRadius: radius['r-full'], backgroundColor: color.ink, alignItems: 'center', justifyContent: 'center' },
+  badgeHome: { backgroundColor: color.surface, borderWidth: layout.routeHomeStroke, borderColor: color.ink },
+  tagText: { textAlign: 'center' },
   homeGlyph: { alignItems: 'center', justifyContent: 'center' },
   pickArea: {
     width: PICK_AREA_RADIUS * 2,
@@ -478,23 +571,6 @@ const styles = StyleSheet.create({
     borderColor: color.ink,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  homeRoof: {
-    width: layout.homeRoof,
-    height: layout.homeRoof,
-    borderTopWidth: layout.homeStroke,
-    borderLeftWidth: layout.homeStroke,
-    borderColor: color.ink,
-    transform: [{ rotate: '45deg' }],
-    marginBottom: -layout.homeRoof / 2,
-  },
-  homeWall: {
-    width: layout.homeWall[0],
-    height: layout.homeWall[1],
-    borderLeftWidth: layout.homeStroke,
-    borderRightWidth: layout.homeStroke,
-    borderBottomWidth: layout.homeStroke,
-    borderColor: color.ink,
   },
   // reh-dot: 속 흰색 + 고리 3 ink, 바깥 지름 20, 퍼지는 고리 없음
   rehDot: {
