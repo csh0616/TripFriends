@@ -12,7 +12,7 @@
 //     canAddMustVisit(form, date): boolean         그날 5곳 미만일 때만
 //     mustVisitDayNumber(form, placeId): number | null  그 장소가 담긴 날이 몇 일째인지 (1부터). 다른 날에 담긴 곳은 addMustVisit가 그대로 둔다 (§11 D1)
 //     addMustVisit(form, date, placeId): TripForm  5곳이면 그대로 (새 객체, 원본은 안 바꿈)
-//     createTripBody(form)                         POST /trips 본문 (§B1). 숙소가 없으면 lodging을 싣지 않는다.
+//     createTripBody(form)                         POST /trips 본문 (§B1). 숙소가 없으면 lodging: null (TASK-015 §13 Q5, 이전: 싣지 않는다).
 //                                                  숙소(이름 검색으로 고른 곳)는 TASK-015 §A·§9·§12 Q7: lodging = { kind: 'place', place_id, address_text: null, lat: null, lng: null, label: null }
 //                                                  옛 필드 lodging_place_id는 보내지 않는다
 //     placeQueryReady(q) / lodgingQueryReady(q)    꼭 갈 곳은 한 글자부터(§B4), 숙소는 두 글자부터(§B5)
@@ -153,6 +153,7 @@ describe('C2 여행 만들기 폼', () => {
       city_code: 'osaka',
       start_date: '2026-12-10',
       end_date: '2026-12-11',
+      lodging: null, // TASK-015 §13 Q5 (이전: 칸 없음)
       must_visits: [{ date: '2026-12-10', place_id: 'osaka-fake-kuromon' }],
     });
   });

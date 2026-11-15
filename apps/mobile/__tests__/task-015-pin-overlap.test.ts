@@ -9,7 +9,9 @@
 //       Q6(함수는 순수·예외를 잡지 않음, 화면이 감쌈 · 보이는 핀마다 a11yLabel을 함수가 만든다) ·
 //       TASK-015 §12(11-16) 숙소 마커 지름(보통 28, 지금 있는 곳이 숙소일 때만 32 '지금 핀' 모양·내 위치 점 안 그림. 지난 28 · 지금 32 · 다음 36 · 나중 28.
 //       묶기는 크기와 상관없이 중심 거리 < 36) · Q4(a11yLabel 글 6가지, 사용자 이름표 label은 넣지 않음) ·
-//       Q5(이름표 자리 검사의 장애물: 다른 핀은 간격 4 미만이면 겹침, 내 위치 점·떠 있는 판은 간격 0 이하(맞닿음 포함)면 겹침).
+//       Q5(이름표 자리 검사의 장애물 모두 맞닿음까지 겹침) -> §13 Q1로 정리: **하나의 규칙** = 장애물을 여유만큼 키운 뒤 맞닿음까지 겹침(간격 <= 여유).
+//       여유는 다른 핀 4 · 내 위치 점 0 · 떠 있는 판 0 (§12 Q5의 "4 미만"은 PM 글 실수, §11 Q3가 맞다) ·
+//       TASK-015 §13 Q6(다른 순위끼리 묶인 글: 남은 핀(높은 순위)이 앞, 붙은 번호는 순위 말 없이 번호 오름차순 — "나중 4번, 2번도 같은 곳").
 //
 // 계약 (이 테스트가 정한 것, 승인 대기 — 질문 목록 참고):
 //   모듈 '@/lib/pin-overlap'
@@ -17,7 +19,7 @@
 //     입력 pins = [{ id, kind: next|now|lodging|later|done, x, y(핀 중심, pt), size(지름), seq: 코스 번호(숙소는 null) }] — ① 카메라는 부르는 쪽이 끝낸 뒤의 화면 좌표
 //     출력 pins = 보일 핀만, 그리는 순서(아래 -> 위) done · later · lodging · now · next. 각 핀 { ...입력, shape: pin|home|now, badges, hidden: 묶여 빠진 id[], a11yLabel }
 //     a11yLabel (§11 Q6 · §12 Q4): 보이는 핀마다 화면 읽기 글. 순위 말(다음·지금·지난·나중)은 순위표에서
-//                묶이지 않은 핀 "나중 4번" · 여러 번호 묶음 "나중 4번, 5번·6번도 같은 곳" · 숙소 혼자 "숙소" ·
+//                묶이지 않은 핀 "나중 4번" · 여러 번호 묶음 "나중 4번, 5번·6번도 같은 곳"(붙은 번호는 순위와 상관없이 번호 오름차순, §13 Q6) · 숙소 혼자 "숙소" ·
 //                집 배지 "다음 3번, 숙소도 같은 곳" · 둘 다 "나중 4번, 5번도 같은 곳, 숙소도 같은 곳" · 숙소에 머무는 중 "지금 숙소" (label은 넣지 않음)
 //     badges: { type: 'plus', count, corner } (빠진 번호 핀 수) · { type: 'home', corner: 'top-right' } (숙소가 번호 핀에 묶임). 둘 다면 home 오른쪽 위, plus 오른쪽 아래
 //     label = 다음 핀 하나의 이름표 { pinId, side: top|right|left|bottom, rect } | null
@@ -290,6 +292,26 @@ describe('§11 Q6 a11yLabel', () => {
   test('T15_S12_Q4_여러_번호_묶음은_나중_4번,_5번·6번도_같은_곳', () => {
     const pins = [pin('a', 'later', 100, 100, 4), pin('b', 'later', 120, 100, 5), pin('c', 'later', 100, 120, 6)];
     for (const order of [pins, [...pins].reverse()]) expect(byId(run(order), 'a').a11yLabel).toBe('나중 4번, 5번·6번도 같은 곳');
+  });
+
+  // §13 Q6 다른 순위끼리 묶임: 남은 핀(높은 순위)이 앞, 붙은 번호는 순위 말 없이 번호 오름차순
+  test('T15_S13_Q6_지난_2번이_나중_4번에_붙으면_나중_4번,_2번도_같은_곳', () => {
+    const pins = [pin('a', 'later', 100, 100, 4), pin('b', 'done', 120, 100, 2)];
+    for (const order of [pins, [...pins].reverse()]) expect(byId(run(order), 'a').a11yLabel).toBe('나중 4번, 2번도 같은 곳');
+  });
+
+  test('T15_S13_Q6_다음_5번에_지난_1번·나중_6번·지금_3번이_붙으면_순위_말_없이_번호_오름차순', () => {
+    const pins = [pin('n', 'next', 100, 100, 5), pin('d', 'done', 115, 100, 1), pin('l', 'later', 100, 115, 6), pin('w', 'now', 110, 110, 3)];
+    for (const order of [pins, [...pins].reverse()]) {
+      const label = byId(run(order), 'n').a11yLabel;
+      expect(label).toBe('다음 5번, 1번·3번·6번도 같은 곳');
+      for (const word of ['지난', '나중', '지금']) expect(label).not.toContain(word); // 붙은 번호에는 순위 말이 없다
+    }
+  });
+
+  test('T15_S13_Q6_다른_순위_묶음과_집_배지가_둘_다면_번호_다음에_숙소', () => {
+    const result = run([pin('h', 'lodging', 100, 118), pin('a', 'later', 100, 100, 4), pin('b', 'done', 115, 100, 2)]);
+    expect(byId(result, 'a').a11yLabel).toBe('나중 4번, 2번도 같은 곳, 숙소도 같은 곳');
   });
 
   test('T15_S12_Q4_숙소_혼자는_숙소', () => {

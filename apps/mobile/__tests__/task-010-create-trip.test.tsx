@@ -368,6 +368,7 @@ describe('C2 여행 만들기', () => {
       city_code: 'osaka',
       start_date: '2026-12-03',
       end_date: '2026-12-04',
+      lodging: null, // TASK-015 §13 Q5: 숙소 없이 = lodging: null을 보낸다 (이전: 칸 없음)
       must_visits: [{ date: '2026-12-03', place_id: 'osaka-fake-kuromon' }],
     });
     expect(server.headers(sent).authorization ?? '').toMatch(BEARER); // TASK-012 B2 (이전 X-Device-Id)
@@ -420,7 +421,7 @@ describe('C2 여행 만들기', () => {
     await tap(screen.getByTestId('create-trip-submit'));
     await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
     expect(server.sent(CREATE)[0].body).not.toHaveProperty('lodging_place_id');
-    expect((server.sent(CREATE)[0].body as { lodging?: unknown }).lodging ?? null).toBeNull(); // TASK-015 §12 Q7 · §6 숙소 없이 = lodging 없음
+    expect(server.sent(CREATE)[0].body).toHaveProperty('lodging', null); // TASK-015 §13 Q5: 숙소 없이 = lodging: null을 보낸다 (빼지 않음). 이전: 칸이 없거나 null
   });
 
   test('T15_S12_Q7_숙소_검색에서_고르면_본문은_lodging_place_모양이고_옛_필드는_없다', async () => {

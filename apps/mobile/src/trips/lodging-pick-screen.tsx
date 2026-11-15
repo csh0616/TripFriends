@@ -10,6 +10,8 @@ export type LodgingPickResult = { ok: true } | { ok: false; status: number; code
 export type LodgingPickScreenProps = {
   /** 여행 도시 (안내 글의 도시 이름, 예 osaka -> 오사카) */
   cityCode: string;
+  /** 여행 도시의 중심 (서버가 준 도시 정보 center, TASK-015 §13 Q2). 찍은 핀이 여기서 50km 이상이면 서버에 묻기 전에 바로 안내 · 비활성 (@/lib/lodging-pick) */
+  center: { lat: number; lng: number };
   /** [여기로 정했어]. 부르는 쪽이 서버에 보내고 결과를 돌려준다 */
   onConfirm: (picked: PickedLodging) => Promise<LodgingPickResult>;
   onBack: () => void;

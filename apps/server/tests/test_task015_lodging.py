@@ -25,8 +25,9 @@ TASK-015 §11(11-16 PM 답: Q1 INVALID_LODGING + reason too_far·coords_not_allo
             "coords_not_allowed" = place·address에 lat·lng (Q4)
             "too_far"            = pin이 city.center에서 50km 밖 (Q5)
             "label_too_long"     = 앞뒤 공백을 자른 label이 31자 이상 (§11 Q2: 자르지 않는다)
-            "missing_field"      = kind·그 kind의 필수 칸이 없음 (null·빈 글 포함)
-            "invalid_kind"       = kind가 place·address·pin이 아님 (§12 Q1, 예 "house")
+            "missing_field"      = kind·그 kind의 필수 칸이 없음 (null·빈 글 포함). 빈 글 kind("" · 공백·탭·줄바꿈만)도 여기 (§13 Q7)
+            "invalid_kind"       = kind가 place·address·pin이 아님 (§12 Q1, 예 "house"). 숫자·참거짓·목록·객체 같은 다른 타입도 여기 (§13 Q7)
+        50km 경계 (§13 Q2): 거리 >= 50km = too_far (정확히 50km는 밖). 거리 공식은 trip/detect.py와 같은 하버사인 6371km, 앱 @/lib/lodging-pick도 같은 공식
         모르는 kind는 400 INVALID_LODGING · invalid_kind 이고 아무것도 저장하지 않는다 (§12 Q1)
         공백만 있는 address_text = 자른 뒤 빈 글 = missing_field (§12 Q2)
         여러 조건이 겹치면 reason은 하나, 먼저 걸린 것 (§12 Q3):
@@ -518,6 +519,46 @@ def test_T15_S12_Q1_경계_세_kind와_한_글자라도_다르면_invalid_kind(m
     assert lodging_reason(response) == "invalid_kind", response.json()
 
 
+@pytest.mark.parametrize("kind", ["", "   ", "\t", " \n "], ids=["빈_글", "공백", "탭", "공백·줄바꿈"])
+def test_T15_S13_Q7_빈_글_kind는_400_INVALID_LODGING_missing_field이고_아무것도_저장하지_않는다(mem, kind):
+    """§13 Q7 ①: 빈 글 kind("" · 공백) = missing_field. ②: 탭·줄바꿈도 공백으로 자른다."""
+    before = stores(mem)
+    response = post_trip(mem, {**pin_body(), "kind": kind})
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "missing_field", response.json()
+    assert stores(mem) == before
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [1, 0, 1.5, True, False, ["pin"], {"kind": "pin"}],
+    ids=["숫자_1", "숫자_0", "소수", "참", "거짓", "목록", "객체"],
+)
+def test_T15_S13_Q7_숫자·다른_타입_kind는_400_INVALID_LODGING_invalid_kind이고_아무것도_저장하지_않는다(mem, kind):
+    """§13 Q7 ①: 숫자 · 다른 타입 = invalid_kind (VALIDATION_ERROR가 아니라 숙소 한 코드, §11 Q1)."""
+    before = stores(mem)
+    response = post_trip(mem, {**pin_body(), "kind": kind})
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == "invalid_kind", response.json()
+    assert stores(mem) == before
+
+
+@pytest.mark.parametrize(
+    ("sent", "expected"),
+    [
+        pytest.param({"kind": "", "place_id": GOOGLE_LODGING_ID, "lat": PIN[0], "lng": PIN[1]}, "missing_field", id="빈_kind+좌표"),
+        pytest.param({"kind": " ", "lat": PIN[0], "lng": PIN[1], "label": "가" * 31}, "missing_field", id="공백_kind+label"),
+        pytest.param({"kind": 1}, "invalid_kind", id="숫자_kind+필수칸없음"),
+        pytest.param({"kind": 1, "place_id": GOOGLE_LODGING_ID, "lat": PIN[0], "lng": PIN[1]}, "invalid_kind", id="숫자_kind+좌표"),
+    ],
+)
+def test_T15_S13_Q7_빈_글·숫자_kind도_reason_순서를_따른다(mem, sent, expected):
+    """§12 Q3 순서(invalid_kind -> missing_field -> coords_not_allowed -> label_too_long -> too_far)에 §13 Q7 분류를 얹은 것."""
+    response = post_trip(mem, sent)
+    assert response.status_code == 400, response.text
+    assert lodging_reason(response) == expected, response.json()
+
+
 @pytest.mark.parametrize("text", ["   ", "\t", " \n "], ids=["공백", "탭", "공백·줄바꿈"])
 def test_T15_S12_Q2_공백만_있는_주소는_자른_뒤_빈_글이라_missing_field(mem, text):
     """§12 Q2: 공백만 = 자른 뒤 빈 글 = missing_field. reason 자리는 error.detail.reason."""
@@ -662,6 +703,8 @@ def mem_v3(monkeypatch, tmp_path):
     [
         pytest.param(north_of_center(49.5), id="북쪽_49_5km"),
         pytest.param(south_of_center(49.5), id="남쪽_49_5km"),
+        pytest.param(north_of_center(49.999), id="경계_북쪽_49_999km"),  # §13 Q2: 50km 미만은 안
+        pytest.param(south_of_center(49.999), id="경계_남쪽_49_999km"),
         pytest.param((34.9858, 135.7588), id="교토역_약_42km"),  # §9 Q5: 오사카 여행에 교토 숙소 정도는 들어오게
         pytest.param(CENTER_V3, id="도시_중심_그_자리"),
     ],
@@ -676,6 +719,11 @@ def test_T15_Q5_city_center에서_50km_안의_pin은_받는다(mem_v3, at):
     [
         pytest.param(north_of_center(50.5), id="북쪽_50_5km"),
         pytest.param(south_of_center(50.5), id="남쪽_50_5km"),
+        # §13 Q2 "경계 50km는 밖 = 400". 정확히 50km로 만든 점은 공식상 49999.9999999998m처럼 나온다 ->
+        # trip/detect.py _within처럼 소수 6자리로 반올림해 비교해야 경계가 지켜진다 (앱 @/lib/lodging-pick isTooFar와 같은 경계)
+        pytest.param(north_of_center(50.0), id="경계_북쪽_정확히_50km"),
+        pytest.param(south_of_center(50.0), id="경계_남쪽_정확히_50km"),
+        pytest.param(north_of_center(50.001), id="경계_북쪽_50_001km"),
         pytest.param((35.6812, 139.7671), id="도쿄역"),
     ],
 )
