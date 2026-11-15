@@ -1,5 +1,6 @@
 // TASK-010 §C2 여행 만들기 폼 규칙. 화면은 이 함수들이 정한 대로만 그린다.
 import { addDays, daysBetween } from './calendar';
+import { CITY_NAME } from './day-list';
 
 export type TripForm = {
   startDate: string | null;
@@ -74,7 +75,8 @@ export function fixedEventError(status: number, code: string | null): string | n
   return status === 409 && code === 'PLAN_EXISTS' ? '이미 계획을 고른 날이야. 일정을 바꾸려면 계획을 다시 짜야 해' : null;
 }
 
-/** TASK-015 §11 Q1: 숙소 400 INVALID_LODGING의 reason별 안내 (a2 지도 찍기). too_far면 "{도시}에서 너무 멀어…". 그 밖에는 null. 껍데기 — frontend가 채운다 */
-export function lodgingError(_status: number, _code: string | null, _reason: string | null, _cityCode: string): string | null {
-  throw new Error('not implemented');
+/** TASK-015 §11 Q1: 숙소 400 INVALID_LODGING의 reason별 안내 (a2 지도 찍기). too_far면 "{도시}에서 너무 멀어…". 그 밖에는 null (화면의 기본 문장을 쓴다 — 다른 reason의 글은 문서에 없다) */
+export function lodgingError(status: number, code: string | null, reason: string | null, cityCode: string): string | null {
+  if (status !== 400 || code !== 'INVALID_LODGING' || reason !== 'too_far') return null;
+  return `${CITY_NAME[cityCode] ?? cityCode}에서 너무 멀어. 여행할 도시 근처로 찍어 줘`;
 }
