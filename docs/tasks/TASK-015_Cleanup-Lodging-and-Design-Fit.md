@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 발행 | PM · 2026-11-16 |
-| 상태 | **v1.6** — §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
+| 상태 | **v1.7** — §13 test-writer 답(`fc3bc4b`·`a34efdd` 승인) · v1.6 §12 숙소 마커 지름 디자이너 답 · v1.5 §12 test-writer 답(`579a19f`·`1b20185` 승인) · v1.4 §11 test-writer 답(`4781a03`·`a90f0d9` 승인) · v1.3 §10 디자이너 보드 답(V128) · v1.2 §9 test-writer 답(`5046392` 승인) · v1.1 Q1 결정(주소 글자·찍은 좌표 저장) · v1.0 발행 |
 | 관련 | TASK-010 §B5(숙소 검색)·C4 · TASK-014 §28·§29·§34(넘어온 것) · `docs/design/reviews/task-014-design.md` §9-4·§10·§11·§12·§13 · DESIGN-001 v2.8 §4-6·§4-9·§4-11·§4-13 · API-001(`/places/lodging-search`·`POST /trips`·`NowView`) · ADR-015(Google 약관·좌표 30일) · HISTORY 11-15·11-16 결정권자 의견 · ADR-019(배포는 이 TASK 밖) |
 | 브랜치 | `feat/task-015-cleanup` |
 | 다음 | TASK-016 장소 데이터 확장(ADR-018) → TASK-017 SOS·오프라인·알림·출발 전 점검 |
@@ -150,6 +150,23 @@
 | 8 | 측정 목록 더하기 | **둘 다 넣는다**: Stryker `task-015-lodging-lib`, mutmut `places/seed.py` + `test_task015_seed_center` |
 
 - 다음: test-writer §12 반영(Q1 · Q3 · Q4 · Q5 · Q6 · Q7 · Q8) → 승인 → `backend` → `frontend`
+
+## 13. test-writer §12 답 (11-16, 테스트 `fc3bc4b` · 측정 목록 `a34efdd` 승인)
+- **요약표 · 바꾼 단언 · 껍데기 `lodging-pick-screen.tsx`(타입 + not implemented) 승인.** 서버 20 + 준비 오류 1 · 앱 38 = 구현 전, tsc 0
+- **a2 화면 계약 승인**: 모듈 `@/trips/lodging-pick-screen`, testID `pick-map` · `pin-pick` · `pick-panel` · `pick-label` · `pick-confirm`, `onConfirm` → `{ok} | {ok:false, status, code, reason}`
+- **측정 목록 승인**: Stryker 새 테스트 2개, mutmut `places/seed.py`를 `source_paths`로 + `test_task015_seed_center.py`
+
+| # | 질문 | 답 |
+|---|---|---|
+| 1 | §11 Q3 "+4에서 맞닿음도 겹침" vs §12 Q5 "4 미만" | **§11이 맞다(지금 테스트 그대로).** §12 Q5의 "4 미만"은 PM 글 실수. **하나의 규칙**: 장애물을 여유만큼 키운 뒤 **맞닿음까지 겹침** = 간격 ≤ 여유. 여유는 다른 핀 4 · 내 위치 점 0 · 떠 있는 판 0 |
+| 2 | a2 계약 · `too_far`는 어느 요청에서 | `POST /trips`가 최종 확인(서버). 그런데 a2에서 [여기로 정했어]를 누를 땐 아직 여행이 없어 서버에 묻지 않는다 → **a2가 같은 규칙(도시 중심 50km)을 앱에서 먼저 검사**해 바로 안내 · 비활성. 같은 중심 값이 필요하므로 **여행 만들기 화면이 받는 도시 정보에 `center`를 넣는다**(지금 앱이 도시 정보를 어디서 받는지 test-writer가 확인 → 받는 곳이 없으면 `GET /cities/{city_code}` → `{code, name_ko, center}`를 제안. §9 Q7 "NowView에만"을 이것 하나만 넓힘). 거리 계산은 **lib 순수 함수**(서버와 같은 공식, 경계 50km는 밖 = 400과 같게). `POST /trips`가 그래도 `too_far`를 주면 a2로 돌아가 안내 |
+| 3 | `too_far` 뒤 핀을 다시 찍으면 | **다시 검사해서 50km 안이면 [여기로 정했어] 켜짐.** 핀을 옮길 때마다 같은 검사 |
+| 4 | 이름 칸이 비면 | **`label: null`**(빈 글을 보내지 않음, 6칸 늘 있음) |
+| 5 | 숙소 없이 만들 때 | **`lodging: null`을 보낸다**(빼지 않음 — 응답과 같은 모양, 명시) |
+| 6 | 다른 순위끼리 묶인 화면 읽기 글 순서 | **남은 핀(높은 순위)이 앞, 붙은 번호는 순위 말 없이 번호 오름차순**: 지난 2번이 나중 4번에 붙으면 "나중 4번, 2번도 같은 곳" |
+| 7 | 기타 | ① 빈 글 `kind`("" · 공백) = **`missing_field`**, 숫자 · 다른 타입 = **`invalid_kind`** ② 탭 · 줄바꿈도 공백으로 자름 — **승인**(서버 · 앱 같은 규칙) ③ `lodging-pick-screen.tsx`는 Stryker `mutate`에 **넣지 않는다**(화면). 대신 거리 검사 · 버튼 켜짐 판단을 **lib 함수로 빼서 그것을 넣는다** |
+
+- 다음: test-writer §13 반영(Q2 도시 정보 `center` · 앱 거리 검사 lib · Q3 · Q4 · Q5 · Q6 · Q7) → 승인 → `backend` → `frontend`
 
 ## 6. 실패하면
 | 상황 | 결과 |
