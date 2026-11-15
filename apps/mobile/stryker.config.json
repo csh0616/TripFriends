@@ -25,7 +25,8 @@
     "src/lib/account-link.ts",
     "src/lib/mask-email.ts",
     "src/lib/live-location.ts",
-    "src/lib/now-api.ts"
+    "src/lib/now-api.ts",
+    "src/lib/pin-overlap.ts"
   ],
   "reporters": [
     "clear-text",
