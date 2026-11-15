@@ -22,8 +22,12 @@ def load_seed(path: Path) -> dict[str, Any]:
         "areas": data.get("areas", []),  # 지역 중심 [{id, name_ko, query}]. 지역은 데이터다 (§12): 몇 곳이든 그대로. 없으면 3km 검사를 건너뛴다
         "places": data["places"],
     }
-    if set(seed["center"]) != {"name_ko", "query"}:
-        raise ValueError("center에는 name_ko와 query만 둔다")
+    center = seed["center"]
+    if not {"name_ko", "query"} <= set(center) <= {"name_ko", "query", "lat", "lng"} or ("lat" in center) != ("lng" in center):
+        raise ValueError("center에는 name_ko와 query, 그리고 lat·lng(둘 다 있거나 둘 다 없음)만 둔다")
+    for key, bound in (("lat", 90), ("lng", 180)):
+        if key in center and (isinstance(center[key], bool) or not isinstance(center[key], (int, float)) or not -bound <= center[key] <= bound):
+            raise ValueError(f"center.{key}는 -{bound}~{bound} 숫자")
     area_ids = [item.get("id") for item in seed["areas"]]
     if any(set(item) != {"id", "name_ko", "query"} for item in seed["areas"]) or len(area_ids) != len(set(area_ids)):
         raise ValueError("areas는 지역마다 id·name_ko·query만 두고 id는 겹치지 않는다")

@@ -38,6 +38,7 @@ from trip.schemas import (
     NowT04Fixed,
     NowT06Proposal,
     NowDaySummary,
+    NowCity,
     NowView,
 )
 from trip.repo import EventRecord, ProposalRecord
@@ -407,6 +408,7 @@ def build_now_view(
     others: Sequence[NowEvent] = (),
     checks: Checks | None = None,
     map_id: MapId | None = None,
+    city: NowCity | None = None,
 ) -> NowView:
     """at는 시간대 없는 그날의 시각. 날짜 검사는 부르는 쪽 몫.
 
@@ -442,7 +444,9 @@ def build_now_view(
     else:
         status, status_text = screen.move_status, STATUS_TEXT[screen.move_status]
     assert main is not None  # 코스가 비지 않았고 하루가 끝나지 않았다면 지금 일정이나 다음 일정이 있다
+    assert city is not None  # 부르는 쪽(TripService)이 늘 넘긴다
     return NowView(
+        city=city,
         day=summary,
         at=at.isoformat(),
         status=status,

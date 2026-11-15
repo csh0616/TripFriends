@@ -379,6 +379,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/places/address-search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 주소 검색 (Google 실시간, 종류 제한 없음) */
+        get: operations["search_address_places_address_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cities/{city_code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 도시 정보 (토큰 없이). center = 도시 팩의 우리 값 */
+        get: operations["get_city_cities__city_code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/account/claim": {
         parameters: {
             query?: never;
@@ -627,6 +661,14 @@ export interface components {
             anonymous_token: string;
             /** Trip Id */
             trip_id: string;
+        };
+        /** CityInfo */
+        CityInfo: {
+            /** Code */
+            code: string;
+            /** Name Ko */
+            name_ko: string;
+            center: components["schemas"]["LatLngPoint"];
         };
         /** ClaimBody */
         ClaimBody: {
@@ -913,6 +955,13 @@ export interface components {
             /** Lng */
             lng: number;
         };
+        /** LatLngPoint */
+        LatLngPoint: {
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
+        };
         /** LodgingHit */
         LodgingHit: {
             /** Place Id */
@@ -921,6 +970,27 @@ export interface components {
             name: string;
             /** Address Short */
             address_short: string;
+        };
+        /**
+         * LodgingInput
+         * @description 요청의 숙소. 값 검사는 trip.lodging.normalize가 해서 400 INVALID_LODGING(reason)으로 돌려준다 (타입이 틀려도 같은 코드).
+         */
+        LodgingInput: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind?: "place" | "address" | "pin";
+            /** Place Id */
+            place_id?: string;
+            /** Address Text */
+            address_text?: string;
+            /** Lat */
+            lat?: number;
+            /** Lng */
+            lng?: number;
+            /** Label */
+            label?: string;
         };
         /** MustVisit */
         MustVisit: {
@@ -1049,6 +1119,22 @@ export interface components {
             lodging: components["schemas"]["LatLng"] | null;
             /** Map Url */
             map_url: string | null;
+        };
+        /**
+         * NowCity
+         * @description 지도 시작 가운데 (TASK-015 §E ③). 도시 팩의 우리 값이며 숙소가 아니다.
+         */
+        NowCity: {
+            /** Code */
+            code: string;
+            center: components["schemas"]["NowCityCenter"];
+        };
+        /** NowCityCenter */
+        NowCityCenter: {
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
         };
         /**
          * NowClosedInfo
@@ -1259,6 +1345,7 @@ export interface components {
         };
         /** NowView */
         NowView: {
+            city: components["schemas"]["NowCity"];
             day: components["schemas"]["NowDaySummary"];
             /** At */
             at: string;
@@ -1631,8 +1718,7 @@ export interface components {
              * Format: date
              */
             end_date: string;
-            /** Lodging Place Id */
-            lodging_place_id: string | null;
+            lodging: components["schemas"]["TripLodging"] | null;
             /**
              * Status
              * @enum {string}
@@ -1680,6 +1766,7 @@ export interface components {
              * Format: date
              */
             end_date: string;
+            lodging?: components["schemas"]["LodgingInput"] | null;
             /** Lodging Place Id */
             lodging_place_id?: string | null;
             /**
@@ -1712,6 +1799,27 @@ export interface components {
              * @default []
              */
             must_visits: components["schemas"]["DayMust"][];
+        };
+        /**
+         * TripLodging
+         * @description 여섯 칸이 늘 있다 (TASK-015 §A). 좌표는 pin만. place·address는 place_id로 그때 좌표를 구한다.
+         */
+        TripLodging: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "place" | "address" | "pin";
+            /** Place Id */
+            place_id: string | null;
+            /** Address Text */
+            address_text: string | null;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Label */
+            label: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -3189,6 +3297,105 @@ export interface operations {
             };
             /** @description Unauthorized */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    search_address_places_address_search_get: {
+        parameters: {
+            query: {
+                city_code: string;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LodgingHit"][];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_city_cities__city_code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                city_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CityInfo"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

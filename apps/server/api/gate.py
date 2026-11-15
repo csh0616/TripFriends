@@ -32,6 +32,7 @@ def _is_position_key(raw_key: str) -> bool:
     return True
 log = logging.getLogger(__name__)
 PUBLIC_PATHS = frozenset({"/health", "/catalog", "/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"})  # §11 Q1: 열린 길은 health·catalog(+ 문서 길)뿐
+PUBLIC_PREFIXES = ("/cities/",)  # TASK-015 §14 Q1: 도시 정보는 공개 값이라 토큰 없이 (API-001 2-1 c6)
 
 
 def bearer_token(scope: Scope) -> str:
@@ -73,7 +74,7 @@ class Gate:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] in PUBLIC_PATHS:
+        if scope["type"] != "http" or scope["path"] in PUBLIC_PATHS or scope["path"].startswith(PUBLIC_PREFIXES):
             await self.app(scope, receive, send)
             return
         state = scope["app"].state

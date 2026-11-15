@@ -18,7 +18,7 @@ class TripRow:
     city_code: str
     start_date: date
     end_date: date
-    lodging_place_id: str | None
+    lodging: dict[str, Any] | None  # 여섯 칸 dict 또는 None (TASK-015 §A). 좌표는 pin만
     day_ids: list[str]
     status: Literal["active", "archived"] = "active"
     is_demo: bool = False  # A5: 개발용 데모 여행

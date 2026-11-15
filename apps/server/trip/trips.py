@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Callable, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from engine.models import DayPlan, PlanFixed
 from planning.presenter import option_view
@@ -19,6 +19,7 @@ from planning.schemas import CourseResultOption
 from planning.seed import DAY_END, DAY_START
 from places.city import CityData
 from places.live import CAPS
+from trip import lodging as lodging_rules
 from trip.days import DayState, city_today, day_state
 from trip.store import FixedRow, MemoryTripStore, TripRow, TripStore
 from trip.visit import _limits as visit_limits, _meters as meters
@@ -36,6 +37,11 @@ class ApiError(Exception):
 
 def invalid(field_name: str, message: str) -> ApiError:
     return ApiError(400, "VALIDATION_ERROR", message, {"field": field_name})
+
+
+def invalid_lodging(reason: str) -> ApiError:
+    """400 INVALID_LODGING, 이유는 detail.reason 하나 (TASK-015 §11 Q1)."""
+    return ApiError(400, "INVALID_LODGING", "숙소를 확인해 주세요", {"reason": reason})
 
 
 def _rules() -> dict[str, int]:
@@ -78,12 +84,23 @@ class TripDay(BaseModel):
     must_visits: list[DayMust] = []  # 넣은 순서, 이름은 도시 팩 장소 이름
 
 
+class TripLodging(BaseModel):
+    """여섯 칸이 늘 있다 (TASK-015 §A). 좌표는 pin만. place·address는 place_id로 그때 좌표를 구한다."""
+
+    kind: Literal["place", "address", "pin"]
+    place_id: str | None
+    address_text: str | None
+    lat: float | None
+    lng: float | None
+    label: str | None
+
+
 class Trip(BaseModel):
     trip_id: str
     city_code: str
     start_date: date
     end_date: date
-    lodging_place_id: str | None  # place_id만 저장, 좌표는 캐시 (B5)
+    lodging: TripLodging | None  # 숙소 없으면 null (TASK-015 §A)
     status: Literal["active", "archived"]
     is_demo: bool = False  # TASK-012 §10 Q11: 개발용 데모 여행 (A5)
     trip_days: list[TripDay]
@@ -94,11 +111,23 @@ class MustVisit(BaseModel):
     place_id: str
 
 
+class LodgingInput(BaseModel):
+    """요청의 숙소. 값 검사는 trip.lodging.normalize가 해서 400 INVALID_LODGING(reason)으로 돌려준다 (타입이 틀려도 같은 코드)."""
+
+    kind: Any = Field(None, json_schema_extra={"enum": ["place", "address", "pin"], "type": "string"})
+    place_id: Any = Field(None, json_schema_extra={"type": "string"})
+    address_text: Any = Field(None, json_schema_extra={"type": "string"})
+    lat: Any = Field(None, json_schema_extra={"type": "number"})
+    lng: Any = Field(None, json_schema_extra={"type": "number"})
+    label: Any = Field(None, json_schema_extra={"type": "string"})
+
+
 class TripCreate(BaseModel):
     city_code: str
     start_date: date
     end_date: date
-    lodging_place_id: str | None = None
+    lodging: LodgingInput | None = None
+    lodging_place_id: str | None = None  # 옛 칸: 이것만 오면 kind place로 받는다 (요청에서만)
     must_visits: list[MustVisit] = []
 
 
@@ -206,7 +235,7 @@ class TripBook:
             city_code=trip.city_code,
             start_date=trip.start_date,
             end_date=trip.end_date,
-            lodging_place_id=trip.lodging_place_id,
+            lodging=TripLodging(**trip.lodging) if trip.lodging else None,
             status=trip.status,
             is_demo=trip.is_demo,
             trip_days=days,
@@ -241,8 +270,16 @@ class TripBook:
             if len(ids) > rules["max_must_per_day"]:
                 raise invalid("must_visits", f"꼭 갈 곳은 하루 {rules['max_must_per_day']}곳까지 고를 수 있어요")
 
+        try:
+            if body.lodging is not None:
+                saved = lodging_rules.normalize(body.lodging.model_dump(), self.city.city_center())
+            else:
+                saved = lodging_rules.from_place_id(body.lodging_place_id)
+        except lodging_rules.LodgingError as error:
+            raise invalid_lodging(error.reason) from None
+
         with self._lock:
-            lodging = self.city.lodging_location(body.lodging_place_id, self.clock()) if body.lodging_place_id else None
+            lodging = lodging_rules.location(saved, self.city.lodging_location, self.clock())
             start_point = lodging or self.city.center()
             trip_id = str(uuid.uuid4())
             day_ids: list[str] = []
@@ -260,7 +297,7 @@ class TripBook:
                 day_id = str(uuid.uuid4())
                 self.planning.save_day(day_id, plan, places, number + 1, lodging_known=lodging is not None, sources=sources)
                 day_ids.append(day_id)
-            trip = TripRow(trip_id, user_id, body.city_code, body.start_date, body.end_date, body.lodging_place_id, day_ids)
+            trip = TripRow(trip_id, user_id, body.city_code, body.start_date, body.end_date, saved, day_ids)
             self.store.add_trip(trip)  # 이전 여행은 지우지 않고 archived (B2). 요청 하나 = 트랜잭션 하나라 중간에 실패하면 모두 되돌아간다 (A3)
             self.planning.save_trip(trip_id, day_ids)
             return self._view(trip)

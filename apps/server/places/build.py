@@ -150,7 +150,11 @@ def build_pack(
     pack = {
         "city_code": seed["city_code"],
         "timezone": seed["timezone"],
-        "center": {"name_ko": seed["center"]["name_ko"], "place_id": center_id},
+        "center": {
+            "name_ko": seed["center"]["name_ko"],
+            "place_id": center_id,
+            **{k: seed["center"][k] for k in ("lat", "lng") if k in seed["center"]},  # 우리 값 (TASK-015 §9 Q6), Google 값 아님
+        },
         "areas": area_pins,
         "places": rows,
     }

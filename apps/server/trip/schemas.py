@@ -182,7 +182,20 @@ class NowDaySummary(DaySummary):
     lodging: LatLng | None
 
 
+class NowCityCenter(BaseModel):
+    lat: float
+    lng: float
+
+
+class NowCity(BaseModel):
+    """지도 시작 가운데 (TASK-015 §E ③). 도시 팩의 우리 값이며 숙소가 아니다."""
+
+    code: str
+    center: NowCityCenter
+
+
 class NowView(BaseModel):
+    city: NowCity
     day: NowDaySummary
     at: str
     status: Literal["on_track", "delayed", "free"]

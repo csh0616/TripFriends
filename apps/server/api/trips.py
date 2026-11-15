@@ -9,10 +9,12 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 
 from api.access import UserId
 from api.planning import _doc, _error
 from planning.schemas import CourseResultOption
+from trip.link import CITY_NAMES
 from trip.trips import CITY_CODE, ApiError, FixedEvent, FixedEventCreate, LodgingHit, PlaceHit, Trip, TripBook, TripCreate, invalid
 
 router = APIRouter()
@@ -77,15 +79,45 @@ def search_places(city_code: str, request: Request, user: UserId, q: str = "") -
     return book(request).search(q)
 
 
-@router.get("/places/lodging-search", responses=_doc(400, 503), summary="숙소 검색 (Google 실시간)")
-def search_lodging(city_code: str, request: Request, user: UserId, q: str = "") -> list[LodgingHit]:
+def _search(request: Request, city_code: str, q: str, method: str) -> list[LodgingHit]:
+    """숙소 검색과 주소 검색이 같은 상수(글자 수·개수·시간 제한)를 쓴다 (TASK-015 §9 Q1)."""
     check_city(city_code)
     text = q.strip()
     if len(text) < LODGING_MIN_CHARS:
         return []
-    future = _lodging_pool.submit(request.app.state.places_provider.search_lodging, text)
+    future = _lodging_pool.submit(getattr(request.app.state.places_provider, method), text)
     try:
         found: list[dict[str, Any]] = future.result(timeout=LODGING_TIMEOUT)
     except Exception:  # 실패·시간 초과 모두 같은 안내 (원인 문장은 담지 않는다)
         raise ApiError(503, "PROVIDER_UNAVAILABLE", "지금 숙소 검색을 못 해요", None) from None
     return [LodgingHit(**hit) for hit in found[:LODGING_LIMIT]]
+
+
+@router.get("/places/lodging-search", responses=_doc(400, 503), summary="숙소 검색 (Google 실시간)")
+def search_lodging(city_code: str, request: Request, user: UserId, q: str = "") -> list[LodgingHit]:
+    return _search(request, city_code, q, "search_lodging")
+
+
+@router.get("/places/address-search", responses=_doc(400, 503), summary="주소 검색 (Google 실시간, 종류 제한 없음)")
+def search_address(city_code: str, request: Request, user: UserId, q: str = "") -> list[LodgingHit]:
+    return _search(request, city_code, q, "search_address")
+
+
+class LatLngPoint(BaseModel):
+    lat: float
+    lng: float
+
+
+class CityInfo(BaseModel):
+    code: str
+    name_ko: str
+    center: LatLngPoint
+
+
+@router.get("/cities/{city_code}", responses=_doc(404), summary="도시 정보 (토큰 없이). center = 도시 팩의 우리 값")
+def get_city(city_code: str, request: Request) -> CityInfo:
+    city = request.app.state.city
+    if city_code != city.city_code or city_code not in CITY_NAMES:
+        raise ApiError(404, "NOT_FOUND", "없는 도시예요", {"resource": "city", "city_code": city_code})
+    lat, lng = city.city_center()
+    return CityInfo(code=city_code, name_ko=CITY_NAMES[city_code], center=LatLngPoint(lat=lat, lng=lng))

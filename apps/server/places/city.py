@@ -77,6 +77,14 @@ class CityData:
         location = self.cache[self.pack["center"]["place_id"]]["location"]
         return location["lat"], location["lng"]
 
+    def city_center(self) -> tuple[float, float]:
+        """지도 시작 가운데 (TASK-015 §E ③). 도시 팩에 둔 우리 값(seed center.lat·lng). Google 좌표 캐시가 아니다.
+        좌표가 없는 옛 팩만 center()로 대신한다 (places build를 다시 돌리면 채워진다)."""
+        center = self.pack["center"]
+        if "lat" in center and "lng" in center:
+            return float(center["lat"]), float(center["lng"])
+        return self.center()
+
     def facts(self, row: dict[str, Any], now: datetime) -> list[dict[str, Any]]:
         """검색 결과용. 영업시간은 부르지 않고 메모리에 있는 값만 쓴다 (없으면 Serper 값 또는 모름)."""
         with self._lock:

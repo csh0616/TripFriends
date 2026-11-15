@@ -74,6 +74,10 @@ class PlacesProvider(ABC):
     def search_lodging(self, q: str) -> list[dict[str, Any]]:
         """[{place_id, name, address_short}]"""
 
+    @abstractmethod
+    def search_address(self, q: str) -> list[dict[str, Any]]:
+        """주소로 찾기 (종류 제한 없음). [{place_id, name, address_short}]"""
+
 
 def _load_fake(path: Path | None) -> dict[str, Any]:
     return json.loads((path or FAKE_PLACES_PATH).read_text(encoding="utf-8"))
@@ -111,6 +115,9 @@ class FakePlaces(PlacesProvider):
             for hit in self._data["lodging"]
             if q in hit["name"]
         ]
+
+    def search_address(self, q: str) -> list[dict[str, Any]]:
+        return self.search_lodging(q)
 
 
 def _hhmm(hour: int, minute: int) -> str:
@@ -199,9 +206,15 @@ class GooglePlaces(PlacesProvider):
         }
 
     def search_lodging(self, q: str) -> list[dict[str, Any]]:
-        body = {
+        return self._search_places(q, "lodging")
+
+    def search_address(self, q: str) -> list[dict[str, Any]]:
+        return self._search_places(q, None)  # 종류 제한 없이 (에어비앤비·지인 집 주소도)
+
+    def _search_places(self, q: str, included_type: str | None) -> list[dict[str, Any]]:
+        body: dict[str, Any] = {
             "textQuery": q,
-            "includedType": "lodging",
+            **({"includedType": included_type} if included_type else {}),
             "pageSize": LODGING_LIMIT,
             "languageCode": "ko",
             "locationBias": {"circle": {"center": {k: LODGING_BIAS[k] for k in ("latitude", "longitude")}, "radius": LODGING_BIAS["radius"]}},

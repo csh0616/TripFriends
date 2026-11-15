@@ -1938,6 +1938,143 @@
         }
       }
     },
+    "/places/address-search": {
+      "get": {
+        "summary": "주소 검색 (Google 실시간, 종류 제한 없음)",
+        "operationId": "search_address_places_address_search_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "city_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "City Code"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LodgingHit"
+                  },
+                  "title": "Response Search Address Places Address Search Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/cities/{city_code}": {
+      "get": {
+        "summary": "도시 정보 (토큰 없이). center = 도시 팩의 우리 값",
+        "operationId": "get_city_cities__city_code__get",
+        "parameters": [
+          {
+            "name": "city_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "City Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CityInfo"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/account/claim": {
       "post": {
         "summary": "익명 여행을 로그인한 계정으로 (옮기거나 고르게 하기)",
@@ -2646,6 +2783,28 @@
           "trip_id"
         ],
         "title": "ChooseBody"
+      },
+      "CityInfo": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name_ko": {
+            "type": "string",
+            "title": "Name Ko"
+          },
+          "center": {
+            "$ref": "#/components/schemas/LatLngPoint"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name_ko",
+          "center"
+        ],
+        "title": "CityInfo"
       },
       "ClaimBody": {
         "properties": {
@@ -3393,6 +3552,24 @@
         ],
         "title": "LatLng"
       },
+      "LatLngPoint": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "title": "Lng"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lng"
+        ],
+        "title": "LatLngPoint"
+      },
       "LodgingHit": {
         "properties": {
           "place_id": {
@@ -3415,6 +3592,42 @@
           "address_short"
         ],
         "title": "LodgingHit"
+      },
+      "LodgingInput": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "place",
+              "address",
+              "pin"
+            ],
+            "title": "Kind"
+          },
+          "place_id": {
+            "type": "string",
+            "title": "Place Id"
+          },
+          "address_text": {
+            "type": "string",
+            "title": "Address Text"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "title": "Lng"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "title": "LodgingInput",
+        "description": "요청의 숙소. 값 검사는 trip.lodging.normalize가 해서 400 INVALID_LODGING(reason)으로 돌려준다 (타입이 틀려도 같은 코드)."
       },
       "MustVisit": {
         "properties": {
@@ -3754,6 +3967,42 @@
           "map_url"
         ],
         "title": "NowCardT08"
+      },
+      "NowCity": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "center": {
+            "$ref": "#/components/schemas/NowCityCenter"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "center"
+        ],
+        "title": "NowCity",
+        "description": "지도 시작 가운데 (TASK-015 §E ③). 도시 팩의 우리 값이며 숙소가 아니다."
+      },
+      "NowCityCenter": {
+        "properties": {
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "title": "Lng"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lat",
+          "lng"
+        ],
+        "title": "NowCityCenter"
       },
       "NowClosedInfo": {
         "properties": {
@@ -4313,6 +4562,9 @@
       },
       "NowView": {
         "properties": {
+          "city": {
+            "$ref": "#/components/schemas/NowCity"
+          },
           "day": {
             "$ref": "#/components/schemas/NowDaySummary"
           },
@@ -4461,6 +4713,7 @@
         },
         "type": "object",
         "required": [
+          "city",
           "day",
           "at",
           "status",
@@ -5217,16 +5470,15 @@
             "format": "date",
             "title": "End Date"
           },
-          "lodging_place_id": {
+          "lodging": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/TripLodging"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Lodging Place Id"
+            ]
           },
           "status": {
             "type": "string",
@@ -5255,7 +5507,7 @@
           "city_code",
           "start_date",
           "end_date",
-          "lodging_place_id",
+          "lodging",
           "status",
           "trip_days"
         ],
@@ -5323,6 +5575,16 @@
             "type": "string",
             "format": "date",
             "title": "End Date"
+          },
+          "lodging": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LodgingInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "lodging_place_id": {
             "anyOf": [
@@ -5419,6 +5681,85 @@
           "fixed_events"
         ],
         "title": "TripDay"
+      },
+      "TripLodging": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "place",
+              "address",
+              "pin"
+            ],
+            "title": "Kind"
+          },
+          "place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Id"
+          },
+          "address_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address Text"
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat"
+          },
+          "lng": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lng"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "place_id",
+          "address_text",
+          "lat",
+          "lng",
+          "label"
+        ],
+        "title": "TripLodging",
+        "description": "여섯 칸이 늘 있다 (TASK-015 §A). 좌표는 pin만. place·address는 place_id로 그때 좌표를 구한다."
       },
       "ValidationError": {
         "properties": {
