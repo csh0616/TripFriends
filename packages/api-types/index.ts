@@ -1607,6 +1607,8 @@ export interface components {
              * @default false
              */
             as_current: boolean;
+            /** Demo Places */
+            demo_places?: ("close_pins" | "two_places") | null;
         };
         /** SeedResult */
         SeedResult: {

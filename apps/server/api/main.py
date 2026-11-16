@@ -256,7 +256,9 @@ if os.environ.get("APP_ENV", "development") != "production":
         TASK-012 §11: 토큰이 필요하고, 데모는 그 사용자 소유(is_demo)다. 지금 여행은 바꾸지 않는다 —
         `{"as_current": true}`일 때만 그 사용자의 지금 여행으로 붙인다 (점검 전용, 이전 여행은 archived)."""
         past_days = body.past_days if body and "past_days" in body.model_fields_set else None
-        result = request.app.state.planning_service.seed(chosen=bool(body and body.chosen), past_days=past_days)
+        result = request.app.state.planning_service.seed(
+            chosen=bool(body and body.chosen), past_days=past_days, demo_places=body.demo_places if body else None
+        )
         request.app.state.trip_book.attach_demo(
             user,
             result.trip_id,

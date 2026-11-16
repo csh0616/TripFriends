@@ -109,7 +109,13 @@ class FakePlaces(PlacesProvider):
             "business_status": found["business_status"],
         }
 
+    def _fail_if_switch(self, q: str) -> None:
+        """TASK-015 §20 #7: 가짜 공급자만의 실패 스위치. 정해 둔 글과 정확히 같을 때만 (실제 Google에는 없다)."""
+        if q in self._data.get("provider_fail", []):
+            raise ProviderTransientError("가짜 공급자 실패 스위치")
+
     def search_lodging(self, q: str) -> list[dict[str, Any]]:
+        self._fail_if_switch(q)
         return [
             {"place_id": hit["place_id"], "name": hit["name"], "address_short": hit["address_short"]}
             for hit in self._data["lodging"]
@@ -118,6 +124,7 @@ class FakePlaces(PlacesProvider):
 
     def search_address(self, q: str) -> list[dict[str, Any]]:
         """이름 검색 결과 + address 표에서 query가 정확히 같은 줄 (query 칸은 내보내지 않는다, TASK-015 §18)."""
+        self._fail_if_switch(q)
         rows = [
             {"place_id": row["place_id"], "name": row["name"], "address_short": row["address_short"]}
             for row in self._data.get("address", [])

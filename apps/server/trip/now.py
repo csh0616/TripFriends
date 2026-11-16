@@ -48,7 +48,7 @@ log = logging.getLogger(__name__)
 
 SUPPORTED = ("T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07", "T-08")  # A3: 이번에 만드는 카드 (T-04: TASK-007, T-05·T-06: TASK-008)
 STATUS_TEXT = {"on_track": "동선대로 가는 중", "delayed": "늦어지는 중", "free": "다음까지 여유 있음"}
-DAY_OVER_REASON = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1, TASK-007 F2
+DAY_OVER_REASON = "오늘 일정이 끝났어"  # §12 R1, TASK-007 F2
 DAY_OVER_PILL = "오늘 일정 끝"  # TASK-007 F1
 
 

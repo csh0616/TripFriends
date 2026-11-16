@@ -5281,6 +5281,21 @@
             "type": "boolean",
             "title": "As Current",
             "default": false
+          },
+          "demo_places": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "close_pins",
+                  "two_places"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Demo Places"
           }
         },
         "additionalProperties": false,

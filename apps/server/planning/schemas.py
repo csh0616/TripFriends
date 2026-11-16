@@ -243,6 +243,14 @@ class SeedRequest(_Request):
     past_days: int = Field(default=0, ge=0, le=3)  # TASK-014 §14 Q3: 최대 = 데모 여행 일수 (DEMO_DATES 3일, 전부 지난 = 끝난 여행)
     # TASK-012 §11 Q2: 점검(Maestro) 전용. true일 때만 그 사용자의 지금 여행으로 붙이고 이전 여행은 archived. 아니면 지금 여행을 바꾸지 않는다
     as_current: bool = False
+    # TASK-015 §20 #7: 개발용 데모 장소 선택지. chosen: true와는 같이 줄 수 없다 (422)
+    demo_places: Literal["close_pins", "two_places"] | None = None
+
+    @model_validator(mode="after")
+    def _not_with_chosen(self) -> "SeedRequest":
+        if self.demo_places is not None and self.chosen:
+            raise ValueError("demo_places와 chosen: true는 같이 줄 수 없다")
+        return self
 
 
 class SeedDay(BaseModel):
