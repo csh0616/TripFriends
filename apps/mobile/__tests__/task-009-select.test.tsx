@@ -54,15 +54,16 @@ type Tree = { type: string; props: Record<string, any>; parent: Tree | null; chi
 const styleOf = (host: { props: Record<string, any> }) => (StyleSheet.flatten(host.props.style) ?? {}) as Record<string, any>;
 const byId = (id: string) => screen.getByTestId(id) as unknown as Tree;
 const inCard = (id: string) => within(byId(id) as never);
-const textOf = (host: Tree) => {
-  const flat = (value: unknown): string => (Array.isArray(value) ? value.map(flat).join('') : typeof value === 'string' || typeof value === 'number' ? String(value) : '');
-  return flat(host.props.children);
-};
+/** Text 하나의 글: 안쪽 Text(예 숫자만 DM Mono로 감싼 것, TASK-015 §B7)까지 순서대로 펴서 읽는다 */
+const textOf = (host: Tree): string =>
+  host.children.map((child) => (typeof child === 'string' || typeof child === 'number' ? String(child) : child && typeof child === 'object' ? textOf(child as Tree) : '')).join('');
+/** 바깥 Text마다 한 덩어리 (안쪽 Text는 바깥 것에 들어 있어 따로 세지 않는다) */
 const words = (id: string) =>
   byId(id)
-    .queryAll((inner) => inner.type === 'Text')
+    .queryAll((inner) => inner.type === 'Text' && !(inner.parent && hasTextAbove(inner.parent)))
     .map(textOf)
     .join(' ');
+const hasTextAbove = (host: Tree | null): boolean => host !== null && (host.type === 'Text' || hasTextAbove(host.parent));
 const chain = (host: Tree): Tree[] => {
   const list: Tree[] = [];
   for (let now: Tree | null = host; now; now = now.parent) list.push(now);
