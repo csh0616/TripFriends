@@ -1,7 +1,7 @@
 // TASK-015 §A ③ · docs/design/reviews/task-015-design.md §1-3 a2 "지도에서 찍기" (+ §1-5 a4 지도를 못 불러옴).
 // 앱은 그리기만 한다: 지도를 길게 눌러 핀 -> 이름 붙이기(선택) -> [여기로 정했어]. Google을 부르지 않는다 (지도 타일만).
 // 50km 검사는 서버와 같은 규칙을 lib가 먼저 해서 바로 안내 · 비활성 (서버 POST /trips가 마지막에 다시 확인한다).
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
@@ -72,10 +72,15 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
   const [mapFailed, setMapFailed] = useState(false);
   const [mapKey, setMapKey] = useState(0);
   // TASK-015 §18 막는 것 1: 이름 칸을 누르면 시트가 키보드 위로 (②-07 field와 같은 규칙). iOS는 Will, 안드로이드는 Did 신호
+  // 이름 칸이 포커스인 동안에는 키보드 숨김 신호가 와도 시트를 내리지 않는다 (시뮬레이터에서 글을 칠 때 키보드가 잠깐 내려갔다 올라오며
+  // 시트가 움직여, 그 사이에 누른 [여기로 정했어]가 키보드 위로 떨어졌다. 칸이 블러될 때 내린다)
   const [keyboard, setKeyboard] = useState(0);
+  const labelFocused = useRef(false);
   useEffect(() => {
     const show = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow', (event) => setKeyboard(event.endCoordinates.height));
-    const hide = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide', () => setKeyboard(0));
+    const hide = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide', () => {
+      if (!labelFocused.current) setKeyboard(0);
+    });
     return () => {
       show.remove();
       hide.remove();
@@ -168,6 +173,13 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
               placeholder="예: 친구 집"
               placeholderTextColor={color.muted}
               autoCorrect={false}
+              onFocus={() => {
+                labelFocused.current = true;
+              }}
+              onBlur={() => {
+                labelFocused.current = false;
+                setKeyboard(0);
+              }}
               style={styles.labelInput}
             />
           </View>

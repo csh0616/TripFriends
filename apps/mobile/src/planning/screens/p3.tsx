@@ -417,7 +417,8 @@ const styles = StyleSheet.create({
   lineMiddle: { top: 0, bottom: 0 },
   lineLast: { top: 0, height: layout.courseRow / 2 },
   rowText: { flex: 1 },
-  sub: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  // 칩 자리가 모자라면 칩이 아래로 내려간다 ("이동 9분" 글을 좁혀 숫자와 단위가 두 줄로 나뉘지 않게)
+  sub: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space['space-2'], rowGap: space['space-1'] },
   subText: { flexShrink: 1 },
   stay: {
     minWidth: layout.stayColumn,

@@ -1,0 +1,108 @@
+# TASK-015 §21 · AC-5 막는 1건: a2 이름 칸에 글을 쳐 **키보드가 열린 채** [여기로 정했어]를 **한 번** 누르면 여행 만들기로 넘어간다
+# (공식 lodging-pin.yaml과 앞부분은 같다. 전제·실행 방법도 create-trip.yaml 머리말과 같다). 실행:
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/lodging-pin-keyboard -e METRO_URL=http://127.0.0.1:<Metro 포트> .maestro/lodging-pin-keyboard.yaml
+# 화면 키보드가 떠야 한다: 시뮬레이터 I/O > Keyboard > Connect Hardware Keyboard를 끈다 (defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false).
+# 원인(11-17): 글을 치는 동안 키보드 "숨김" 신호가 잠깐 와서 시트가 내려갔다 올라오는 사이에 누른 버튼이 키보드 위로 떨어졌다 -> 칸이 포커스인 동안은 시트를 내리지 않게 고침
+# 검색 글 "친구 집 근처": 이름 · 주소 모두 0건 (가짜 공급자)
+appId: com.csh0616.tripfriends
+---
+- evalScript: |
+    ${
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const tokyo = (offsetDays) => {
+        const d = new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400 * 1000);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      };
+      output.start = tokyo(7);
+      output.end = tokyo(8);
+    }
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1&__expo_disable_fab=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 만들기"
+    timeout: 60000
+- runFlow: common/close-dev-menu.yaml
+- tapOn: "여행 만들기"
+- extendedWaitUntil:
+    visible:
+      id: "create-trip-submit"
+    timeout: 30000
+- tapOn:
+    id: "field-start-date"
+- extendedWaitUntil:
+    visible:
+      id: "calendar-sheet"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.start}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.start}"
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.end}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.end}"
+- tapOn:
+    id: "calendar-confirm"
+- tapOn:
+    id: "lodging-search"
+- inputText: "친구 집 근처"
+# 키보드를 먼저 닫는다 (사용자는 [지도에서 찍기]를 누르기 전에 키보드를 닫는다. 아래 a2의 [여기로 정했어]는 일부러 키보드가 열린 채 한 번 누른다)
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "lodging-none"
+    timeout: 15000
+- assertVisible:
+    id: "btn-pick-map"
+- takeScreenshot: lodging-pin-1-a3
+- tapOn:
+    id: "btn-pick-map"
+- extendedWaitUntil:
+    visible:
+      id: "pick-map"
+    timeout: 30000
+# 지도가 준비된 뒤에 길게 누른다 (바로 누르면 핀이 안 찍힐 수 있다)
+- waitForAnimationToEnd:
+    timeout: 4000
+- longPressOn:
+    point: "50%,35%"
+- extendedWaitUntil:
+    visible:
+      id: "pick-label"
+    timeout: 10000
+- tapOn:
+    id: "pick-label"
+- inputText: "친구 집"
+- waitForAnimationToEnd:
+    timeout: 3000
+# 키보드가 실제로 떠 있는 증거 스크린샷 (시트가 키보드 위, [여기로 정했어]가 보임)
+- assertVisible:
+    id: "pick-confirm"
+- takeScreenshot: lodging-pin-keyboard-1-keyboard-open
+# 키보드를 닫지 않고 한 번만 누른다
+- tapOn:
+    id: "pick-confirm"
+- extendedWaitUntil:
+    visible:
+      id: "lodging-picked"
+    timeout: 15000
+- assertVisible: "친구 집"
+- takeScreenshot: lodging-pin-keyboard-2-picked

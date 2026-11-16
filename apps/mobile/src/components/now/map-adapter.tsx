@@ -400,7 +400,7 @@ export function CourseMap({
     if (ready.current) return;
     ready.current = true;
     onReady();
-    map.current?.fitToCoordinates(path, { edgePadding: padding, animated: false });
+    map.current?.fitToCoordinates(path, { edgePadding: { top: Math.max(padding.top - mapPadding.top, 0), bottom: Math.max(padding.bottom - mapPadding.bottom, 0), left: Math.max(padding.left - mapPadding.left, 0), right: Math.max(padding.right - mapPadding.right, 0) }, animated: false });
   };
 
   let rules: PinOverlapResult | null = null;
