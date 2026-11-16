@@ -27,7 +27,7 @@
     "src/lib/live-location.ts",
     "src/lib/now-api.ts",
     "src/lib/pin-overlap.ts",
-    "src/lib/lodging-pick.ts", "src/lib/map-project.ts"
+    "src/lib/lodging-pick.ts", "src/lib/map-project.ts", "src/lib/diagram-spread.ts"
   ],
   "reporters": [
     "clear-text",
@@ -83,7 +83,7 @@
         "<rootDir>/__tests__/task-015-pin-overlap.test.ts",
         "<rootDir>/__tests__/task-015-lodging-lib.test.ts",
         "<rootDir>/__tests__/task-015-lodging-pick.test.tsx",
-        "<rootDir>/__tests__/task-015-lodging-pick-lib.test.ts", "<rootDir>/__tests__/task-015-pin-overlap-all-labels.test.ts", "<rootDir>/__tests__/task-015-floating-panels.test.tsx", "<rootDir>/__tests__/task-015-map-project.test.ts"
+        "<rootDir>/__tests__/task-015-lodging-pick-lib.test.ts", "<rootDir>/__tests__/task-015-pin-overlap-all-labels.test.ts", "<rootDir>/__tests__/task-015-floating-panels.test.tsx", "<rootDir>/__tests__/task-015-map-project.test.ts", "<rootDir>/__tests__/task-015-diagram-spread.test.ts", "<rootDir>/__tests__/task-015-diagram-spread-screen.test.tsx"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",
