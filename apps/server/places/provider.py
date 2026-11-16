@@ -117,7 +117,13 @@ class FakePlaces(PlacesProvider):
         ]
 
     def search_address(self, q: str) -> list[dict[str, Any]]:
-        return self.search_lodging(q)
+        """이름 검색 결과 + address 표에서 query가 정확히 같은 줄 (query 칸은 내보내지 않는다, TASK-015 §18)."""
+        rows = [
+            {"place_id": row["place_id"], "name": row["name"], "address_short": row["address_short"]}
+            for row in self._data.get("address", [])
+            if row["query"] == q
+        ]
+        return self.search_lodging(q) + rows
 
 
 def _hhmm(hour: int, minute: int) -> str:
