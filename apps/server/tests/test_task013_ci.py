@@ -46,6 +46,7 @@ OUTSIDE_READS: dict[str, set[str]] = {
     "apps/server/places/__main__.py": set(),  # docs/data/osaka-seed.yaml은 명령줄 기본값뿐. 테스트는 --seed로 testdata를 준다
     "apps/server/places/provider.py": {"testdata/cities/**"},
     "apps/server/places/serper.py": set(),  # 설명 글에 testdata 이름만
+    "apps/server/planning/seed.py": {"testdata/demo/**"},  # TASK-015 §20 #7: 데모 시드 선택지 전용 데이터 (SERVER_PATHS의 testdata/**가 덮는다)
     "apps/server/tests/test_planning_api.py": {"packages/api-types/**"},
     "apps/server/tests/test_planning_screens_api.py": {"packages/api-types/**"},
     "apps/server/tests/test_score_candidates.py": {"docs/poc/poc_c.json"},
