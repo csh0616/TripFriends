@@ -304,3 +304,89 @@ describe('§15-4 속성', () => {
     );
   });
 });
+
+// TASK-015 §21 #3: Stryker(diagram-spread.ts)에서 살아남은 것 중 §15-4 규칙(18 · 28 · 최대 8번)에 걸린 경계만 더한다.
+//   민 자리가 칸 경계에 정확히 닿으면(18 · 332 · 18 · 102) "칸 안"(경계 포함) -> 그 자리 그대로.
+//   0.01 넘으면 칸 밖 -> 앞 핀 둘레 28 원 위 칸 안 가장 가까운 자리(위 · 아래 가장자리 포함, 위 · 아래 · 왼 · 오른 어느 쪽이 가까운지).
+//   앞 핀 전부와 28 이상이 될 때까지 최대 8번: 8번째 밀기로 풀리면 벌린 자리, 9번째가 필요하면 번호 순서대로 가로 균등 간격.
+//   8 · 9번 입력은 그 수만큼 밀어야 풀리는 자리를 찾아 둔 것(좌표는 정수).
+describe('§21 민 자리의 틀 안쪽 18 경계 (경계 포함)', () => {
+  test.each([
+    ['왼쪽 x=18', [46, 30], [40, 30], [18, 30]],
+    ['오른쪽 x=332', [304, 30], [310, 30], [332, 30]],
+    ['위 y=18', [30, 46], [30, 40], [30, 18]],
+    ['아래 y=102', [30, 74], [30, 80], [30, 102]],
+  ] as const)('T15_S21_민_자리가_정확히_%s이면_칸_안이라_그_자리_그대로', (_, first, second, want) => {
+    const r = run([[first[0], first[1]], [second[0], second[1]]]);
+    expect(r.stops[0]).toEqual({ seq: 1, x: first[0], y: first[1] });
+    expect(r.stops[1].x).toBeCloseTo(want[0], 6);
+    expect(r.stops[1].y).toBeCloseTo(want[1], 6);
+  });
+
+  test('T15_S21_민_자리가_왼쪽_x_17점99면_칸_밖이라_앞_핀_둘레_28_원_위_왼쪽_가장자리', () => {
+    // 1번 (45.99,30) -> 민 자리 (17.99,30). 가장 가까운 칸 안 자리는 x 18 위(y 30 ± 0.748)
+    const r = run([[45.99, 30], [40, 30]]);
+    const p = r.stops[1];
+    expect(insideArea(p, FRAME)).toBe(true);
+    expect(dist(p, r.stops[0])).toBeCloseTo(28, 6);
+    expect(p.x).toBeCloseTo(18, 6);
+    expect(Math.abs(p.y - 30)).toBeCloseTo(Math.sqrt(28 * 28 - 27.99 * 27.99), 6);
+  });
+
+  test('T15_S21_민_자리가_위_y_17점99면_칸_밖이라_앞_핀_둘레_28_원_위_위_가장자리', () => {
+    // 1번 (30,45.99) -> 민 자리 (30,17.99). 위 가장자리 (30 ± 0.748, 18)이 왼쪽 가장자리 (18, 20.69)보다 가깝다
+    const r = run([[30, 45.99], [30, 40]]);
+    const p = r.stops[1];
+    expect(insideArea(p, FRAME)).toBe(true);
+    expect(dist(p, r.stops[0])).toBeCloseTo(28, 6);
+    expect(p.y).toBeCloseTo(18, 6);
+    expect(Math.abs(p.x - 30)).toBeCloseTo(Math.sqrt(28 * 28 - 27.99 * 27.99), 6);
+  });
+});
+
+describe('§21 칸 밖이면 앞 핀 둘레 28 원 위 칸 안 "가장 가까운" 자리', () => {
+  const H = Math.sqrt(28 * 28 - 12 * 12); // 가장자리까지 12일 때 원과 만나는 반 폭
+  const W = Math.sqrt(28 * 28 - 22 * 22); // 가장자리까지 22일 때
+
+  test.each([
+    // [이름, 1번, 2번, 기대]
+    ['오른쪽 가장자리_아래로_비스듬히', [320, 60], [325, 62], [332, 60 + H]],
+    ['오른쪽 가장자리_위로_비스듬히', [320, 60], [325, 58], [332, 60 - H]],
+    ['위_가장자리_오른쪽으로_비스듬히', [100, 40], [102, 30], [100 + W, 18]],
+    ['위_가장자리_왼쪽으로_비스듬히', [100, 40], [98, 30], [100 - W, 18]],
+    ['아래_가장자리_오른쪽으로_비스듬히', [100, 80], [102, 90], [100 + W, 102]],
+    ['아래_가장자리_왼쪽으로_비스듬히', [100, 80], [98, 90], [100 - W, 102]],
+  ] as const)('T15_S21_%s', (_, first, second, want) => {
+    const r = run([[first[0], first[1]], [second[0], second[1]]]);
+    const p = r.stops[1];
+    expect(r.stops[0]).toEqual({ seq: 1, x: first[0], y: first[1] });
+    expect(insideArea(p, FRAME)).toBe(true);
+    expect(dist(p, r.stops[0])).toBeCloseTo(28, 6);
+    expect(p.x).toBeCloseTo(want[0], 6);
+    expect(p.y).toBeCloseTo(want[1], 6);
+  });
+});
+
+describe('§21 최대 8번 경계', () => {
+  const isEvenRow = (xs: number[]) => {
+    const step = xs[1] - xs[0];
+    return step > 0 && xs.every((x, i) => i === 0 || Math.abs(x - xs[i - 1] - step) < EPS);
+  };
+
+  test('T15_S21_8번째_밀기로_풀리면_벌린_자리_그대로_균등_간격_아님', () => {
+    const r = run([[154, 121], [137, 67], [144, 81], [159, 77], [136, 82]]);
+    expect(minPairGap(all(r))).toBeGreaterThanOrEqual(28 - EPS);
+    for (const p of all(r)) expect(insideArea(p, FRAME)).toBe(true);
+    // 2번은 1번(칸 안으로 넣은 (154,102))과 28 넘게 떨어져 제자리 — 균등 간격이면 움직인다
+    expect(r.stops[1]).toEqual({ seq: 2, x: 137, y: 67 });
+    expect(isEvenRow(r.stops.map((s) => s.x))).toBe(false);
+  });
+
+  test('T15_S21_9번째_밀기가_필요하면_번호_순서대로_가로_균등_간격', () => {
+    const r = run([[213, 109], [208, 62], [219, 89], [256, 69], [255, 81]]);
+    expect(r.stops.map((s) => s.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(isEvenRow(r.stops.map((s) => s.x))).toBe(true);
+    expect(minPairGap(all(r))).toBeGreaterThanOrEqual(28 - EPS);
+    for (const p of all(r)) expect(insideArea(p, FRAME)).toBe(true);
+  });
+});
