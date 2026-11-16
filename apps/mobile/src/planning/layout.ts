@@ -181,7 +181,7 @@ export const layout = {
   noticeInfoHeight: 44, // notice-info
   // TASK-015 task-015-design §1-3·§2 (docs/design/reviews/task-015-design.md V129)
   titlePill: 36, // 지도 위 제목 알약 높이 (a2 "지도에서 찍기" · 크게 보기)
-  expandPill: 28, // btn-expand-map 알약 높이 (눌러지는 영역은 도식 전체)
+  expandPill: 24, // 크게 보기 알약 높이 = 요약 줄 높이 (bg-2, 줄 안). 눌러지는 영역은 도식 + 요약 줄
   mapOffCircle: 56, // a4 지도 꺼짐 원
   scaleWidth: 96, // map-scale 폭
   scaleHeight: 30, // map-scale 높이

@@ -137,27 +137,32 @@ export function P3Screen({
       {option ? (
         <>
           {stops.length > 0 ? (
-            // 도식은 그대로 가볍게 비교하고, 통째로 버튼: 누르면 실제 지도로 크게 (aria "코스 지도 크게 보기")
+            // 도식 + 요약 줄이 통째로 버튼 하나: 누르면 실제 지도로 크게 (aria "코스 지도 크게 보기, 요약"). 알약은 눌림 표시일 뿐
             <Pressable
               testID="btn-expand-map"
               accessibilityRole="button"
-              accessibilityLabel="코스 지도 크게 보기"
+              accessibilityLabel={`코스 지도 크게 보기, ${summary}`}
               style={styles.expandHit}
               onPress={() => {
                 setMapNotice(null);
                 setBigMap(true);
               }}
             >
-              <RouteDiagram width={width - 2 * layout.screenMargin} home={day.lodging} stops={stops} />
-              <View pointerEvents="none" style={styles.expandPill}>
-                <ExpandIcon color={color.ink} size={layout.pillIcon} />
-                <Text style={text('label', 'ink')}>크게 보기</Text>
+              <RouteDiagram width={width - 2 * layout.screenMargin} home={day.lodging} stops={stops} spread />
+              <View testID="course-summary" style={styles.summaryRow}>
+                <Text style={text('caption', 'muted')}>{summary}</Text>
+                <View testID="expand-pill" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.expandPill}>
+                  <ExpandIcon color={color.ink} size={layout.pillIcon} />
+                  <Text style={text('label', 'ink')}>크게 보기</Text>
+                </View>
               </View>
             </Pressable>
           ) : (
-            <RouteDiagram width={width - 2 * layout.screenMargin} home={day.lodging} stops={stops} />
+            <>
+              <RouteDiagram width={width - 2 * layout.screenMargin} home={day.lodging} stops={stops} spread />
+              <Text style={text('caption', 'muted')}>{summary}</Text>
+            </>
           )}
-          <Text style={text('caption', 'muted')}>{`${items.length}곳 · 이동 ${option.total_travel_min}분`}</Text>
 
           {empty ? <Text style={text('body', 'muted')}>담은 곳이 없어서 코스가 비었어</Text> : null}
 
@@ -345,8 +350,9 @@ export function ReadRow({ item, must }: { item: CourseItem; must: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  expandHit: { minHeight: layout.routeDiagram },
-  expandPill: { position: 'absolute', right: space['space-2'], bottom: space['space-2'], height: layout.expandPill, paddingHorizontal: space['space-3'], flexDirection: 'row', alignItems: 'center', gap: space['space-1'], borderRadius: radius['r-full'], backgroundColor: color.surface, ...shadow.float },
+  expandHit: { minHeight: layout.routeDiagram + space['space-2'] + layout.expandPill, marginBottom: space['space-1'] }, // 도식 + 요약 줄(8 + 24) = 152. 아래 4로 목록 자리는 그대로
+  summaryRow: { marginTop: space['space-2'], height: layout.expandPill, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  expandPill: { height: layout.expandPill, paddingLeft: space['space-2'], paddingRight: 10, flexDirection: 'row', alignItems: 'center', gap: space['space-1'], borderRadius: radius['r-full'], backgroundColor: color['bg-2'] },
   readRow: {
     minHeight: fit['row-read'].minHeight,
     paddingHorizontal: space['space-3'],
