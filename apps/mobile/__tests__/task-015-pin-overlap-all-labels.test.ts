@@ -201,3 +201,54 @@ test('T15_S17_속성_모든_이름표는_화면_8_안쪽이고_판·다른_핀�
     { numRuns: 200 },
   );
 });
+
+// ---------- §18 Q1 모든 이름표 모드에서 숙소에는 이름표가 없다 ----------
+// 근거: TASK-015 §18 test-writer 남은 질문 표 1("모든 이름표 모드에서 숙소에도 이름표? -> 없음 — 집 모양이 이미 숙소를 말한다")
+// 계약: labelMode 'all'에서 숙소 마커(혼자 남은 것 · 머무는 중 '지금 핀' 모양 모두)의 id는 labels에 없다. 숙소는 5곳을 셀 때도 빠진다(지금 계약 그대로)
+//       번호 핀에 집 배지로 붙은 숙소는 번호 핀의 이름표 하나뿐(숙소 몫 이름표를 따로 만들지 않는다)
+describe('§18 Q1 모든 이름표 — 숙소는 이름표 없음', () => {
+  const HOME = pin('home', 'lodging', X, ROWS[5]);
+
+  test('T15_S18_Q1_혼자_남은_숙소_마커에는_이름표가_없고_번호_핀은_모두_있다', () => {
+    const pins = [...column(3), HOME];
+    const result = run(pins, { labelMode: 'all' });
+    expect(result.pins.map((p) => p.id)).toContain('home'); // 시험 자체 확인: 숙소 마커가 보인다
+    expect(idsOf(labelsOf(result))).toEqual(['p1', 'p2', 'p3']);
+  });
+
+  test('T15_S18_Q1_숙소에_머무는_중(지금_핀_모양)이어도_숙소에는_이름표가_없다', () => {
+    const pins = [...column(2), HOME];
+    const result = run(pins, { labelMode: 'all', stayingAtLodging: true });
+    expect(result.pins.find((p) => p.id === 'home')?.shape).toBe('now');
+    expect(labelsOf(result).map((l) => l.pinId)).not.toContain('home');
+  });
+
+  test('T15_S18_Q1_경계_번호_핀_5곳_+_숙소면_모든_이름표_모드_그대로이고_숙소만_빠진다', () => {
+    const pins = [...column(5), pin('home', 'lodging', X + 150, ROWS[5])];
+    const result = run(pins, { labelMode: 'all' });
+    expect(idsOf(labelsOf(result))).toEqual(['p1', 'p2', 'p3', 'p4', 'p5']);
+  });
+
+  test('T15_S18_Q1_집_배지로_붙은_숙소는_따로_이름표가_없고_번호_핀_이름표_하나', () => {
+    const pins = [...column(2), pin('home', 'lodging', X + 10, ROWS[0])]; // p1과 10 떨어져 집 배지
+    const result = run(pins, { labelMode: 'all' });
+    expect(result.pins.find((p) => p.id === 'p1')?.hidden).toContain('home');
+    expect(idsOf(labelsOf(result))).toEqual(['p1', 'p2']);
+  });
+
+  test('T15_S18_Q1_속성_모든_이름표_모드에서_숙소_id는_labels에_없다', () => {
+    fc.assert(
+      fc.property(
+        pinsArb,
+        fc.array(fc.record({ x: fc.integer({ min: 0, max: 390 }), y: fc.integer({ min: 0, max: 844 }) }), { minLength: 1, maxLength: 2 }),
+        fc.boolean(),
+        (numbered, homes, staying) => {
+          const lodgings = homes.map((h, i) => pin(`home${i}`, 'lodging', h.x, h.y));
+          const result = run([...numbered, ...lodgings], { labelMode: 'all', stayingAtLodging: staying });
+          for (const label of labelsOf(result)) expect(label.pinId.startsWith('home')).toBe(false);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+});

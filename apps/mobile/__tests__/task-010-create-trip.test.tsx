@@ -412,11 +412,14 @@ describe('C2 여행 만들기', () => {
     ['503', apiError(503, 'PROVIDER_UNAVAILABLE')],
   ])('T10_6_Q13_숙소_검색이_%s이면_안내하고_숙소_없이_만들_수_있다', async (_name, failure) => {
     server.match('GET /places/lodging-search', () => failure);
+    server.match('GET /places/address-search', () => failure); // TASK-015 §18 Q2: 이름 검색이 실패해도 같은 글로 주소 검색을 한다
     server.on(CREATE, json(201, trip(['planning', 'planning'])));
     await toForm();
     await fillDates();
     await type('lodging-search', '호텔');
-    expect(await screen.findByText(/지금 숙소 검색을 못 해/)).toBeTruthy();
+    // (이전 단언: "지금 숙소 검색을 못 해" 안내) -> §18 Q2: 이름·주소 둘 다 실패면 a3 ② "지금 주소로 못 찾았어" + [지도에서 찍기]
+    expect(await screen.findByText('지금 주소로 못 찾았어')).toBeTruthy();
+    expect(screen.getByTestId('btn-pick-map')).toBeTruthy();
     expect(isDisabled('create-trip-submit')).toBe(false);
     await tap(screen.getByTestId('create-trip-submit'));
     await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));

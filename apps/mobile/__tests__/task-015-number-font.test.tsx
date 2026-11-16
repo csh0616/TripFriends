@@ -11,16 +11,19 @@
 //   혼자 값: 숫자 글자는 DM Mono · 한글과 로마자(D-day의 D)는 DM Mono 아님 · 숫자 사이의 : / –는 DM Mono
 //   문장 안 숫자: 그 글 전체에 DM Mono 글자가 없다
 //   읽기 도구에는 한 문장으로 읽혀야 하므로 글자를 찾는 단위는 바깥 Text 하나(getByText가 찾는 것)
-import { render, screen, within } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { PickSheet } from '@/account/pick-sheet';
+import { NowCardView } from '@/components/now/now-cards';
+import { CourseMapScreen } from '@/components/planning/course-map-screen';
 import { CalendarSheet } from '@/trips/calendar-sheet';
 import { TripDays } from '@/trips/trip-days';
 
 import { resetDevice, tap } from '../test-support/planning-driver';
-import { FakeServer, apiError } from '../test-support/fake-server';
+import { FakeServer, apiError, json } from '../test-support/fake-server';
+import { t01, t02, t07 } from '../test-support/trip-now-fixtures';
 
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
@@ -232,5 +235,175 @@ describe('§13-3 6 여행 만들기 날짜 칸', () => {
     const field = within(screen.getByTestId('field-start-date'));
     const inside = [field.getByText('12월 10일 (목)') as unknown as Host];
     expect(valueMistakes(inside[0])).toEqual([]);
+  });
+});
+
+// =====================================================================
+// TASK-015 §18 — 숫자 글꼴 남은 곳 + reviewer 막는 것 3 (T-01 시각)
+// 근거: TASK-015 §18 reviewer "막는 것" 3("T-01 '11:14에 끝나'의 시각이 Noto(now-cards.tsx:186·190) -> 시각 숫자만 DM Mono(§B1·§B7)") ·
+//       §B1("'16:00에 끝나'(시각만 DM Mono)") · §18 남은 질문 6("task-014-design §13-1 규칙 + §13-3 디자이너 판단 6곳을 따른다. 입력 칸 안 날짜는 Noto 그대로") ·
+//       task-014-design §13-1(시각 = 혼자 값) · §13-3 1(N일째 머리말 · 칩 "1일째 12/11" = DM Mono, 문장 제목은 Noto) · §13-3 3("확인: 11월 2일" = 날짜 값) ·
+//       §13-3 4(T-02 줄 "16:00 출발 · 전철 12분") · §13-3 5("끝 · 4곳 · 이동 55분" 모양은 그대로 DM Mono) · §13-2 Noto로 남긴 것("2일째에 담김") ·
+//       §14-3(사실 줄 "시각 DM Mono": T-02 "16:00 출발 …" · T-07 "18:42 출발") · task-015-design §9("N일째 · 시각 · 날짜 숫자 DM Mono 500")
+// 계약 (이 묶음이 정한 것):
+//   시각 섞인 문장("12:20에 시작해" · "12:00에 출발 · 5분 뒤" · "14:40까지 출발해야 해"): HH:MM 글자(숫자와 그 사이 :)는 DM Mono, 한글은 DM Mono 아님.
+//     그 밖의 숫자("5분 뒤"의 5)는 보지 않는다 — §13-3 4 "앱 줄에서 12분이 DM Mono인지 확인 필요"(질문)
+//   이미 있는 것은 다시 쓰지 않는다 (위 머리 주석 목록 + 이 파일 §17 묶음). 입력 칸(TextInput) 안 날짜는 보지 않는다(§18 Q6: Noto 그대로)
+// =====================================================================
+
+const TIME = /\d{1,2}:\d{2}/g;
+
+/** 시각(HH:MM)만 DM Mono, 한글·로마자는 DM Mono 아님. 다른 숫자는 보지 않는다. 시각이 하나도 없으면 시험 자체가 틀린 것 */
+function timeMistakes(host: Host): string[] {
+  const list = glyphs(host);
+  const whole = list.map(([ch]) => ch).join('');
+  const inTime = new Set<number>();
+  for (const found of whole.matchAll(TIME)) for (let i = 0; i < found[0].length; i += 1) inTime.add((found.index ?? 0) + i);
+  if (inTime.size === 0) return ['시각 없음'];
+  const wrong: string[] = [];
+  list.forEach(([ch, family], i) => {
+    if (inTime.has(i) && !isMono(family)) wrong.push(`${i}:${ch} DM Mono 아님`);
+    if (LETTER.test(ch) && isMono(family)) wrong.push(`${i}:${ch} DM Mono임`);
+  });
+  return wrong;
+}
+
+async function showCard(card: object) {
+  await render(<NowCardView card={card as never} main onOpenFailed={() => {}} />);
+}
+
+describe('§18 막는 것 3 — T-01 시각은 숫자만 DM Mono', () => {
+  test('T15_S18_T01_끝나는_시각_HH:MM에_끝나는_시각만_DM_Mono', async () => {
+    await showCard(t01());
+    expect(timeMistakes(textHost(/^\d{1,2}:\d{2}에 끝나$/))).toEqual([]);
+  });
+
+  test('T15_S18_T01_아직_시작_전이면_HH:MM에_시작해도_시각만_DM_Mono', async () => {
+    await showCard(t01({ ends_in_min: null }));
+    expect(timeMistakes(textHost(/^\d{1,2}:\d{2}에 시작해$/))).toEqual([]);
+    expect(timeMistakes(textHost(/^\d{1,2}:\d{2}에 끝나$/))).toEqual([]);
+  });
+
+  test('T15_S18_T01_도구_확인_시각_글자가_한_Text로_읽힌다', async () => {
+    // 읽기 도구에는 "12:20에 시작해" 한 문장 (글자를 나눠도 바깥 Text 하나)
+    await showCard(t01({ ends_in_min: null }));
+    expect(screen.getByText('12:20에 시작해')).toBeTruthy();
+    expect(screen.getByText('14:00에 끝나')).toBeTruthy();
+  });
+});
+
+describe('§13-3 4 · §14-3 사실 줄 시각 — T-02 · T-07', () => {
+  test('T15_S18_T02_출발_줄_HH:MM에_출발_·_N분_뒤의_시각만_DM_Mono', async () => {
+    await showCard(t02());
+    expect(timeMistakes(textHost(/^12:00에 출발 · 5분 뒤$/))).toEqual([]);
+  });
+
+  test('T15_S18_T02_경계_지금_나설_때_HH:MM에_출발,_지금_나서자도_시각만_DM_Mono', async () => {
+    await showCard(t02({ leave_in_min: 0 }));
+    expect(timeMistakes(textHost('12:00에 출발, 지금 나서자'))).toEqual([]);
+  });
+
+  test('T15_S18_T07_HH:MM까지_출발해야_해의_시각만_DM_Mono', async () => {
+    await showCard(t07());
+    expect(timeMistakes(textHost('14:40까지 출발해야 해'))).toEqual([]);
+  });
+
+  test('T15_S18_T07_제목_속_시각_범위_15:00–16:00은_콜론·대시까지_DM_Mono', async () => {
+    await showCard(t07());
+    const host = textHost(/15:00–16:00/);
+    expect(timeMistakes(host)).toEqual([]);
+    const dash = glyphs(host).find(([ch]) => ch === '–');
+    expect(dash && isMono(dash[1])).toBe(true);
+  });
+});
+
+describe('§13-3 3 확인 날짜는 날짜 값', () => {
+  test('T15_S18_T05_사실_줄_확인:_날짜의_숫자는_DM_Mono_글자는_아님', async () => {
+    const t05 = {
+      type: 'T-05',
+      place: { place_id: 'D02', name: '서버_확인할_곳' },
+      facts: [{ field: 'opening_hours', value: '10:00-18:00', status: 'confirmed', source_type: 'user', checked_at: '2026-11-02T09:00:00+09:00' }],
+      map_url: 'https://www.google.com/maps/search/?api=1&query=35.02,134.99',
+    };
+    await showCard(t05);
+    const host = textHost(/확인: /);
+    const list = glyphs(host);
+    const at = list.map(([ch]) => ch).join('').indexOf('확인: ');
+    const wrong = list.slice(at).filter(([ch, family]) => (DIGIT.test(ch) && !isMono(family)) || (LETTER.test(ch) && isMono(family)));
+    expect(wrong.map(([ch]) => ch)).toEqual([]);
+  });
+});
+
+describe('§13-3 1 N일째 머리말 — 여행 만들기 날 칩 · 크게 보기 머리', () => {
+  async function toCreateWithDates() {
+    resetDevice();
+    freezeDate('2026-12-02T03:00:00Z');
+    const server = new FakeServer().on('GET /trips/current', apiError(404, 'NOT_FOUND', { resource: 'trip' }));
+    const Index = require('@/app/index').default;
+    await render(
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <Index />
+      </SafeAreaProvider>,
+    );
+    await tap(await screen.findByText('여행 만들기'));
+    await tap(await screen.findByTestId('field-start-date'));
+    await screen.findByTestId('calendar-sheet');
+    await tap(await screen.findByTestId('cal-day-2026-12-10'));
+    await tap(await screen.findByTestId('cal-day-2026-12-11'));
+    await tap(screen.getByTestId('calendar-confirm'));
+    return server;
+  }
+
+  test.each([
+    ['2026-12-10', '1일째 12/10'],
+    ['2026-12-11', '2일째 12/11'],
+  ])('T15_S18_날_칩_%s_%s는_숫자만_DM_Mono', async (date, label) => {
+    await toCreateWithDates();
+    const chip = within(await screen.findByTestId(`tab-day-${date}`));
+    expect(valueMistakes(chip.getByText(label) as unknown as Host)).toEqual([]);
+  });
+
+  test('T15_S18_다른_날에_담김_N일째에_담김은_문장이라_DM_Mono_없음', async () => {
+    const server = await toCreateWithDates();
+    const kuromon = {
+      id: 'osaka-fake-kuromon', name: '구로몬 시장', category: 'food', lat: 34.6651, lng: 135.5065, crowd_level: 4, price_level: 2, mood_tags: ['현지'],
+      image: { category: 'food' }, facts: [{ field: 'opening_hours', value: '09:00-18:00', status: 'confirmed', source_type: 'google', source_url: null, checked_at: '2026-11-10' }],
+    };
+    server.match('GET /places/search', () => json(200, [kuromon]));
+    await tap(await screen.findByTestId('tab-day-2026-12-10'));
+    await fireEvent.changeText(await screen.findByTestId('must-search'), '구로');
+    await tap(await screen.findByText('구로몬 시장'));
+    await tap(await screen.findByTestId('tab-day-2026-12-11'));
+    await fireEvent.changeText(screen.getByTestId('must-search'), '구로몬');
+    const row = within(await screen.findByTestId('must-result-osaka-fake-kuromon'));
+    expect(sentenceMistakes(row.getByText('1일째에 담김') as unknown as Host)).toEqual([]);
+  });
+
+  async function showCourseMap() {
+    await render(
+      <SafeAreaProvider initialMetrics={METRICS}>
+        <CourseMapScreen
+          dayNumber={2}
+          labelText="느긋하게"
+          stops={[{ seq: 1, lat: 34.6687, lng: 135.5013, name: '가' }, { seq: 2, lat: 34.6651, lng: 135.5065, name: '나' }]}
+          home={null}
+          summary="5곳 · 이동 45분"
+          busy={false}
+          onClose={() => {}}
+          onPick={() => {}}
+          onFail={() => {}}
+        />
+      </SafeAreaProvider>,
+    );
+  }
+
+  test('T15_S18_크게_보기_머리_2일째_·_느긋하게는_숫자만_DM_Mono', async () => {
+    await showCourseMap();
+    expect(valueMistakes(textHost('2일째 · 느긋하게'))).toEqual([]);
+  });
+
+  test('T15_S18_크게_보기_요약_5곳_·_이동_45분은_§13-3_5대로_숫자만_DM_Mono', async () => {
+    await showCourseMap();
+    expect(valueMistakes(textHost('5곳 · 이동 45분'))).toEqual([]);
   });
 });

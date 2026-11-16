@@ -349,3 +349,92 @@ describe('§17 이름 검색이 실패해도 지도에서 찍기로 갈 수 있�
     expect(screen.queryByTestId('btn-pick-map')).toBeNull();
   });
 });
+
+// ---------- §18 Q2 이름 검색이 실패해도 같은 글로 주소 검색 ----------
+// 근거: TASK-015 §18 test-writer 남은 질문 표 2("이름 검색 실패 뒤 주소 검색도? -> 한다(같은 글로). 둘 다 실패하면 a3 ② + [지도에서 찍기]") ·
+//       §A 표 ②("①에서 못 찾으면 같은 글을 주소로 다시 — 사용자가 다시 치지 않는다") · task-015-design §1-4(a3 ② 주소 검색 공급자 실패) · §7 글(a3 ② 제목)
+// 계약: 이름 검색(GET /places/lodging-search)이 끊김·500·503이어도 앱은 같은 글로 GET /places/address-search를 한 번 부른다 (q = 이름 검색에 보낸 q와 같다)
+//       주소 결과가 있으면 a1 줄(addr-row-{place_id}) + [여기 없어? 지도에서 찍기](btn-pick-map), 고르면 kind address
+//       주소도 실패(끊김·500·503)면 a3 ②: lodging-none 안에 제목 "지금 주소로 못 찾았어" + btn-pick-map
+//       (이름 실패 + 주소 0건이 a3 ①인지 ②인지는 문서에 없어 글은 보지 않고 [지도에서 찍기]만 본다 — 질문)
+const ADDRESS_DOWN_TITLE = '지금 주소로 못 찾았어';
+const ADDR_HIT = { place_id: 'FAKE-T15-address-1', name: '가짜_주소_장소', address_short: '가짜_짧은_주소' };
+const qOf = (sent: { path: string }) => new URLSearchParams(sent.path.split('?')[1] ?? '').get('q');
+const named = () => server.requests.filter((r) => r.path.startsWith('/places/lodging-search'));
+const addressed = () => server.requests.filter((r) => r.path.startsWith('/places/address-search'));
+
+function serverWith(name: () => Reply, address: () => Reply) {
+  server = new FakeServer();
+  server.on(CURRENT, apiError(404, 'NOT_FOUND', { resource: 'trip' }));
+  server.on(CITY, json(200, { code: 'osaka', name_ko: '오사카', center: OSAKA_CENTER }));
+  server.match('GET /places/lodging-search', name);
+  server.match('GET /places/address-search', address);
+}
+
+async function typeLodging(value: string) {
+  await toForm();
+  await fillDates();
+  await fireEvent.changeText(await screen.findByTestId('lodging-search'), value);
+  await settleAll();
+}
+
+describe('§18 Q2 이름 검색이 실패하면 같은 글로 주소 검색', () => {
+  test.each(NAME_FAILS)('T15_S18_Q2_이름_검색이_%s여도_같은_글로_주소_검색을_부른다', async (_name, fail) => {
+    serverWith(() => fail, () => json(200, [ADDR_HIT]));
+    await typeLodging('2-5-12 Namba');
+    await waitFor(() => expect(addressed().length).toBeGreaterThanOrEqual(1));
+    expect(named().length).toBeGreaterThanOrEqual(1);
+    expect(qOf(addressed()[addressed().length - 1])).toBe(qOf(named()[named().length - 1]));
+  });
+
+  test.each(NAME_FAILS)('T15_S18_Q2_이름_검색이_%s이고_주소_결과가_있으면_a1_줄과_지도에서_찍기', async (_name, fail) => {
+    serverWith(() => fail, () => json(200, [ADDR_HIT]));
+    await typeLodging('2-5-12 Namba');
+    expect(await screen.findByTestId(`addr-row-${ADDR_HIT.place_id}`)).toBeTruthy();
+    expect(screen.getByTestId('btn-pick-map')).toBeTruthy();
+  });
+
+  test('T15_S18_Q2_이름_검색_실패_뒤_주소_줄을_고르면_본문은_kind_address_입력한_글', async () => {
+    serverWith(() => networkDown, () => json(200, [ADDR_HIT]));
+    server.on(CREATE, json(201, created));
+    await typeLodging('2-5-12 Namba');
+    await tap(await screen.findByTestId(`addr-row-${ADDR_HIT.place_id}`));
+    await tap(await screen.findByTestId('create-trip-submit'));
+    await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
+    expect((server.sent(CREATE)[0].body as Record<string, unknown>).lodging).toEqual({
+      kind: 'address', place_id: ADDR_HIT.place_id, address_text: '2-5-12 Namba', lat: null, lng: null, label: null,
+    });
+  });
+
+  const BOTH: [string, Reply, Reply][] = [];
+  for (const [nameCase, nameFail] of NAME_FAILS) for (const [addrCase, addrFail] of NAME_FAILS) BOTH.push([`${nameCase}+${addrCase}`, nameFail, addrFail]);
+
+  test.each(BOTH)('T15_S18_Q2_이름·주소_둘_다_실패(%s)면_a3_②_제목과_지도에서_찍기', async (_name, nameFail, addrFail) => {
+    serverWith(() => nameFail, () => addrFail);
+    await typeLodging('친구 집 근처');
+    const none = await screen.findByTestId('lodging-none');
+    expect(within(none).getByText(ADDRESS_DOWN_TITLE)).toBeTruthy();
+    expect(within(none).getByTestId('btn-pick-map')).toBeTruthy();
+    expect(addressed().length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('T15_S18_Q2_둘_다_실패해도_지도에서_찍기로_a2에_가서_찍은_숙소로_만들_수_있다', async () => {
+    serverWith(() => networkDown, () => apiError(503, 'PROVIDER_UNAVAILABLE', null));
+    server.on(CREATE, json(201, { ...created, lodging: pinBody(SPOT) }));
+    await typeLodging('친구 집 근처');
+    await tap(await screen.findByTestId('btn-pick-map'));
+    await screen.findByTestId('pick-map');
+    await longPress(SPOT);
+    await tap(screen.getByTestId('pick-confirm'));
+    await tap(await screen.findByTestId('create-trip-submit'));
+    await waitFor(() => expect(server.sent(CREATE)).toHaveLength(1));
+    expect((server.sent(CREATE)[0].body as Record<string, unknown>).lodging).toEqual(pinBody(SPOT));
+  });
+
+  test('T15_S18_Q2_이름_실패·주소_0건이어도_지도에서_찍기가_있다', async () => {
+    serverWith(() => apiError(500, 'INTERNAL', null), () => json(200, []));
+    await typeLodging('친구 집 근처');
+    await waitFor(() => expect(addressed().length).toBeGreaterThanOrEqual(1));
+    expect(await screen.findByTestId('btn-pick-map')).toBeTruthy();
+  });
+});

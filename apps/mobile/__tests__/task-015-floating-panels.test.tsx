@@ -27,7 +27,7 @@ import { mapControl } from '../test-support/maps-mock';
 import { resetDevice, tap } from '../test-support/planning-driver';
 import { day as demoDay, relaxed } from '../test-support/planning-fixtures';
 import { installConfig, TEST_KEY, toNow } from '../test-support/trip-now-driver';
-import { nowView, pins as basePins } from '../test-support/trip-now-fixtures';
+import { delayedView, nowView, pins as basePins } from '../test-support/trip-now-fixtures';
 
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
@@ -167,12 +167,12 @@ afterEach(() => {
 describe('§17 연습 화면은 떠 있는 판 셋을 겹침 함수에 넘긴다', () => {
   let server: FakeServer;
 
-  async function toRehearsal() {
+  async function toRehearsal(viewOf: (over?: object) => object = rehearsalView) {
     (Constants as unknown as { expoConfig: unknown }).expoConfig = { extra: { googleMapsKeyPresent: true } };
     freezeDate(NOW_ISO);
     server = new FakeServer().on(CURRENT, json(200, trip()));
-    server.match(`GET /days/${PLANNED}/now`, () => json(200, rehearsalView()));
-    server.match(`POST /days/${PLANNED}/check`, (sent) => json(200, rehearsalView({ at: body(sent).at })));
+    server.match(`GET /days/${PLANNED}/now`, () => json(200, viewOf()));
+    server.match(`POST /days/${PLANNED}/check`, (sent) => json(200, viewOf({ at: body(sent).at })));
     server.on(`GET /days/${PLANNED}/course`, json(200, relaxed('opt-3')));
     const Index = require('@/app/index').default;
     await render(
@@ -227,6 +227,22 @@ describe('§17 연습 화면은 떠 있는 판 셋을 겹침 함수에 넘긴다
     const stripBottom = sheetTopOf(area) - CLOCK_ABOVE_SHEET;
     expect(stripBottom - stripTop).toBeGreaterThan(40); // 시험 자체 확인: 띠가 있다
     expect(covers(lastPanels(), MID_X, (stripTop + stripBottom) / 2)).toBe(false);
+  });
+  // ---------- §18 Q3 notice-info도 떠 있는 판 ----------
+  // 근거: TASK-015 §18 test-writer 남은 질문 표 3("notice-info도 떠 있는 판? -> 예 — 지도 위에 그려지는 것은 모두") · §B3(notice-info는 떠 있는 줄 아래 8)
+  // 계약: 연습 중 안내 한 줄(notice-info, "연습이라 저장하지 않았어")이 보이는 동안 그 사각형이 판 안. 자리는 그려진 notice-info의 style top · height로 잰다
+  test('T15_S18_Q3_연습_안내_한_줄_notice_info가_보이는_동안_판_안', async () => {
+    await toRehearsal((over = {}) => delayedView({ day: plannedDay, ...over }));
+    await tap(await screen.findByTestId('event-dismiss'));
+    const notice = await screen.findByTestId('notice-info');
+    await layoutAndRegion();
+    const style = require('react-native').StyleSheet.flatten((notice as unknown as Host).props.style) as Record<string, number>;
+    expect(typeof style.top).toBe('number'); // 시험 자체 확인: 위에서 잰 자리
+    const height = typeof style.height === 'number' ? style.height : 44;
+    const panels = lastPanels();
+    expect(covers(panels, MID_X, style.top + height / 2)).toBe(true);
+    expect(covers(panels, MID_X, style.top + 2)).toBe(true);
+    expect(covers(panels, MID_X, style.top + height - 2)).toBe(true);
   });
 });
 
