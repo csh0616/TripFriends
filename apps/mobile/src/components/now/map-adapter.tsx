@@ -7,7 +7,7 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewProps } from 'r
 
 import mapStyleFile from '../../../assets/map/google-map-style.json';
 import { Text } from '@/components/app-text';
-import { metersPerPoint as metersPerPointOf, project, scaleBar, unproject, type Region } from '@/lib/map-project';
+import { metersPerPoint as metersPerPointOf, project, scaleBar, unproject, visibleArea, type Region } from '@/lib/map-project';
 import type { NowPin } from '@/lib/now-api';
 import { resolvePinOverlap, type Badge, type PinOverlapResult, type Rect, type ScreenPin } from '@/lib/pin-overlap';
 import { layout } from '@/planning/layout';
@@ -404,7 +404,8 @@ export function CourseMap({
   };
 
   let rules: PinOverlapResult | null = null;
-  const size = { width, height };
+  const mapPadding = { top: 0, left: 0, right: 0, bottom: padding.bottom - 40 > 0 ? padding.bottom - 40 : 0 };
+  const size = visibleArea({ width, height }, mapPadding); // region은 mapPadding을 뺀 보이는 영역을 채운다 (TASK-015 §20 #4)
   if (region) {
     try {
       const screenPins: ScreenPin[] = stops.map((stop) => ({ id: `p${stop.seq}`, kind: 'later', ...project(region, size, { latitude: stop.lat, longitude: stop.lng }), size: layout.pinLater, seq: stop.seq }));
@@ -412,7 +413,7 @@ export function CourseMap({
       const named = stops.filter((stop) => stop.name);
       rules = resolvePinOverlap({
         pins: screenPins,
-        screen: size,
+        screen: { width, height },
         labelWidth: 0,
         panels,
         labelMode: 'all',
@@ -434,7 +435,7 @@ export function CourseMap({
         customMapStyle={MAP_STYLE}
         style={StyleSheet.absoluteFill}
         initialRegion={{ ...(home ?? (stops[0] ? { latitude: stops[0].lat, longitude: stops[0].lng } : NO_CENTER)), latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
-        mapPadding={{ top: 0, left: 0, right: 0, bottom: padding.bottom - 40 > 0 ? padding.bottom - 40 : 0 }}
+        mapPadding={mapPadding}
         toolbarEnabled={false}
         onRegionChangeComplete={setRegion}
         onMapReady={signalReady}

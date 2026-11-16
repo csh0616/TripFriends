@@ -21,8 +21,8 @@ export function project(region: Region, size: Frame, at: Coord): { x: number; y:
   const topMerc = merc(region.latitude + region.latitudeDelta / 2);
   const bottomMerc = merc(region.latitude - region.latitudeDelta / 2);
   return {
-    x: ((at.longitude - west) / region.longitudeDelta) * size.width,
-    y: ((topMerc - merc(at.latitude)) / (topMerc - bottomMerc)) * size.height,
+    x: (size.x ?? 0) + ((at.longitude - west) / region.longitudeDelta) * size.width,
+    y: (size.y ?? 0) + ((topMerc - merc(at.latitude)) / (topMerc - bottomMerc)) * size.height,
   };
 }
 
@@ -32,16 +32,14 @@ export function unproject(region: Region, size: Frame, point: { x: number; y: nu
   const topMerc = merc(region.latitude + region.latitudeDelta / 2);
   const bottomMerc = merc(region.latitude - region.latitudeDelta / 2);
   return {
-    latitude: unmerc(topMerc - (point.y / size.height) * (topMerc - bottomMerc)),
-    longitude: west + (point.x / size.width) * region.longitudeDelta,
+    latitude: unmerc(topMerc - ((point.y - (size.y ?? 0)) / size.height) * (topMerc - bottomMerc)),
+    longitude: west + ((point.x - (size.x ?? 0)) / size.width) * region.longitudeDelta,
   };
 }
 
-/** TASK-015 §20 #4: 지도 전체 크기에서 mapPadding을 뺀 보이는 영역 (껍데기 — 구현은 frontend) */
+/** TASK-015 §20 #4: 지도 전체 크기에서 mapPadding을 뺀 보이는 영역 (지도가 알려 주는 region이 채우는 곳) */
 export function visibleArea(size: Size, padding: MapPadding): Required<Frame> {
-  void size;
-  void padding;
-  throw new Error('not implemented');
+  return { x: padding.left, y: padding.top, width: size.width - padding.left - padding.right, height: size.height - padding.top - padding.bottom };
 }
 
 /** 화면 가로 한 점이 몇 m인가 (지도 가운데 위도 기준) */
