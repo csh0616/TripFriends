@@ -22,6 +22,9 @@ import { course, day, relaxed } from '../test-support/planning-fixtures';
 
 type Tree = { type: string; props: Record<string, any>; parent: Tree | null; children: (Tree | string)[]; queryAll: (p: (h: Tree) => boolean) => Tree[] };
 const byId = (id: string) => screen.getByTestId(id) as unknown as Tree;
+// 알약은 aria-hidden이라 RNTL 기본 쿼리로는 안 찾아진다 -> 숨김 포함으로 찾는다
+const HIDDEN = { includeHiddenElements: true };
+const pillOf = () => screen.getByTestId('expand-pill', HIDDEN) as unknown as Tree;
 const inside = (host: Tree) => host.queryAll(() => true);
 const isInside = (inner: Tree, outer: Tree) => {
   for (let up: Tree | null = inner; up; up = up.parent) if (up === outer) return true;
@@ -42,11 +45,11 @@ describe('§19 [크게 보기] 알약 자리 · 한 버튼', () => {
   test('T15_S19_알약은_요약_줄_안에_있고_도식_안에는_없다', async () => {
     happyServer();
     await toP3();
-    const pill = byId('expand-pill');
+    const pill = pillOf();
     expect(isInside(pill, byId('course-summary'))).toBe(true);
     expect(isInside(pill, byId('route-diagram'))).toBe(false);
-    expect(within(screen.getByTestId('route-diagram')).queryByText('크게 보기')).toBeNull();
-    expect(within(screen.getByTestId('expand-pill')).getByText('크게 보기')).toBeTruthy();
+    expect(within(screen.getByTestId('route-diagram')).queryByText('크게 보기', HIDDEN)).toBeNull();
+    expect(within(screen.getByTestId('expand-pill', HIDDEN)).getByText('크게 보기', HIDDEN)).toBeTruthy();
   });
 
   test('T15_S19_요약_줄에_요약_글과_알약이_함께_있고_알약이_요약_글_뒤_오른쪽_끝', async () => {
@@ -61,7 +64,7 @@ describe('§19 [크게 보기] 알약 자리 · 한 버튼', () => {
   test('T15_S19_알약은_aria_hidden이고_따로_눌러지는_버튼이_아니다', async () => {
     happyServer();
     await toP3();
-    const pill = byId('expand-pill');
+    const pill = pillOf();
     const hidden =
       pill.props['aria-hidden'] === true ||
       pill.props.accessibilityElementsHidden === true ||
@@ -103,7 +106,8 @@ describe('§19 [크게 보기] 알약 자리 · 한 버튼', () => {
   test('T15_S19_알약_글자를_눌러도_크게_보기가_열린다', async () => {
     happyServer();
     await toP3();
-    await tap(within(screen.getByTestId('expand-pill')).getByText('크게 보기'));
+    // 알약은 버튼이 아니므로 눌림이 감싼 btn-expand-map으로 전해져야 열린다
+    await tap(within(screen.getByTestId('expand-pill', HIDDEN)).getByText('크게 보기', HIDDEN));
     expect(await screen.findByTestId('course-map-screen')).toBeTruthy();
   });
 
