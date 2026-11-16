@@ -1,0 +1,107 @@
+# TASK-015 AC-5 · §A 경로 ② 이름 검색 0건 -> 주소 결과(a1)에서 고르기 -> 여행 만들기
+# 전제·실행 방법은 create-trip.yaml 머리말과 같다 (로컬 Supabase + 점검 서버 8010 가짜 오사카 + 개발 빌드 + Metro). 실행:
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/lodging-address -e METRO_URL=http://127.0.0.1:<Metro 포트> .maestro/lodging-address.yaml
+# 화면 이름(testID)은 apps/mobile/__tests__/task-015-lodging-flow.test.tsx 머리말의 계약과 같다.
+# 검색 글 "난바 주소 1-1": 이름 검색 0건 · 주소 검색 1건이 되게 가짜 공급자 데이터가 맞춰져 있다 (test-writer). 주소 줄은 addr-row-*
+appId: com.csh0616.tripfriends
+---
+- evalScript: |
+    ${
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const tokyo = (offsetDays) => {
+        const d = new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400 * 1000);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      };
+      output.start = tokyo(7);
+      output.end = tokyo(8);
+    }
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1&__expo_disable_fab=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 만들기"
+    timeout: 60000
+- runFlow: common/close-dev-menu.yaml
+- tapOn: "여행 만들기"
+- extendedWaitUntil:
+    visible:
+      id: "create-trip-submit"
+    timeout: 30000
+- tapOn:
+    id: "field-start-date"
+- extendedWaitUntil:
+    visible:
+      id: "calendar-sheet"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.start}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.start}"
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.end}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.end}"
+- tapOn:
+    id: "calendar-confirm"
+- tapOn:
+    id: "lodging-search"
+- inputText: "난바 주소 1-1"
+- extendedWaitUntil:
+    visible:
+      id: "btn-pick-map"
+    timeout: 15000
+- assertNotVisible:
+    id: "lodging-none"
+- takeScreenshot: lodging-address-1-a1
+# 주소 결과 첫 줄 (testID 앞부분 addr-row-)
+- tapOn:
+    id: "addr-row-.*"
+    index: 0
+- hideKeyboard
+- assertVisible:
+    id: "lodging-picked"
+- assertVisible: "난바 주소 1-1"
+- takeScreenshot: lodging-address-2-form
+- takeScreenshot: lodging-address-3-picked
+- tapOn:
+    id: "create-trip-submit"
+- extendedWaitUntil:
+    visible: "계획 전"
+    timeout: 30000
+- takeScreenshot: lodging-address-4-day-list
+# 첫날 계획 -> 코스 (P3). 첫 이동의 출발이 고른 숙소인지는 코스 화면 스크린샷의 집 표시로 본다
+- tapOn:
+    text: "계획 전"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "choice-walk_alley"
+    timeout: 30000
+- tapOn: "아무거나 찾아 줘"
+- extendedWaitUntil:
+    visible:
+      id: "compose-button"
+    timeout: 60000
+- tapOn:
+    id: "compose-button"
+- extendedWaitUntil:
+    visible: "코스 짜 봤어"
+    timeout: 60000
+- takeScreenshot: lodging-address-5-course-from-lodging
