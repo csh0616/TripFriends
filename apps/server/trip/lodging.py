@@ -59,8 +59,8 @@ def normalize(raw: dict[str, Any], center: tuple[float, float] | None) -> dict[s
         raise LodgingError("invalid_type")
     if kind != "pin" and (lat is not None or lng is not None):
         raise LodgingError("coords_not_allowed")  # 조용히 버리지 않는다 (§9 Q4)
-    if kind == "pin" and (not _blank(place_id) or not _blank(address)):
-        raise LodgingError("field_not_allowed")  # pin은 place_id·address_text 값을 받지 않는다 (§17 Q-D)
+    if (kind != "address" and not _blank(address)) or (kind == "pin" and not _blank(place_id)):
+        raise LodgingError("field_not_allowed")  # kind에 속하지 않는 글자 칸(label 제외)에 값이 있으면 (§17 Q-D, §18). 빈 글은 null로 받는다
     text = label.strip() if isinstance(label, str) else None
     if text is not None and len(text) > _limits()["label_max"]:
         raise LodgingError("label_too_long")  # 자르지 않는다 (§11 Q2)
