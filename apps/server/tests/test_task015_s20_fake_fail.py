@@ -88,3 +88,31 @@ def test_T15_S20_7_API_실패_글이면_503_PROVIDER_UNAVAILABLE(mem, path, q): 
 def test_T15_S20_7_API_경계_비슷한_글은_200(mem, path):  # noqa: F811
     response = mem.client.get(path, params={"city_code": "osaka", "q": "공급자 실패"}, headers=bearer(ME))
     assert response.status_code == 200, response.text
+
+
+# ---------- 실패 스위치는 가짜 공급자에만 (결정권자 11-16) ----------
+
+
+@pytest.mark.parametrize("method", METHODS)
+def test_T15_S20_7_실제_Google_공급자는_실패_글이어도_실패하지_않고_그대로_보낸다(method):
+    """실제 Google을 부르지 않는다: 가짜 전송이 요청을 받아 결과 한 줄을 돌려준다. 실패 글이어도 예외 없이 그 결과 그대로, 검색 글도 그대로 보낸다."""
+    import httpx
+
+    from places.provider import GooglePlaces
+
+    sent: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"places": [{"id": "FAKE-google-1", "displayName": {"text": "가짜 이름"}, "shortFormattedAddress": "가짜 주소"}]})
+
+    provider = GooglePlaces("TEST-ONLY-NOT-A-KEY", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    found = getattr(provider, method)(FAIL_Q)
+    assert found == [{"place_id": "FAKE-google-1", "name": "가짜 이름", "address_short": "가짜 주소"}]
+    assert len(sent) == 1 and sent[0]["textQuery"] == FAIL_Q
+
+
+def test_T15_S20_7_같은_실패_글에서_이름_검색과_주소_검색_둘_다_503(mem):  # noqa: F811
+    """앱 a3 ②: 이름 검색 실패 뒤 같은 글로 주소 검색(§18 Q2) -> 둘 다 실패해야 "지금 주소로 못 찾았어"."""
+    codes = [mem.client.get(path, params={"city_code": "osaka", "q": FAIL_Q}, headers=bearer(ME)).status_code for path in PATHS]
+    assert codes == [503, 503]

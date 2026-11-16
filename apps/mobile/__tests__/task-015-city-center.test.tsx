@@ -129,6 +129,12 @@ describe('§E ③ 숙소도 핀도 없으면 지도는 도시 중심에서 시�
   test.each(PLACES)('T15_E3_%s_빈_코스_날에_일본_가운데에_머물지_않는다', async (_name, dayId, date) => {
     serve(dayId, date, { ...EMPTY, day: { ...demoDay, day_id: dayId, date, lodging: null }, city: { code: 'osaka', center: CITY } });
     await open(entry(dayId));
+    // TASK-015 §20 Q4 불안정 고침: 가짜 지도는 준비 신호를 setTimeout(0)으로 주고, open()은 setImmediate 한 번만 기다린다.
+    // Node에서 둘의 순서가 정해져 있지 않아 신호 전에 보면 카메라 이동이 0건 -> initialRegion(일본 가운데)을 보고 실패했다.
+    // 지도 준비 신호 뒤를 보도록 setTimeout(0) 한 차례를 더 기다린다 (가짜 지도의 타이머보다 뒤에 걸려 늘 그 뒤에 돈다). 단언은 그대로
+    await act(async () => {
+      await new Promise<void>((done) => setTimeout(done, 0));
+    });
     const last = mapControl.moves.at(-1);
     expect(last ? near(last, { lat: JAPAN.latitude, lng: JAPAN.longitude }) : near(initialCenter(), { lat: JAPAN.latitude, lng: JAPAN.longitude })).toBe(false);
   });
