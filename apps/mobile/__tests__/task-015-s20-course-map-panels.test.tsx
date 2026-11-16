@@ -14,6 +14,8 @@
 //   그린 이름표(`map-pin-label` Marker 좌표를 같은 지도 영역으로 다시 화면 점으로, 폭 = width prop, 높이 28)가 넘긴 판 어느 것과도 닿지 않는다
 //   지도 영역(region)은 가짜 지도에 regionChangeComplete로 넣는다. 값은 fitToCoordinates(경로, edgePadding = 화면이 넘긴 padding)를 흉내 내어
 //   경로 상자가 padding 안쪽 끝에 닿게 계산한다 -> 맨 위 핀은 y = padding.top. 그 핀의 "위" 이름표는 위 줄과 닿는 자리다 (reviewer 사례)
+//   (§20 #4 frontend 진단 뒤 고침, 11-17) region은 MapView mapPadding을 뺀 보이는 영역을 채운다. 시험이 화면 점을 계산할 때도 그 영역 기준
+//   (계약: __tests__/task-015-s20-course-map-visible-area.test.tsx)
 //   데이터: engine/fixtures/demo_city.json(데모 도시)의 장소 이름·좌표, 숙소 = 데모 중심(35.0, 135.0). 어떤 4곳 · 5곳이었는지는 reviewer 보고에 없어 골라 넣었다:
 //     4곳 = 정원 카페 C가 경로 상자 오른쪽 위 끝(SOS 쪽), 5곳 = 국수집 A가 맨 위이고 가로로 가운데 근처(알약 쪽)
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
@@ -68,20 +70,25 @@ const rad = (deg: number) => (deg * Math.PI) / 180;
 const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + rad(lat) / 2));
 const unmerc = (y: number) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
 
-/** fitToCoordinates(points, edgePadding)를 흉내 낸 지도 영역: 점 상자가 padding 안쪽 끝에 닿는다 */
+type Frame = { x: number; y: number; width: number; height: number };
+/** 지도가 region을 알려 주는 보이는 영역 = 화면에서 MapView mapPadding을 뺀 곳 (§20 #4) */
+let frame: Frame = { x: 0, y: 0, width: WIDTH, height: HEIGHT };
+
+/** fitToCoordinates(points, edgePadding)를 흉내 낸 지도 영역: 점 상자가 화면 위 padding 안쪽 끝에 닿고, region은 보이는 영역을 채운다 */
 function fitRegion(points: { lat: number; lng: number }[], pad: { top: number; bottom: number; left: number; right: number }): Region {
   const lats = points.map((p) => p.lat);
   const lngs = points.map((p) => p.lng);
-  const lngSpan = Math.max(...lngs) - Math.min(...lngs);
-  const innerW = WIDTH - pad.left - pad.right;
-  const longitudeDelta = (lngSpan * WIDTH) / innerW;
-  const west = Math.min(...lngs) - (lngSpan * pad.left) / innerW;
+  const x1 = (pad.left - frame.x) / frame.width;
+  const x2 = (WIDTH - pad.right - frame.x) / frame.width;
+  const longitudeDelta = (Math.max(...lngs) - Math.min(...lngs)) / (x2 - x1);
+  const west = Math.min(...lngs) - x1 * longitudeDelta;
+  const y1 = (pad.top - frame.y) / frame.height;
+  const y2 = (HEIGHT - pad.bottom - frame.y) / frame.height;
   const top = merc(Math.max(...lats));
   const bottom = merc(Math.min(...lats));
-  const innerH = HEIGHT - pad.top - pad.bottom;
-  const span = top - bottom;
-  const north = unmerc(top + (span * pad.top) / innerH);
-  const south = unmerc(bottom - (span * pad.bottom) / innerH);
+  const mercPer = (top - bottom) / (y2 - y1);
+  const north = unmerc(top + y1 * mercPer);
+  const south = unmerc(bottom - (1 - y2) * mercPer);
   return { latitude: (north + south) / 2, longitude: west + longitudeDelta / 2, latitudeDelta: north - south, longitudeDelta };
 }
 
@@ -93,6 +100,9 @@ async function showMap(stops: CourseStop[]) {
   );
   const map = root().queryAll((h) => h.props.mapElement === 'MapView' && h.props.testID === 'course-map')[0];
   expect(map).toBeDefined(); // 시험 자체 확인: 대체 그림이 아니라 지도
+  const mp = (map.props.mapPadding ?? {}) as Record<string, number | undefined>;
+  const [top, bottom, left, right] = [mp.top ?? 0, mp.bottom ?? 0, mp.left ?? 0, mp.right ?? 0];
+  frame = { x: left, y: top, width: WIDTH - left - right, height: HEIGHT - top - bottom };
   const padding = map.props.mapPadding !== undefined ? fitPaddingOf() : null;
   const region = fitRegion([HOME, ...stops], padding ?? { top: INSET_TOP + 52 + 28, bottom: 168 + INSET_BOTTOM + 40, left: 24, right: 24 });
   await act(async () => {
@@ -122,7 +132,7 @@ function drawnLabels(region: Region): { name: string; rect: Rect }[] {
   return root()
     .queryAll((h) => h.props.mapElement === 'Marker' && h.props.testID === 'map-pin-label')
     .map((h) => {
-      const at = project(region, { width: WIDTH, height: HEIGHT }, h.props.coordinate);
+      const at = project(region, frame, h.props.coordinate);
       const width = h.queryAll((inner) => typeof inner.props.style !== 'undefined' && [inner.props.style].flat().some((s: any) => s && typeof s.width === 'number'))[0];
       const w = [width?.props.style].flat().find((s: any) => s && typeof s.width === 'number')?.width as number;
       const name = String(h.queryAll((inner) => typeof inner.props.children === 'string')[0]?.props.children ?? '');
@@ -208,7 +218,7 @@ describe('§20 #4 reviewer 사례: 그린 이름표가 위 줄 · 시트와 닿�
 
   test('T15_S20_4_경계_4곳에서_정원_카페_C는_경로_상자_맨_위라_위_이름표_자리가_위_줄과_닿는다(시험_자체_확인)', async () => {
     const region = await showMap(FOUR);
-    const pin = project(region, { width: WIDTH, height: HEIGHT }, { latitude: D03.lat, longitude: D03.lng });
+    const pin = project(region, frame, { latitude: D03.lat, longitude: D03.lng });
     const topLabel: Rect = { x: pin.x - 40, y: pin.y - 14 - 4 - LABEL_H, width: 80, height: LABEL_H }; // 지난 핀 28 기준 "위" 자리
     expect(touches(topLabel, { x: 0, y: ROW_TOP, width: WIDTH, height: BUTTON })).toBe(true);
   });

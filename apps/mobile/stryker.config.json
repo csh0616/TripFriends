@@ -83,7 +83,7 @@
         "<rootDir>/__tests__/task-015-pin-overlap.test.ts",
         "<rootDir>/__tests__/task-015-lodging-lib.test.ts",
         "<rootDir>/__tests__/task-015-lodging-pick.test.tsx",
-        "<rootDir>/__tests__/task-015-lodging-pick-lib.test.ts", "<rootDir>/__tests__/task-015-pin-overlap-all-labels.test.ts", "<rootDir>/__tests__/task-015-floating-panels.test.tsx", "<rootDir>/__tests__/task-015-map-project.test.ts", "<rootDir>/__tests__/task-015-diagram-spread.test.ts", "<rootDir>/__tests__/task-015-diagram-spread-screen.test.tsx", "<rootDir>/__tests__/task-015-s20-focus.test.tsx", "<rootDir>/__tests__/task-015-s20-a4.test.tsx", "<rootDir>/__tests__/task-015-s20-course-map-panels.test.tsx", "<rootDir>/__tests__/task-015-s20-demo-seed.test.tsx"
+        "<rootDir>/__tests__/task-015-lodging-pick-lib.test.ts", "<rootDir>/__tests__/task-015-pin-overlap-all-labels.test.ts", "<rootDir>/__tests__/task-015-floating-panels.test.tsx", "<rootDir>/__tests__/task-015-map-project.test.ts", "<rootDir>/__tests__/task-015-diagram-spread.test.ts", "<rootDir>/__tests__/task-015-diagram-spread-screen.test.tsx", "<rootDir>/__tests__/task-015-s20-focus.test.tsx", "<rootDir>/__tests__/task-015-s20-a4.test.tsx", "<rootDir>/__tests__/task-015-s20-course-map-panels.test.tsx", "<rootDir>/__tests__/task-015-s20-demo-seed.test.tsx", "<rootDir>/__tests__/task-015-s20-map-visible-area.test.ts", "<rootDir>/__tests__/task-015-s20-course-map-visible-area.test.tsx"
       ],
       "moduleNameMapper": {
         "\\.css$": "<rootDir>/jest/style-mock.js",

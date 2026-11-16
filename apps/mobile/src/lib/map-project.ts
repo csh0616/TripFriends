@@ -4,6 +4,10 @@
 export type Region = { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number };
 export type Size = { width: number; height: number };
 export type Coord = { latitude: number; longitude: number };
+/** TASK-015 §20 #4: 지도가 region을 알려 주는 보이는 영역. 화면 왼쪽 위 기준 원점(x, y, 없으면 0)과 크기 */
+export type Frame = Size & { x?: number; y?: number };
+/** MapView mapPadding (pt) */
+export type MapPadding = { top: number; bottom: number; left: number; right: number };
 
 const METERS_PER_DEGREE = (Math.PI / 180) * 6371000;
 const rad = (deg: number): number => (deg * Math.PI) / 180;
@@ -12,7 +16,7 @@ const merc = (lat: number): number => Math.log(Math.tan(Math.PI / 4 + rad(lat) /
 const unmerc = (y: number): number => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
 
 /** 좌표 -> 지도 화면 위 점 (왼쪽 위가 0,0) */
-export function project(region: Region, size: Size, at: Coord): { x: number; y: number } {
+export function project(region: Region, size: Frame, at: Coord): { x: number; y: number } {
   const west = region.longitude - region.longitudeDelta / 2;
   const topMerc = merc(region.latitude + region.latitudeDelta / 2);
   const bottomMerc = merc(region.latitude - region.latitudeDelta / 2);
@@ -23,7 +27,7 @@ export function project(region: Region, size: Size, at: Coord): { x: number; y: 
 }
 
 /** 화면 위 점 -> 좌표 (project의 거꾸로) */
-export function unproject(region: Region, size: Size, point: { x: number; y: number }): Coord {
+export function unproject(region: Region, size: Frame, point: { x: number; y: number }): Coord {
   const west = region.longitude - region.longitudeDelta / 2;
   const topMerc = merc(region.latitude + region.latitudeDelta / 2);
   const bottomMerc = merc(region.latitude - region.latitudeDelta / 2);
@@ -31,6 +35,13 @@ export function unproject(region: Region, size: Size, point: { x: number; y: num
     latitude: unmerc(topMerc - (point.y / size.height) * (topMerc - bottomMerc)),
     longitude: west + (point.x / size.width) * region.longitudeDelta,
   };
+}
+
+/** TASK-015 §20 #4: 지도 전체 크기에서 mapPadding을 뺀 보이는 영역 (껍데기 — 구현은 frontend) */
+export function visibleArea(size: Size, padding: MapPadding): Required<Frame> {
+  void size;
+  void padding;
+  throw new Error('not implemented');
 }
 
 /** 화면 가로 한 점이 몇 m인가 (지도 가운데 위도 기준) */
