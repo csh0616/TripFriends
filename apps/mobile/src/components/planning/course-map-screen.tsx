@@ -7,6 +7,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Text } from '@/components/app-text';
 import { CourseMap, type CourseStop } from '@/components/now/map-adapter';
 import { CloseIcon } from '@/components/planning/icons';
+import { MonoText } from '@/components/trips/parts';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { SosButton } from '@/components/planning/sos-button';
 import { SosSheet } from '@/components/planning/sos-sheet';
@@ -81,14 +82,14 @@ export function CourseMapScreen({
           <CloseIcon color={color.ink} />
         </Pressable>
         <View style={styles.pill}>
-          <Text style={text('label', 'ink')}>{`${dayNumber}일째 · ${labelText}`}</Text>
+          <MonoText value={`${dayNumber}일째 · ${labelText}`} base={text('label', 'ink')} />
         </View>
         <SosButton onPress={() => setSosOpen(true)} />
       </View>
       <View testID="course-bar" style={[styles.sheet, { height: sheet }]}>
         <View style={styles.sheetText}>
           <Text style={text('heading')}>{labelText}</Text>
-          <Text style={text('caption', 'muted')}>{summary}</Text>
+          <MonoText value={summary} base={text('caption', 'muted')} />
         </View>
         <PrimaryButton testID="course-pick" label="이걸로 할래" disabled={busy} onPress={onPick} />
       </View>

@@ -143,9 +143,8 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
     if (!lodgingQueryReady(value)) return searchLodging(null);
     searchLodging(async (): Promise<LodgingResult | null> => {
       const result = await send(tripRequests.searchLodging(value));
-      if (!(result.ok && Array.isArray(result.data))) return null;
-      if (result.data.length > 0) return { kind: 'name', hits: result.data as LodgingHit[] };
-      // ① 이름으로 0건 -> ② 같은 글을 주소로 다시 (사용자가 다시 치지 않는다)
+      if (result.ok && Array.isArray(result.data) && result.data.length > 0) return { kind: 'name', hits: result.data as LodgingHit[] };
+      // ① 이름으로 0건이거나 검색 실패(TASK-015 §18 Q2) -> ② 같은 글을 주소로 다시 (사용자가 다시 치지 않는다)
       const byAddress = await send(tripRequests.searchAddress(value));
       if (!(byAddress.ok && Array.isArray(byAddress.data))) return { kind: 'none', addressDown: true };
       return byAddress.data.length > 0 ? { kind: 'address', hits: byAddress.data as LodgingHit[] } : { kind: 'none', addressDown: false };

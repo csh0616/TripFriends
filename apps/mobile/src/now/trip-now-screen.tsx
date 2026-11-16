@@ -18,7 +18,7 @@ import { LocateIcon } from '@/components/planning/icons';
 import { InputBar } from '@/components/planning/input-bar';
 import { LocationIntroSheet, LocationOffPill, LocationOffSheet } from '@/components/now/location-ui';
 import type { Rect } from '@/lib/pin-overlap';
-import { RehearsalBand, RehearsalNotice, REHEARSAL_FAILED } from '@/components/now/rehearsal-ui';
+import { RehearsalBand, RehearsalNotice, NOTICE_SIDE, REHEARSAL_FAILED } from '@/components/now/rehearsal-ui';
 import { Notice } from '@/components/planning/notice';
 import { RouteDiagram } from '@/components/planning/route-diagram';
 import { SecondaryButton } from '@/components/planning/secondary-button';
@@ -661,6 +661,8 @@ export function TripNowScreen({
     { x: 0, y: insets.top + rehTop, width, height: TOP_ROW },
     ...(rehearsal ? [{ x: 0, y: panelSheetTop - CLOCK_ABOVE_SHEET, width, height: layout.rehClock }] : []),
     { x: 0, y: panelSheetTop, width, height: sheetMid },
+    // TASK-015 §18 Q3: 지도 위에 그려지는 안내 한 줄도 떠 있는 판
+    ...(rehearsalInfo ? [{ x: NOTICE_SIDE, y: bandTop + control.sos, width: Math.max(0, width - 2 * NOTICE_SIDE), height: layout.noticeInfoHeight }] : []),
   ];
 
   return (

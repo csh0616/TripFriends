@@ -1,8 +1,8 @@
 // TASK-015 §A ③ · docs/design/reviews/task-015-design.md §1-3 a2 "지도에서 찍기" (+ §1-5 a4 지도를 못 불러옴).
 // 앱은 그리기만 한다: 지도를 길게 눌러 핀 -> 이름 붙이기(선택) -> [여기로 정했어]. Google을 부르지 않는다 (지도 타일만).
 // 50km 검사는 서버와 같은 규칙을 lib가 먼저 해서 바로 안내 · 비활성 (서버 POST /trips가 마지막에 다시 확인한다).
-import { useContext, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useContext, useEffect, useState } from 'react';
+import { Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { Component, type ReactNode } from 'react';
@@ -71,6 +71,16 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
   const [sending, setSending] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapKey, setMapKey] = useState(0);
+  // TASK-015 §18 막는 것 1: 이름 칸을 누르면 시트가 키보드 위로 (②-07 field와 같은 규칙). iOS는 Will, 안드로이드는 Did 신호
+  const [keyboard, setKeyboard] = useState(0);
+  useEffect(() => {
+    const show = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow', (event) => setKeyboard(event.endCoordinates.height));
+    const hide = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide', () => setKeyboard(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   const tooFar = pin !== null && (serverTooFar || (center !== null && isTooFar(pin, center)));
   const canConfirm = pin !== null && !tooFar && !sending && (center === null || canConfirmPin(pin, center));
@@ -100,7 +110,6 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
       <View style={styles.titlePill}>
         <Text style={text('label', 'ink')}>지도에서 찍기</Text>
       </View>
-      <View style={styles.back} pointerEvents="none" />
     </View>
   );
 
@@ -143,7 +152,7 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
         />
       </MapGuard>
       {topBar}
-      <View testID="pick-panel" style={[styles.sheet, { minHeight: SHEET_HEIGHT, paddingBottom: Math.max(insets.bottom, space['space-5']) }]}>
+      <View testID="pick-panel" style={[styles.sheet, { bottom: keyboard, minHeight: SHEET_HEIGHT, paddingBottom: Math.max(insets.bottom, space['space-5']) }]}>
         <Text style={text('heading')}>{pin ? PIN_TITLE : FIRST_TITLE}</Text>
         <Text style={text('body', tooFar || otherError ? 'alert' : 'ink')}>{sub}</Text>
         {pin ? (
@@ -171,8 +180,8 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: color['bg-2'] },
-  top: { position: 'absolute', left: space['space-4'], right: space['space-4'], flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { width: control['touch-min'], height: control['touch-min'], borderRadius: radius['r-full'], backgroundColor: color.surface, alignItems: 'center', justifyContent: 'center', ...shadow.float },
+  top: { position: 'absolute', left: space['space-4'], right: space['space-4'], height: control['touch-min'], flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }, // 가운데 알약, 뒤로는 왼쪽 끝 (오른쪽 자리는 비워 둠)
+  back: { position: 'absolute', left: 0, width: control['touch-min'], height: control['touch-min'], borderRadius: radius['r-full'], backgroundColor: color.surface, alignItems: 'center', justifyContent: 'center', ...shadow.float },
   titlePill: { height: layout.titlePill, paddingHorizontal: space['space-4'], borderRadius: radius['r-full'], backgroundColor: color.surface, alignItems: 'center', justifyContent: 'center', ...shadow.float },
   sheet: {
     position: 'absolute',

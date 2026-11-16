@@ -13,11 +13,14 @@ import { color, control, fitText, radius, space, text } from '@/planning/theme';
  * TASK-015 §B7·§17 (task-014-design §13-1): 혼자 값으로 서는 숫자(날짜·날짜 범위·D-day·"n일 중 k일" 등)는 숫자(와 숫자 사이 : / –)만 DM Mono 500, 글자는 Noto.
  * 숫자 덩어리만 안쪽 Text로 나눈다 (읽기 도구엔 한 문장). base = 바깥 글자 모양 (text()·fitText() 결과), 안쪽은 같은 크기·줄 높이·색에 글꼴만 DM Mono
  */
-export function MonoText({ value, base, testID, numberOfLines }: { value: string; base: TextStyle; testID?: string; numberOfLines?: number }) {
+const NUMBERS = /(\d+(?:[:/–]\d+)*)/;
+/** 문장 속 시각(HH:MM, 범위면 HH:MM–HH:MM)만 — 그 밖의 숫자("5분 뒤")는 문장이라 Noto (TASK-015 §18) */
+const TIMES = /(\d{1,2}:\d{2}(?:–\d{1,2}:\d{2})?)/;
+export function MonoText({ value, base, testID, numberOfLines, timesOnly }: { value: string; base: TextStyle; testID?: string; numberOfLines?: number; timesOnly?: boolean }) {
   const mono = fitText({ size: base.fontSize as number, lineHeight: base.lineHeight as number, weight: 500, family: tokens.font['font-mono'], fg: base.color as string }, 'muted');
   return (
     <Text testID={testID} numberOfLines={numberOfLines} style={base}>
-      {value.split(/(\d+(?:[:/–]\d+)*)/).map((part, index) => (index % 2 === 1 ? <Text key={index} style={mono}>{part}</Text> : part))}
+      {value.split(timesOnly ? TIMES : NUMBERS).map((part, index) => (index % 2 === 1 ? <Text key={index} style={mono}>{part}</Text> : part))}
     </Text>
   );
 }
@@ -127,7 +130,7 @@ export function ChipButton({ label, onPress, testID, selected }: { label: string
       hitSlop={{ top: layout.chipSlop, bottom: layout.chipSlop }}
       style={[styles.chip, selected && styles.chipOn]}
     >
-      <Text style={text(selected ? 'label' : 'caption', selected ? 'ink' : 'muted')}>{label}</Text>
+      <MonoText value={label} base={text(selected ? 'label' : 'caption', selected ? 'ink' : 'muted')} />
     </Pressable>
   );
 }

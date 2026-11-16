@@ -3,6 +3,7 @@
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { MonoText } from '@/components/trips/parts';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { HoursChipView, StatusChip } from '@/components/planning/status-chip';
@@ -50,14 +51,17 @@ const changeLabel = (minutes: number): string => (minutes < 0 ? `\u2212${-minute
 /** T-05: 사실마다 상태 칩 + 출처 + 확인 날짜. 서버 값만 쓴다 (영업 여부를 지어내지 않는다) */
 function FactLine({ fact }: { fact: NowFact }) {
   const shown = todayHoursText([fact]);
+  const checkedLine = `${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`;
   return (
     <View style={styles.titleRow}>
       <StatusChip status={fact.status} />
       <Text style={text('body')}>{hoursRangeText(shown.text)}</Text>
       {/* §11 G1: Google 출처 글자는 Roboto 400 (src-google). 번역하지 않는다 */}
-      <Text style={fact.source_type === 'google' ? googleText : text('caption', 'muted')}>
-        {`${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`}
-      </Text>
+      {fact.source_type === 'google' ? (
+        <Text style={googleText}>{checkedLine}</Text>
+      ) : (
+        <MonoText value={checkedLine} base={text('caption', 'muted')} />
+      )}
     </View>
   );
 }
@@ -183,11 +187,11 @@ export function NowCardView({
             <FactChip facts={card.item.facts} />
           </View>
           {card.ends_in_min === null ? (
-            <Text style={text('body', 'muted')}>{`${card.item.start}에 시작해`}</Text>
+            <MonoText timesOnly value={`${card.item.start}에 시작해`} base={text('body', 'muted')} />
           ) : (
             <BigMinutes value={card.ends_in_min} unit="분 남았어" />
           )}
-          <Text style={text('caption', 'muted')}>{`${card.item.end}에 끝나`}</Text>
+          <MonoText timesOnly value={`${card.item.end}에 끝나`} base={text('caption', 'muted')} />
         </Shell>
       );
     case 'T-02': {
@@ -205,13 +209,17 @@ export function NowCardView({
             <Text style={[text('title'), styles.grow]}>{card.next_item.name}</Text>
             <FactChip facts={card.next_item.facts} />
           </View>
-          <Text style={text('body')}>
-            {card.leave_in_min > 0
-              ? `${card.leave_at}에 출발 · ${card.leave_in_min}분 뒤`
-              : late > 0
-                ? `출발 시각이 ${late}분 지났어`
-                : `${card.leave_at}에 출발, 지금 나서자`}
-          </Text>
+          <MonoText
+            timesOnly
+            base={text('body')}
+            value={
+              card.leave_in_min > 0
+                ? `${card.leave_at}에 출발 · ${card.leave_in_min}분 뒤`
+                : late > 0
+                  ? `출발 시각이 ${late}분 지났어`
+                  : `${card.leave_at}에 출발, 지금 나서자`
+            }
+          />
           <Text style={text('caption', 'muted')}>{`이동 ${card.travel_min}분`}</Text>
           {url !== null && !rehearsal ? <SecondaryButton small testID="directions-button" label="길 안내" onPress={open} /> : null}
         </Shell>
@@ -311,10 +319,10 @@ export function NowCardView({
           <Text style={text('label', 'muted')}>고정 일정이 곧이야</Text>
           <View style={styles.titleRow}>
             {/* §14: 고정 일정 제목 + 시작~끝 시각 ("저녁 예약 · 18:30–19:30") */}
-            <Text style={[text('title'), styles.grow]}>{`${card.fixed.title} \u00b7 ${timeRange(card.fixed.start, card.fixed.end)}`}</Text>
+            <MonoText timesOnly value={`${card.fixed.title} \u00b7 ${timeRange(card.fixed.start, card.fixed.end)}`} base={{ ...text('title'), flexGrow: 1, flexShrink: 1 }} />
             <FactChip facts={card.fixed.facts} />
           </View>
-          <Text style={text('body')}>{`${card.leave_by}까지 출발해야 해`}</Text>
+          <MonoText timesOnly value={`${card.leave_by}까지 출발해야 해`} base={text('body')} />
           {card.leave_in_min > 0 ? <BigMinutes value={card.leave_in_min} unit="분 뒤" /> : <Text style={text('heading')}>지금 출발해</Text>}
         </Shell>
       );
@@ -332,7 +340,7 @@ export function NowCardView({
       const minutes = card.go_home_min;
       return (
         <Shell id="card-T-08" main={main}>
-          <Text style={text('label', 'muted')}>숙소 가는 법</Text>
+          <Text style={text('label', 'muted')}>숙소로</Text>
           <Text style={text('title')}>{minutes != null && minutes > 0 ? `숙소까지 ${minutes}분` : '숙소로 돌아가자'}</Text>
           {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
           {mapUrl != null && !rehearsal ? (
