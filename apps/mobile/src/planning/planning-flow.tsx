@@ -15,6 +15,7 @@ import {
   send,
   type CandidateBatch,
   type CourseResult,
+  type DemoPlaces,
   type Failure,
   type PlanningSession,
   type Request,
@@ -97,6 +98,7 @@ export default function PlanningFlow({
   dayId,
   startMode,
   autoStart,
+  demoPlaces,
   onLeave,
   resumeSessionId,
   onSession,
@@ -106,6 +108,8 @@ export default function PlanningFlow({
   /** 실제 여행의 날: 'auto'면 대화 없이 바로 자동 계획 (TASK-011 [알아서 짜 줘]) */
   startMode?: 'conversation' | 'auto';
   autoStart?: 'demo' | 'now';
+  /** 개발용 데모 선택지(TASK-015 §20 #7): 시드에 그대로 보낸다 */
+  demoPlaces?: DemoPlaces;
   onLeave?: () => void;
   /** 실제 여행의 날: 이미 시작한 대화가 있으면 새로 만들지 않고 GET으로 이어 간다 (TASK-010 §12 답 3) */
   resumeSessionId?: string;
@@ -136,6 +140,7 @@ export default function PlanningFlow({
       onSession={onSession}
       onBackToList={onBackToList}
       autoStart={boot.epoch === 0 ? autoStart : undefined}
+      demoPlaces={demoPlaces}
       onReset={(notice) => (onLeave ? onLeave() : setBoot((now) => ({ epoch: now.epoch + 1, start: 's0', notice })))}
     />
   );
@@ -147,6 +152,7 @@ function Session({
   dayId,
   startMode,
   autoStart,
+  demoPlaces,
   resumeSessionId,
   onSession,
   onBackToList,
@@ -157,6 +163,7 @@ function Session({
   dayId?: string;
   startMode?: 'conversation' | 'auto';
   autoStart?: 'demo' | 'now';
+  demoPlaces?: DemoPlaces;
   resumeSessionId?: string;
   onSession?: (sessionId: string) => void;
   onBackToList?: () => void;
@@ -404,7 +411,7 @@ function Session({
     };
     try {
       if (seedDay.current === null) {
-        const seeded = await send(requests.seed(), signals.current);
+        const seeded = await send(requests.seed(demoPlaces), signals.current);
         if (!alive.current) return;
         if (!seeded.ok) return stop(seeded.failure);
         const dayId = (seeded.data as SeedResult | null)?.day_ids?.[1]; // 둘째 날

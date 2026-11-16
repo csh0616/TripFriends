@@ -14,7 +14,7 @@ import { SecondaryButton } from '@/components/planning/secondary-button';
 import { authNotice } from '@/lib/auth-messages';
 import { cityClock } from '@/lib/calendar';
 import type { DayDestination } from '@/lib/day-list';
-import { send } from '@/lib/planning-api';
+import { send, type DemoPlaces } from '@/lib/planning-api';
 import { TripNowScreen, type NowRecord } from '@/now/trip-now-screen';
 import { fontAssets } from '@/planning/fonts';
 import { layout } from '@/planning/layout';
@@ -32,7 +32,7 @@ const OOPS = '잠깐 문제가 생겼어';
 type View_ =
   | { name: 'loading' }
   | { name: 'empty'; notice: string | null }
-  | { name: 'demo'; start?: 'demo' | 'now' }
+  | { name: 'demo'; start?: 'demo' | 'now'; demoPlaces?: DemoPlaces }
   | { name: 'create' }
   | { name: 'days' }
   | { name: 'planning'; dayId: string; mode?: 'conversation' | 'auto' }
@@ -159,9 +159,9 @@ function HomeBody({ hooks }: { hooks: React.RefObject<{ reload: () => void; trip
         </ScreenFrame>
       );
     case 'empty':
-      return <EmptyHome notice={view.notice} onRetry={view.notice ? () => void load() : undefined} onCreate={() => setView({ name: 'create' })} onDemo={(start) => setView({ name: 'demo', start })} />;
+      return <EmptyHome notice={view.notice} onRetry={view.notice ? () => void load() : undefined} onCreate={() => setView({ name: 'create' })} onDemo={(start, demoPlaces) => setView({ name: 'demo', start, demoPlaces })} />;
     case 'demo':
-      return <PlanningFlow autoStart={view.start} onLeave={() => void load()} />;
+      return <PlanningFlow autoStart={view.start} demoPlaces={view.demoPlaces} onLeave={() => void load()} />;
     case 'create':
       return (
         <CreateTripScreen
@@ -215,7 +215,7 @@ function EmptyHome({
   notice: string | null;
   onRetry?: () => void;
   onCreate: () => void;
-  onDemo: (start: 'demo' | 'now') => void;
+  onDemo: (start: 'demo' | 'now', demoPlaces?: DemoPlaces) => void;
 }) {
   const account = useAccount();
   return (
@@ -238,6 +238,9 @@ function EmptyHome({
         {__DEV__ ? (
           <>
             <SecondaryButton testID="home-demo" label="데모 여행 시작" onPress={() => onDemo('demo')} />
+            {/* TASK-015 §20 #7: 도식 벌리기 · 2곳 이름표를 눈으로 보는 데모 선택지 (작은 보조 버튼) */}
+            <SecondaryButton small testID="home-demo-close-pins" label="가까운 핀 데모" onPress={() => onDemo('demo', 'close_pins')} />
+            <SecondaryButton small testID="home-demo-two-places" label="2곳 데모" onPress={() => onDemo('demo', 'two_places')} />
             <SecondaryButton testID="s0-now-demo" label="여행 중 데모 바로 보기" onPress={() => onDemo('now')} />
           </>
         ) : null}

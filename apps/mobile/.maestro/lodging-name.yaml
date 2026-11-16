@@ -82,22 +82,13 @@ appId: com.csh0616.tripfriends
     visible: "계획 전"
     timeout: 30000
 - takeScreenshot: lodging-name-4-day-list
-# 첫날 계획 -> 코스 (P3). 첫 이동의 출발이 고른 숙소인지는 코스 화면 스크린샷의 집 표시로 본다
+# 첫날 [알아서 짜 줘] -> 코스안 (AC-2: 첫 이동의 출발이 고른 숙소). 코스안 도식의 집(route-home)은 서버가 준 숙소 좌표(home)가 있을 때만 그려진다
 - tapOn:
-    text: "계획 전"
+    text: "알아서 짜 줘"
     index: 0
 - extendedWaitUntil:
-    visible:
-      id: "choice-walk_alley"
-    timeout: 30000
-- tapOn: "아무거나 찾아 줘"
-- extendedWaitUntil:
-    visible:
-      id: "compose-button"
+    visible: "이걸로 할래"
     timeout: 60000
-- tapOn:
-    id: "compose-button"
-- extendedWaitUntil:
-    visible: "코스 짜 봤어"
-    timeout: 60000
+- assertVisible:
+    id: "route-home"
 - takeScreenshot: lodging-name-5-course-from-lodging

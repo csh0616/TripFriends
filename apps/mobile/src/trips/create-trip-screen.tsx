@@ -163,6 +163,7 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
     setForm((now) => ({ ...now, lodging: { place_id: hit.place_id, name: hit.name } }));
     setLodgingQuery('');
     searchLodging(null);
+    setFocused(null); // 고르면 검색 칸이 블러 없이 사라진다 -> 포커스를 직접 비운다
     setErrors((now) => ({ ...now, lodging_place_id: '', lodging: '' }));
   };
 
@@ -171,6 +172,7 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
     setForm((now) => ({ ...now, lodging: { kind: 'address', place_id: hit.place_id, address_text: lodgingQuery.trim() } }));
     setLodgingQuery('');
     searchLodging(null);
+    setFocused(null); // 고르면 검색 칸이 블러 없이 사라진다 -> 포커스를 직접 비운다
     setErrors((now) => ({ ...now, lodging_place_id: '', lodging: '' }));
   };
 
@@ -198,6 +200,7 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
     setForm((now) => ({ ...now, lodging: { kind: 'pin', lat: picked.lat, lng: picked.lng, label: picked.label } }));
     setLodgingQuery('');
     searchLodging(null);
+    setFocused(null); // 고르면 검색 칸이 블러 없이 사라진다 -> 포커스를 직접 비운다
     setErrors((now) => ({ ...now, lodging_place_id: '', lodging: '' }));
     setPicking(false);
     return { ok: true };
@@ -252,9 +255,13 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
         center={city ? city.center : null}
         initial={pinned ? { pin: { lat: pinned.lat, lng: pinned.lng }, label: pinned.label, tooFar: pickTooFar } : undefined}
         onConfirm={confirmPick}
-        onBack={() => setPicking(false)}
+        onBack={() => {
+          setFocused(null);
+          setPicking(false);
+        }}
         onSkip={() => {
           setForm((now) => ({ ...now, lodging: null }));
+          setFocused(null);
           setPicking(false);
         }}
       />

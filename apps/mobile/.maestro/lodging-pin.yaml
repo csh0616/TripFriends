@@ -63,6 +63,8 @@ appId: com.csh0616.tripfriends
 - tapOn:
     id: "lodging-search"
 - inputText: "친구 집 근처"
+# 키보드를 먼저 닫는다 (사용자는 [지도에서 찍기]를 누르기 전에 키보드를 닫는다. 아래 a2의 [여기로 정했어]는 일부러 키보드가 열린 채 한 번 누른다)
+- hideKeyboard
 - extendedWaitUntil:
     visible:
       id: "lodging-none"
@@ -91,7 +93,7 @@ appId: com.csh0616.tripfriends
 - assertVisible:
     id: "pick-confirm"
 - takeScreenshot: lodging-pin-3-a2-keyboard
-- hideKeyboard
+# 키보드를 닫지 않고 한 번만 누른다 (TASK-015 §20 #3: 키보드가 열린 채 한 번에 넘어가야 한다)
 - tapOn:
     id: "pick-confirm"
 - extendedWaitUntil:
