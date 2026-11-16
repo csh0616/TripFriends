@@ -16,6 +16,8 @@ reviewer가 시뮬레이터에서 P3 도식 벌리기 · 크게 보기 2곳 이�
     값이 있으면 시드 3일 모두 그 파일의 장소만 쓴다(숙소 · 날짜 · 둘째 날 꼭 갈 곳 규칙은 그대로). 응답 모양은 지금 그대로
     값이 없으면 지금 그대로(demo_city.json 30곳)
     둘째 날 [알아서 짜 줘](mode auto)의 두 안(relaxed · packed) 모두 = 파일의 장소 전부(순서는 엔진 몫), 숙소 = 데모 중심
+    결정권자 11-17: demo_places와 chosen: true를 같이 주면 막는다 — 지금 seed-demo의 다른 잘못된 본문과 같은 422(FastAPI 본문 검증,
+        detail[0].loc[0] = "body"), 이유 한 줄(detail[0].msg에 demo_places와 chosen이 함께 나온다). chosen: false와는 같이 줄 수 있다
 """
 
 import importlib
@@ -144,3 +146,27 @@ def test_T15_S20_7_운영에서는_선택지를_줘도_404(production, option):
     with TestClient(production) as client:
         response = client.post("/debug/seed-demo", json={"demo_places": option}, headers=bearer(TESTER))
         assert response.status_code == 404, response.text
+
+
+# ---------- demo_places + chosen: true는 막는다 (결정권자 11-17) ----------
+
+
+@pytest.mark.parametrize("option", list(FILES))
+def test_T15_S20_7_선택지와_chosen_true를_같이_주면_422_이유_한_줄(env, option):
+    response = env.client.post("/debug/seed-demo", json={"demo_places": option, "chosen": True})
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    assert len(detail) == 1  # 이유 한 줄
+    assert detail[0]["loc"][0] == "body"
+    assert "demo_places" in detail[0]["msg"] and "chosen" in detail[0]["msg"]
+    assert detail[0]["type"] != "extra_forbidden"  # 칸을 모른다는 오류가 아니라 같이 줄 수 없다는 이유
+
+
+@pytest.mark.parametrize("option", list(FILES))
+def test_T15_S20_7_경계_선택지와_chosen_false는_같이_줄_수_있다(env, option):
+    assert _seed(env, {"demo_places": option, "chosen": False})["day_ids"]
+
+
+def test_T15_S20_7_경계_chosen_true만은_지금처럼_201(env):
+    response = env.client.post("/debug/seed-demo", json={"chosen": True})
+    assert response.status_code == 201, response.text

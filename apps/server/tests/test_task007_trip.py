@@ -59,7 +59,7 @@ from deciders import JevDecider
 from engine.compose import REASONS, OpenEvent, compose_screen
 
 SERVER = Path(__file__).parents[1]
-DAY_OVER = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §0-1 F2 = TASK-006 §12 R1
+DAY_OVER = "오늘 일정이 끝났어"  # §0-1 F2 = TASK-006 §12 R1 -> TASK-015 §20 #5 (REASONS 표와 같게, 이전 "…숙소로 가 볼까?")
 DAY_OVER_PILL = "오늘 일정 끝"  # §0-1 F1
 FREE = "다음까지 여유 있음"
 P02 = at_place(2.0)

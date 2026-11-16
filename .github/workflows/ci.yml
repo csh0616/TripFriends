@@ -38,6 +38,7 @@ jobs:
         pnpm-lock.yaml
         .npmrc
         testdata/particles.json
+        testdata/demo/**
         apps/server/trip/link.py
         apps/server/trip/detect.py
         .node-version

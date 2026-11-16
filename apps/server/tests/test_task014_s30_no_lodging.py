@@ -46,7 +46,7 @@ from trip_helpers import at_place, at_time, plain_day, plant
 
 HOME = (35.0, 135.0)  # trip_helpers: 심은 하루의 출발점(숙소 자리) = 숙소 모름이면 도시 중심 같은 출발점
 DAY_OVER_PILL = "오늘 일정 끝"
-DAY_OVER_WITH_LODGING = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # TASK-006 §12 R1 (숙소 있음은 그대로, §31 Q3)
+DAY_OVER_WITH_LODGING = "오늘 일정이 끝났어"  # TASK-006 §12 R1 -> TASK-015 §20 #5 (숙소 있음, REASONS 표와 같게. 이전 "…숙소로 가 볼까?")
 EMPTY_REASON = "오늘 코스가 비어 있어"
 
 

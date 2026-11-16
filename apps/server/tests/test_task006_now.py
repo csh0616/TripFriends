@@ -34,7 +34,7 @@ CARD_KEYS = {  # §A-1 표, §11 Q8: 평평하게
     "T-07": {"type", "fixed", "leave_by", "leave_in_min"},
     "T-08": {"type", "go_home_min", "lodging", "map_url"},  # map_url: §13 E4
 }
-DAY_OVER = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1
+DAY_OVER = "오늘 일정이 끝났어"  # §12 R1 -> TASK-015 §20 #5 (REASONS 표와 같게, 이전 "…숙소로 가 볼까?")
 ON_TRACK = "동선대로 가는 중"
 FREE = "다음까지 여유 있음"
 

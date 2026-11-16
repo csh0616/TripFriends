@@ -13,7 +13,7 @@ Q4("1번 장소 전 위치를 경로 선에: 넣는다 ('지금 위치 → 1번'
     숙소 없음(lodging_known=False, 좌표 못 찾은 숙소 포함) + 마지막 장소 끝(정각 포함) 뒤:
         main = 숙소 없는 T-08, reason = "오늘 일정이 끝났어. 오늘도 수고했어!", subs = [], status_text = "오늘 일정 끝"
     숙소 없음 + 빈 코스 날: main = 숙소 없는 T-08, reason = "오늘 코스가 비어 있어" 그대로 (안내 글이 함께)
-    숙소 있음 (경계): main T-08 = {lodging: 숙소 좌표, map_url: 문자열}, reason = "오늘 일정이 끝났어. 숙소로 가 볼까?" 그대로
+    숙소 있음 (경계): main T-08 = {lodging: 숙소 좌표, map_url: 문자열}, reason = "오늘 일정이 끝났어" (TASK-015 §20 #5로 바뀜, 이전 "…숙소로 가 볼까?")
     마지막 장소 끝 1분 전(18:59): 숙소와 상관없이 main은 T-08이 아니고 이유는 하루 끝 문구가 아니다
     카드 제목 "오늘 일정 끝"·숙소 줄 없음은 앱이 그린다 (서버는 lodging·map_url null만 준다) — 앱 테스트 몫
     Q4 숙소 없음 + 1번 장소로 이동 중(1번 출발 시각 10:00 ~ 1번 시작 10:12 전) + 위치를 실음(check·연습 check):
@@ -47,7 +47,7 @@ from planning_helpers import place
 from trip_helpers import at_place, plain_day, plant
 
 HOME = (35.0, 135.0)  # trip_helpers: 심은 하루의 출발점(숙소 자리)
-DAY_OVER_WITH_LODGING = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # TASK-006 §12 R1 (숙소 있음 그대로)
+DAY_OVER_WITH_LODGING = "오늘 일정이 끝났어"  # TASK-006 §12 R1 -> TASK-015 §20 #5 (숙소 있음, REASONS 표와 같게. 이전 "…숙소로 가 볼까?")
 DAY_OVER_PILL = "오늘 일정 끝"  # TASK-007 F1
 EMPTY_REASON = "오늘 코스가 비어 있어"  # TASK-006 §11 Q13
 TOWARD_P1 = at_place(0.5)  # 숙소 자리(0km)와 P01(1km) 사이
@@ -90,7 +90,7 @@ def test_T14_S31_Q2_숙소_모름_하루_끝은_숙소_없는_T_08_수고했어_
 
 
 @pytest.mark.parametrize("clock", ["19:00", "19:01", "23:59"])
-def test_T14_S31_Q3_경계_숙소_있음_하루_끝은_숙소_좌표·길_안내_주소와_숙소로_가_볼까_그대로(env, clock):
+def test_T14_S31_Q3_경계_숙소_있음_하루_끝은_숙소_좌표·길_안내_주소와_숙소_있는_하루_끝_문구(env, clock):
     day_id = plain_day(env)
     for kind, view in views(env, day_id, clock).items():
         main = view["main"]
@@ -149,7 +149,7 @@ def test_T14_S31_Q2_좌표를_못_찾은_숙소도_마지막_뒤는_숙소_없�
         assert view["reason"] == NO_LODGING_DAY_OVER, kind
 
 
-def test_T14_S31_Q2_경계_API로_만든_숙소_있는_여행_마지막_뒤는_숙소_좌표_T_08과_숙소로_가_볼까(mem):  # noqa: F811
+def test_T14_S31_Q2_경계_API로_만든_숙소_있는_여행_마지막_뒤는_숙소_좌표_T_08과_숙소_있는_하루_끝_문구(mem):  # noqa: F811
     hit = lodging_hit(mem)
     day_id, date = planned_day(mem, lodging=hit["place_id"])
     lat, lng = mem.app.state.city.lodging_location(hit["place_id"], mem.app.state.clock())

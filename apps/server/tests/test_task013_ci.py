@@ -56,6 +56,7 @@ OUTSIDE_READS: dict[str, set[str]] = {
     "apps/server/tests/test_task012_schema.py": {"supabase/migrations/**"},
     "apps/server/tests/test_task013_ci.py": {"docs/tasks/TASK-013_CI.md", WORKFLOW_SELF},  # §12: A5 작업에서도 항상 돈다
     "apps/server/tests/test_task015_city_center.py": {"docs/data/osaka-seed.yaml", "testdata/cities/osaka-seed-fake.yaml"},  # TASK-015 §9 Q6: 정본 v3 center 값을 가짜 seed 사본에 더한다
+    "apps/server/tests/test_task015_s20_demo_seed.py": {"testdata/demo/**"},  # TASK-015 §20 #7: 데모 시드 선택지 전용 데이터 (앱 테스트와 같은 파일)
     # ---- 앱 (apps/mobile) ----
     "apps/mobile/__tests__/design-tokens.test.ts": {"packages/design-tokens/**"},
     "apps/mobile/__tests__/guardrails.test.tsx": {
@@ -76,6 +77,7 @@ OUTSIDE_READS: dict[str, set[str]] = {
     "apps/mobile/__tests__/task-012-link-lib.test.ts": set(),  # REPO_ROOT를 가져오기만 하고 쓰지 않는다
     "apps/mobile/__tests__/task-013-toolchain.test.ts": {".node-version", "pnpm-workspace.yaml", "package.json"},
     "apps/mobile/__tests__/task-015-lodging-pick-lib.test.ts": {"apps/server/trip/detect.py"},  # TASK-015 §15 ②: 서버 거리 공식과 같은지 본다
+    "apps/mobile/__tests__/task-015-s20-demo-seed.test.tsx": {"testdata/demo/**"},  # TASK-015 §20 #7: 서버 시드 선택지와 같은 데이터로 도식 벌리기를 본다
 }
 
 
@@ -101,7 +103,7 @@ SERVER_PATHS = A6_SERVER | {
     "docs/poc/poc_c.json", "docs/data/osaka-seed.yaml", "docs/tasks/TASK-013_CI.md",
 }
 MOBILE_PATHS = A6_MOBILE | {
-    "testdata/particles.json", "apps/server/trip/link.py", "apps/server/trip/detect.py",
+    "testdata/particles.json", "testdata/demo/**", "apps/server/trip/link.py", "apps/server/trip/detect.py",
     ".node-version", "pnpm-workspace.yaml",
     "docs/DESIGN-001_Brand-Tokens.md",
     "docs/design/logo-ink.png", "docs/design/app-icon-1024.png", "docs/design/google-map-style.json",
