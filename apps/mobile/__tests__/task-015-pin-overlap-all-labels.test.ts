@@ -3,7 +3,7 @@
 // 근거: TASK-015 §17 "frontend가 문서 없이 정한 것" 표("크게 보기에 이름표 없음" -> 고친다: 디자인 ①-41대로 5곳 이하면 모든 핀에 이름표.
 //       겹침 함수에 '모든 이름표' 모드: 같은 자리 후보 순서(위 -> 오른쪽 -> 왼쪽 -> 아래), 겹치면 그 이름표만 뺌, 6곳 이상이면 다음 핀 규칙. test-writer 테스트 먼저) ·
 //       task-015-design §2 "이름표: 핀마다 이름표(5곳 이하일 때) ... 6곳 이상이면 B6의 묶음·이름표 빼기 규칙" · task-014-design §11-3 이름표 자리 값(높이 28 · 위 4 · 옆 6 · 가장자리 8) ·
-//       TASK-015 §13 Q1(장애물 여유: 다른 핀 4 · 떠 있는 판 0, 맞닿음까지 겹침)
+//       TASK-015 §13 Q1(장애물 여유: 다른 핀 4 · 떠 있는 판 0, 맞닿음까지 겹침) -> §24(11-18): 떠 있는 판 여유 **4**(간격 4 이하면 겹침, 닿으면 다음 후보)
 //
 // 계약 (이 테스트가 제안 — 껍데기 타입은 src/lib/pin-overlap.ts):
 //   resolvePinOverlap 입력에 labelMode?: 'next' | 'all' (기본 'next') · labelWidths?: { [pinId]: 폭 } (없는 핀은 labelWidth)
@@ -58,7 +58,7 @@ describe('§17 모든 이름표 — 5곳 이하', () => {
 
   test('T15_S17_위가_떠_있는_판에_막히면_그_핀만_다음_후보_오른쪽', () => {
     const pins = column(5);
-    const panel: Rect = { x: 0, y: 40, width: 390, height: 44 }; // p1(100)의 위 자리 54~82만 덮는다
+    const panel: Rect = { x: 0, y: 40, width: 390, height: 40 }; // p1(100)의 위 자리 54~82만 덮는다 (§24: 오른쪽 자리 86~114와는 6 떨어져 여유 4 밖)
     const labels = labelsOf(run(pins, { labelMode: 'all', panels: [panel] }));
     const first = labels.find((l) => l.pinId === 'p1')!;
     expect(first.side).toBe('right');
@@ -74,18 +74,16 @@ describe('§17 모든 이름표 — 5곳 이하', () => {
     expect(result.pins.map((p) => p.id).sort()).toEqual(['p1', 'p2', 'p3', 'p4', 'p5']); // 이름표 때문에 핀을 빼지 않는다
   });
 
-  test('T15_S17_경계_판과_맞닿기만_해도_겹침(여유_0)', () => {
+  test.each([
+    [0, 'right'], // 위 자리 윗변에 딱 닿음
+    [1, 'right'], // 옛 여유 0에선 'top' -> §24 여유 4라 겹침
+    [4, 'right'], // 4 떨어짐 = 여유와 같음 -> 겹침
+    [5, 'top'], // 5 떨어짐 -> 위 그대로
+  ])('T15_S24_경계_판과_%i_떨어지면_%s(판_여유_4)', (gap, side) => {
     const pins = column(1);
-    const panel: Rect = { x: 0, y: 0, width: 390, height: top(pins[0]).y }; // 위 자리 윗변에 딱 닿음
+    const panel: Rect = { x: 0, y: 0, width: 390, height: top(pins[0]).y - gap };
     const labels = labelsOf(run(pins, { labelMode: 'all', panels: [panel] }));
-    expect(labels[0].side).toBe('right');
-  });
-
-  test('T15_S17_경계_판과_1_떨어지면_위_그대로', () => {
-    const pins = column(1);
-    const panel: Rect = { x: 0, y: 0, width: 390, height: top(pins[0]).y - 1 };
-    const labels = labelsOf(run(pins, { labelMode: 'all', panels: [panel] }));
-    expect(labels[0].side).toBe('top');
+    expect(labels[0].side).toBe(side);
   });
 
   test('T15_S17_핀마다_자기_이름표_폭을_쓴다', () => {
@@ -152,7 +150,8 @@ describe('§17 기본(next) 모드', () => {
 
 // ---------- 속성: 아무 핀·판이어도 놓인 이름표는 규칙을 지킨다 ----------
 
-const touchesRect = (a: Rect, b: Rect) => a.x <= b.x + b.width && b.x <= a.x + a.width && a.y <= b.y + b.height && b.y <= a.y + a.height;
+/** 두 사각형 사이 거리 (겹치면 0). §24 판 여유 4 — 모서리 쪽 판정 방식은 문서에 없어 유클리드 거리 > 4만 본다 */
+const rectGap = (a: Rect, b: Rect) => Math.hypot(Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width), 0), Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height), 0));
 const touchesCircle = (r: Rect, c: { x: number; y: number }, radius: number) => {
   const nx = Math.min(Math.max(c.x, r.x), r.x + r.width);
   const ny = Math.min(Math.max(c.y, r.y), r.y + r.height);
@@ -189,7 +188,7 @@ test('T15_S17_속성_모든_이름표는_화면_8_안쪽이고_판·다른_핀�
         expect(r.y).toBeGreaterThanOrEqual(8);
         expect(r.x + r.width).toBeLessThanOrEqual(SCREEN.width - 8);
         expect(r.y + r.height).toBeLessThanOrEqual(SCREEN.height - 8);
-        for (const panel of panels) expect(touchesRect(r, panel)).toBe(false);
+        for (const panel of panels) expect(rectGap(r, panel)).toBeGreaterThan(4 - 1e-9); // §24 판과 4 넘게
         for (const other of shown) if (other.id !== owner!.id) expect(touchesCircle(r, other, other.size / 2 + 4)).toBe(false);
       }
       const numbered = pins.filter((p) => p.kind !== 'lodging').length;

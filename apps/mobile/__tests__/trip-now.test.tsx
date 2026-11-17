@@ -332,9 +332,12 @@ describe('B6 카드 부품', () => {
   // §14 T-07 시각: 시각 글자가 여러 곳에 나오므로 줄을 정확히 찾는다 (승인된 수정)
   const cardWords = (id: string) => textsUnder(byId(id)).map(textOf).join('');
 
-  test('T6_S14_T_07_제목과_시작_끝_시각', async () => {
+  // TASK-015 §24 · task-015-design §12-5 2(보드대로): 제목 + 장소 줄 (옛: "제목 · 시작–끝" 한 줄). 장소 줄에 시각을 붙이는지는 질문
+  test('T15_S24_T_07_제목은_제목만_한_줄이고_장소_이름_줄이_따로', async () => {
     await shows(t07());
-    expect(cardWords('card-T-07')).toContain('서버_예약_제목 · 15:00–16:00'); // TASK-011 §9 Q8: 앱 전체 timeRange (승인)
+    expect(inCard('card-T-07').getByText('서버_예약_제목')).toBeTruthy();
+    expect(inCard('card-T-07').getByText(/서버_식당_이름/)).toBeTruthy();
+    expect(cardWords('card-T-07')).not.toContain('서버_예약_제목 · 15:00–16:00');
   });
 
   // TASK-011 §9 Q10: 영업시간을 보여 주는 모든 곳(여행 중 카드 포함). curated 시간대 -> "추천 시간대", 늘 열림 -> "확인됨" 칩 + "늘 열려 있어" (§14 N9로 바뀜)
@@ -353,20 +356,23 @@ describe('B6 카드 부품', () => {
     expect(inCard('card-T-01').getByText(/늘 열려 있어/)).toBeTruthy();
   });
 
-  test('T6_S14_T_07_까지_출발해야_해', async () => {
+  // TASK-015 §24 (보드 ①-30 "11분 뒤에 출발해 · 18:42 출발"): 옛 "HH:MM까지 출발해야 해" -> "HH:MM 출발"
+  test('T15_S24_T_07_출발_시각_줄은_HH:MM_출발', async () => {
     await shows(t07());
-    expect(inCard('card-T-07').getByText('14:40까지 출발해야 해')).toBeTruthy();
+    expect(inCard('card-T-07').getByText('14:40 출발')).toBeTruthy();
+    expect(inCard('card-T-07').queryByText('14:40까지 출발해야 해')).toBeNull();
   });
 
-  test('T6_S14_T_07_남은_분', async () => {
+  test('T15_S24_T_07_남은_분은_N분_뒤에_출발해', async () => {
     await shows(t07());
-    expect(inCard('card-T-07').getByText(/^15(분.*)?$/)).toBeTruthy();
+    expect(cardWords('card-T-07')).toContain('15분 뒤에 출발해');
   });
 
   test('T6_S11_Q4_T_07_출발_시각이_지나면_지금_출발해', async () => {
     await shows(t07({ leave_in_min: 0 }));
     expect(inCard('card-T-07').getByText('지금 출발해')).toBeTruthy();
-    expect(inCard('card-T-07').getByText('14:40까지 출발해야 해')).toBeTruthy();
+    expect(inCard('card-T-07').getByText('14:40 출발')).toBeTruthy(); // §24: 옛 "14:40까지 출발해야 해"
+    expect(cardWords('card-T-07')).not.toContain('분 뒤에 출발해');
   });
 
   test('T6_B6_T_08_숙소까지_분', async () => {

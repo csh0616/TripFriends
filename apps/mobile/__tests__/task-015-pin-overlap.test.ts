@@ -11,6 +11,8 @@
 //       묶기는 크기와 상관없이 중심 거리 < 36) · Q4(a11yLabel 글 6가지, 사용자 이름표 label은 넣지 않음) ·
 //       Q5(이름표 자리 검사의 장애물 모두 맞닿음까지 겹침) -> §13 Q1로 정리: **하나의 규칙** = 장애물을 여유만큼 키운 뒤 맞닿음까지 겹침(간격 <= 여유).
 //       여유는 다른 핀 4 · 내 위치 점 0 · 떠 있는 판 0 (§12 Q5의 "4 미만"은 PM 글 실수, §11 Q3가 맞다) ·
+//       **TASK-015 §24(11-18): 떠 있는 판 여유 0 -> 4** ("SOS · 닫기 · 제목 · 축척 · 시트와 4 이상 띄움, 닿으면 밀지 않고 다음 후보" — task-015-design §12-3 Q4).
+//       같은 하나의 규칙(간격 <= 여유면 겹침)이라 판과 간격 4는 겹침 · 5는 통과. 내 위치 점 여유는 §24에 말이 없어 0 그대로 ·
 //       TASK-015 §13 Q6(다른 순위끼리 묶인 글: 남은 핀(높은 순위)이 앞, 붙은 번호는 순위 말 없이 번호 오름차순 — "나중 4번, 2번도 같은 곳").
 //
 // 계약 (이 테스트가 정한 것, 승인 대기 — 질문 목록 참고):
@@ -479,19 +481,34 @@ describe('§B6 이름표 자리', () => {
     expect(run([NEXT], { panels: [{ x: 0, y: 240, width: 390, height: 20 }] }).label?.side).toBe('right');
   });
 
-  test('T15_B6_경계_떠_있는_판과_1_떨어지면_위', () => {
-    expect(run([NEXT], { panels: [{ x: 0, y: 229, width: 390, height: 20 }] }).label?.side).toBe('top'); // 판 아래 끝 249
+  // §24: 판 여유 4 — 1 떨어지면 이제 겹침(옛 단언 'top'), 5 떨어져야 위
+  test('T15_S24_경계_떠_있는_판과_1_떨어지면_이제_겹침이라_다음_후보', () => {
+    expect(run([NEXT], { panels: [{ x: 0, y: 229, width: 390, height: 20 }] }).label?.side).toBe('right'); // 판 아래 끝 249, 위 후보 윗변 250
   });
 
-  // §12 Q5: 내 위치 점·떠 있는 판은 간격 0 이하(맞닿음 포함)면 겹침. 위 후보 = x 155 ~ 235, y 250 ~ 278
+  test('T15_S24_경계_떠_있는_판과_5_떨어지면_위', () => {
+    expect(run([NEXT], { panels: [{ x: 0, y: 225, width: 390, height: 20 }] }).label?.side).toBe('top'); // 판 아래 끝 245
+  });
+
+  // §12 Q5 -> §24: 떠 있는 판은 간격 4 이하(맞닿음 포함)면 겹침, 5부터 통과. 위 후보 = x 155 ~ 235, y 250 ~ 278
+  //   (오른쪽 후보 x 219 ~ 299 · y 286 ~ 314는 아래 판들과 4 넘게 떨어져 있어 'right'가 다음 후보로 나온다)
   test.each([
-    [{ x: 0, y: 229, width: 390, height: 21 }, 'right'], // 판 아래 끝 250 = 위 후보 윗변: 맞닿음
-    [{ x: 0, y: 229, width: 390, height: 20 }, 'top'], // 249: 1 떨어짐
+    [{ x: 0, y: 229, width: 390, height: 21 }, 'right'], // 판 아래 끝 250 = 위 후보 윗변: 맞닿음 (그대로 겹침)
+    [{ x: 0, y: 226, width: 390, height: 20 }, 'right'], // 246: 4 떨어짐 -> 겹침
+    [{ x: 0, y: 225, width: 390, height: 20 }, 'top'], // 245: 5 떨어짐
     [{ x: 235, y: 250, width: 50, height: 28 }, 'right'], // 판 왼쪽 끝 235 = 위 후보 오른쪽 끝: 맞닿음
-    [{ x: 236, y: 250, width: 50, height: 28 }, 'top'], // 1 떨어짐
+    [{ x: 239, y: 250, width: 50, height: 28 }, 'right'], // 4 떨어짐 -> 겹침
+    [{ x: 240, y: 250, width: 50, height: 28 }, 'top'], // 5 떨어짐
     [{ x: 105, y: 250, width: 50, height: 28 }, 'right'], // 판 오른쪽 끝 155 = 위 후보 왼쪽 끝: 맞닿음
-  ])('T15_S12_Q5_경계_떠_있는_판과_맞닿으면_겹침_판_%j면_%s', (panel, side) => {
+    [{ x: 101, y: 250, width: 50, height: 28 }, 'right'], // 151: 4 떨어짐 -> 겹침
+    [{ x: 100, y: 250, width: 50, height: 28 }, 'top'], // 150: 5 떨어짐
+  ])('T15_S24_경계_떠_있는_판은_4_여유를_두고_잰다_판_%j면_%s', (panel, side) => {
     expect(run([NEXT], { panels: [panel] }).label?.side).toBe(side);
+  });
+
+  test('T15_S24_경계_내_위치_점_여유는_0_그대로(§24에_말_없음)', () => {
+    // 점(반지름 11) 아래 끝 249 -> 위 후보 윗변과 1 떨어짐: 판이라면 겹침이지만 점은 통과
+    expect(run([NEXT], { me: { x: 195, y: 238, size: 22 } }).label?.side).toBe('top');
   });
 
   test.each([
@@ -567,8 +584,14 @@ const rectTouchesCircle = (r: Rect, c: { x: number; y: number }, radius: number)
   const ny = Math.min(Math.max(c.y, r.y), r.y + r.height);
   return Math.hypot(c.x - nx, c.y - ny) <= radius + 1e-9;
 };
-/** §12 Q5: 떠 있는 판과는 맞닿음(간격 0)도 겹침 (이전: 넓이가 겹칠 때만) */
-const rectsTouch = (a: Rect, b: Rect) => a.x <= b.x + b.width + 1e-9 && b.x <= a.x + a.width + 1e-9 && a.y <= b.y + b.height + 1e-9 && b.y <= a.y + a.height + 1e-9;
+/** 두 사각형 사이 거리 (겹치면 0) */
+const rectGap = (a: Rect, b: Rect) => {
+  const dx = Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width), 0);
+  const dy = Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height), 0);
+  return Math.hypot(dx, dy);
+};
+/** §24: 떠 있는 판과는 간격 4 이하면 겹침 (§12 Q5 여유 0 -> 4). 모서리 쪽(대각선) 판정 방식은 문서에 없어 유클리드 거리 > 4만 본다 */
+const PANEL_MARGIN = 4;
 
 describe('§B6 속성', () => {
   test('T15_B6_P_모든_핀은_보이거나_한_핀에_묶여_정확히_한_번_나온다', () => {
@@ -675,7 +698,7 @@ describe('§B6 속성', () => {
         expect(r.y + r.height).toBeLessThanOrEqual(SCREEN.height - 8);
         for (const other of result.pins) if (other.id !== label.pinId) expect(rectTouchesCircle(r, other, other.size / 2 + 4)).toBe(false);
         if (input.me && result.meDot) expect(rectTouchesCircle(r, input.me, input.me.size / 2)).toBe(false); // §12 Q5 맞닿음도 겹침
-        for (const panel of input.panels ?? []) expect(rectsTouch(r, panel)).toBe(false); // §12 Q5 맞닿음도 겹침
+        for (const panel of input.panels ?? []) expect(rectGap(r, panel)).toBeGreaterThan(PANEL_MARGIN - 1e-9); // §24 판과 4 넘게
       }),
     );
   });

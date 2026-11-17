@@ -303,17 +303,18 @@ describe('§13-3 4 · §14-3 사실 줄 시각 — T-02 · T-07', () => {
     expect(timeMistakes(textHost('12:00에 출발, 지금 나서자'))).toEqual([]);
   });
 
-  test('T15_S18_T07_HH:MM까지_출발해야_해의_시각만_DM_Mono', async () => {
+  // TASK-015 §24(T-07 보드대로): 옛 "14:40까지 출발해야 해" -> "14:40 출발"(§14-3 사실 줄 "18:42 출발" 시각 DM Mono)
+  test('T15_S24_T07_HH:MM_출발_줄의_시각만_DM_Mono', async () => {
     await showCard(t07());
-    expect(timeMistakes(textHost('14:40까지 출발해야 해'))).toEqual([]);
+    expect(timeMistakes(textHost('14:40 출발'))).toEqual([]);
   });
 
-  test('T15_S18_T07_제목_속_시각_범위_15:00–16:00은_콜론·대시까지_DM_Mono', async () => {
+  // §24: 제목은 제목만(옛 "제목 · 15:00–16:00"). 장소 줄에 시작 시각을 붙이는지는 질문 -> 카드에 보이는 다른 시각 글자도 시각만 DM Mono인지 본다
+  test('T15_S24_T07_카드_안_시각_글자는_모두_시각만_DM_Mono', async () => {
     await showCard(t07());
-    const host = textHost(/15:00–16:00/);
-    expect(timeMistakes(host)).toEqual([]);
-    const dash = glyphs(host).find(([ch]) => ch === '–');
-    expect(dash && isMono(dash[1])).toBe(true);
+    const hosts = screen.queryAllByText(/\d{1,2}:\d{2}/) as unknown as Host[];
+    expect(hosts.length).toBeGreaterThanOrEqual(1); // 시험 자체 확인: 적어도 "14:40 출발"
+    for (const host of hosts) expect(timeMistakes(host)).toEqual([]);
   });
 });
 

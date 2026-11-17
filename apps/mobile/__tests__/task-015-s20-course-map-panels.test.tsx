@@ -5,13 +5,16 @@
 //       SOS 버튼 · 제목 알약 · 닫기 · 아래 시트를 떠 있는 판으로 넘긴다, §B6 · §18 Q3) · §18 Q3("지도 위에 그려지는 것은 모두" 떠 있는 판) ·
 //       §17("화면에 실제로 떠 있는 판의 사각형을 넘긴다") · §18 frontend 정한 것(승인: 크게 보기 위 줄 insets.top + 8 ~ 44, 폭 화면 전체) ·
 //       task-014-design §11-3(이름표는 떠 있는 판과 겹치면 다음 후보) · TASK-015 §12 Q5 · §13 Q1(판 여유 0, 맞닿음도 겹침) ·
-//       task-015-design §2(크게 보기: 위 닫기 · 제목 알약 · SOS, 아래 course-bar) · DESIGN 토큰(SOS 44, 닫기 touch-min 44, 제목 알약 36)
+//       task-015-design §2(크게 보기: 위 닫기 · 제목 알약 · SOS, 아래 course-bar) · DESIGN 토큰(SOS 44, 닫기 touch-min 44, 제목 알약 36) ·
+//       **TASK-015 §24(11-18) · task-015-design §12**: 판 여유 0 -> 4(이름표는 SOS · 닫기 · 제목 · 시트와 4 이상 띄움, 간격 4 이하면 겹침) ·
+//       course-bar 168 = 아래 안전영역 34 포함(옛 168 + 34 = 202 -> 168, `mapPadding.bottom = 168`) · 맞춤 좌우 = 핀 가장자리 24 = 핀 중심 38(옛 24) ·
+//       이름표 높이 28(앱 24 -> 보드 28)
 //
 // 계약 (이 파일이 정한 것):
 //   '@/lib/pin-overlap'의 resolvePinOverlap(input)에서 input.panels가 아래 점을 모두 덮는다(판을 몇 개로 나눠 넘기든 상관없다):
 //     닫기(왼쪽, x 16~60) · SOS(오른쪽, x 330~374) · 제목 알약(가운데 x 195, 세로 59~95) — 위 줄 y = insets.top + 8 ~ + 44 (390×844, insets.top 47 -> 55~99)
-//     아래 시트 course-bar: y = 844 − (168 + insets.bottom 34) = 642 ~ 844
-//   그린 이름표(`map-pin-label` Marker 좌표를 같은 지도 영역으로 다시 화면 점으로, 폭 = width prop, 높이 28)가 넘긴 판 어느 것과도 닿지 않는다
+//     아래 시트 course-bar: y = 844 − 168(안전영역 34 포함, §24) = 676 ~ 844
+//   그린 이름표(`map-pin-label` Marker 좌표를 같은 지도 영역으로 다시 화면 점으로, 폭 = width prop, 높이 28)가 넘긴 판 어느 것과도 4 넘게 떨어진다(§24)
 //   지도 영역(region)은 가짜 지도에 regionChangeComplete로 넣는다. 값은 fitToCoordinates(경로, edgePadding = 화면이 넘긴 padding)를 흉내 내어
 //   경로 상자가 padding 안쪽 끝에 닿게 계산한다 -> 맨 위 핀은 y = padding.top. 그 핀의 "위" 이름표는 위 줄과 닿는 자리다 (reviewer 사례)
 //   (§20 #4 frontend 진단 뒤 고침, 11-17) region은 MapView mapPadding을 뺀 보이는 영역을 채운다. 시험이 화면 점을 계산할 때도 그 영역 기준
@@ -45,7 +48,7 @@ const ROW_TOP = INSET_TOP + 8; // 위 줄 top = insets.top + space-2
 const BUTTON = 44; // 닫기 · SOS 지름
 const PILL = 36; // 제목 알약 높이 (layout.titlePill)
 const SIDE = 16; // 위 줄 좌우 = space-4
-const SHEET_TOP = HEIGHT - (168 + INSET_BOTTOM); // course-bar
+const SHEET_TOP = HEIGHT - 168; // course-bar 168 = 안쪽 134 + 아래 안전영역 34 (§24 · task-015-design §12-4. 옛 168 + insets.bottom)
 const LABEL_H = 28;
 const HOME = { lat: 35.0, lng: 135.0 }; // 데모 도시 중심 = 숙소 (planning/seed.py DEMO_CENTER)
 
@@ -104,7 +107,7 @@ async function showMap(stops: CourseStop[]) {
   const [top, bottom, left, right] = [mp.top ?? 0, mp.bottom ?? 0, mp.left ?? 0, mp.right ?? 0];
   frame = { x: left, y: top, width: WIDTH - left - right, height: HEIGHT - top - bottom };
   const padding = map.props.mapPadding !== undefined ? fitPaddingOf() : null;
-  const region = fitRegion([HOME, ...stops], padding ?? { top: INSET_TOP + 52 + 28, bottom: 168 + INSET_BOTTOM + 40, left: 24, right: 24 });
+  const region = fitRegion([HOME, ...stops], padding ?? { top: INSET_TOP + 52 + 28, bottom: 168 + 40, left: 38, right: 38 }); // §24: 시트 168(안전영역 포함) · 좌우 38
   // (§22 막는 2, 11-17) 이름표는 경로 맞춤(fitToCoordinates) 뒤 처음 온 영역으로만 그린다 -> 준비 신호(맞춤)를 먼저 주고 영역을 넣는다.
   // 영역 값은 바꾸지 않으려고 맞춤 전에 위에서 계산해 둔 값 그대로 쓴다 (이 파일은 처음부터 맞춤 전 padding 대체값으로 계산해 왔다)
   await act(async () => {
@@ -131,6 +134,10 @@ function lastPanels(): Rect[] {
 
 const covers = (panels: Rect[], x: number, y: number) => panels.some((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height);
 const touches = (a: Rect, b: Rect) => a.x <= b.x + b.width && b.x <= a.x + a.width && a.y <= b.y + b.height && b.y <= a.y + a.height;
+/** §24: 판 여유 4 — 두 사각형 사이 거리가 4 이하면 "가깝다"(겹침과 같은 판정) */
+const gapOf = (a: Rect, b: Rect) => Math.hypot(Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width), 0), Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height), 0));
+const PANEL_MARGIN = 4;
+const near = (a: Rect, b: Rect) => gapOf(a, b) <= PANEL_MARGIN;
 
 /** 그린 이름표의 화면 사각형 (Marker 좌표 = 이름표 가운데, anchor CENTER) */
 function drawnLabels(region: Region): { name: string; rect: Rect }[] {
@@ -199,13 +206,13 @@ describe('§20 #4 reviewer 사례: 그린 이름표가 위 줄 · 시트와 닿�
   test.each([
     ['4곳_정원_카페_C', FOUR],
     ['5곳_국수집_A', FIVE],
-  ] as const)('T15_S20_4_%s_그린_이름표가_닫기·SOS·제목_알약·아래_시트와_닿지_않는다', async (_name, stops) => {
+  ] as const)('T15_S24_%s_그린_이름표가_닫기·SOS·제목_알약·아래_시트와_4_넘게_떨어진다', async (_name, stops) => {
     const region = await showMap(stops);
     const labels = drawnLabels(region);
     expect(labels.length).toBeGreaterThanOrEqual(1); // 시험 자체 확인: 모든 이름표 모드라 적어도 하나는 그린다
     for (const { name, rect } of labels) {
       for (const [part, element] of [['닫기', CLOSE], ['SOS', SOS], ['제목 알약', PILL_MID], ['아래 시트', SHEET]] as const) {
-        expect({ name, part, touches: touches(rect, element) }).toEqual({ name, part, touches: false });
+        expect({ name, part, near: near(rect, element) }).toEqual({ name, part, near: false });
       }
     }
   });
@@ -213,11 +220,11 @@ describe('§20 #4 reviewer 사례: 그린 이름표가 위 줄 · 시트와 닿�
   test.each([
     ['4곳_정원_카페_C', FOUR],
     ['5곳_국수집_A', FIVE],
-  ] as const)('T15_S20_4_%s_그린_이름표는_넘긴_판_어느_것과도_닿지_않는다', async (_name, stops) => {
+  ] as const)('T15_S24_%s_그린_이름표는_넘긴_판_어느_것과도_4_넘게_떨어진다', async (_name, stops) => {
     const region = await showMap(stops);
     const panels = lastPanels();
     for (const { name, rect } of drawnLabels(region)) {
-      expect({ name, touching: panels.filter((panel) => touches(rect, panel)).length }).toEqual({ name, touching: 0 });
+      expect({ name, near: panels.filter((panel) => near(rect, panel)).length }).toEqual({ name, near: 0 });
     }
   });
 
@@ -226,5 +233,43 @@ describe('§20 #4 reviewer 사례: 그린 이름표가 위 줄 · 시트와 닿�
     const pin = project(region, frame, { latitude: D03.lat, longitude: D03.lng });
     const topLabel: Rect = { x: pin.x - 40, y: pin.y - 14 - 4 - LABEL_H, width: 80, height: LABEL_H }; // 지난 핀 28 기준 "위" 자리
     expect(touches(topLabel, { x: 0, y: ROW_TOP, width: WIDTH, height: BUTTON })).toBe(true);
+  });
+});
+
+// ---------- TASK-015 §24 (디자이너 재검수 · task-015-design §12) 바뀐 값 ----------
+const mapOf = () => root().queryAll((h) => h.props.mapElement === 'MapView' && h.props.testID === 'course-map')[0];
+
+describe('§24 크게 보기 값', () => {
+  test('T15_S24_course_bar는_안전영역_포함_168이라_mapPadding_bottom이_168(옛_202)', async () => {
+    await showMap(FOUR);
+    expect((mapOf().props.mapPadding ?? {}).bottom).toBe(168);
+  });
+
+  test('T15_S24_아래_시트_판은_화면_아래_168(안전영역_포함)만_덮는다', async () => {
+    await showMap(FOUR);
+    const panels = lastPanels();
+    expect(covers(panels, WIDTH / 2, HEIGHT - 168 + 1)).toBe(true);
+    expect(covers(panels, WIDTH / 2, HEIGHT - 168 - 1)).toBe(false); // 옛 202 판이면 덮인다
+  });
+
+  test('T15_S24_경로_맞춤_좌우_여백은_핀_중심_기준_38(핀_가장자리_24)', async () => {
+    await showMap(FOUR);
+    const pad = fitPaddingOf();
+    expect(pad).not.toBeNull(); // 시험 자체 확인: 준비 신호 뒤 맞춤을 불렀다
+    const mp = (mapOf().props.mapPadding ?? {}) as Record<string, number | undefined>;
+    // 화면 가장자리에서 맞춤 안쪽 끝까지 = mapPadding + edgePadding (두 번 빼지 않음, §21 #1)
+    expect({ left: (mp.left ?? 0) + pad!.left, right: (mp.right ?? 0) + pad!.right }).toEqual({ left: 38, right: 38 });
+  });
+
+  test('T15_S24_그린_이름표_높이는_28(겹침_계산과_같은_높이)', async () => {
+    await showMap(FOUR);
+    const tags = root().queryAll((h) => h.props.mapElement === 'Marker' && h.props.testID === 'map-pin-label');
+    expect(tags.length).toBeGreaterThanOrEqual(1); // 시험 자체 확인
+    for (const tag of tags) {
+      const box = tag.queryAll((inner) => [inner.props.style].flat().some((st: any) => st && typeof st.width === 'number'))[0];
+      const flat = Object.assign({}, ...[box?.props.style].flat(Infinity).filter(Boolean));
+      expect(flat.height).toBe(LABEL_H);
+    }
+    for (const placed of (overlap.mock.results.filter((r) => r.type === 'return').at(-1)?.value.labels ?? []) as { rect: Rect }[]) expect(placed.rect.height).toBe(LABEL_H);
   });
 });

@@ -12,7 +12,7 @@
 //   가짜 지도가 regionChangeComplete로 F를 채우는 region을 알려 주면:
 //     겹침 함수(resolvePinOverlap) input.pins의 x · y = F 기준으로 계산한 화면 좌표(화면 왼쪽 위 0,0 — 떠 있는 판과 같은 좌표계)
 //     그린 이름표(`map-pin-label` Marker 좌표)를 F 기준으로 다시 화면 점으로 바꾸면 겹침 함수가 놓은 이름표 사각형 가운데와 같다
-//     그렇게 그린 이름표는 넘긴 떠 있는 판 · 닫기 · SOS · 제목 알약 · 아래 시트와 닿지 않는다
+//     그렇게 그린 이름표는 넘긴 떠 있는 판 · 닫기 · SOS · 제목 알약 · 아래 시트와 4 넘게 떨어진다 (TASK-015 §24: 판 여유 0 -> 4)
 //   region 흉내: fitToCoordinates(경로, edgePadding = 화면이 넘긴 값)가 경로 상자를 화면 위 edgePadding 안쪽 끝에 놓는다고 보고,
 //     그 화면 자리가 그대로 보이도록 F를 채우는 region을 계산한다 (가짜 지도는 바꾸지 않고 시험이 region을 넣는다)
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
@@ -43,7 +43,7 @@ const ROW_TOP = INSET_TOP + 8;
 const BUTTON = 44;
 const PILL = 36;
 const SIDE = 16;
-const SHEET_TOP = HEIGHT - (168 + INSET_BOTTOM); // 672 (진단의 아래 시트 판 y)
+const SHEET_TOP = HEIGHT - 168; // 706 — §24: course-bar 168은 아래 안전영역 34 포함 (옛 진단 672 = 874 − 202)
 const LABEL_H = 28;
 const HOME = { lat: 35.0, lng: 135.0 };
 
@@ -143,7 +143,8 @@ function lastResult(): PinOverlapResult {
   return results[results.length - 1].value as PinOverlapResult;
 }
 
-const touches = (a: Rect, b: Rect) => a.x <= b.x + b.width && b.x <= a.x + a.width && a.y <= b.y + b.height && b.y <= a.y + a.height;
+/** §24: 판 여유 4 — 두 사각형 사이 거리가 4 이하면 겹침과 같다 (옛 여유 0: 닿으면 겹침) */
+const near = (a: Rect, b: Rect) => Math.hypot(Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width), 0), Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height), 0)) <= 4;
 
 /** 그린 이름표: Marker 좌표를 보이는 영역 기준으로 화면 점으로 (anchor CENTER), 폭 = 말풍선 width */
 function drawnLabels(region: Region, frame: F): { name: string; center: { x: number; y: number }; rect: Rect }[] {
@@ -241,7 +242,7 @@ describe('§20 #4 이름표: 겹침 함수가 놓은 자리에 그대로 그려�
   test.each([
     ['4곳_정원_카페_C', FOUR],
     ['5곳_국수집_A', FIVE],
-  ] as const)('T15_S20_4_%s_그린_이름표가_넘긴_판·닫기·SOS·제목_알약·아래_시트와_닿지_않는다', async (_name, stops) => {
+  ] as const)('T15_S24_%s_그린_이름표가_넘긴_판·닫기·SOS·제목_알약·아래_시트와_4_넘게_떨어진다', async (_name, stops) => {
     const { map, frame } = await mount(stops);
     const region = fitRegion([HOME, ...stops], fitPadding(), frame);
     await tellRegion(map, region);
@@ -250,8 +251,8 @@ describe('§20 #4 이름표: 겹침 함수가 놓은 자리에 그대로 그려�
     expect(drawn.length).toBeGreaterThanOrEqual(1);
     for (const { name, rect } of drawn) {
       const hits = [
-        ...panels.filter((panel) => touches(rect, panel)).map(() => '넘긴 판'),
-        ...([['닫기', CLOSE], ['SOS', SOS], ['제목 알약', PILL_MID], ['아래 시트', SHEET]] as const).filter(([, el]) => touches(rect, el)).map(([part]) => part),
+        ...panels.filter((panel) => near(rect, panel)).map(() => '넘긴 판'),
+        ...([['닫기', CLOSE], ['SOS', SOS], ['제목 알약', PILL_MID], ['아래 시트', SHEET]] as const).filter(([, el]) => near(rect, el)).map(([part]) => part),
       ];
       expect({ name, hits }).toEqual({ name, hits: [] });
     }

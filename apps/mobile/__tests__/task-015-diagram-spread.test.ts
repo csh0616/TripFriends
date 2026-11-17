@@ -390,3 +390,36 @@ describe('§21 최대 8번 경계', () => {
     for (const p of all(r)) expect(insideArea(p, FRAME)).toBe(true);
   });
 });
+
+// TASK-015 §24 · task-015-design §12-3 Q3 · task-014-design §15-4(11-17 범위): 균등 간격은 번호 순서로 x = 18 ~ (칸 폭 − 18)에 나눠 놓고,
+//   y는 원래 자리(칸 안 18 ~ 높이 − 18으로만). 332는 칸 폭 350일 때의 값 — 앱 도식 칸 362면 18 ~ 344 (숫자로 박지 않는다).
+describe('§24 균등 간격 범위 = 칸 폭 기준', () => {
+  // 위 §21 "9번째 밀기가 필요하면" 입력과 같다 (1번 y 109는 칸 아래 102 밖)
+  const CROWD: [number, number][] = [[213, 109], [208, 62], [219, 89], [256, 69], [255, 81]];
+
+  test.each([
+    ['보드_칸_350', 350, 332],
+    ['앱_칸_362', 362, 344],
+  ])('T15_S24_균등_간격_x는_18부터_칸_폭_−_18까지_(%s_→_18~%i)', (_name, width, last) => {
+    const frame = { width, height: 120 };
+    const r = run(CROWD, null, frame);
+    const xs = r.stops.map((s) => s.x);
+    const step = (last - 18) / (CROWD.length - 1);
+    xs.forEach((x, i) => expect(x).toBeCloseTo(18 + step * i, 6));
+    expect(xs[0]).toBeCloseTo(18, 6);
+    expect(xs[xs.length - 1]).toBeCloseTo(last, 6);
+  });
+
+  test.each([350, 362])('T15_S24_균등_간격_y는_원래_자리(칸_밖이면_칸_안으로만)_칸_폭_%i', (width) => {
+    const r = run(CROWD, null, { width, height: 120 });
+    expect(r.stops.map((s) => s.y)).toEqual([102, 62, 89, 69, 81]);
+  });
+
+  test('T15_S24_경계_앱_칸_362에서_마지막_x는_332가_아니라_344(오른쪽_여백도_18)', () => {
+    const r = run(CROWD, null, { width: 362, height: 120 });
+    const lastX = r.stops[r.stops.length - 1].x;
+    expect(362 - lastX).toBeCloseTo(18, 6);
+    expect(lastX).not.toBeCloseTo(332, 3);
+  });
+
+});

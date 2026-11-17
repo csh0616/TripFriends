@@ -173,7 +173,8 @@ function lastResult(): PinOverlapResult {
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
-const touches = (a: Rect, b: Rect) => a.x <= b.x + b.width && b.x <= a.x + a.width && a.y <= b.y + b.height && b.y <= a.y + a.height;
+/** §24: 판 여유 4 — 두 사각형 사이 거리가 4 이하면 겹침과 같다 (옛 여유 0: 닿으면 겹침) */
+const near = (a: Rect, b: Rect) => Math.hypot(Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width), 0), Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height), 0)) <= 4;
 
 /** 그린 이름표: Marker 좌표를 region · 보이는 영역 기준 화면 점으로 (anchor CENTER), 폭 = 말풍선 width */
 function drawnLabels(region: Region): { name: string; center: { x: number; y: number }; rect: Rect }[] {
@@ -278,7 +279,7 @@ describe('§22 막는 2 — 맞춤 끝 영역을 받은 뒤', () => {
     expectLabelsFrom(region);
   });
 
-  test('T15_S22_2_맞춤_끝_영역으로_그린_이름표는_위_줄(닫기·SOS·제목_알약)과_넘긴_판에_닿지_않는다', async () => {
+  test('T15_S24_맞춤_끝_영역으로_그린_이름표는_위_줄(닫기·SOS·제목_알약)과_넘긴_판에서_4_넘게_떨어진다', async () => {
     await mount();
     await tellRegion(firstRegion());
     await mapReady();
@@ -289,8 +290,8 @@ describe('§22 막는 2 — 맞춤 끝 영역을 받은 뒤', () => {
     expect(drawn).toHaveLength(2);
     for (const { name, rect } of drawn) {
       const hits = [
-        ...panels.filter((panel) => touches(rect, panel)).map(() => '넘긴 판'),
-        ...([['닫기', CLOSE], ['SOS', SOS], ['제목 알약', PILL_MID]] as const).filter(([, el]) => touches(rect, el)).map(([part]) => part),
+        ...panels.filter((panel) => near(rect, panel)).map(() => '넘긴 판'),
+        ...([['닫기', CLOSE], ['SOS', SOS], ['제목 알약', PILL_MID]] as const).filter(([, el]) => near(rect, el)).map(([part]) => part),
       ];
       expect({ name, hits }).toEqual({ name, hits: [] });
     }
@@ -522,17 +523,18 @@ async function remount(options: Parameters<typeof mount>[0]) {
   return mount(options);
 }
 
-/** frontend 시뮬레이터 실측 알림(11-17, 16번 중 3번 같은 값, 보이는 영역 402×672) */
-const MEASURED_ALERT: Region = { latitude: 34.99999664825308, longitude: 135, latitudeDelta: 0.06846607929220738, longitudeDelta: 0.04999972879886627 };
+// frontend 시뮬레이터 실측 알림(11-17, 보이는 영역 402×672 = 874 − 옛 시트 202)의 값 그대로는 순수 함수 시험(task-015-s22-region-match)에 남는다.
+// §24(11-18): course-bar 168이 아래 안전영역 포함이 되어 보이는 영역이 402×706으로 바뀐다 -> 옛 실측 값(위도 폭 0.0685)은 새 영역의 처음 영역 모양과 달라
+// 화면 시험에는 쓸 수 없다. 화면 시험은 같은 실측 차(reportedInitial: 가운데 위도 3.35e-6도 · 경도 폭 상대 5.4e-6)를 새 영역에 얹어 본다.
 
 describe('§22 막는 2 — 맞춤 뒤에 온 initialRegion과 같은 알림은 이름표 계산에 쓰지 않는다 (목표가 다를 때)', () => {
-  test('T15_S22_2_F_실측_알림_값(402×672)이_맞춤_뒤에_먼저_와도_이름표_0개', async () => {
+  test('T15_S24_보이는_영역은_402×706(시트_168_안전영역_포함)이고_그_영역의_처음_영역_알림이_맞춤_뒤에_먼저_와도_이름표_0개', async () => {
     jest.useFakeTimers();
     await mount();
     await mapReady();
-    expect(visibleFrame()).toEqual({ x: 0, y: 0, width: 402, height: 672 }); // 시험 자체 확인: 실측과 같은 보이는 영역
+    expect(visibleFrame()).toEqual({ x: 0, y: 0, width: 402, height: 874 - 168 }); // §24: 옛 402×672(시트 202)
     expect(firstRegion()).toMatchObject({ latitude: 35.0, longitude: 135.0 }); // 시험 자체 확인: 실측과 같은 처음 영역
-    await tellRegion(MEASURED_ALERT);
+    await tellRegion(reportedInitial());
     expect(labelHosts()).toHaveLength(0);
   });
 
