@@ -1,12 +1,13 @@
 // TASK-006 B3~B10: 여행 중 화면 SC-04. 지도(바탕) + 카드 시트 3단 + 데모 시계.
 // 앱은 그리기만 한다: 카드를 고르지 않고(서버 main이 이긴다, §6) 일정을 바꾸지 않는다. 시각은 데모 시계만 쓴다 (실제 시계는 쓰지 않는다).
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView, useGestureEventsHandlersDefault } from '@gorhom/bottom-sheet';
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { Text } from '@/components/app-text';
 import { DemoPanel } from '@/components/now/demo-panel';
@@ -611,15 +612,22 @@ export function TripNowScreen({
   // 연습 중엔 중간 단 윗변이 보드 자리 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
   // TASK-015 §24(17): 맨 위 단의 윗변은 위 버튼 줄 아래 + 8보다 올라가지 않는다 (task-015-design §12-4: 손잡이 · 위 버튼 줄이 안 가려지게)
   const sheetTopMin = insets.top + rehTop + layout.header + space['space-2'];
-  // §24 18번(승현 11-18): 접힌 단 = 지금 메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 아래 끝 + 16, 모든 카드 같은 규칙. 잰 값은 메인 카드가 바뀌면 버린다
+  // §24 18번(승현 11-18): 접힌 단 = 지금 메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 아래 끝 + 16, 모든 카드 같은 규칙.
+  // §26: 메인 카드가 바뀌면 새 카드를 잴 때까지 앞 카드의 잰 값을 쓴다 (버리면 옛 16%로 내려갔다 다시 올라와 시트가 두 번 움직인다). 메인 카드가 없으면 버린다
   const mainKey = view && visible(view.main) ? view.main.type : null;
   const [mainBoxY, setMainBoxY] = useState(0);
-  const [lastBox, setLastBox] = useState<{ key: string | null; y: number; height: number } | null>(null);
-  const lastBottom = lastBox && lastBox.key === mainKey ? mainBoxY + lastBox.y + lastBox.height : null;
+  const [lastBox, setLastBox] = useState<{ y: number; height: number } | null>(null);
+  const lastBottom = lastBox && mainKey !== null ? mainBoxY + lastBox.y + lastBox.height : null;
+  // §26: 사용자가 시트(손잡이 · 내용)를 끌고 있는 동안은 접힌 단을 끌기 시작할 때 값으로 둔다 (손가락 밑에서 시트를 옮기지 않게). 놓으면 새 값으로
+  const [dragLow, setDragLow] = useState<string | number | null>(null);
+  const lowNow = useRef<string | number | null>(null);
+  const onDragStart = useCallback(() => setDragLow(lowNow.current), []);
+  const onDragEnd = useCallback(() => setDragLow(null), []);
+  const sheetGestures = useMemo(() => dragAwareGestures(onDragStart, onDragEnd), [onDragStart, onDragEnd]);
   const snapPoints = useMemo(() => {
     const total = areaHeight || windowHeight;
     return layout.sheetFractions.map((fraction, index) => {
-      if (index === 0) return collapsedSnap(fraction, lastBottom, total);
+      if (index === 0) return dragLow ?? collapsedSnap(fraction, lastBottom, total);
       if (rehearsal && index === 1) return rehSheetHeight(total);
       if (rehearsal && index === 2) return Math.max(rehSheetHeight(total, layout.rehSheetTopUp), rehSheetHeight(total) + 1); // 위로 끌면 윗변 417 (TASK-015 §B3)
       if (index === layout.sheetFractions.length - 1 && total > 0) {
@@ -629,7 +637,10 @@ export function TripNowScreen({
       return `${Math.round(fraction * 100)}%`;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rehearsal, areaHeight, windowHeight, sheetTopMin, lastBottom]);
+  }, [rehearsal, areaHeight, windowHeight, sheetTopMin, lastBottom, dragLow]);
+  useEffect(() => {
+    lowNow.current = snapPoints[0];
+  }, [snapPoints]);
   const sheetTop = useSharedValue(0);
   const gap = space['space-3'];
   // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)
@@ -831,6 +842,9 @@ export function TripNowScreen({
           snapPoints={snapPoints}
           onChange={setSheetIndex}
           animatedPosition={sheetTop}
+          // §26: 접힌 단 높이가 바뀌면(메인 카드가 바뀜) 시트가 약 250ms 동안 부드럽게 옮겨 간다. 접힌 단에 있을 때만 보이는 움직임이다 (다른 단의 높이는 그대로라)
+          animationConfigs={SHEET_ANIMATION}
+          gestureEventsHandlersHook={sheetGestures}
           enableDynamicSizing={false}
           style={shadow.sheet}
           backgroundStyle={styles.sheetBackground}
@@ -851,7 +865,7 @@ export function TripNowScreen({
                       onVisit={visit}
                       lateAt={lateAt}
                       rehearsal={rehearsal}
-                      onLastLayout={(box) => setLastBox({ key: mainCard.type, y: box.y, height: box.height })}
+                      onLastLayout={(box) => setLastBox({ y: box.y, height: box.height })}
                     />
                   ) : null}
                   {note === null && reasonHidden(mainCard, view.reason) ? null : (
@@ -896,6 +910,38 @@ export function TripNowScreen({
       {location.sheet === 'off' ? <LocationOffSheet onSettings={location.openSettings} onClose={location.closeSheet} /> : null}
     </View>
   );
+}
+
+/**
+ * TASK-015 §26: 시트가 단 사이를 옮겨 갈 때의 움직임 = 250ms 시간 애니메이션 (gorhom 기본 시간과 같은 250ms, 끝에서 천천히 멈춤).
+ * 라이브러리가 단 높이 변경 반응을 처음 그릴 때 한 번만 잡아서, 접힌 단일 때만 다른 값을 줄 수 없다 → 끌어 놓을 때도 같은 움직임
+ */
+const SHEET_ANIMATION = { duration: 250, easing: Easing.out(Easing.cubic) };
+
+/** §26: gorhom 기본 끌기 처리에 "끌기 시작 · 끝" 알림만 더한다 (끌기 동작은 그대로) */
+function dragAwareGestures(onStart: () => void, onEnd: () => void) {
+  return function useDragAwareGestures() {
+    const base = useGestureEventsHandlersDefault();
+    return {
+      ...base,
+      handleOnStart: (source: Parameters<typeof base.handleOnStart>[0], payload: Parameters<typeof base.handleOnStart>[1]) => {
+        'worklet';
+        scheduleOnRN(onStart);
+        base.handleOnStart(source, payload);
+      },
+      // 놓기는 handleOnEnd로 온다 (그 뒤 gorhom이 handleOnFinalize를 건너뜀). 끝 없이 취소되면 handleOnFinalize로 온다
+      handleOnEnd: (source: Parameters<typeof base.handleOnEnd>[0], payload: Parameters<typeof base.handleOnEnd>[1]) => {
+        'worklet';
+        base.handleOnEnd(source, payload);
+        scheduleOnRN(onEnd);
+      },
+      handleOnFinalize: (source: Parameters<typeof base.handleOnFinalize>[0], payload: Parameters<typeof base.handleOnFinalize>[1]) => {
+        'worklet';
+        base.handleOnFinalize(source, payload);
+        scheduleOnRN(onEnd);
+      },
+    };
+  };
 }
 
 /** 손잡이 자리 = gorhom 손잡이 위아래 안쪽 10 + 손잡이 막대 (§24 18번 접힌 단 계산) */
