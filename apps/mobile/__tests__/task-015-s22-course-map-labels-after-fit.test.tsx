@@ -438,11 +438,137 @@ describe('§22 막는 2 (A ①) — 영역 보고가 한 번도 없이 기다림
       await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS);
     });
     const before = labelHosts().map((h) => h.props.coordinate);
+    // 늦게 온 실제 영역은 목표 영역과 다른 값(움직인 영역)으로 넣는다: 2곳 데모는 목표 영역과 fitEnd()가 같은 이름표 자리를 줘서 "바뀌었다"를 볼 수 없다
+    const target = targetRegion() as Region;
+    const late: Region = { ...target, latitude: target.latitude + target.latitudeDelta * 0.1, latitudeDelta: target.latitudeDelta * 1.5, longitudeDelta: target.longitudeDelta * 1.5 };
+    await tellRegion(late);
+    expect(labelHosts()).toHaveLength(2);
+    expectLabelsFrom(late);
+    expect(labelHosts().map((h) => h.props.coordinate)).not.toEqual(before); // 시험 자체 확인: 좌표가 실제로 바뀌었다
+  });
+});
+
+// ---------- 맞춤 뒤 initialRegion과 같은 알림 거르기 (승현 11-17, 시뮬레이터 8번 중 2번) ----------
+// "같은 영역" (이 파일이 정한 것): 가운데 위도 · 경도 차가 각각 1e-6도 이하이고 경도 폭(longitudeDelta) 상대 차가 1e-3 이하.
+//   위도 폭은 보지 않는다 (지도가 initialRegion을 화면 비율에 맞춰 위도 폭을 바꿔 알려 준다)
+
+/** 지도가 알려 주는 initialRegion 모양: 가운데 · 경도 폭은 그대로, 위도 폭만 화면 비율로 바뀜 */
+const reportedInitial = (): Region => ({ ...firstRegion(), latitudeDelta: firstRegion().latitudeDelta * 1.7 });
+
+async function remount(options: Parameters<typeof mount>[0]) {
+  await screen.unmount();
+  mapControl.reset();
+  overlap.mockClear();
+  return mount(options);
+}
+
+describe('§22 막는 2 — 맞춤 뒤에 온 initialRegion과 같은 알림은 이름표 계산에 쓰지 않는다 (목표가 다를 때)', () => {
+  test('T15_S22_2_F_목표가_다를_때_맞춤_뒤_initialRegion과_같은_알림이_먼저_와도_이름표_0개', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await tellRegion(reportedInitial());
+    expect(labelHosts()).toHaveLength(0);
+    expect(numberPins()).toHaveLength(2);
+  });
+
+  test('T15_S22_2_F_목표가_다를_때_같은_알림_뒤_50ms에_실제_맞춤_영역이_오면_그_영역으로_이름표_2개', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await tellRegion(reportedInitial());
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(50);
+    });
     const fitted = fitEnd();
     await tellRegion(fitted);
     expect(labelHosts()).toHaveLength(2);
     expectLabelsFrom(fitted);
-    expect(labelHosts().map((h) => h.props.coordinate)).not.toEqual(before); // 시험 자체 확인: 좌표가 실제로 바뀌었다
+  });
+
+  test('T15_S22_2_F_목표가_다를_때_거른_알림만_오고_기다림_시간이_되면_목표_영역_기준', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await tellRegion(reportedInitial());
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS - 1);
+    });
+    expect(labelHosts()).toHaveLength(0);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1);
+    });
+    expect(labelHosts()).toHaveLength(2);
+    expectLabelsFrom(targetRegion() as Region);
+  });
+
+  test.each<[string, (r: Region) => Region]>([
+    ['가운데_위도_0.5e-6도_차', (r) => ({ ...r, latitude: r.latitude + 0.5e-6 })],
+    ['가운데_경도_0.5e-6도_차', (r) => ({ ...r, longitude: r.longitude - 0.5e-6 })],
+    ['경도_폭_상대_0.5e-3_차', (r) => ({ ...r, longitudeDelta: r.longitudeDelta * 1.0005 })],
+  ])('T15_S22_2_F_경계_허용_오차_안(%s)이면_같은_영역이라_거른다', async (_name, nudge) => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await tellRegion(nudge(reportedInitial()));
+    expect(labelHosts()).toHaveLength(0);
+  });
+
+  test.each<[string, (r: Region) => Region]>([
+    ['가운데_위도_2e-6도_차', (r) => ({ ...r, latitude: r.latitude + 2e-6 })],
+    ['가운데_경도_2e-6도_차', (r) => ({ ...r, longitude: r.longitude - 2e-6 })],
+    ['경도_폭_상대_2e-3_차', (r) => ({ ...r, longitudeDelta: r.longitudeDelta * 1.002 })],
+  ])('T15_S22_2_F_경계_허용_오차_밖(%s)이면_다른_영역이라_바로_그_영역으로_그린다', async (_name, nudge) => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    const region = nudge(reportedInitial());
+    await tellRegion(region);
+    expect(labelHosts()).toHaveLength(2);
+    expectLabelsFrom(region);
+  });
+});
+
+describe('§22 막는 2 — 맞춤 목표 영역이 initialRegion과 같으면(카메라가 안 움직임) 거르지 않고 바로', () => {
+  /**
+   * 목표 영역이 initialRegion(숙소 가운데, 경도 폭 0.05)과 같아지는 경로. 경도 폭이 맞춤을 정하게 동서로 한 곳씩 두고,
+   * 맞춤 안쪽 칸은 위 · 아래 여백이 달라 칸 가운데가 보이는 영역 가운데보다 (top − bottom)/2 아래에 있으므로, 점 상자 가운데가 그만큼 숙소 아래로 오게 동쪽 곳을 남쪽에 둔다
+   */
+  async function sameTargetStops(): Promise<CourseStop[]> {
+    await mount();
+    await mapReady();
+    const pad = fitPadding();
+    const frame = visibleFrame();
+    const half = (0.05 / 2) * ((frame.width - pad.left - pad.right) / frame.width);
+    const mercPerPt = rad(0.05) / frame.width; // 한 배율: 가로 축척 = 세로 축척
+    let south = unmerc(merc(HOME.lat) - (pad.top - pad.bottom) * mercPerPt);
+    // region 가운데 위도(북 · 남 끝의 가운데, 도)가 숙소에 오도록 목표 영역을 보며 남쪽 곳을 조금씩 맞춘다 (점 상자 가운데는 남쪽 끝 이동의 절반만 움직인다)
+    for (let i = 0; i < 30; i += 1) {
+      const path = [{ latitude: HOME.lat, longitude: HOME.lng }, { latitude: HOME.lat, longitude: HOME.lng - half }, { latitude: south, longitude: HOME.lng + half }, { latitude: HOME.lat, longitude: HOME.lng }];
+      const target = fitTargetRegion(path, { width: frame.width, height: frame.height }, pad);
+      if (!target) break;
+      south -= 2 * (target.latitude - HOME.lat);
+    }
+    return [
+      { seq: 1, name: '서쪽 가게', lat: HOME.lat, lng: HOME.lng - half },
+      { seq: 2, name: '동쪽 가게', lat: south, lng: HOME.lng + half },
+    ];
+  }
+
+  test('T15_S22_2_F_목표가_같을_때_맞춤_뒤_initialRegion과_같은_알림이_오면_기다리지_않고_바로_이름표_2개', async () => {
+    jest.useFakeTimers(); // 시간을 밀지 않는다 = 기다림 없이
+    const stops = await sameTargetStops();
+    await remount({ stops });
+    await mapReady();
+    const target = targetRegion() as Region;
+    // 시험 자체 확인: 목표 영역이 이 파일의 "같은 영역"으로 initialRegion과 같다
+    expect(Math.abs(target.latitude - firstRegion().latitude)).toBeLessThanOrEqual(1e-6);
+    expect(Math.abs(target.longitude - firstRegion().longitude)).toBeLessThanOrEqual(1e-6);
+    expect(Math.abs(target.longitudeDelta / firstRegion().longitudeDelta - 1)).toBeLessThanOrEqual(1e-3);
+    const region = reportedInitial();
+    await tellRegion(region);
+    expect(labelHosts()).toHaveLength(2);
+    expectLabelsFrom(region);
   });
 });
 
