@@ -158,3 +158,80 @@ describe('§22 막는 2 — shownRegion (지도가 처음 영역을 보여 주�
     expect(shownRegion(region, size)).toBeNull();
   });
 });
+
+// ---------- 승현 11-17 조건: 보이는 지도 영역 크기로, 화면 비율 여러 가지에서 같은 규칙 ----------
+
+const INITIAL: Region = { latitude: 35.0, longitude: 135.0, latitudeDelta: 0.05, longitudeDelta: 0.05 }; // 크게 보기 initialRegion (layout.mapDelta)
+/** frontend 시뮬레이터 실측 알림 (보이는 지도 영역 402×672) */
+const MEASURED_ALERT: Region = { latitude: 34.99999664825308, longitude: 135, latitudeDelta: 0.06846607929220738, longitudeDelta: 0.04999972879886627 };
+
+/** 시험 쪽 "보여 주는 모양" (가운데 그대로 · 작은 축척 한 배율 · 남는 축만 넓힘) */
+function shownOracle(r: Region, size: Size): Region {
+  const lngRad = rad(r.longitudeDelta);
+  const top = merc(r.latitude + r.latitudeDelta / 2);
+  const bottom = merc(r.latitude - r.latitudeDelta / 2);
+  const scale = Math.min(size.width / lngRad, size.height / (top - bottom));
+  const mid = (top + bottom) / 2;
+  const half = size.height / scale / 2;
+  return { latitude: r.latitude, longitude: r.longitude, latitudeDelta: unmerc(mid + half) - unmerc(mid - half), longitudeDelta: ((size.width / scale) * 180) / Math.PI };
+}
+
+/** base 화면에서 other의 가운데 · 네 모서리 중 가장 먼 차 (pt) */
+function gap(base: Region, other: Region, size: Size): number {
+  const pts = (r: Region) => [
+    { latitude: r.latitude, longitude: r.longitude },
+    ...[-1, 1].flatMap((a) => [-1, 1].map((b) => ({ latitude: r.latitude + (a * r.latitudeDelta) / 2, longitude: r.longitude + (b * r.longitudeDelta) / 2 }))),
+  ];
+  const mine = pts(base).map((p) => project(base, size, p));
+  const theirs = pts(other).map((p) => project(base, size, p));
+  return Math.max(...mine.map((m, i) => Math.hypot(m.x - theirs[i].x, m.y - theirs[i].y)));
+}
+
+describe('§22 막는 2 — 실측 알림 (402×672)', () => {
+  test('T15_S22_2_M_실측_알림은_보여_주는_처음_영역과_같다(걸러짐)', () => {
+    const size = { width: 402, height: 672 };
+    const shown = shownRegion(INITIAL, size) as Region;
+    expect(gap(shownOracle(INITIAL, size), MEASURED_ALERT, size)).toBeLessThan(0.05); // 시험 자체 확인: frontend 보고 0.031~0.035pt
+    expect(sameRegionOnScreen(shown, MEASURED_ALERT, size)).toBe(true);
+  });
+
+  test('T15_S22_2_M_실측_알림을_initialRegion_값(0.05×0.05)_그대로와_비교하면_다르다(그래서_보여_주는_모양으로_맞춘다)', () => {
+    expect(sameRegionOnScreen(INITIAL, MEASURED_ALERT, { width: 402, height: 672 })).toBe(false);
+  });
+});
+
+// 0.05 × 0.05 (위도 35)는 메르카토르 세로 폭이 경도 폭의 약 1.22배 -> 높이 < 폭 × 1.22면 세로가, 아니면 가로가 맞춤(작은 축척)을 정한다
+describe.each<[string, Size, 'lng' | 'lat']>([
+  ['지금_크기_402×672(가로가_정함)', { width: 402, height: 672 }, 'lng'],
+  ['더_긴_화면_402×1000(가로가_정함)', { width: 402, height: 1000 }, 'lng'],
+  ['낮은_화면_402×450(세로가_정함)', { width: 402, height: 450 }, 'lat'],
+])('§22 막는 2 — 화면 비율 %s', (_name, size, binding) => {
+  test('T15_S22_2_M_비율_보여_주는_모양은_정하는_축_폭이_그대로이고_시험_계산과_같다', () => {
+    const shown = shownRegion(INITIAL, size) as Region;
+    expect(shown).not.toBeNull();
+    if (binding === 'lng') expect(shown.longitudeDelta).toBeCloseTo(0.05, 12);
+    else expect(shown.latitudeDelta).toBeCloseTo(0.05, 12);
+    expect(gap(shownOracle(INITIAL, size), shown, size)).toBeLessThan(1e-6);
+  });
+
+  test('T15_S22_2_M_비율_실측만큼의_흔들림(가운데_약_0.03pt)은_같다(걸러짐)', () => {
+    const base = shownRegion(INITIAL, size) as Region;
+    const other = { ...base, latitude: base.latitude - 3.35e-6 * (base.latitudeDelta / 0.0685), longitudeDelta: base.longitudeDelta * (1 - 5.4e-6) };
+    expect(gap(base, other, size)).toBeLessThan(0.1); // 시험 자체 확인
+    expect(sameRegionOnScreen(base, other, size)).toBe(true);
+  });
+
+  test.each([
+    ['0.49pt_같다', 0.49, true],
+    ['0.51pt_다르다', 0.51, false],
+  ])('T15_S22_2_M_비율_경계_가운데를_가로로_%s', (_n, dx, expected) => {
+    const base = shownRegion(INITIAL, size) as Region;
+    const other = { ...base, longitude: base.longitude + ((dx as number) * base.longitudeDelta) / size.width };
+    expect(sameRegionOnScreen(base, other, size)).toBe(expected);
+  });
+
+  test('T15_S22_2_M_비율_가운데_같고_넓이만_다른_영역(두_폭_×1.01)은_다르다', () => {
+    const base = shownRegion(INITIAL, size) as Region;
+    expect(sameRegionOnScreen(base, { ...base, latitudeDelta: base.latitudeDelta * 1.01, longitudeDelta: base.longitudeDelta * 1.01 }, size)).toBe(false);
+  });
+});

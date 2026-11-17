@@ -34,6 +34,7 @@ import { COURSE_LABEL_FIT_WAIT_MS, type CourseStop } from '@/components/now/map-
 import { CourseMapScreen } from '@/components/planning/course-map-screen';
 import { fitTargetRegion, type Region } from '@/lib/map-project';
 import { resolvePinOverlap, type PinOverlapInput, type PinOverlapResult, type Rect } from '@/lib/pin-overlap';
+import { sameRegionOnScreen, shownRegion } from '@/lib/region-match';
 
 import { mapControl } from '../test-support/maps-mock';
 import { REPO_ROOT } from '../test-support/source-files';
@@ -44,6 +45,15 @@ jest.mock('@/lib/pin-overlap', () => {
 });
 
 const overlap = resolvePinOverlap as unknown as jest.Mock;
+
+// 진짜 판정 함수를 그대로 쓰되 받은 크기를 기록한다 (승현 11-17: 보여 주는 모양 · 같은 영역 판정은 화면 전체가 아니라 보이는 지도 영역 크기로)
+jest.mock('@/lib/region-match', () => {
+  const actual = jest.requireActual('@/lib/region-match');
+  return { __esModule: true, ...actual, shownRegion: jest.fn(actual.shownRegion), sameRegionOnScreen: jest.fn(actual.sameRegionOnScreen) };
+});
+
+const shownSpy = shownRegion as unknown as jest.Mock;
+const sameSpy = sameRegionOnScreen as unknown as jest.Mock;
 
 // iPhone 17 (frontend 진단)
 const WIDTH = 402;
@@ -207,6 +217,8 @@ const PILL_MID: Rect = { x: WIDTH / 2, y: ROW_TOP + (BUTTON - PILL) / 2, width: 
 beforeEach(() => {
   mapControl.reset();
   overlap.mockClear();
+  shownSpy.mockClear();
+  sameSpy.mockClear();
   windowSize = { width: WIDTH, height: HEIGHT };
   const window = Dimensions.get('window');
   jest.spyOn(Dimensions, 'get').mockImplementation(() => ({ ...window, ...windowSize }));
@@ -453,14 +465,23 @@ describe('§22 막는 2 (A ①) — 영역 보고가 한 번도 없이 기다림
 //   비교 기준 = 지도가 initialRegion을 실제로 보여 주는 모양(shownRegion: 가운데 · 경도 폭 그대로, 위도 폭은 한 배율로 넓어짐 — 세로로 긴 화면).
 //   initialRegion 값(0.05 × 0.05) 그대로와 네 모서리를 비교하면 위도 폭이 달라 늘 "다름"이 된다 (질문으로 올림)
 
-/** 지도가 보여 주는 처음 영역 (시험이 직접 계산: 가운데 · 경도 폭 그대로, 위도 폭 = 한 배율) */
+/** 시험 쪽 "보여 주는 모양": 가운데 그대로, 영역이 다 들어가는 한 배율(작은 축척), 남는 축 폭만 넓힘 */
+function shownOracle(r: Region, size: { width: number; height: number }): Region {
+  const lngRad = rad(r.longitudeDelta);
+  const mercSpan = merc(r.latitude + r.latitudeDelta / 2) - merc(r.latitude - r.latitudeDelta / 2);
+  const scale = Math.min(size.width / lngRad, size.height / mercSpan);
+  const lngDelta = ((size.width / scale) * 180) / Math.PI;
+  const mercHalf = size.height / scale / 2;
+  const mid = (merc(r.latitude + r.latitudeDelta / 2) + merc(r.latitude - r.latitudeDelta / 2)) / 2;
+  const north = unmerc(mid + mercHalf);
+  const south = unmerc(mid - mercHalf);
+  return { latitude: r.latitude, longitude: r.longitude, latitudeDelta: north - south, longitudeDelta: lngDelta };
+}
+
+/** 지도가 보여 주는 처음 영역 (보이는 지도 영역 크기로) */
 function shownInitial(): Region {
-  const first = firstRegion();
   const frame = visibleFrame();
-  const half = (rad(first.longitudeDelta) * (frame.height / frame.width)) / 2;
-  const north = unmerc(merc(first.latitude) + half);
-  const south = unmerc(merc(first.latitude) - half);
-  return { latitude: first.latitude, longitude: first.longitude, latitudeDelta: north - south, longitudeDelta: first.longitudeDelta };
+  return shownOracle(firstRegion(), { width: frame.width, height: frame.height });
 }
 
 /** 맞춤 뒤 먼저 오는 처음 영역 알림: frontend 시뮬레이터 실제 측정 차(가운데 위도 3.35e-6도, 경도 폭 상대 5.4e-6) */
@@ -494,7 +515,34 @@ async function remount(options: Parameters<typeof mount>[0]) {
   return mount(options);
 }
 
+/** frontend 시뮬레이터 실측 알림(11-17, 16번 중 3번 같은 값, 보이는 영역 402×672) */
+const MEASURED_ALERT: Region = { latitude: 34.99999664825308, longitude: 135, latitudeDelta: 0.06846607929220738, longitudeDelta: 0.04999972879886627 };
+
 describe('§22 막는 2 — 맞춤 뒤에 온 initialRegion과 같은 알림은 이름표 계산에 쓰지 않는다 (목표가 다를 때)', () => {
+  test('T15_S22_2_F_실측_알림_값(402×672)이_맞춤_뒤에_먼저_와도_이름표_0개', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    expect(visibleFrame()).toEqual({ x: 0, y: 0, width: 402, height: 672 }); // 시험 자체 확인: 실측과 같은 보이는 영역
+    expect(firstRegion()).toMatchObject({ latitude: 35.0, longitude: 135.0 }); // 시험 자체 확인: 실측과 같은 처음 영역
+    await tellRegion(MEASURED_ALERT);
+    expect(labelHosts()).toHaveLength(0);
+  });
+
+  test('T15_S22_2_F_보여_주는_모양·같은_영역_판정에_넘기는_크기는_화면_전체가_아니라_보이는_지도_영역', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await tellRegion(reportedInitial());
+    const frame = visibleFrame();
+    expect(frame.height).toBeLessThan(HEIGHT); // 시험 자체 확인: 화면 전체와 다르다
+    const want = { width: frame.width, height: frame.height };
+    expect(shownSpy).toHaveBeenCalled();
+    expect(sameSpy).toHaveBeenCalled();
+    for (const call of shownSpy.mock.calls) expect({ width: call[1]?.width, height: call[1]?.height }).toEqual(want);
+    for (const call of sameSpy.mock.calls) expect({ width: call[2]?.width, height: call[2]?.height }).toEqual(want);
+  });
+
   test('T15_S22_2_F_목표가_다를_때_맞춤_뒤_initialRegion과_같은_알림이_먼저_와도_이름표_0개', async () => {
     jest.useFakeTimers();
     await mount();
@@ -600,8 +648,11 @@ describe('§22 막는 2 — 맞춤 목표 영역이 initialRegion과 같으면(�
     await remount({ stops });
     await mapReady();
     const target = targetRegion() as Region;
-    // 시험 자체 확인: 목표 영역이 "같은 영역"(0.5pt)으로 지도가 보여 주는 처음 영역과 같다
-    expect(screenGap(shownInitial(), target)).toBeLessThanOrEqual(0.5);
+    // 시험 자체 확인: 목표 영역과 처음 영역을 둘 다 보여 주는 모양으로 맞추면 "같은 영역"(0.5pt)이다.
+    // 처음 영역 값(0.05 × 0.05) 그대로와는 위도 폭이 달라 다르다 -> 화면이 그대로 비교하면 알림을 걸러 기다리게 되어 아래 단언이 깨진다
+    const frame = visibleFrame();
+    expect(screenGap(shownInitial(), shownOracle(target, { width: frame.width, height: frame.height }))).toBeLessThanOrEqual(0.5);
+    expect(screenGap(firstRegion(), target)).toBeGreaterThan(0.5);
     const region = reportedInitial();
     await tellRegion(region);
     expect(labelHosts()).toHaveLength(2);
