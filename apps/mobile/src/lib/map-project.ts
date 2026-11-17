@@ -43,12 +43,34 @@ export function visibleArea(size: Size, padding: MapPadding): Required<Frame> {
 }
 
 /**
- * TASK-015 §22 막는 2 (껍데기, test-writer): 경로 맞춤(fitToCoordinates)이 요청하는 목표 영역 — 점 상자를 보이는 영역(size) 안 edgePadding 안쪽에
- * 한 배율로 넣고 가운데 맞춘 region (region은 size를 채운다). 점이 없거나 한 점뿐이거나 안쪽 넓이가 0 이하면 null.
+ * TASK-015 §22 막는 2: 경로 맞춤(fitToCoordinates)이 요청하는 목표 영역 — 점 상자를 보이는 영역(size) 안 edgePadding 안쪽에
+ * 한 배율로 넣고 가운데 맞춘 region (region은 size를 채운다). 점이 없거나 모든 점이 한 자리거나 안쪽 넓이가 0 이하면 null.
  * 계약: __tests__/task-015-s22-fit-target-region.test.ts
  */
-export function fitTargetRegion(_points: Coord[], _size: Size, _edgePadding: MapPadding): Region | null {
-  throw new Error('not implemented');
+export function fitTargetRegion(points: Coord[], size: Size, edgePadding: MapPadding): Region | null {
+  const innerWidth = size.width - edgePadding.left - edgePadding.right;
+  const innerHeight = size.height - edgePadding.top - edgePadding.bottom;
+  if (points.length === 0 || !(size.width > 0) || !(size.height > 0) || !(innerWidth > 0) || !(innerHeight > 0)) return null;
+  const lats = points.map((p) => p.latitude);
+  const lngs = points.map((p) => p.longitude);
+  const spanLng = rad(Math.max(...lngs) - Math.min(...lngs)); // 라디안
+  const topM = merc(Math.max(...lats));
+  const bottomM = merc(Math.min(...lats));
+  const spanMerc = topM - bottomM;
+  // 웹 메르카토르는 가로·세로 축척이 같다: pt / 라디안(경도) = pt / 메르카토르 세로. 두 방향 중 더 빡빡한 쪽에 맞춘다
+  const scales = [spanLng > 0 ? innerWidth / spanLng : Infinity, spanMerc > 0 ? innerHeight / spanMerc : Infinity];
+  const perUnit = Math.min(...scales);
+  if (!Number.isFinite(perUnit) || perUnit <= 0) return null;
+  // 상자 가운데를 안쪽 칸 가운데에
+  const centerX = edgePadding.left + innerWidth / 2;
+  const centerY = edgePadding.top + innerHeight / 2;
+  const midLng = (Math.max(...lngs) + Math.min(...lngs)) / 2;
+  const west = midLng - (centerX / perUnit) * (180 / Math.PI);
+  const longitudeDelta = (size.width / perUnit) * (180 / Math.PI);
+  const topMerc = (topM + bottomM) / 2 + centerY / perUnit;
+  const north = unmerc(topMerc);
+  const south = unmerc(topMerc - size.height / perUnit);
+  return { latitude: (north + south) / 2, longitude: west + longitudeDelta / 2, latitudeDelta: north - south, longitudeDelta };
 }
 
 /** 화면 가로 한 점이 몇 m인가 (지도 가운데 위도 기준) */

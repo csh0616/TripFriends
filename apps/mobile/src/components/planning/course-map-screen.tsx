@@ -55,7 +55,8 @@ export function CourseMapScreen({
   onPick: () => void;
   onFail: () => void;
 }) {
-  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, bottom: 0, left: 0, right: 0 };
+  const known = useContext(SafeAreaInsetsContext); // 없으면 판 위치를 모름 -> 이름표 없이 핀만 (§22 막는 2. 위쪽 0은 정상 값)
+  const insets = known ?? { top: 0, bottom: 0, left: 0, right: 0 };
   const [sosOpen, setSosOpen] = useState(false);
   const sheet = SHEET_HEIGHT + insets.bottom;
   const { width, height } = useWindowDimensions();
@@ -72,7 +73,7 @@ export function CourseMapScreen({
           home={home ? { latitude: home.lat, longitude: home.lng } : null}
           padding={{ top: insets.top + layout.header + LABEL_ROOM, bottom: sheet + LOGO_ROOM, left: SIDE, right: SIDE }}
           scaleBottom={sheet + space['space-2'] + 2}
-          panels={panels}
+          panels={known ? panels : null}
           onReady={() => undefined}
           onFail={onFail}
         />

@@ -7,8 +7,9 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewProps } from 'r
 
 import mapStyleFile from '../../../assets/map/google-map-style.json';
 import { Text } from '@/components/app-text';
-import { metersPerPoint as metersPerPointOf, project, scaleBar, unproject, visibleArea, type Region } from '@/lib/map-project';
+import { fitTargetRegion, metersPerPoint as metersPerPointOf, project, scaleBar, unproject, visibleArea, type Region } from '@/lib/map-project';
 import type { NowPin } from '@/lib/now-api';
+import { sameRegionOnScreen, shownRegion } from '@/lib/region-match';
 import { resolvePinOverlap, type Badge, type PinOverlapResult, type Rect, type ScreenPin } from '@/lib/pin-overlap';
 import { layout } from '@/planning/layout';
 import tokens from 'design-tokens';
@@ -26,8 +27,9 @@ export type MapAdapterHandle = {
 const MAP_READY_LIMIT_MS = 8000; // §11 Q17
 /**
  * TASK-015 §22 막는 2: 크게 보기에서 경로 맞춤(fitToCoordinates)을 부른 뒤 맞춤 끝 영역 보고(onRegionChangeComplete)를
- * 이만큼 기다린다. 끝까지 안 오면(카메라가 움직이지 않음) 마지막으로 받은 영역으로, 한 번도 없었으면 처음 영역(initialRegion)으로 이름표를 그린다.
- * 값 1초는 승현 11-17 결정
+ * 이만큼 기다린다. 끝까지 안 오면(카메라가 움직이지 않음) 맞춤이 요청한 목표 영역(fitTargetRegion)으로, 그게 없으면 처음 영역(initialRegion)으로
+ * 이름표를 그린다. 맞춤 전에 받은 영역은 쓰지 않는다. 값 1초는 승현 11-17 결정
+ * (11-17 iPhone 17 시뮬레이터 2곳 데모 5번: 맞춤 뒤 첫 영역 보고 63·3·46·47·47ms, 가장 긴 값 0.8초 미만이라 1초 그대로)
  */
 export const COURSE_LABEL_FIT_WAIT_MS = 1000;
 
@@ -385,43 +387,75 @@ export function CourseMap({
   padding: { top: number; bottom: number; left: number; right: number };
   /** 축척 막대의 아래 자리 (시트 위 10) */
   scaleBottom: number;
-  /** TASK-015 §17: 떠 있는 판(위 버튼 줄·아래 시트)의 사각형 — 이름표가 피한다. 지도 화면 pt, 맨 위 0 */
-  panels?: Rect[];
+  /** TASK-015 §17: 떠 있는 판(위 버튼 줄·아래 시트)의 사각형 — 이름표가 피한다. 지도 화면 pt, 맨 위 0. null = 판 위치를 모름(이름표를 그리지 않는다, §22 막는 2) */
+  panels?: Rect[] | null;
   onReady: () => void;
   onFail: () => void;
 }) {
   const map = useRef<MapView>(null);
   const ready = useRef(false);
+  const fitted = useRef(false); // fitToCoordinates를 불렀나 (§22 막는 2)
+  const fitWait = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipInitial = useRef<Region | null>(null); // 거를 처음 영역(보여 주는 모양). null이면 거르지 않는다
   const { width, height } = useWindowDimensions();
-  const [region, setRegion] = useState<Region | null>(null);
+  // §22 막는 2: 확정된 영역 = 맞춤 뒤 처음(과 그 뒤) 받은 영역(걸러진 알림 제외). 기다림이 끝나도 안 오면 목표 영역 -> initialRegion
+  const [confirmed, setConfirmed] = useState<Region | null>(null); // 확정된 영역: 이름표 · 겹침 · 축척이 함께 읽는다 (승현 11-17)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (!ready.current) onFail();
     }, MAP_READY_LIMIT_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (fitWait.current) clearTimeout(fitWait.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const path = [...(home ? [home] : []), ...stops.map((stop) => ({ latitude: stop.lat, longitude: stop.lng })), ...(home ? [home] : [])];
+  const initialRegion: Region = { ...(home ?? (stops[0] ? { latitude: stops[0].lat, longitude: stops[0].lng } : NO_CENTER)), latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta };
   const signalReady = () => {
     if (ready.current) return;
     ready.current = true;
     onReady();
-    map.current?.fitToCoordinates(path, { edgePadding: { top: Math.max(padding.top - mapPadding.top, 0), bottom: Math.max(padding.bottom - mapPadding.bottom, 0), left: Math.max(padding.left - mapPadding.left, 0), right: Math.max(padding.right - mapPadding.right, 0) }, animated: false });
+    const edgePadding = { top: Math.max(padding.top - mapPadding.top, 0), bottom: Math.max(padding.bottom - mapPadding.bottom, 0), left: Math.max(padding.left - mapPadding.left, 0), right: Math.max(padding.right - mapPadding.right, 0) };
+    const fallback = fitTargetRegion(path, { width: size.width, height: size.height }, edgePadding) ?? initialRegion;
+    // 맞춤 목표와 처음 영역을 둘 다 지도가 보여 주는 모양(보이는 지도 영역 크기)으로 맞춰 비교: 다르면 맞춤 뒤 처음 영역 알림을 거른다
+    const visible = { width: size.width, height: size.height };
+    const shownInitial = shownRegion(initialRegion, visible);
+    const shownTarget = shownRegion(fallback, visible);
+    skipInitial.current = shownInitial && shownTarget && !sameRegionOnScreen(shownInitial, shownTarget, visible) ? shownInitial : null;
+    fitted.current = true;
+    map.current?.fitToCoordinates(path, { edgePadding, animated: false });
+    fitWait.current = setTimeout(() => {
+      fitWait.current = null;
+      setConfirmed((now) => now ?? fallback);
+    }, COURSE_LABEL_FIT_WAIT_MS);
+  };
+  const onRegion = (next: Region) => {
+    if (!fitted.current) return; // 맞춤 전 영역은 이름표 계산에 쓰지 않는다
+    // 맞춤 뒤에 늦게 온 처음 영역 알림(진단 11-17: 맞춤 3~5ms 뒤 0.05가 먼저 오는 회차)은 거른다. 목표가 initialRegion과 같으면(카메라가 안 움직임) 그대로 쓴다
+    if (skipInitial.current && sameRegionOnScreen(skipInitial.current, next, { width: size.width, height: size.height })) return;
+    if (fitWait.current) {
+      clearTimeout(fitWait.current);
+      fitWait.current = null;
+    }
+    setConfirmed(next);
   };
 
   let rules: PinOverlapResult | null = null;
   const mapPadding = { top: 0, left: 0, right: 0, bottom: padding.bottom - 40 > 0 ? padding.bottom - 40 : 0 };
   const size = visibleArea({ width, height }, mapPadding); // region은 mapPadding을 뺀 보이는 영역을 채운다 (TASK-015 §20 #4)
-  if (region) {
+  // §22 막는 2: 지도 크기와 떠 있는 판 위치를 알고, 맞춤 뒤 영역이 있을 때만 이름표를 그린다. 그 전엔 핀만
+  const labelBase = confirmed && panels && width > 0 && height > 0 ? confirmed : null;
+  if (labelBase) {
     try {
-      const screenPins: ScreenPin[] = stops.map((stop) => ({ id: `p${stop.seq}`, kind: 'later', ...project(region, size, { latitude: stop.lat, longitude: stop.lng }), size: layout.pinLater, seq: stop.seq }));
-      if (home) screenPins.push({ id: 'home', kind: 'lodging', ...project(region, size, home), size: layout.homePin, seq: null });
+      const screenPins: ScreenPin[] = stops.map((stop) => ({ id: `p${stop.seq}`, kind: 'later', ...project(labelBase, size, { latitude: stop.lat, longitude: stop.lng }), size: layout.pinLater, seq: stop.seq }));
+      if (home) screenPins.push({ id: 'home', kind: 'lodging', ...project(labelBase, size, home), size: layout.homePin, seq: null });
       const named = stops.filter((stop) => stop.name);
       rules = resolvePinOverlap({
         pins: screenPins,
         screen: { width, height },
         labelWidth: 0,
-        panels,
+        panels: panels ?? [],
         labelMode: 'all',
         labelWidths: Object.fromEntries(named.map((stop) => [`p${stop.seq}`, labelWidthOf(stop.name as string)])),
       });
@@ -440,10 +474,10 @@ export function CourseMap({
         provider={PROVIDER_GOOGLE}
         customMapStyle={MAP_STYLE}
         style={StyleSheet.absoluteFill}
-        initialRegion={{ ...(home ?? (stops[0] ? { latitude: stops[0].lat, longitude: stops[0].lng } : NO_CENTER)), latitudeDelta: layout.mapDelta, longitudeDelta: layout.mapDelta }}
+        initialRegion={initialRegion}
         mapPadding={mapPadding}
         toolbarEnabled={false}
-        onRegionChangeComplete={setRegion}
+        onRegionChangeComplete={onRegion}
         onMapReady={signalReady}
         onMapLoaded={signalReady}
       >
@@ -466,18 +500,18 @@ export function CourseMap({
             />
           );
         })}
-        {region && rules
+        {labelBase && rules
           ? (rules.labels ?? []).map((placed) => {
               const stop = stops.find((candidate) => `p${candidate.seq}` === placed.pinId);
               if (!stop?.name) return null;
-              const at = unproject(region, size, { x: placed.rect.x + placed.rect.width / 2, y: placed.rect.y + placed.rect.height / 2 });
+              const at = unproject(labelBase, size, { x: placed.rect.x + placed.rect.width / 2, y: placed.rect.y + placed.rect.height / 2 });
               return <NameTag key={placed.pinId} coordinate={at} name={stop.name} width={placed.rect.width} />;
             })
           : null}
       </MapView>
-      {region ? (
+      {confirmed ? (
         <View pointerEvents="none" style={[styles.scaleSlot, { bottom: scaleBottom }]}>
-          <MapScale region={region} width={width} />
+          <MapScale region={confirmed} width={size.width} />
         </View>
       ) : null}
     </>
