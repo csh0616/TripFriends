@@ -612,7 +612,7 @@ describe('§22 막는 2 — 맞춤 뒤에 온 initialRegion과 같은 알림은 
   test.each<[string, (r: Region) => Region]>([
     ['가로_0.51pt_옮김', (r) => shiftedX(r, 0.51)],
     ['가운데_같고_경도_폭만_1%_넓음(모서리_약_2pt)', (r) => ({ ...r, longitudeDelta: r.longitudeDelta * 1.01 })],
-    ['가운데_같고_두_폭이_진짜_맞춤처럼_좁음(경도_폭_0.0114)', (r) => ({ ...r, latitudeDelta: (r.latitudeDelta * 0.0114) / r.longitudeDelta, longitudeDelta: 0.0114 })],
+    ['가운데_같고_두_폭이_처음_영역보다_좁음(경도_폭_0.018)', (r) => ({ ...r, latitudeDelta: (r.latitudeDelta * 0.018) / r.longitudeDelta, longitudeDelta: 0.018 })], // §24: 시트 168(보이는 영역 402×706) 뒤 0.0114면 1번 핀이 위 버튼 줄 바로 아래라 네 후보가 다 막힘 -> 영역 준비 값만 넓혔다
   ])('T15_S22_2_F_경계_0.5pt_밖(%s)이면_다른_영역이라_바로_그_영역으로_그린다', async (_name, nudge) => {
     jest.useFakeTimers();
     await mount();
@@ -838,5 +838,43 @@ describe('§22 막는 2 — 축척 막대는 확정된 영역(이름표와 같�
       await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS * 2);
     });
     expectBothFrom(moved); // 기다림 시간이 지나도 목표 영역으로 돌아가지 않는다
+  });
+});
+
+// ---------- TASK-015 §24 D-2 (승현 "추천대로" 11-18): 이름표와 축척은 늘 함께 ----------
+// 안전 영역 정보(context)를 모르면 이름표처럼 축척도 숨긴다. 핀 겹침 계산이 실패하면(§6 "규칙 없이 지금처럼") 이름표는 없지만 축척은 보인다 — 경계
+describe('§24 D-2 — 안전 영역을 모르면 축척도 숨김, 겹침 계산 실패면 축척은 보임', () => {
+  test('T15_S24_D2_안전_영역을_모르면(SafeAreaProvider_없음)_맞춤_끝_영역이_와도_축척_없음', async () => {
+    await mount({ insetsKnown: false });
+    await mapReady();
+    await tellRegion(fitEnd());
+    expect(labelHosts()).toHaveLength(0); // 시험 자체 확인: 이름표도 없다
+    expect(scaleHost()).toBeUndefined();
+  });
+
+  test('T15_S24_D2_경계_안전_영역을_알면_같은_순서에서_축척이_맞춤_끝_영역으로_나온다', async () => {
+    await mount();
+    await mapReady();
+    const region = fitEnd();
+    await tellRegion(region);
+    expectScaleFrom(region);
+  });
+
+  test('T15_S24_D2_경계_핀_겹침_계산이_실패하면_이름표는_없고_축척은_맞춤_끝_영역으로_보인다', async () => {
+    overlap.mockImplementation(() => {
+      throw new Error('겹침 계산 실패 흉내');
+    });
+    try {
+      await mount();
+      await mapReady();
+      const region = fitEnd();
+      await tellRegion(region);
+      expect(overlap).toHaveBeenCalled(); // 시험 자체 확인: 계산을 시도했다
+      expect(labelHosts()).toHaveLength(0);
+      expect(numberPins()).toHaveLength(2); // 규칙 없이 핀은 그린다 (§6)
+      expectScaleFrom(region);
+    } finally {
+      overlap.mockImplementation(jest.requireActual('@/lib/pin-overlap').resolvePinOverlap);
+    }
   });
 });

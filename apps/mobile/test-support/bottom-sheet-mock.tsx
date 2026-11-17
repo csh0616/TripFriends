@@ -18,12 +18,13 @@ export const sheetControl = {
   },
   /**
    * 사용자가 index 단으로 끌어 놓은 것처럼: animatedPosition(시트 윗면의 y)을 넣고 onChange를 부른다.
-   * 위치는 문서 값으로 계산한다: 윗면 = 영역 높이 × (1 − 그 단의 비율). 비율은 snapPoints('88%' 또는 0.88)에서 읽는다.
+   * 위치는 문서 값으로 계산한다: 윗면 = 영역 높이 − 그 단의 높이. 높이는 snapPoints('88%'는 비율, 숫자는 px)에서 읽는다.
    */
   settle(index: number, areaHeight: number) {
     const point = this.props?.snapPoints?.[index];
-    const fraction = typeof point === 'string' ? Number(point.replace('%', '')) / 100 : Number(point);
-    if (this.props?.animatedPosition) this.props.animatedPosition.value = areaHeight * (1 - fraction);
+    // '%' 글자 = 비율, 숫자 = 높이 px (진짜 부품과 같다. TASK-015 §24 18번: 접힌 단은 px로 올 수 있다)
+    const height = typeof point === 'string' ? (Number(point.replace('%', '')) / 100) * areaHeight : Number(point);
+    if (this.props?.animatedPosition) this.props.animatedPosition.value = areaHeight - height;
     this.onChange?.(index);
   },
 };

@@ -254,12 +254,14 @@ describe('B4 지도에 넘기는 값', () => {
 // ---------- B5 시트, 입력창 ----------
 
 describe('B5 카드 시트', () => {
+  // TASK-015 §24 18번(승현 "추천대로" 11-18): 접힌 단 = 지금 메인 카드의 주 버튼 아래 끝 + 여백 (옛: 16% 고정). 3단 · 기본 중간 뜻은 그대로.
+  //   중간 44% · 높게 88%(§24 17번: 위 버튼 줄 아래 8보다 높으면 그만큼 낮춤)는 그대로
   test('T6_B5_3단이고_기본은_중간', async () => {
     await toNow();
     const sheet = byId('card-sheet');
     expect(sheet.props.snapPoints).toHaveLength(3);
-    // §14 정한 값 승인: [0.16, 0.44, 0.88]. 비율을 숫자로 주든 '%' 글자로 주든 같다
-    expect((sheet.props.snapPoints as (string | number)[]).map((p) => (typeof p === 'string' ? Number(p.replace('%', '')) / 100 : p))).toEqual([0.16, 0.44, 0.88]);
+    const ratio = (p: string | number) => (typeof p === 'string' ? Number(p.replace('%', '')) / 100 : p);
+    expect((sheet.props.snapPoints as (string | number)[]).slice(1).map(ratio)).toEqual([0.44, 0.88]);
     expect(sheet.props.index).toBe(1);
   });
 
@@ -411,7 +413,7 @@ describe('B6 카드 부품', () => {
   test('T6_S12_R4_T_07_카드_제목은_fixed_title', async () => {
     await shows(t07());
     expect(cardWords('card-T-07')).toContain('서버_예약_제목');
-    expect(cardWords('card-T-07')).not.toContain('서버_식당_이름');
+    // TASK-015 §24(승현 답 11-18): 장소 줄 "{장소} {시작} 시작"이 생겨 옛 "장소 이름 없음" 단언은 뺐다. 제목 = fixed.title 뜻은 위 단언이 지킨다
   });
 
   test('T6_S11_Q21_T_07_고정_일정에_장소가_있으면_상태_글자', async () => {
@@ -1516,5 +1518,67 @@ describe('리뷰 재점검 §7 띠 가림', () => {
       if (screen.queryByTestId('my-location-button') !== null) expect([id, drawnAbove(byId(id), floatBox())]).toEqual([id, true]);
       if (screen.queryByTestId('demo-panel') !== null) expect([id, drawnAbove(byId(id), byId('demo-panel'))]).toEqual([id, true]);
     }
+  });
+});
+
+
+// ---------- TASK-015 §24 18번: 접힌 단은 메인 카드 주 버튼 아래 끝 + 여백 ----------
+// 근거: TASK-015 §24 표 하 18("시트를 접으면 버튼이 입력창에 반쯤 잘림 -> 접힌 높이 조정") · task-015-design §12-4("카드 시트 접힘 단: 내용 경계에 맞춘다
+//   (버튼이 반쯤 잘리지 않게: 버튼 위 또는 버튼 아래 끝) — 높이는 frontend가 정해") · 승현 규칙(11-18) "지금 메인 카드의 주 버튼 아래 끝 + 여백".
+// 계약 (이 묶음이 정한 것):
+//   여백 = 16(space-4, 시트 안 카드 사이와 같은 값) — 디자인 문서에 값이 없어 test-writer가 정함(보고에 적음)
+//   화면은 메인 카드 주 버튼(T-08 `home-directions-button`)의 자리를 onLayout으로 잰다. 시험은 시트 영역 높이를 알린 뒤,
+//   버튼에서 card-sheet까지 onLayout이 있는 host마다: 버튼에 가장 가까운 것 = { y: Y, height: 52 }, 나머지 = { y: 0 } 을 준다 -> 버튼 아래 끝 = Y + 52 (시트 내용 기준)
+//   접힌 단(snapPoints[0])은 px 숫자: >= Y + 52 + 16 (손잡이 자리 등 시트 머리 높이는 상수라 값을 박지 않는다) · 버튼 아래 끝이 Δ 바뀌면 접힌 단도 정확히 Δ
+//   여전히 중간 단(44%)보다 낮다
+describe('§24 18번 접힌 단 = 메인 카드 주 버튼 아래 끝 + 여백', () => {
+  const AREA_H = 746;
+  const MARGIN = 16;
+
+  async function measure(buttonY: number) {
+    const sheetHost = byId('card-sheet');
+    const area = chain(sheetHost).find((host) => typeof host.props.onLayout === 'function') as Tree;
+    await fireEvent(area as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: AREA_H } } });
+    const button = byId('home-directions-button');
+    const path = chain(button);
+    const stop = path.indexOf(sheetHost);
+    const measured = path.slice(0, stop < 0 ? path.length : stop).filter((host) => typeof host.props.onLayout === 'function');
+    expect(measured.length).toBeGreaterThanOrEqual(1); // 화면이 버튼 자리를 잰다 (계약)
+    for (const [i, host] of measured.entries()) {
+      const layout = i === 0 ? { x: 0, y: buttonY, width: 342, height: 52 } : { x: 0, y: 0, width: 390, height: 400 };
+      await act(async () => {
+        host.props.onLayout({ persist() {}, nativeEvent: { layout } });
+      });
+    }
+  }
+
+  const low = () => {
+    const point = (byId('card-sheet').props.snapPoints as (string | number)[])[0];
+    expect(typeof point).toBe('number'); // px
+    return point as number;
+  };
+
+  test('T15_S24_18_T_08_메인이면_접힌_단은_주_버튼_아래_끝_+_16_이상(버튼이_잘리지_않는다)', async () => {
+    await toNow(nowServer(nowView({ main: t08(), subs: [] })));
+    await measure(70);
+    expect(low()).toBeGreaterThanOrEqual(70 + 52 + MARGIN);
+    expect(low()).toBeLessThan(AREA_H * 0.44); // 중간 단보다 낮다
+    expect(byId('card-sheet').props.snapPoints).toHaveLength(3);
+    expect(byId('card-sheet').props.index).toBe(1);
+  });
+
+  test('T15_S24_18_버튼_아래_끝이_40_내려가면_접힌_단도_정확히_40_높아진다(그_카드_기준)', async () => {
+    await toNow(nowServer(nowView({ main: t08(), subs: [] })));
+    await measure(70);
+    const before = low();
+    await measure(110);
+    expect(low() - before).toBe(40);
+  });
+
+  test('T15_S24_18_경계_옛_16%_고정이_아니다(버튼_아래_끝이_16%보다_아래여도_잘리지_않음)', async () => {
+    await toNow(nowServer(nowView({ main: t08(), subs: [] })));
+    await measure(100); // 버튼 아래 끝 152 + 16 = 168 > 746 × 0.16 = 119.4
+    expect(low()).toBeGreaterThan(AREA_H * 0.16);
+    expect(low()).toBeGreaterThanOrEqual(100 + 52 + MARGIN);
   });
 });
