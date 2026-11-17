@@ -1522,30 +1522,44 @@ describe('리뷰 재점검 §7 띠 가림', () => {
 });
 
 
-// ---------- TASK-015 §24 18번: 접힌 단은 메인 카드 주 버튼 아래 끝 + 여백 ----------
-// 근거: TASK-015 §24 표 하 18("시트를 접으면 버튼이 입력창에 반쯤 잘림 -> 접힌 높이 조정") · task-015-design §12-4("카드 시트 접힘 단: 내용 경계에 맞춘다
-//   (버튼이 반쯤 잘리지 않게: 버튼 위 또는 버튼 아래 끝) — 높이는 frontend가 정해") · 승현 규칙(11-18) "지금 메인 카드의 주 버튼 아래 끝 + 여백".
-// 계약 (이 묶음이 정한 것):
-//   여백 = 16(space-4, 시트 안 카드 사이와 같은 값) — 디자인 문서에 값이 없어 test-writer가 정함(보고에 적음)
-//   화면은 메인 카드 주 버튼(T-08 `home-directions-button`)의 자리를 onLayout으로 잰다. 시험은 시트 영역 높이를 알린 뒤,
-//   버튼에서 card-sheet까지 onLayout이 있는 host마다: 버튼에 가장 가까운 것 = { y: Y, height: 52 }, 나머지 = { y: 0 } 을 준다 -> 버튼 아래 끝 = Y + 52 (시트 내용 기준)
-//   접힌 단(snapPoints[0])은 px 숫자: >= Y + 52 + 16 (손잡이 자리 등 시트 머리 높이는 상수라 값을 박지 않는다) · 버튼 아래 끝이 Δ 바뀌면 접힌 단도 정확히 Δ
-//   여전히 중간 단(44%)보다 낮다
-describe('§24 18번 접힌 단 = 메인 카드 주 버튼 아래 끝 + 여백', () => {
+// ---------- TASK-015 §24 18번: 접힌 단 = 메인 카드의 마지막 요소 아래 끝 + 16 (모든 카드 같은 규칙) ----------
+// 근거: TASK-015 §24 표 하 18("시트를 접으면 버튼이 입력창에 반쯤 잘림 -> 접힌 높이 조정") · task-015-design §12-4("카드 시트 접힘 단: 내용 경계에 맞춘다") ·
+//   승현 규칙(11-18 원문): "메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 아래 끝 + 16. 모든 카드에 같은 규칙이고, 테스트도 이 규칙으로." (옛: 16% 고정 · 주 버튼 있는 T-08만)
+// 계약 (이 묶음이 정한 것 — frontend는 이대로 잰다):
+//   마지막 요소 = 메인 카드(`card-{type}`) 안에서 그리는 순서로 마지막인 "줄"(바깥 Text, 다른 Text 안이 아닌 것) 또는 "버튼"(누를 수 있는 host, 그 안의 Text는 따로 세지 않음).
+//     카드 아래 이유 줄(now-reason)은 메인 카드 밖이라 세지 않는다
+//   화면은 그 마지막 요소(또는 그것만 감싼 상자)에 onLayout을 두고, 메인 카드부터 시트 내용까지의 위치도 onLayout으로 잰다(지금 now-main처럼).
+//   시험은 시트 영역 높이(AREA_H)를 알린 뒤, 마지막 요소에서 card-sheet까지 onLayout이 있는 host마다
+//     마지막 요소에 가장 가까운 것 = { y: Y, height: H }, 나머지 = { y: 0 } 을 준다 -> 마지막 요소 아래 끝 = Y + H (시트 내용 기준)
+//   접힌 단(snapPoints[0])은 px 숫자: >= Y + H + 16 (손잡이 자리 등 시트 머리 높이는 상수라 박지 않는다) · 아래 끝이 Δ 바뀌면 접힌 단도 정확히 Δ ·
+//   16% 고정 분기 없음 · 중간 단(44%)보다 낮다 · 3단 · 기본 중간 그대로
+describe('§24 18번 접힌 단 = 메인 카드 마지막 요소 아래 끝 + 16', () => {
   const AREA_H = 746;
   const MARGIN = 16;
+  const insideText = (host: Tree | null): boolean => host !== null && (host.type === 'Text' || insideText(host.parent));
+  const pressable = (host: Tree) => typeof host.props.onClick === 'function';
+  const insidePressable = (host: Tree | null): boolean => host !== null && (pressable(host) || insidePressable(host.parent));
 
-  async function measure(buttonY: number) {
+  /** 메인 카드의 마지막 요소: 바깥 줄(Text) 또는 버튼(누르는 host). 버튼 안의 Text는 버튼에 포함 */
+  function lastElement(type: string): Tree {
+    const card = byId(`card-${type}`);
+    const items = card.queryAll(
+      (host) => (pressable(host) && !insidePressable(host.parent)) || (host.type === 'Text' && !insideText(host.parent) && !insidePressable(host.parent)),
+    );
+    expect(items.length).toBeGreaterThanOrEqual(1); // 시험 자체 확인
+    return items[items.length - 1];
+  }
+
+  async function measure(type: string, y: number, height: number) {
     const sheetHost = byId('card-sheet');
     const area = chain(sheetHost).find((host) => typeof host.props.onLayout === 'function') as Tree;
     await fireEvent(area as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: AREA_H } } });
-    const button = byId('home-directions-button');
-    const path = chain(button);
+    const path = chain(lastElement(type));
     const stop = path.indexOf(sheetHost);
     const measured = path.slice(0, stop < 0 ? path.length : stop).filter((host) => typeof host.props.onLayout === 'function');
-    expect(measured.length).toBeGreaterThanOrEqual(1); // 화면이 버튼 자리를 잰다 (계약)
+    expect(measured.length).toBeGreaterThanOrEqual(1); // 화면이 마지막 요소 자리를 잰다 (계약)
     for (const [i, host] of measured.entries()) {
-      const layout = i === 0 ? { x: 0, y: buttonY, width: 342, height: 52 } : { x: 0, y: 0, width: 390, height: 400 };
+      const layout = i === 0 ? { x: 0, y, width: 342, height } : { x: 0, y: 0, width: 390, height: 400 };
       await act(async () => {
         host.props.onLayout({ persist() {}, nativeEvent: { layout } });
       });
@@ -1554,31 +1568,54 @@ describe('§24 18번 접힌 단 = 메인 카드 주 버튼 아래 끝 + 여백',
 
   const low = () => {
     const point = (byId('card-sheet').props.snapPoints as (string | number)[])[0];
-    expect(typeof point).toBe('number'); // px
+    expect(typeof point).toBe('number'); // px (16% 글자가 아니다)
     return point as number;
   };
 
-  test('T15_S24_18_T_08_메인이면_접힌_단은_주_버튼_아래_끝_+_16_이상(버튼이_잘리지_않는다)', async () => {
-    await toNow(nowServer(nowView({ main: t08(), subs: [] })));
-    await measure(70);
-    expect(low()).toBeGreaterThanOrEqual(70 + 52 + MARGIN);
-    expect(low()).toBeLessThan(AREA_H * 0.44); // 중간 단보다 낮다
+  // [이름, 메인 카드, type, 마지막 요소 높이]
+  const CARDS: [string, () => object, string, number][] = [
+    ['T_08_주_버튼', () => t08(), 'T-08', 52],
+    ['T_08_숙소_없음(마지막_줄)', () => t08({ lodging: null, map_url: null, go_home_min: null }), 'T-08', 22],
+    ['T_01(마지막_줄)', () => t01(), 'T-01', 22],
+    ['T_02(마지막_요소)', () => t02(), 'T-02', 44],
+    ['T_07(마지막_줄)', () => t07(), 'T-07', 22],
+  ];
+
+  test.each(CARDS)('T15_S24_18_%s_접힌_단은_마지막_요소_아래_끝_+_16_이상이고_중간_단보다_낮다', async (_name, card, type, h) => {
+    await toNow(nowServer(nowView({ main: card(), subs: [] })));
+    await measure(type, 70, h);
+    expect(low()).toBeGreaterThanOrEqual(70 + h + MARGIN);
+    expect(low()).toBeLessThan(AREA_H * 0.44);
     expect(byId('card-sheet').props.snapPoints).toHaveLength(3);
     expect(byId('card-sheet').props.index).toBe(1);
   });
 
-  test('T15_S24_18_버튼_아래_끝이_40_내려가면_접힌_단도_정확히_40_높아진다(그_카드_기준)', async () => {
-    await toNow(nowServer(nowView({ main: t08(), subs: [] })));
-    await measure(70);
+  test.each(CARDS)('T15_S24_18_%s_마지막_요소_아래_끝이_40_내려가면_접힌_단도_정확히_40_높아진다', async (_name, card, type, h) => {
+    await toNow(nowServer(nowView({ main: card(), subs: [] })));
+    await measure(type, 70, h);
     const before = low();
-    await measure(110);
+    await measure(type, 110, h);
     expect(low() - before).toBe(40);
   });
 
-  test('T15_S24_18_경계_옛_16%_고정이_아니다(버튼_아래_끝이_16%보다_아래여도_잘리지_않음)', async () => {
-    await toNow(nowServer(nowView({ main: t08(), subs: [] })));
-    await measure(100); // 버튼 아래 끝 152 + 16 = 168 > 746 × 0.16 = 119.4
+  test.each(CARDS)('T15_S24_18_경계_%s_옛_16%_고정이_아니다(아래_끝이_16%보다_아래여도_잘리지_않음)', async (_name, card, type, h) => {
+    await toNow(nowServer(nowView({ main: card(), subs: [] })));
+    await measure(type, 120, h); // 120 + h + 16 > 746 × 0.16 = 119.4
     expect(low()).toBeGreaterThan(AREA_H * 0.16);
-    expect(low()).toBeGreaterThanOrEqual(100 + 52 + MARGIN);
+    expect(low()).toBeGreaterThanOrEqual(120 + h + MARGIN);
+  });
+
+  test('T15_S24_18_같은_규칙_하나_마지막_요소_아래_끝이_같으면_카드가_달라도_접힌_단이_같다', async () => {
+    await toNow(nowServer(nowView({ main: t08(), subs: [] })));
+    await measure('T-08', 70, 52); // 아래 끝 122
+    const withButton = low();
+    await screen.unmount();
+    resetDevice(); // 처음부터 다시 (beforeEach와 같은 준비)
+    mapControl.reset();
+    sheetControl.reset();
+    installConfig(TEST_KEY);
+    await toNow(nowServer(nowView({ main: t01(), subs: [] })));
+    await measure('T-01', 100, 22); // 아래 끝 122
+    expect(low()).toBe(withButton);
   });
 });
