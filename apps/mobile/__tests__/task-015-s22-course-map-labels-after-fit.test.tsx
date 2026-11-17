@@ -449,11 +449,43 @@ describe('§22 막는 2 (A ①) — 영역 보고가 한 번도 없이 기다림
 });
 
 // ---------- 맞춤 뒤 initialRegion과 같은 알림 거르기 (승현 11-17, 시뮬레이터 8번 중 2번) ----------
-// "같은 영역" (이 파일이 정한 것): 가운데 위도 · 경도 차가 각각 1e-6도 이하이고 경도 폭(longitudeDelta) 상대 차가 1e-3 이하.
-//   위도 폭은 보지 않는다 (지도가 initialRegion을 화면 비율에 맞춰 위도 폭을 바꿔 알려 준다)
+// "같은 영역" (승현 11-17, 판정 함수 계약: __tests__/task-015-s22-region-match.test.ts): 보이는 영역 화면에서 가운데와 네 모서리가 각각 0.5pt 이내(정각 포함).
+//   비교 기준 = 지도가 initialRegion을 실제로 보여 주는 모양(shownRegion: 가운데 · 경도 폭 그대로, 위도 폭은 한 배율로 넓어짐 — 세로로 긴 화면).
+//   initialRegion 값(0.05 × 0.05) 그대로와 네 모서리를 비교하면 위도 폭이 달라 늘 "다름"이 된다 (질문으로 올림)
 
-/** 지도가 알려 주는 initialRegion 모양: 가운데 · 경도 폭은 그대로, 위도 폭만 화면 비율로 바뀜 */
-const reportedInitial = (): Region => ({ ...firstRegion(), latitudeDelta: firstRegion().latitudeDelta * 1.7 });
+/** 지도가 보여 주는 처음 영역 (시험이 직접 계산: 가운데 · 경도 폭 그대로, 위도 폭 = 한 배율) */
+function shownInitial(): Region {
+  const first = firstRegion();
+  const frame = visibleFrame();
+  const half = (rad(first.longitudeDelta) * (frame.height / frame.width)) / 2;
+  const north = unmerc(merc(first.latitude) + half);
+  const south = unmerc(merc(first.latitude) - half);
+  return { latitude: first.latitude, longitude: first.longitude, latitudeDelta: north - south, longitudeDelta: first.longitudeDelta };
+}
+
+/** 맞춤 뒤 먼저 오는 처음 영역 알림: frontend 시뮬레이터 실제 측정 차(가운데 위도 3.35e-6도, 경도 폭 상대 5.4e-6) */
+const reportedInitial = (): Region => {
+  const shown = shownInitial();
+  return { ...shown, latitude: shown.latitude + 3.35e-6, longitudeDelta: shown.longitudeDelta * (1 + 5.4e-6) };
+};
+
+/** 시험 쪽 판정: base 화면에서 other의 가운데 · 네 모서리가 각각 몇 pt 떨어졌나 (가장 큰 값) */
+function screenGap(base: Region, other: Region): number {
+  const frame = visibleFrame();
+  const size = { width: frame.width, height: frame.height };
+  const points = (r: Region) => [
+    { latitude: r.latitude, longitude: r.longitude },
+    ...[-1, 1].flatMap((a) => [-1, 1].map((b) => ({ latitude: r.latitude + (a * r.latitudeDelta) / 2, longitude: r.longitude + (b * r.longitudeDelta) / 2 }))),
+  ];
+  const mine = points(base).map((p) => toScreen(base, { x: 0, y: 0, ...size }, p));
+  const theirs = points(other).map((p) => toScreen(base, { x: 0, y: 0, ...size }, p));
+  return Math.max(...mine.map((m, i) => Math.hypot(m.x - theirs[i].x, m.y - theirs[i].y)));
+}
+
+/** base 화면에서 가로로 dx pt 옮긴 영역 */
+function shiftedX(base: Region, dx: number): Region {
+  return { ...base, longitude: base.longitude + (dx * base.longitudeDelta) / visibleFrame().width };
+}
 
 async function remount(options: Parameters<typeof mount>[0]) {
   await screen.unmount();
@@ -502,27 +534,34 @@ describe('§22 막는 2 — 맞춤 뒤에 온 initialRegion과 같은 알림은 
     expectLabelsFrom(targetRegion() as Region);
   });
 
-  test.each<[string, (r: Region) => Region]>([
-    ['가운데_위도_0.5e-6도_차', (r) => ({ ...r, latitude: r.latitude + 0.5e-6 })],
-    ['가운데_경도_0.5e-6도_차', (r) => ({ ...r, longitude: r.longitude - 0.5e-6 })],
-    ['경도_폭_상대_0.5e-3_차', (r) => ({ ...r, longitudeDelta: r.longitudeDelta * 1.0005 })],
-  ])('T15_S22_2_F_경계_허용_오차_안(%s)이면_같은_영역이라_거른다', async (_name, nudge) => {
-    jest.useFakeTimers();
+  test('T15_S22_2_F_시험_자체_확인_실제_측정값_알림은_보여_주는_처음_영역과_0.5pt_안(약_0.03pt)', async () => {
     await mount();
-    await mapReady();
-    await tellRegion(nudge(reportedInitial()));
-    expect(labelHosts()).toHaveLength(0);
+    expect(screenGap(shownInitial(), reportedInitial())).toBeLessThan(0.1);
   });
 
   test.each<[string, (r: Region) => Region]>([
-    ['가운데_위도_2e-6도_차', (r) => ({ ...r, latitude: r.latitude + 2e-6 })],
-    ['가운데_경도_2e-6도_차', (r) => ({ ...r, longitude: r.longitude - 2e-6 })],
-    ['경도_폭_상대_2e-3_차', (r) => ({ ...r, longitudeDelta: r.longitudeDelta * 1.002 })],
-  ])('T15_S22_2_F_경계_허용_오차_밖(%s)이면_다른_영역이라_바로_그_영역으로_그린다', async (_name, nudge) => {
+    ['실제_측정값(약_0.03pt)', (r) => r],
+    ['가로_0.49pt_더_옮김', (r) => shiftedX(r, 0.49 - 0.03)],
+  ])('T15_S22_2_F_경계_0.5pt_안(%s)이면_같은_영역이라_거른다', async (_name, nudge) => {
     jest.useFakeTimers();
     await mount();
     await mapReady();
     const region = nudge(reportedInitial());
+    expect(screenGap(shownInitial(), region)).toBeLessThanOrEqual(0.5); // 시험 자체 확인
+    await tellRegion(region);
+    expect(labelHosts()).toHaveLength(0);
+  });
+
+  test.each<[string, (r: Region) => Region]>([
+    ['가로_0.51pt_옮김', (r) => shiftedX(r, 0.51)],
+    ['가운데_같고_경도_폭만_1%_넓음(모서리_약_2pt)', (r) => ({ ...r, longitudeDelta: r.longitudeDelta * 1.01 })],
+    ['가운데_같고_두_폭이_진짜_맞춤처럼_좁음(경도_폭_0.0114)', (r) => ({ ...r, latitudeDelta: (r.latitudeDelta * 0.0114) / r.longitudeDelta, longitudeDelta: 0.0114 })],
+  ])('T15_S22_2_F_경계_0.5pt_밖(%s)이면_다른_영역이라_바로_그_영역으로_그린다', async (_name, nudge) => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    const region = nudge(shownInitial());
+    expect(screenGap(shownInitial(), region)).toBeGreaterThan(0.5); // 시험 자체 확인
     await tellRegion(region);
     expect(labelHosts()).toHaveLength(2);
     expectLabelsFrom(region);
@@ -561,10 +600,8 @@ describe('§22 막는 2 — 맞춤 목표 영역이 initialRegion과 같으면(�
     await remount({ stops });
     await mapReady();
     const target = targetRegion() as Region;
-    // 시험 자체 확인: 목표 영역이 이 파일의 "같은 영역"으로 initialRegion과 같다
-    expect(Math.abs(target.latitude - firstRegion().latitude)).toBeLessThanOrEqual(1e-6);
-    expect(Math.abs(target.longitude - firstRegion().longitude)).toBeLessThanOrEqual(1e-6);
-    expect(Math.abs(target.longitudeDelta / firstRegion().longitudeDelta - 1)).toBeLessThanOrEqual(1e-3);
+    // 시험 자체 확인: 목표 영역이 "같은 영역"(0.5pt)으로 지도가 보여 주는 처음 영역과 같다
+    expect(screenGap(shownInitial(), target)).toBeLessThanOrEqual(0.5);
     const region = reportedInitial();
     await tellRegion(region);
     expect(labelHosts()).toHaveLength(2);
