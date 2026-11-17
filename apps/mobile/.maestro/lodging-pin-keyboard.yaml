@@ -4,6 +4,11 @@
 #     --test-output-dir=.maestro/screenshots/lodging-pin-keyboard -e METRO_URL=http://127.0.0.1:<Metro 포트> .maestro/lodging-pin-keyboard.yaml
 # 화면 키보드가 떠야 한다: 시뮬레이터 I/O > Keyboard > Connect Hardware Keyboard를 끈다 (defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false).
 # 원인(11-17): 글을 치는 동안 키보드 "숨김" 신호가 잠깐 와서 시트가 내려갔다 올라오는 사이에 누른 버튼이 키보드 위로 떨어졌다 -> 칸이 포커스인 동안은 시트를 내리지 않게 고침
+# §22 막는 1: a2 이름 칸에는 inputText를 쓰지 않는다 (Maestro가 글을 넣으면 화면 키보드가 사라져 "키보드가 열린 채"를 거치지 않는다).
+#   칸을 눌러 키보드를 띄우고, 화면 키보드의 자판(접근성 이름 "ㅊ" "ㅣ" ...)을 하나씩 눌러 "친구 집"을 친다 -> 키보드가 보이는지 확인 -> [여기로 정했어] 한 번.
+#   시뮬레이터 화면 키보드가 한국어(두벌식) 자판으로 떠야 한다 (자판 이름으로 누른다).
+#   §22 확인(11-17): 고치기 전 코드(5a822ad의 lodging-pick-screen.tsx 변경을 되돌림)에서도 이 흐름은 통과했다 — 키보드가 열린 채로는 숨김 신호가 오지 않아서.
+#   §21에서 실패한 것은 "칸이 포커스인데 키보드만 사라진" 상태였다 (그때 시뮬레이터에서 inputText 뒤 키보드가 사라짐). 그 상태를 만드는 흐름은 아직 없다
 # 검색 글 "친구 집 근처": 이름 · 주소 모두 0건 (가짜 공급자)
 appId: com.csh0616.tripfriends
 ---
@@ -90,10 +95,24 @@ appId: com.csh0616.tripfriends
     timeout: 10000
 - tapOn:
     id: "pick-label"
-- inputText: "친구 집"
+# 키보드를 띄운다 (칸만 누름). 자판이 보여야 한다
 - waitForAnimationToEnd:
     timeout: 3000
-# 키보드가 실제로 떠 있는 증거 스크린샷 (시트가 키보드 위, [여기로 정했어]가 보임)
+- assertVisible: "ㅊ"
+# 자판을 눌러 한글로 친다: 친구 집 (마지막 "집"은 조합 중인 채로 둔다)
+- tapOn: "ㅊ"
+- tapOn: "ㅣ"
+- tapOn: "ㄴ"
+- tapOn: "ㄱ"
+- tapOn: "ㅜ"
+- tapOn: "space"
+- tapOn: "ㅈ"
+- tapOn: "ㅣ"
+- tapOn: "ㅂ"
+- waitForAnimationToEnd:
+    timeout: 3000
+# 키보드가 열린 채인 증거: 자판과 [여기로 정했어]가 함께 보인다 (스크린샷)
+- assertVisible: "ㅊ"
 - assertVisible:
     id: "pick-confirm"
 - takeScreenshot: lodging-pin-keyboard-1-keyboard-open
