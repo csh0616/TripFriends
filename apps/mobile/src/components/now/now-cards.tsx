@@ -5,6 +5,8 @@ import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { MonoText } from '@/components/trips/parts';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
+import { LockIcon } from '@/components/planning/icons';
+import { PrimaryButton } from '@/components/planning/primary-button';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { HoursChipView, StatusChip } from '@/components/planning/status-chip';
 import { minutesOfAt, toMinutes } from '@/lib/demo-clock';
@@ -12,7 +14,7 @@ import { withParticle } from '@/lib/particle';
 import { sourceLabel } from '@/lib/source-label';
 import type { NowCard, NowCourseItem, NowFact, NowProposal, NowT06Proposal } from '@/lib/now-api';
 import { hoursView, todayHoursText } from '@/lib/today-hours-text';
-import { hoursRangeText, timeRange } from '@/planning/format';
+import { hoursRangeText } from '@/planning/format';
 import { layout } from '@/planning/layout';
 import { color, googleText, radius, space, text } from '@/planning/theme';
 
@@ -315,16 +317,20 @@ export function NowCardView({
       );
     }
     case 'T-07':
+      // TASK-015 §24 2(보드 ①-30대로): 자물쇠 + "고정 일정 · 곧 출발" · 제목 · 장소 줄 "{장소} {시작} 시작" · "N분 뒤에 출발해"(0분이면 "지금 출발해") · "{시각} 출발". 진행 막대 없음
       return (
         <Shell id="card-T-07" main={main}>
-          <Text style={text('label', 'muted')}>고정 일정이 곧이야</Text>
+          <View style={styles.labelRow}>
+            <LockIcon color={color.muted} size={layout.factIcon} />
+            <Text style={text('label', 'muted')}>고정 일정 · 곧 출발</Text>
+          </View>
+          <Text style={text('title')}>{card.fixed.title}</Text>
           <View style={styles.titleRow}>
-            {/* §14: 고정 일정 제목 + 시작~끝 시각 ("저녁 예약 · 18:30–19:30") */}
-            <MonoText timesOnly value={`${card.fixed.title} \u00b7 ${timeRange(card.fixed.start, card.fixed.end)}`} base={{ ...text('title'), flexGrow: 1, flexShrink: 1 }} />
+            <MonoText timesOnly value={`${card.fixed.name} ${card.fixed.start} 시작`} base={{ ...text('body'), flexShrink: 1 }} />
             <FactChip facts={card.fixed.facts} />
           </View>
-          <MonoText timesOnly value={`${card.leave_by}까지 출발해야 해`} base={text('body')} />
-          {card.leave_in_min > 0 ? <BigMinutes value={card.leave_in_min} unit="분 뒤" /> : <Text style={text('heading')}>지금 출발해</Text>}
+          {card.leave_in_min > 0 ? <BigMinutes value={card.leave_in_min} unit="분 뒤에 출발해" /> : <Text style={text('heading')}>지금 출발해</Text>}
+          <MonoText timesOnly value={`${card.leave_by} 출발`} base={text('caption', 'muted')} />
         </Shell>
       );
     case 'T-08': {
@@ -345,9 +351,9 @@ export function NowCardView({
           {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
           <Text numberOfLines={1} adjustsFontSizeToFit style={text('title')}>{minutes != null && minutes > 0 ? `숙소까지 ${minutes}분` : '숙소로 돌아가자'}</Text>
           {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
+          {/* TASK-015 §24 1: 하루 끝에 할 일이 이것뿐이라 주 버튼(52, 주황). T-08이 메인이면 화면의 주황 주 버튼은 이것 하나 */}
           {mapUrl != null && !rehearsal ? (
-            <SecondaryButton
-              small
+            <PrimaryButton
               testID="home-directions-button"
               label="숙소로 길 안내"
               onPress={() => {
@@ -365,6 +371,7 @@ const styles = StyleSheet.create({
   card: { gap: space['space-2'] },
   sub: { backgroundColor: color['bg-2'], borderRadius: radius['r-lg'], padding: space['space-4'] },
   grow: { flexShrink: 1, flexGrow: 1 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-1'] },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], flexWrap: 'wrap' },
   // 고르는 칸: 안 골랐을 때도 테두리 자리를 같은 굵기로 잡아 골라도 모양이 안 움직인다
   choice: {

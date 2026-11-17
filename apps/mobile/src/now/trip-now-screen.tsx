@@ -609,15 +609,21 @@ export function TripNowScreen({
 
   // ---------- 시트 ----------
   // 연습 중엔 중간 단 윗변이 보드 자리 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
+  // TASK-015 §24(17): 맨 위 단의 윗변은 위 버튼 줄 아래 + 8보다 올라가지 않는다 (task-015-design §12-4: 손잡이 · 위 버튼 줄이 안 가려지게)
+  const sheetTopMin = insets.top + rehTop + layout.header + space['space-2'];
   const snapPoints = useMemo(() => {
     const total = areaHeight || windowHeight;
     return layout.sheetFractions.map((fraction, index) => {
       if (rehearsal && index === 1) return rehSheetHeight(total);
       if (rehearsal && index === 2) return Math.max(rehSheetHeight(total, layout.rehSheetTopUp), rehSheetHeight(total) + 1); // 위로 끌면 윗변 417 (TASK-015 §B3)
+      if (index === layout.sheetFractions.length - 1 && total > 0) {
+        const room = (total - sheetTopMin) / total;
+        if (room < fraction && room > layout.sheetFractions[index - 1]) return `${Math.floor(room * 1000) / 10}%`;
+      }
       return `${Math.round(fraction * 100)}%`;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rehearsal, areaHeight, windowHeight]);
+  }, [rehearsal, areaHeight, windowHeight, sheetTopMin]);
   const sheetTop = useSharedValue(0);
   const gap = space['space-3'];
   // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)
