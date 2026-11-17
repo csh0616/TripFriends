@@ -8,6 +8,8 @@
 //   pt 환산 = project(base, size, 점) (map-project, 보이는 영역 크기 · 웹 메르카토르). 모서리 = 위도 ± 위도 폭/2, 경도 ± 경도 폭/2. 가운데 = (latitude, longitude)
 //   거리 = 화면 두 점 사이 직선 거리(pt). 0.5pt "정각"은 같음(≤)
 //   shownRegion: 가운데 그대로 · 가로 축척(size.width / 경도 폭 라디안) = 세로 축척(size.height / 메르카토르 세로 폭) · 원래 두 폭 이상이고 한쪽은 원래 폭 그대로
+//     위도 폭 = 도 단위 가운데(latitude) 그대로 두고 위 · 아래로 같은 도만큼 (latitude ± 위도 폭/2). 메르카토르 가운데에서 넓히는 방식보다 실측 알림에 가깝다
+//     (11-17 실측 34.99999664825308: 도 가운데 방식 35와 3.35e-6도, 메르카토르 가운데 방식 34.99999284와 3.81e-6도 차)
 import fc from 'fast-check';
 
 import { project, type Region, type Size } from '@/lib/map-project';
@@ -18,13 +20,22 @@ const rad = (deg: number) => (deg * Math.PI) / 180;
 const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + rad(lat) / 2));
 const unmerc = (y: number) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
 
-/** 처음 영역(35.0, 135.0, 경도 폭 0.05)을 지도가 보여 주는 모양 — 위도 폭은 한 배율로 계산 */
+/** 도 단위 가운데 lat에서 위 · 아래로 같은 도만큼 넓혀 메르카토르 세로 폭이 span이 되는 위도 폭 (반으로 나눠 찾기) */
+function latDeltaFor(lat: number, span: number): number {
+  let lo = 0;
+  let hi = 2 * (90 - Math.abs(lat)) - 1e-9;
+  for (let i = 0; i < 200; i += 1) {
+    const d = (lo + hi) / 2;
+    if (merc(lat + d / 2) - merc(lat - d / 2) < span) lo = d;
+    else hi = d;
+  }
+  return (lo + hi) / 2;
+}
+
+/** 처음 영역(35.0, 135.0, 경도 폭 0.05)을 지도가 보여 주는 모양 — 도 단위 가운데 그대로, 위도 폭은 한 배율로 계산 */
 function initialShown(size: Size = SIZE): Region {
   const lngDelta = 0.05;
-  const mercHalf = (rad(lngDelta) * (size.height / size.width)) / 2;
-  const north = unmerc(merc(35.0) + mercHalf);
-  const south = unmerc(merc(35.0) - mercHalf);
-  return { latitude: 35.0, longitude: 135.0, latitudeDelta: north - south, longitudeDelta: lngDelta };
+  return { latitude: 35.0, longitude: 135.0, latitudeDelta: latDeltaFor(35.0, (rad(lngDelta) * size.height) / size.width), longitudeDelta: lngDelta };
 }
 
 /** base 화면에서 dx · dy pt 옮긴 영역 (가운데만 옮김, 두 폭 그대로) */
@@ -165,15 +176,12 @@ const INITIAL: Region = { latitude: 35.0, longitude: 135.0, latitudeDelta: 0.05,
 /** frontend 시뮬레이터 실측 알림 (보이는 지도 영역 402×672) */
 const MEASURED_ALERT: Region = { latitude: 34.99999664825308, longitude: 135, latitudeDelta: 0.06846607929220738, longitudeDelta: 0.04999972879886627 };
 
-/** 시험 쪽 "보여 주는 모양" (가운데 그대로 · 작은 축척 한 배율 · 남는 축만 넓힘) */
+/** 시험 쪽 "보여 주는 모양": 도 단위 가운데(latitude) 그대로 · 작은 축척 한 배율 · 남는 축만 넓힘 (위도 폭은 도 가운데에서 위 · 아래로 같은 도만큼) */
 function shownOracle(r: Region, size: Size): Region {
   const lngRad = rad(r.longitudeDelta);
-  const top = merc(r.latitude + r.latitudeDelta / 2);
-  const bottom = merc(r.latitude - r.latitudeDelta / 2);
-  const scale = Math.min(size.width / lngRad, size.height / (top - bottom));
-  const mid = (top + bottom) / 2;
-  const half = size.height / scale / 2;
-  return { latitude: r.latitude, longitude: r.longitude, latitudeDelta: unmerc(mid + half) - unmerc(mid - half), longitudeDelta: ((size.width / scale) * 180) / Math.PI };
+  const mercSpan = merc(r.latitude + r.latitudeDelta / 2) - merc(r.latitude - r.latitudeDelta / 2);
+  const scale = Math.min(size.width / lngRad, size.height / mercSpan);
+  return { latitude: r.latitude, longitude: r.longitude, latitudeDelta: latDeltaFor(r.latitude, size.height / scale), longitudeDelta: ((size.width / scale) * 180) / Math.PI };
 }
 
 /** base 화면에서 other의 가운데 · 네 모서리 중 가장 먼 차 (pt) */

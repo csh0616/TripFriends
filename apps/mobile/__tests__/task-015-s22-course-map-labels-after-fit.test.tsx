@@ -32,7 +32,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { COURSE_LABEL_FIT_WAIT_MS, type CourseStop } from '@/components/now/map-adapter';
 import { CourseMapScreen } from '@/components/planning/course-map-screen';
-import { fitTargetRegion, type Region } from '@/lib/map-project';
+import { fitTargetRegion, metersPerPoint, scaleBar, type Region } from '@/lib/map-project';
 import { resolvePinOverlap, type PinOverlapInput, type PinOverlapResult, type Rect } from '@/lib/pin-overlap';
 import { sameRegionOnScreen, shownRegion } from '@/lib/region-match';
 
@@ -465,17 +465,24 @@ describe('§22 막는 2 (A ①) — 영역 보고가 한 번도 없이 기다림
 //   비교 기준 = 지도가 initialRegion을 실제로 보여 주는 모양(shownRegion: 가운데 · 경도 폭 그대로, 위도 폭은 한 배율로 넓어짐 — 세로로 긴 화면).
 //   initialRegion 값(0.05 × 0.05) 그대로와 네 모서리를 비교하면 위도 폭이 달라 늘 "다름"이 된다 (질문으로 올림)
 
-/** 시험 쪽 "보여 주는 모양": 가운데 그대로, 영역이 다 들어가는 한 배율(작은 축척), 남는 축 폭만 넓힘 */
+/** 도 단위 가운데 lat에서 위 · 아래로 같은 도만큼 넓혀 메르카토르 세로 폭이 span이 되는 위도 폭 (반으로 나눠 찾기) */
+function latDeltaFor(lat: number, span: number): number {
+  let lo = 0;
+  let hi = 2 * (90 - Math.abs(lat)) - 1e-9;
+  for (let i = 0; i < 200; i += 1) {
+    const d = (lo + hi) / 2;
+    if (merc(lat + d / 2) - merc(lat - d / 2) < span) lo = d;
+    else hi = d;
+  }
+  return (lo + hi) / 2;
+}
+
+/** 시험 쪽 "보여 주는 모양": 도 단위 가운데 그대로 · 작은 축척 한 배율 · 남는 축만 넓힘 (task-015-s22-region-match와 같은 계산) */
 function shownOracle(r: Region, size: { width: number; height: number }): Region {
   const lngRad = rad(r.longitudeDelta);
   const mercSpan = merc(r.latitude + r.latitudeDelta / 2) - merc(r.latitude - r.latitudeDelta / 2);
   const scale = Math.min(size.width / lngRad, size.height / mercSpan);
-  const lngDelta = ((size.width / scale) * 180) / Math.PI;
-  const mercHalf = size.height / scale / 2;
-  const mid = (merc(r.latitude + r.latitudeDelta / 2) + merc(r.latitude - r.latitudeDelta / 2)) / 2;
-  const north = unmerc(mid + mercHalf);
-  const south = unmerc(mid - mercHalf);
-  return { latitude: r.latitude, longitude: r.longitude, latitudeDelta: north - south, longitudeDelta: lngDelta };
+  return { latitude: r.latitude, longitude: r.longitude, latitudeDelta: latDeltaFor(r.latitude, size.height / scale), longitudeDelta: ((size.width / scale) * 180) / Math.PI };
 }
 
 /** 지도가 보여 주는 처음 영역 (보이는 지도 영역 크기로) */
@@ -697,5 +704,137 @@ describe('§22 막는 2 — 지도 크기 · 떠 있는 판 크기를 모르면 
     await mapReady();
     await tellRegion(fitEnd());
     expect(labelHosts()).toHaveLength(2);
+  });
+});
+
+// ---------- 축척 막대도 이름표와 같은 "확정된 영역" (승현 11-17) ----------
+// 근거(원문 요지): "축척 막대도 이름표와 같은 확정된 영역(맞춤 뒤 영역, 걸러진 알림 제외)을 써. 그 전엔 축척 막대를 그리지 마.
+//   기다림 시간이 지나 목표 영역으로 그릴 때도 이름표와 같은 영역. 이름표와 축척이 확정된 영역을 한 곳에서 받아 쓰게".
+// 계약 (이 파일이 정한 것): 축척 막대 = testID `map-scale`(accessibilityLabel "축척 <글>", 안의 막대 View style.width).
+//   기대 막대 = scaleBar(metersPerPoint(R, 보이는 지도 영역 폭)). 확정된 영역이 없으면 `map-scale` 없음.
+//   "한 곳에서 받음"은 매 단계마다 이름표(expectLabelsFrom)와 축척이 같은 R로 계산됐는지(둘 다 없거나 둘 다 R)로 본다
+
+const scaleHost = () => root().queryAll((h) => h.props.testID === 'map-scale')[0];
+
+function expectScaleFrom(region: Region | null) {
+  const host = scaleHost();
+  if (region === null) {
+    expect(host).toBeUndefined();
+    return;
+  }
+  expect(host).toBeDefined();
+  const bar = scaleBar(metersPerPoint(region, visibleFrame().width));
+  expect(bar).not.toBeNull(); // 시험 자체 확인
+  const barView = host.queryAll((inner) => [inner.props.style].flat().some((st: any) => st && typeof st.width === 'number'))[0];
+  const width = [barView?.props.style].flat().find((st: any) => st && typeof st.width === 'number')?.width;
+  expect({ label: host.props.accessibilityLabel, width: Math.round((width ?? NaN) * 100) / 100 }).toEqual({ label: `축척 ${bar!.label}`, width: Math.round(bar!.width * 100) / 100 });
+}
+
+/** 이름표와 축척이 둘 다 없거나, 둘 다 region으로 계산됐다 */
+function expectBothFrom(region: Region | null) {
+  if (region === null) expect(labelHosts()).toHaveLength(0);
+  else {
+    expect(labelHosts()).toHaveLength(2);
+    expectLabelsFrom(region);
+  }
+  expectScaleFrom(region);
+}
+
+describe('§22 막는 2 — 축척 막대는 확정된 영역(이름표와 같은 영역)으로만', () => {
+  test('T15_S22_2_S_시험_자체_확인_처음_영역과_맞춤_영역의_축척_막대가_다르다', async () => {
+    await mount();
+    await mapReady();
+    const w = visibleFrame().width;
+    expect(scaleBar(metersPerPoint(shownInitial(), w))).not.toEqual(scaleBar(metersPerPoint(fitEnd(), w)));
+  });
+
+  test('T15_S22_2_S_처음_그린_직후(확정_전)_축척_막대_없음', async () => {
+    await mount();
+    expectScaleFrom(null);
+  });
+
+  test('T15_S22_2_S_맞춤_전_영역이_와도_축척_막대_없음', async () => {
+    await mount();
+    await tellRegion(firstRegion());
+    expectBothFrom(null);
+  });
+
+  test('T15_S22_2_S_맞춤_뒤_걸러진_처음_영역(0.05)_알림_뒤에도_축척_막대_없음', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await tellRegion(reportedInitial());
+    expectBothFrom(null);
+  });
+
+  test('T15_S22_2_S_맞춤_영역이_오면_그_영역의_축척_(이름표와_같은_영역)', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await tellRegion(reportedInitial());
+    const fitted = fitEnd();
+    await tellRegion(fitted);
+    expectBothFrom(fitted);
+  });
+
+  test('T15_S22_2_S_영역_보고_없이_기다림_시간이_되면_목표_영역의_축척_(1ms_전엔_없음)', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    const target = targetRegion() as Region;
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS - 1);
+    });
+    expectBothFrom(null);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1);
+    });
+    expectBothFrom(target);
+  });
+
+  test('T15_S22_2_S_걸러진_알림만_오고_기다림_시간이_되면_목표_영역의_축척', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await tellRegion(reportedInitial());
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS);
+    });
+    expectBothFrom(targetRegion() as Region);
+  });
+
+  test('T15_S22_2_S_목표_영역으로_그린_뒤_늦은_실제_영역이_오면_축척도_그_영역으로_다시', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS);
+    });
+    const target = targetRegion() as Region;
+    const late: Region = { ...target, latitude: target.latitude + target.latitudeDelta * 0.1, latitudeDelta: target.latitudeDelta * 3, longitudeDelta: target.longitudeDelta * 3 };
+    expect(scaleBar(metersPerPoint(late, visibleFrame().width))).not.toEqual(scaleBar(metersPerPoint(target, visibleFrame().width))); // 시험 자체 확인
+    await tellRegion(late);
+    expectBothFrom(late);
+  });
+
+  test('T15_S22_2_S_한_곳에서_받음_맞춤_전_영역→준비→걸러진_알림→맞춤_영역→움직인_영역_매_단계_이름표와_축척이_같은_영역', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await tellRegion(firstRegion());
+    expectBothFrom(null);
+    await mapReady();
+    expectBothFrom(null);
+    await tellRegion(reportedInitial());
+    expectBothFrom(null);
+    const fitted = fitEnd();
+    await tellRegion(fitted);
+    expectBothFrom(fitted);
+    const moved: Region = { ...fitted, latitude: fitted.latitude + fitted.latitudeDelta * 0.1, latitudeDelta: fitted.latitudeDelta * 3, longitudeDelta: fitted.longitudeDelta * 3 };
+    await tellRegion(moved);
+    expectBothFrom(moved);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS * 2);
+    });
+    expectBothFrom(moved); // 기다림 시간이 지나도 목표 영역으로 돌아가지 않는다
   });
 });
