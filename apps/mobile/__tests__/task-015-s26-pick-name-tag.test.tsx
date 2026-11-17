@@ -1,0 +1,424 @@
+/// <reference types="jest" />
+// TASK-015 §26 막는 1: a2 "지도에서 찍기" — 찍은 핀 옆에 사용자가 쓴 이름표가 보인다.
+// 로직 · 가드레일만 본다 (이름표가 있나 · 글 · 자리 후보 · 모양 값 28 · 테두리). 가짜 지도 위 화면 테스트 — 실제로 보이는지는 Maestro · 스크린샷 몫.
+// 근거: TASK-015 §26 "막는 1건"(reviewer 6차 78장: 지도 코드에 이름표 자체가 없음 -> §1-3대로 보인다. ②-06a 이름표 모양 · 자리 후보(위 -> 오른쪽 -> 왼쪽 -> 아래),
+//       이름 칸이 비면 이름표 없음, 치는 대로 바뀜) · docs/design/reviews/task-015-design.md §1-3 이름표 줄("②-06a name tag(흰 알약 28 · 12/16·600) ·
+//       위치 후보 순서 위→오른쪽→왼쪽→아래 · 사용자가 쓴 이름이 있으면 보임") · §1-3 pin-pick(지름 32, 중심 = 찍은 좌표) · pick-area(반지름 64) ·
+//       §13-6 "a2 키보드 열림: 범위 원 · 이름표 '친구 집' 보임" · §13-6 크게 보기 "이름표 높이 28 + 테두리 #E5E7EB 1" · §12 하-2(보드 B6 = 28 + #E5E7EB 1) ·
+//       task-014-design §11-3 B6 이름표 자리(높이 28 · 핀과 위 4 · 옆 6 · 화면 가장자리에서 8 안쪽 · 모두 안 되면 뺌) ·
+//       TASK-015 §14 Q3(이름은 앞뒤 공백을 자른다, 자른 뒤 빈 글이면 없음 — @/lib/create-trip trimLabel)
+//
+// 계약 (이 파일이 정한 것):
+//   이름표 = `pick-map`(MapView) 안의 Marker testID `map-pin-label` (크게 보기 · 지금 화면과 같은 ②-06a 이름표 부품). 많아야 1개
+//     Marker coordinate = 이름표 가운데 (anchor CENTER). 안쪽에 style.width가 숫자인 상자(= 이름표 폭)가 있고, 높이는 28
+//     글 = 이름 칸(`pick-label`) 글의 앞뒤 공백을 자른 것. 자른 뒤 비면 이름표 없음. 글을 바꾸면 다음 그림에서 바로 바뀐다(지도 영역 알림을 다시 기다리지 않는다)
+//   지도 영역: `pick-map`의 onRegionChangeComplete로 받는다. region은 보이는 영역(화면 390×844에서 MapView mapPadding을 뺀 곳)을 채운다
+//     (__tests__/task-015-s20-course-map-visible-area.test.tsx와 같은 계약). 시험은 영역 알림을 준 뒤에만 이름표 자리를 본다 (알림 전은 보지 않음 — 질문)
+//   자리: 찍은 핀(지름 32, 반지름 16) 화면 점 (px, py), 이름표 폭 w, 높이 28.
+//     위 (px − w/2, py − 16 − 4 − 28) -> 오른쪽 (px + 16 + 6, py − 14) -> 왼쪽 (px − 16 − 6 − w, py − 14) -> 아래 (px − w/2, py + 16 + 4)
+//     화면 가장자리에서 8 안쪽이 아닌 후보는 건너뛴다(밀어 넣지 않는다, §12 중-4)
+//   범위 원(pick-area 반지름 64)은 막는 것이 아니다 — 네 후보 모두 핀 중심에서 64 안이라 막는 것이면 이름표가 늘 빠진다(§1-3 "보임"과 어긋남)
+//   떠 있는 판(위 버튼 줄 · 시트)과의 여유는 문서에 a2 값이 없어 이 파일은 묻지 않는다: 모든 경우 판과 4 넘게 떨어진 자리만 쓴다 (질문)
+//   키보드: 이름 칸 포커스 -> 키보드 336 -> 시트가 올라가고 지도는 핀을 띠 가운데로 민다(§24). 그 뒤 영역 알림이 오면 이름표가 새 핀 화면 자리 옆에 있다
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import fc from 'fast-check';
+import { DeviceEventEmitter, Dimensions, StyleSheet } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+import { project, unproject, type Region } from '@/lib/map-project';
+import { LodgingPickScreen, type LodgingPickResult, type PickedLodging } from '@/trips/lodging-pick-screen';
+
+import { mapControl } from '../test-support/maps-mock';
+
+const WIDTH = 390;
+const HEIGHT = 844;
+const METRICS = { frame: { x: 0, y: 0, width: WIDTH, height: HEIGHT }, insets: { top: 47, left: 0, right: 0, bottom: 34 } };
+const CENTER = { lat: 34.6662, lng: 135.501 }; // 시드 v3 center (§9 Q6)
+const SPOT = { lat: 34.657913, lng: 135.506271 }; // 찍은 자리 (지어낸 값, 도시 중심에서 약 1km)
+const KEYBOARD = 336;
+const PIN_R = 16; // pin-pick 지름 32 (§1-3)
+const LABEL_H = 28; // ②-06a 이름표 높이 (§13-6 · §12 하-2)
+const GAP_TOP = 4; // B6: 핀과 위 4
+const GAP_SIDE = 6; // B6: 옆 6
+const EDGE = 8; // B6: 화면 가장자리에서 8 안쪽
+const LNG_DELTA = 0.02; // 시험이 고른 지도 축척 (값 자체는 상관없다)
+const NAME = '친구 집'; // §13-6 · §12 중-2의 예
+
+type Host = { props: Record<string, any>; queryAll: (pick: (host: Host) => boolean) => Host[] };
+type Rect = { x: number; y: number; width: number; height: number };
+type Frame = { x: number; y: number; width: number; height: number };
+type Side = 'top' | 'right' | 'left' | 'bottom';
+
+const root = () => screen.root as unknown as Host;
+const rad = (deg: number) => (deg * Math.PI) / 180;
+const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + rad(lat) / 2));
+const unmerc = (y: number) => ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
+
+const keyboardEvent = (height: number) => ({
+  endCoordinates: { height, screenY: HEIGHT - height, screenX: 0, width: WIDTH },
+  startCoordinates: { height: 0, screenY: HEIGHT, screenX: 0, width: WIDTH },
+  duration: 0,
+  easing: 'keyboard',
+  isEventFromThisApp: true,
+});
+
+function pickMap(): Host {
+  const map = root().queryAll((h) => h.props.mapElement === 'MapView' && h.props.testID === 'pick-map')[0];
+  expect(map).toBeDefined(); // 시험 자체 확인: a4가 아니라 지도
+  return map;
+}
+
+/** 지금 MapView mapPadding을 뺀 보이는 영역 (화면 좌표) */
+function frameNow(): Frame {
+  const mp = (pickMap().props.mapPadding ?? {}) as Record<string, number | undefined>;
+  const [top, bottom, left, right] = [mp.top ?? 0, mp.bottom ?? 0, mp.left ?? 0, mp.right ?? 0];
+  return { x: left, y: top, width: WIDTH - left - right, height: HEIGHT - top - bottom };
+}
+
+/** 좌표 at이 보이는 영역 frame 안에서 화면 점 (px, py)에 오는 지도 영역 (가로 · 세로 축척 같음) */
+function regionPutting(at: { lat: number; lng: number }, point: { x: number; y: number }, frame: Frame): Region {
+  const west = at.lng - ((point.x - frame.x) / frame.width) * LNG_DELTA;
+  const span = rad(LNG_DELTA) * (frame.height / frame.width);
+  const topMerc = merc(at.lat) + ((point.y - frame.y) / frame.height) * span;
+  const north = unmerc(topMerc);
+  const south = unmerc(topMerc - span);
+  return { latitude: (north + south) / 2, longitude: west + LNG_DELTA / 2, latitudeDelta: north - south, longitudeDelta: LNG_DELTA };
+}
+
+async function regionSettles(region: Region) {
+  await act(async () => {
+    fireEvent(pickMap() as never, 'regionChangeComplete', region);
+  });
+}
+
+/** 찍은 핀이 화면 점 point에 오게 지도 영역 알림을 준다. 돌려준 값으로 화면 점을 다시 계산한다 */
+async function pinSettlesAt(pin: { lat: number; lng: number }, point: { x: number; y: number }) {
+  const frame = frameNow();
+  const region = regionPutting(pin, point, frame);
+  await regionSettles(region);
+  return { region, frame };
+}
+
+const styleOf = (host: Host | undefined) => (StyleSheet.flatten(host?.props.style) ?? {}) as Record<string, any>;
+
+function tags(): Host[] {
+  return pickMap().queryAll((h) => h.props.mapElement === 'Marker' && h.props.testID === 'map-pin-label');
+}
+
+function tagBox(tag: Host): Host | undefined {
+  return tag.queryAll((inner) => typeof styleOf(inner).width === 'number')[0];
+}
+
+function tagText(tag: Host): string {
+  const texts = tag.queryAll((inner) => typeof inner.props.children === 'string' || (Array.isArray(inner.props.children) && inner.props.children.every((c: unknown) => typeof c === 'string')));
+  const node = texts[0];
+  if (!node) return '';
+  return [node.props.children].flat().join('');
+}
+
+/** 그린 이름표의 화면 사각형 (Marker 좌표 = 가운데) */
+function tagRect(tag: Host, region: Region, frame: Frame): Rect {
+  const at = project(region, frame, tag.props.coordinate);
+  const width = styleOf(tagBox(tag)).width as number;
+  return { x: at.x - width / 2, y: at.y - LABEL_H / 2, width, height: LABEL_H };
+}
+
+function candidate(side: Side, pin: { x: number; y: number }, w: number): Rect {
+  switch (side) {
+    case 'top':
+      return { x: pin.x - w / 2, y: pin.y - PIN_R - GAP_TOP - LABEL_H, width: w, height: LABEL_H };
+    case 'right':
+      return { x: pin.x + PIN_R + GAP_SIDE, y: pin.y - LABEL_H / 2, width: w, height: LABEL_H };
+    case 'left':
+      return { x: pin.x - PIN_R - GAP_SIDE - w, y: pin.y - LABEL_H / 2, width: w, height: LABEL_H };
+    case 'bottom':
+      return { x: pin.x - w / 2, y: pin.y + PIN_R + GAP_TOP, width: w, height: LABEL_H };
+  }
+}
+
+const inside = (r: Rect) => r.x >= EDGE && r.y >= EDGE && r.x + r.width <= WIDTH - EDGE && r.y + r.height <= HEIGHT - EDGE;
+
+/** 이름표 하나가 있고, 글이 name, 자리가 핀 화면 점 pin의 side 후보 (0.5 이내) */
+function expectTagAt(side: Side, pin: { x: number; y: number }, region: Region, frame: Frame, name = NAME) {
+  const all = tags();
+  expect(all).toHaveLength(1);
+  expect(tagText(all[0])).toBe(name);
+  const drawn = tagRect(all[0], region, frame);
+  expect(drawn.width).toBeGreaterThan(0);
+  const want = candidate(side, pin, drawn.width);
+  expect(Math.abs(drawn.x - want.x)).toBeLessThan(0.5);
+  expect(Math.abs(drawn.y - want.y)).toBeLessThan(0.5);
+  return drawn;
+}
+
+async function show(label: string | null = NAME, pin: { lat: number; lng: number } | null = SPOT) {
+  const confirm = jest.fn(async (_picked: PickedLodging): Promise<LodgingPickResult> => ({ ok: true }));
+  await render(
+    <SafeAreaProvider initialMetrics={METRICS}>
+      <LodgingPickScreen cityCode="osaka" center={CENTER} onConfirm={confirm} onBack={jest.fn()} initial={pin ? { pin, label, tooFar: false } : undefined} />
+    </SafeAreaProvider>,
+  );
+}
+
+async function type(text: string) {
+  await act(async () => {
+    fireEvent.changeText(screen.getByTestId('pick-label'), text);
+  });
+}
+
+async function keyboardShow() {
+  await act(async () => {
+    fireEvent(screen.getByTestId('pick-label'), 'focus');
+  });
+  await act(async () => {
+    DeviceEventEmitter.emit('keyboardWillShow', keyboardEvent(KEYBOARD));
+  });
+  await act(async () => {
+    DeviceEventEmitter.emit('keyboardDidShow', keyboardEvent(KEYBOARD));
+  });
+}
+
+async function keyboardHide() {
+  await act(async () => {
+    DeviceEventEmitter.emit('keyboardWillHide', keyboardEvent(0));
+  });
+  await act(async () => {
+    DeviceEventEmitter.emit('keyboardDidHide', keyboardEvent(0));
+  });
+  await act(async () => {
+    fireEvent(screen.getByTestId('pick-label'), 'blur');
+  });
+}
+
+let fetchSpy: jest.SpyInstance;
+beforeEach(() => {
+  mapControl.reset();
+  const window = Dimensions.get('window');
+  jest.spyOn(Dimensions, 'get').mockImplementation(() => ({ ...window, width: WIDTH, height: HEIGHT }));
+  fetchSpy = jest.spyOn(globalThis, 'fetch' as never).mockImplementation((() => {
+    throw new Error('a2 화면은 네트워크를 부르지 않는다');
+  }) as never);
+});
+afterEach(() => {
+  fetchSpy.mockRestore();
+  jest.restoreAllMocks();
+});
+
+describe('§26 a2 이름표 — 이름이 있으면 찍은 핀 옆에 보인다', () => {
+  test('T15_S26_이름_칸에_친구_집이면_찍은_핀_위에_이름표_친구_집', async () => {
+    await show(NAME);
+    const point = { x: 195, y: 300 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    expect(frame.height).toBeGreaterThan(0); // 시험 자체 확인
+    const pinAt = project(region, frame, { latitude: SPOT.lat, longitude: SPOT.lng });
+    expect(Math.abs(pinAt.x - point.x)).toBeLessThan(0.01); // 시험 자체 확인: 핀이 고른 화면 점에
+    expect(Math.abs(pinAt.y - point.y)).toBeLessThan(0.01);
+    expectTagAt('top', point, region, frame);
+  });
+
+  test('T15_S26_앞뒤_공백은_잘라서_보인다_가운데_공백은_그대로', async () => {
+    await show(null);
+    const point = { x: 195, y: 300 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    await type('  친구 집 \t');
+    expectTagAt('top', point, region, frame, '친구 집');
+  });
+
+  test('T15_S26_범위_원(반지름_64)_안이어도_위_후보를_쓴다(범위_원은_막는_것이_아니다)', async () => {
+    await show(NAME);
+    const point = { x: 195, y: 300 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    const drawn = expectTagAt('top', point, region, frame);
+    // 시험 자체 확인: 위 후보 가운데는 핀 중심에서 64 안 (범위 원 안)
+    expect(Math.hypot(drawn.x + drawn.width / 2 - point.x, drawn.y + LABEL_H / 2 - point.y)).toBeLessThan(64);
+  });
+});
+
+describe('§26 a2 이름표 모양 — ②-06a 이름표 (높이 28 + 테두리 #E5E7EB 1, 흰 면, 12/16)', () => {
+  test('T15_S26_이름표_높이_28_테두리_1_line색_흰_면_글자_12_16', async () => {
+    await show(NAME);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    const all = tags();
+    expect(all).toHaveLength(1);
+    const box = styleOf(tagBox(all[0]));
+    expect(box.height).toBe(LABEL_H);
+    expect(box.borderWidth).toBe(1);
+    expect(String(box.borderColor).toUpperCase()).toBe('#E5E7EB');
+    expect(String(box.backgroundColor).toUpperCase()).toBe('#FFFFFF');
+    const label = all[0].queryAll((inner) => inner.props.children === NAME)[0];
+    const font = styleOf(label);
+    expect(font.fontSize).toBe(12);
+    expect(font.lineHeight).toBe(16);
+  });
+});
+
+describe('§26 a2 이름표 자리 후보 — 위 -> 오른쪽 -> 왼쪽 -> 아래 (밀어 넣지 않는다)', () => {
+  // 화면 390×844 · 키보드 없음 · 시트 258. 아래 자리는 모두 위 버튼 줄(뒤로 x16–60 · 가운데 알약, y 55–99)과 시트(y ≥ 586)에서 4 넘게 떨어진 곳을 골랐다
+  test('T15_S26_위가_되면_위', async () => {
+    await show(NAME);
+    const point = { x: 195, y: 400 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    expectTagAt('top', point, region, frame);
+  });
+
+  test('T15_S26_위가_화면_왼쪽_8_밖이면_오른쪽', async () => {
+    await show(NAME);
+    const point = { x: 20, y: 400 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    const drawn = expectTagAt('right', point, region, frame);
+    expect(inside(candidate('top', point, drawn.width))).toBe(false); // 시험 자체 확인
+  });
+
+  test('T15_S26_위_오른쪽이_화면_오른쪽_8_밖이면_왼쪽', async () => {
+    await show(NAME);
+    const point = { x: 375, y: 400 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    const drawn = expectTagAt('left', point, region, frame);
+    expect(inside(candidate('top', point, drawn.width))).toBe(false); // 시험 자체 확인
+    expect(inside(candidate('right', point, drawn.width))).toBe(false);
+  });
+
+  test('T15_S26_위_오른쪽_왼쪽이_다_화면_밖이면_아래', async () => {
+    await show(NAME);
+    const point = { x: 340, y: 20 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    const drawn = expectTagAt('bottom', point, region, frame);
+    for (const side of ['top', 'right', 'left'] as const) expect(inside(candidate(side, point, drawn.width))).toBe(false); // 시험 자체 확인
+  });
+
+  test('T15_S26_경계_위_후보가_화면_위_8에_딱_닿으면_위_7.5면_오른쪽', async () => {
+    // 위 후보 y = py − 48. py = 56 -> y 8 (안쪽, 위) · py = 55.5 -> y 7.5 (밖, 오른쪽). 가로는 가운데라 x는 걸리지 않는다
+    await show(NAME);
+    const on = { x: 195, y: 56 + 200 }; // 위 버튼 줄과 떨어지게 먼저 아래에서 폭을 잰다
+    const first = await pinSettlesAt(SPOT, on);
+    const w = tagRect(tags()[0], first.region, first.frame).width;
+    expect(w).toBeGreaterThan(0);
+    // 오른쪽 후보가 화면 오른쪽 8 안쪽에 들어가는 가장 오른쪽 자리(위 버튼 줄의 뒤로 · 가운데 알약과 가로로 먼 곳)
+    const x = WIDTH - EDGE - PIN_R - GAP_SIDE - w - 1;
+    expect(inside(candidate('right', { x, y: 55.5 }, w))).toBe(true); // 시험 자체 확인
+    const atEdge = await pinSettlesAt(SPOT, { x, y: 56 });
+    expectTagAt('top', { x, y: 56 }, atEdge.region, atEdge.frame);
+    const past = await pinSettlesAt(SPOT, { x, y: 55.5 });
+    expectTagAt('right', { x, y: 55.5 }, past.region, past.frame);
+  });
+});
+
+describe('§26 a2 이름 칸이 비면 이름표 없음', () => {
+  test.each([
+    ['이름을 안 쳤음(null)', null],
+    ['빈 글', ''],
+    ['공백만', '   '],
+    ['탭 · 줄바꿈만', ' \t\n '],
+  ])('T15_S26_이름_칸_%s이면_이름표_없음', async (_what, label) => {
+    await show(label);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    expect(pickMap().queryAll((h) => h.props.testID === 'pin-pick')).not.toHaveLength(0); // 시험 자체 확인: 핀은 있다
+    expect(tags()).toHaveLength(0);
+  });
+
+  test('T15_S26_핀을_찍기_전에는_이름표_없음', async () => {
+    await show(null, null);
+    await regionSettles(regionPutting(CENTER, { x: 195, y: 300 }, frameNow()));
+    expect(tags()).toHaveLength(0);
+  });
+});
+
+describe('§26 a2 이름표는 치는 대로 바뀐다', () => {
+  test('T15_S26_글을_바꾸면_이름표_글이_바로_바뀌고_지우면_사라지고_다시_치면_돌아온다', async () => {
+    await show(null);
+    const point = { x: 195, y: 300 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    expect(tags()).toHaveLength(0);
+    await type('친');
+    expectTagAt('top', point, region, frame, '친');
+    await type('친구 집');
+    expectTagAt('top', point, region, frame, '친구 집');
+    await type('친구 집 2층');
+    expectTagAt('top', point, region, frame, '친구 집 2층');
+    await type('');
+    expect(tags()).toHaveLength(0);
+    await type('  ');
+    expect(tags()).toHaveLength(0);
+    await type('민박');
+    expectTagAt('top', point, region, frame, '민박');
+  });
+
+  test('T15_S26_속성_어떤_글이든_이름표는_자른_글이_있을_때만_있고_글이_자른_글과_같다', async () => {
+    await show(null);
+    const point = { x: 195, y: 400 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    const char = fc.constantFrom(' ', '\t', '\n', '친', '구', '집', 'A', 'b', '1', '·');
+    await fc.assert(
+      fc.asyncProperty(fc.array(char, { maxLength: 30 }), async (chars) => {
+        const text = chars.join('');
+        await type(text);
+        const trimmed = text.trim();
+        if (trimmed === '') expect(tags()).toHaveLength(0);
+        else expectTagAt('top', point, region, frame, trimmed);
+      }),
+      { numRuns: 40 },
+    );
+  });
+});
+
+describe('§26 a2 핀을 다시 찍으면 이름표가 새 핀 옆으로', () => {
+  test('T15_S26_다시_길게_누르면_이름표가_새_핀_위로_옮겨_간다(글은_그대로)', async () => {
+    await show(NAME);
+    const first = { x: 195, y: 300 };
+    const { region, frame } = await pinSettlesAt(SPOT, first);
+    expectTagAt('top', first, region, frame);
+    // 지도는 움직이지 않고(길게 누름은 카메라를 옮기지 않는다) 다른 자리를 찍는다
+    const second = { x: 120, y: 460 };
+    const at = unproject(region, frame, second);
+    await act(async () => {
+      fireEvent(pickMap() as never, 'longPress', { nativeEvent: { coordinate: at } });
+    });
+    expectTagAt('top', second, region, frame);
+  });
+
+  test('T15_S26_새_핀이_화면_오른쪽_끝이면_새_자리에서_다시_후보를_고른다(왼쪽)', async () => {
+    await show(NAME);
+    const { region, frame } = await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    const edge = { x: 375, y: 420 };
+    await act(async () => {
+      fireEvent(pickMap() as never, 'longPress', { nativeEvent: { coordinate: unproject(region, frame, edge) } });
+    });
+    expectTagAt('left', edge, region, frame);
+  });
+});
+
+describe('§26 a2 이름표는 키보드 열림 · 닫힘 모두에서 보인다', () => {
+  test('T15_S26_키보드_닫힘_열림_닫힘_세_장면_모두_이름표_친구_집이_핀_위', async () => {
+    await show(NAME);
+    // 닫힘
+    const closed = { x: 195, y: 300 };
+    const a = await pinSettlesAt(SPOT, closed);
+    expectTagAt('top', closed, a.region, a.frame);
+    // 열림: 시트가 키보드 위로, 지도는 핀을 띠(위 버튼 줄 아래 ~ 시트 윗변) 가운데로 민다 (§24 · §12 중-2)
+    await keyboardShow();
+    const band = frameNow();
+    expect(band.y).toBeGreaterThan(0); // 시험 자체 확인: 띠가 생겼다 (mapPadding.top)
+    expect(band.height).toBeGreaterThan(0);
+    const open = { x: WIDTH / 2, y: band.y + band.height / 2 };
+    const b = await pinSettlesAt(SPOT, open);
+    expectTagAt('top', open, b.region, b.frame);
+    // 열린 채로 글을 바꿔도 바로 바뀐다
+    await type('친구 집 ');
+    expectTagAt('top', open, b.region, b.frame, '친구 집');
+    // 닫힘 (다시)
+    await keyboardHide();
+    const again = { x: 195, y: 320 };
+    const c = await pinSettlesAt(SPOT, again);
+    expectTagAt('top', again, c.region, c.frame, '친구 집');
+  });
+
+  test('T15_S26_키보드가_열린_채_영역_알림이_오기_전에도_이름표가_사라지지_않는다', async () => {
+    // 키보드가 열리면 지도가 움직인다. 움직이는 동안 자리는 보지 않지만, 이름이 있는 한 이름표를 빼지는 않는다 (§13-6 "a2 키보드 열림 · 이름표 보임")
+    await show(NAME);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    expect(tags()).toHaveLength(1);
+    await keyboardShow();
+    expect(tags()).toHaveLength(1);
+    expect(tagText(tags()[0])).toBe(NAME);
+  });
+});
