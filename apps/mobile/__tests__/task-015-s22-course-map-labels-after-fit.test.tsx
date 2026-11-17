@@ -14,9 +14,11 @@
 //   이름표 = Marker testID `map-pin-label`. 번호 핀 = Marker testID `map-pin-<seq>` (이름표 규칙과 상관없이 늘 그린다)
 //   맞춤 끝 영역을 받으면: 이름표 2개(2곳 데모), 이름표 좌표를 그 영역 · 보이는 영역 기준으로 화면 점으로 바꾸면 겹침 함수가 놓은 자리 가운데,
 //     겹침 함수에 넘긴 핀 좌표도 그 영역 기준. 그 뒤 다른 영역이 오면 마지막 영역 기준으로 다시 계산
-//   맞춤 끝 영역이 안 올 때(A): fitToCoordinates를 부른 때부터 COURSE_LABEL_FIT_WAIT_MS 미만이면 이름표 0개, 그 시간이 되면 마지막으로 받은 영역으로 그린다
-//     영역 보고가 한 번도 없었으면 맞춤이 요청한 목표 영역(fitTargetRegion(맞춤에 넘긴 좌표, 보이는 영역 크기, 맞춤 edgePadding))으로 반드시 그리고,
-//     목표 영역이 없으면(null, 예: 경로가 한 점) 처음 영역(MapView initialRegion)으로. 그 뒤 실제 영역이 오면 그 영역으로 다시 계산 (승현 11-17 보충 ①)
+//   맞춤 끝 영역이 안 올 때(A, 승현 11-17 최종): fitToCoordinates를 부른 때부터 COURSE_LABEL_FIT_WAIT_MS 미만이면 이름표 0개, 그 시간이 되면 반드시 그린다.
+//     기준 순서 = 맞춤이 요청한 목표 영역(fitTargetRegion(맞춤에 넘긴 좌표, 보이는 영역 크기, 맞춤 edgePadding)) -> (없으면) 마지막 받은 영역 -> (없으면) initialRegion.
+//     맞춤 "전"에 받은 영역은 이름표 계산에 쓰지 않는다 -> "마지막 받은 영역"은 맞춤 뒤 영역뿐인데, 그게 오면 이미 바로 그리므로 기다림이 끝나는 경우엔 없다.
+//     그래서 목표 영역이 없고(null, 예: 경로가 한 점) 맞춤 전 영역만 받았으면 initialRegion으로 그린다 (시험 T15_S22_2_A1_목표_영역이_없고_맞춤_전_영역만…).
+//     그 뒤 맞춤 뒤 실제 영역이 늦게 오면 그 영역으로 다시 계산
 //     (시간 값 = '@/components/now/map-adapter'의 COURSE_LABEL_FIT_WAIT_MS, 1000ms로 시작 — frontend가 재서 바꿀 수 있어 시험은 상수를 읽어 쓴다, 보충 ②)
 //   크기를 모름: 안전 영역을 모름(SafeAreaProvider 없음 -> 판 위치를 모름. 안전 영역 위쪽 0은 정상 값이라 기다리지 않고 그린다 — 승현 11-17 보충 ③) 또는 창 크기 폭 · 높이 중 하나라도 0 -> 맞춤 끝 영역이 와도 이름표 0개, 번호 핀은 그대로
 //   맞춤 끝 영역 흉내: fitToCoordinates의 edgePadding은 보이는 영역(mapPadding을 뺀 곳) 안쪽 여백으로 보고, 경로 상자가 그 안쪽 끝에 닿는 region을 시험이 계산한다
@@ -296,7 +298,7 @@ describe('§22 막는 2 — 맞춤 끝 영역을 받은 뒤', () => {
   });
 });
 
-describe('§22 막는 2 (A) — 맞춤 끝 영역 보고가 안 오면(카메라가 안 움직임) 기다린 뒤 마지막 영역으로', () => {
+describe('§22 막는 2 (A) — 맞춤 끝 영역 보고가 안 오면(카메라가 안 움직임) 기다린 뒤 목표 영역으로 (맞춤 전 영역은 안 씀)', () => {
   test('T15_S22_2_A_기다림_시간은_0보다_큰_유한한_값', () => {
     expect(Number.isFinite(COURSE_LABEL_FIT_WAIT_MS)).toBe(true);
     expect(COURSE_LABEL_FIT_WAIT_MS).toBeGreaterThan(0);
@@ -314,17 +316,18 @@ describe('§22 막는 2 (A) — 맞춤 끝 영역 보고가 안 오면(카메라
     expect(numberPins()).toHaveLength(2);
   });
 
-  test('T15_S22_2_A_경계_맞춤_뒤_기다림_시간이_되면_마지막으로_받은_영역으로_이름표_2개', async () => {
+  test('T15_S22_2_A_경계_맞춤_전_영역(0.05)만_받고_기다림_시간이_되면_맞춤_전_영역이_아니라_목표_영역_기준으로_이름표_2개', async () => {
     jest.useFakeTimers();
     await mount();
-    const last = firstRegion();
-    await tellRegion(last);
+    await tellRegion(firstRegion()); // 맞춤 전 영역 — 이름표 계산에 쓰지 않는다
     await mapReady();
+    const target = targetRegion();
+    expect(target).not.toBeNull(); // 시험 자체 확인
     await act(async () => {
       await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS);
     });
     expect(labelHosts()).toHaveLength(2);
-    expectLabelsFrom(last);
+    expectLabelsFrom(target as Region);
   });
 
   test('T15_S22_2_A_기다림_시간_전에_맞춤_끝_영역이_오면_바로_그리고_시간이_지나도_그_영역_그대로', async () => {
@@ -407,6 +410,21 @@ describe('§22 막는 2 (A ①) — 영역 보고가 한 번도 없이 기다림
     expect(labelHosts()).toHaveLength(0);
     await act(async () => {
       await jest.advanceTimersByTimeAsync(1);
+    });
+    expect(labelHosts()).toHaveLength(1);
+    expectLabelsFrom(firstRegion());
+  });
+
+  test('T15_S22_2_A1_목표_영역이_없고_맞춤_전_영역만_받았으면_맞춤_전_영역이_아니라_initialRegion_기준으로_이름표_1개', async () => {
+    jest.useFakeTimers();
+    const one: CourseStop[] = [TWO[0]];
+    await mount({ stops: one, home: null });
+    const beforeFit: Region = { ...firstRegion(), latitudeDelta: 0.02, longitudeDelta: 0.02 }; // initialRegion과 다른 맞춤 전 영역
+    await tellRegion(beforeFit);
+    await mapReady();
+    expect(targetRegion()).toBeNull(); // 시험 자체 확인: 한 점 경로는 목표 영역이 없다
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS);
     });
     expect(labelHosts()).toHaveLength(1);
     expectLabelsFrom(firstRegion());
