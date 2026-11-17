@@ -191,7 +191,8 @@ export function P3Screen({
                 {`${d.name} · ${REASON_TEXT[d.reason]}`}
               </Text>
             ))}
-            <Text style={text('body')}>{`숙소까지 ${option.go_home_min}분`}</Text>
+            {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
+            <Text numberOfLines={1} adjustsFontSizeToFit style={text('body')}>{`숙소까지 ${option.go_home_min}분`}</Text>
           </View>
         </>
       ) : null}

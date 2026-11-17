@@ -220,7 +220,8 @@ export function NowCardView({
                   : `${card.leave_at}에 출발, 지금 나서자`
             }
           />
-          <Text style={text('caption', 'muted')}>{`이동 ${card.travel_min}분`}</Text>
+          {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
+          <Text numberOfLines={1} adjustsFontSizeToFit style={text('caption', 'muted')}>{`이동 ${card.travel_min}분`}</Text>
           {url !== null && !rehearsal ? <SecondaryButton small testID="directions-button" label="길 안내" onPress={open} /> : null}
         </Shell>
       );
@@ -341,7 +342,8 @@ export function NowCardView({
       return (
         <Shell id="card-T-08" main={main}>
           <Text style={text('label', 'muted')}>숙소로</Text>
-          <Text style={text('title')}>{minutes != null && minutes > 0 ? `숙소까지 ${minutes}분` : '숙소로 돌아가자'}</Text>
+          {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
+          <Text numberOfLines={1} adjustsFontSizeToFit style={text('title')}>{minutes != null && minutes > 0 ? `숙소까지 ${minutes}분` : '숙소로 돌아가자'}</Text>
           {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
           {mapUrl != null && !rehearsal ? (
             <SecondaryButton
