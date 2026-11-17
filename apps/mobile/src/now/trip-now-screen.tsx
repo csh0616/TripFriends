@@ -4,8 +4,8 @@ import BottomSheet, { BottomSheetScrollView, useGestureEventsHandlersDefault } f
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { AccessibilityInfo, ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
@@ -48,6 +48,7 @@ import { send, type DaySummary, type Request, type Result } from '@/lib/planning
 import { layout } from '@/planning/layout';
 import { color, control, radius, shadow, space, text } from '@/planning/theme';
 
+import { sheetMotion } from './sheet-motion';
 import { useLiveLocation } from './use-live-location';
 
 /** 기기에 저장해 다시 켜도 이 화면으로 돌아오는 값 (§11 Q16, §12 R10) */
@@ -612,7 +613,7 @@ export function TripNowScreen({
   // 연습 중엔 중간 단 윗변이 보드 자리 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
   // TASK-015 §24(17): 맨 위 단의 윗변은 위 버튼 줄 아래 + 8보다 올라가지 않는다 (task-015-design §12-4: 손잡이 · 위 버튼 줄이 안 가려지게)
   const sheetTopMin = insets.top + rehTop + layout.header + space['space-2'];
-  // §24 18번(승현 11-18): 접힌 단 = 지금 메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 아래 끝 + 16, 모든 카드 같은 규칙.
+  // §24 18번(승현 11-18) · §27: 접힌 단 = 지금 메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 아래 끝 + 4, 모든 카드 같은 규칙.
   // §26: 메인 카드가 바뀌면 새 카드를 잴 때까지 앞 카드의 잰 값을 쓴다 (버리면 옛 16%로 내려갔다 다시 올라와 시트가 두 번 움직인다). 메인 카드가 없으면 버린다
   const mainKey = view && visible(view.main) ? view.main.type : null;
   const [mainBoxY, setMainBoxY] = useState(0);
@@ -641,6 +642,14 @@ export function TripNowScreen({
   useEffect(() => {
     lowNow.current = snapPoints[0];
   }, [snapPoints]);
+  // §27(task-015-design §14-5 ②④): 움직임 값은 sheetMotion 한 곳. 기기 "동작 줄이기"면 즉시(0)
+  const reduceMotion = useReduceMotion();
+  const motionNow = sheetMotion(reduceMotion);
+  const sheetAnimation = useMemo(() => ({ duration: motionNow.durationMs, easing: Easing.out(Easing.cubic) }), [motionNow.durationMs]);
+  // ② 메인 카드 종류가 바뀌면 새 카드가 fadeMs 동안 서서히 나타난다 (시트가 옮겨 가는 동안 새 카드가 옛 높이에 먼저 튀어나오지 않게). 첫 그림 · 같은 종류는 그대로
+  const [fadeFrom, setFadeFrom] = useState<{ shown: string | null; fade: boolean }>({ shown: mainKey, fade: false });
+  if (fadeFrom.shown !== mainKey) setFadeFrom({ shown: mainKey, fade: fadeFrom.shown !== null && mainKey !== null });
+  const mainEntering = fadeFrom.fade && motionNow.fadeMs > 0 ? FadeIn.duration(motionNow.fadeMs) : undefined;
   const sheetTop = useSharedValue(0);
   const gap = space['space-3'];
   // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)
@@ -842,8 +851,8 @@ export function TripNowScreen({
           snapPoints={snapPoints}
           onChange={setSheetIndex}
           animatedPosition={sheetTop}
-          // §26: 접힌 단 높이가 바뀌면(메인 카드가 바뀜) 시트가 약 250ms 동안 부드럽게 옮겨 간다. 접힌 단에 있을 때만 보이는 움직임이다 (다른 단의 높이는 그대로라)
-          animationConfigs={SHEET_ANIMATION}
+          // §26 · §27: 접힌 단 높이가 바뀌면(메인 카드가 바뀜) 시트가 sheetMotion 시간(250ms) 동안 부드럽게 옮겨 간다. 접힌 단에 있을 때만 보이는 움직임이다 (다른 단의 높이는 그대로라)
+          animationConfigs={sheetAnimation}
           gestureEventsHandlersHook={sheetGestures}
           enableDynamicSizing={false}
           style={shadow.sheet}
@@ -855,18 +864,20 @@ export function TripNowScreen({
               <>
                 <View testID="now-main" style={styles.mainBox} onLayout={(event) => setMainBoxY(event.nativeEvent.layout.y)}>
                   {mainCard ? (
-                    <NowCardView
-                      card={mainCard}
-                      main
-                      onOpenFailed={showToast}
-                      chosenId={chosen}
-                      onChoose={choose}
-                      onDismiss={dismiss}
-                      onVisit={visit}
-                      lateAt={lateAt}
-                      rehearsal={rehearsal}
-                      onLastLayout={(box) => setLastBox({ y: box.y, height: box.height })}
-                    />
+                    <Animated.View key={mainKey ?? 'none'} entering={mainEntering}>
+                      <NowCardView
+                        card={mainCard}
+                        main
+                        onOpenFailed={showToast}
+                        chosenId={chosen}
+                        onChoose={choose}
+                        onDismiss={dismiss}
+                        onVisit={visit}
+                        lateAt={lateAt}
+                        rehearsal={rehearsal}
+                        onLastLayout={(box) => setLastBox({ y: box.y, height: box.height })}
+                      />
+                    </Animated.View>
                   ) : null}
                   {note === null && reasonHidden(mainCard, view.reason) ? null : (
                     <View testID="now-reason">
@@ -913,10 +924,27 @@ export function TripNowScreen({
 }
 
 /**
- * TASK-015 §26: 시트가 단 사이를 옮겨 갈 때의 움직임 = 250ms 시간 애니메이션 (gorhom 기본 시간과 같은 250ms, 끝에서 천천히 멈춤).
- * 라이브러리가 단 높이 변경 반응을 처음 그릴 때 한 번만 잡아서, 접힌 단일 때만 다른 값을 줄 수 없다 → 끌어 놓을 때도 같은 움직임
+ * TASK-015 §27 · task-015-design §14-5 ④: 기기 설정 "동작 줄이기" (처음 값 + reduceMotionChanged 알림).
+ * 참고: gorhom은 단 높이 변경 반응의 움직임 값을 처음 그릴 때 한 번만 잡는다(그래서 끌어 놓을 때도 같은 움직임, §26).
+ * 중간에 설정이 바뀌어도 reanimated가 기기 "동작 줄이기"를 따라 움직임을 건너뛴다(ReduceMotion.System 기본)
  */
-const SHEET_ANIMATION = { duration: 250, easing: Easing.out(Easing.cubic) };
+function useReduceMotion(): boolean {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((on) => {
+        if (alive) setReduce(on);
+      })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => setReduce(on));
+    return () => {
+      alive = false;
+      subscription?.remove();
+    };
+  }, []);
+  return reduce;
+}
 
 /** §26: gorhom 기본 끌기 처리에 "끌기 시작 · 끝" 알림만 더한다 (끌기 동작은 그대로) */
 function dragAwareGestures(onStart: () => void, onEnd: () => void) {
@@ -948,12 +976,13 @@ function dragAwareGestures(onStart: () => void, onEnd: () => void) {
 const SHEET_HANDLE_ROOM = 2 * layout.sheetHandlePad + layout.sheetHandleHeight;
 
 /**
- * TASK-015 §24 18번 접힌 단 = 손잡이 자리 + 메인 카드 마지막 요소 아래 끝 + 16 (px, 중간 단보다 낮게). 모든 카드 같은 규칙.
+ * TASK-015 §24 18번 · §27 접힌 단 = 손잡이 자리 + 메인 카드 마지막 요소 아래 끝 + 4 (px, 중간 단보다 낮게). 모든 카드 같은 규칙.
  * 아직 못 잰 첫 그림(메인 카드 없음 · 잰 값 전)에만 옛 비율을 쓴다
  */
 function collapsedSnap(fraction: number, lastBottom: number | null, total: number): string | number {
   if (lastBottom === null || total <= 0) return `${Math.round(fraction * 100)}%`;
-  const height = SHEET_HANDLE_ROOM + lastBottom + space['space-4'];
+  // §27(task-015-design §14-5): 여유 16 -> 4. 이유 줄(카드 아래 8)이 접힌 경계 밖으로 나가 윗머리가 비치지 않게
+  const height = SHEET_HANDLE_ROOM + lastBottom + space['space-1'];
   return Math.min(Math.round(height), Math.floor(total * layout.sheetFractions[1]) - 1);
 }
 

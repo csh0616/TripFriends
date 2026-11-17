@@ -1,6 +1,6 @@
 // TASK-006 B6: 여행 중 화면의 카드 부품 T-01·T-02·T-03·T-07·T-08. 서버가 준 값을 그리기만 한다 (카드를 고르지 않는다).
 // 장소가 들어간 카드는 확인 상태 칩(색 + 글자)이 항상 붙는다 (SCREEN-001 §3-2). 장소가 없는 줄(facts가 빈 목록)은 칩이 없다 (§11 Q6).
-import { Children, createContext, useContext } from 'react';
+import { Children, createContext, useContext, type ReactNode } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
@@ -29,17 +29,28 @@ export const reasonHidden = (card: NowCard | null, reason: string): boolean =>
   card !== null && card.type === 'T-08' && card.lodging == null && reason.trim() === NO_LODGING_BODY;
 
 /** 영업시간 칩 자리 (TASK-011 §9 Q10, §14 N9): 확인 상태 칩 / curated 시간대는 "추천 시간대" / 늘 열림은 그 status 칩(보통 확인됨) + "늘 열려 있어" */
-function FactChip({ facts }: { facts: NowCourseItem['facts'] }) {
+function FactChip({ facts, long = false }: { facts: NowCourseItem['facts']; long?: boolean }) {
   if (facts.length === 0) return null;
   const view = hoursView(facts);
   if (view.text === ALWAYS_OPEN_TEXT)
     return (
       <View style={styles.alwaysOpen}>
-        <HoursChipView chip={view.chip} />
+        <HoursChipView chip={view.chip} long={long} />
         <Text style={text('caption', 'muted')}>{ALWAYS_OPEN_TEXT}</Text>
       </View>
     );
-  return <HoursChipView chip={view.chip} />;
+  return <HoursChipView chip={view.chip} long={long} />;
+}
+
+/** TASK-015 §27 칩 ㉠ (task-014-design §10-1 "라벨 줄 24 | 라벨 + 오른쪽 칩"): 라벨 줄 오른쪽 끝에 긴 칩. 이름이 길어도 칩이 밀리거나 이름을 자르지 않는다 */
+function LabelRow({ children, facts }: { children: ReactNode; facts: NowCourseItem['facts'] }) {
+  return (
+    <View style={styles.labelRow}>
+      {children}
+      <View style={styles.grow} />
+      <FactChip facts={facts} long />
+    </View>
+  );
 }
 
 /** 직선거리 m를 "350m" / "1.0km"로 (10m 단위 반올림, 995m부터 km) */
@@ -207,11 +218,10 @@ export function NowCardView({
       case 'T-01':
         return (
           <Shell id="card-T-01" main={main}>
-            <Text style={text('label', 'muted')}>지금 할 일</Text>
-            <View style={styles.titleRow}>
-              <Text style={[text('title'), styles.grow]}>{card.item.name}</Text>
-              <FactChip facts={card.item.facts} />
-            </View>
+            <LabelRow facts={card.item.facts}>
+              <Text style={text('label', 'muted')}>지금 할 일</Text>
+            </LabelRow>
+            <Text style={text('title')}>{card.item.name}</Text>
             {card.ends_in_min === null ? (
               <MonoText timesOnly value={`${card.item.start}에 시작해`} base={text('body', 'muted')} />
             ) : (
@@ -230,11 +240,10 @@ export function NowCardView({
         };
         return (
           <Shell id="card-T-02" main={main}>
-            <Text style={text('label', 'muted')}>다음 이동</Text>
-            <View style={styles.titleRow}>
-              <Text style={[text('title'), styles.grow]}>{card.next_item.name}</Text>
-              <FactChip facts={card.next_item.facts} />
-            </View>
+            <LabelRow facts={card.next_item.facts}>
+              <Text style={text('label', 'muted')}>다음 이동</Text>
+            </LabelRow>
+            <Text style={text('title')}>{card.next_item.name}</Text>
             <MonoText
               timesOnly
               base={text('body')}
@@ -344,15 +353,12 @@ export function NowCardView({
         // TASK-015 §24 2(보드 ①-30대로): 자물쇠 + "고정 일정 · 곧 출발" · 제목 · 장소 줄 "{장소} {시작} 시작" · "N분 뒤에 출발해"(0분이면 "지금 출발해") · "{시각} 출발". 진행 막대 없음
         return (
           <Shell id="card-T-07" main={main}>
-            <View style={styles.labelRow}>
+            <LabelRow facts={card.fixed.facts}>
               <LockIcon color={color.muted} size={layout.factIcon} />
               <Text style={text('label', 'muted')}>고정 일정 · 곧 출발</Text>
-            </View>
+            </LabelRow>
             <Text style={text('title')}>{card.fixed.title}</Text>
-            <View style={styles.titleRow}>
-              <MonoText timesOnly value={`${card.fixed.name} ${card.fixed.start} 시작`} base={{ ...text('body'), flexShrink: 1 }} />
-              <FactChip facts={card.fixed.facts} />
-            </View>
+            <MonoText timesOnly value={`${card.fixed.name} ${card.fixed.start} 시작`} base={text('body')} />
             {card.leave_in_min > 0 ? <BigMinutes value={card.leave_in_min} unit="분 뒤에 출발해" /> : <Text style={text('heading')}>지금 출발해</Text>}
             <MonoText timesOnly value={`${card.leave_by} 출발`} base={text('caption', 'muted')} />
           </Shell>

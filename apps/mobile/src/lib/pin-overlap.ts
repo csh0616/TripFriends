@@ -86,6 +86,9 @@ const SCREEN_MARGIN = 8;
 const PIN_MARGIN = 4; // 다른 핀 둘레 여유 (맞닿음 = 간격 <= 여유도 겹침)
 const PANEL_MARGIN = 4; // 떠 있는 판 여유 (TASK-015 §24: 0 -> 4, 간격 <= 4면 겹침 -> 다음 후보)
 const LODGING_STAYING_SIZE = 32; // 머무는 동안 숙소 마커 = "지금 핀" 지름 (§12)
+/** +N · 집 배지: 지름 20, 가운데 = 핀 가운데 + (10, −10) (task-014-design §11-3 "가까운 핀 묶기" · "숙소 + 번호 핀") */
+export const BADGE_SIZE = 20;
+export const BADGE_OFFSET = 10;
 const EPS = 1e-9;
 
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }): number => Math.hypot(a.x - b.x, a.y - b.y);
@@ -110,11 +113,23 @@ function rectGap(a: Rect, b: Rect): number {
   return Math.hypot(dx, dy);
 }
 
-function labelRects(pin: { x: number; y: number; size: number }, w: number): [LabelSide, Rect][] {
+/** 오른쪽 위 배지 원 (없으면 null). 오른쪽 아래 배지(집 배지와 같이 붙은 +N)의 자리 값은 문서에 없어 보지 않는다 */
+function topRightBadge(pin: { x: number; y: number; badges?: Badge[] }): { x: number; y: number; r: number } | null {
+  return pin.badges?.some((b) => b.corner === 'top-right') ? { x: pin.x + BADGE_OFFSET, y: pin.y - BADGE_OFFSET, r: BADGE_SIZE / 2 } : null;
+}
+
+/**
+ * 이름표 후보 위 -> 오른쪽 -> 왼쪽 -> 아래. TASK-015 §27 하-11: 오른쪽 위 배지가 붙은 핀은 핀 + 배지를 한 덩어리로 보고
+ * 위 4 · 옆 6을 그 바깥 경계에서 잰다 (덩어리 위 = min(핀 윗변, 배지 윗변), 오른쪽 = max(핀 오른변, 배지 오른변). 왼쪽 · 아래는 핀 그대로)
+ */
+function labelRects(pin: { x: number; y: number; size: number; badges?: Badge[] }, w: number): [LabelSide, Rect][] {
   const r = pin.size / 2;
+  const badge = topRightBadge(pin);
+  const top = badge ? Math.min(pin.y - r, badge.y - badge.r) : pin.y - r;
+  const right = badge ? Math.max(pin.x + r, badge.x + badge.r) : pin.x + r;
   return [
-    ['top', { x: pin.x - w / 2, y: pin.y - r - LABEL_GAP_TOP_BOTTOM - LABEL_HEIGHT, width: w, height: LABEL_HEIGHT }],
-    ['right', { x: pin.x + r + LABEL_GAP_SIDE, y: pin.y - LABEL_HEIGHT / 2, width: w, height: LABEL_HEIGHT }],
+    ['top', { x: pin.x - w / 2, y: top - LABEL_GAP_TOP_BOTTOM - LABEL_HEIGHT, width: w, height: LABEL_HEIGHT }],
+    ['right', { x: right + LABEL_GAP_SIDE, y: pin.y - LABEL_HEIGHT / 2, width: w, height: LABEL_HEIGHT }],
     ['left', { x: pin.x - r - LABEL_GAP_SIDE - w, y: pin.y - LABEL_HEIGHT / 2, width: w, height: LABEL_HEIGHT }],
     ['bottom', { x: pin.x - w / 2, y: pin.y + r + LABEL_GAP_TOP_BOTTOM, width: w, height: LABEL_HEIGHT }],
   ];
@@ -185,11 +200,17 @@ export function resolvePinOverlap(input: PinOverlapInput): PinOverlapResult {
   const labels: PlacedLabel[] = [];
   for (const target of targets) {
     const free = (rect: Rect): boolean =>
-      rect.x >= SCREEN_MARGIN &&
-      rect.y >= SCREEN_MARGIN &&
-      rect.x + rect.width <= screen.width - SCREEN_MARGIN &&
-      rect.y + rect.height <= screen.height - SCREEN_MARGIN &&
+      // 화면 8 안쪽: 딱 닿으면 안쪽 (지도 좌표를 오가며 생기는 소수 오차 EPS는 닿음으로 본다)
+      rect.x >= SCREEN_MARGIN - EPS &&
+      rect.y >= SCREEN_MARGIN - EPS &&
+      rect.x + rect.width <= screen.width - SCREEN_MARGIN + EPS &&
+      rect.y + rect.height <= screen.height - SCREEN_MARGIN + EPS &&
       shown.every((other) => other.id === target.id || !touchesCircle(rect, other, other.size / 2 + PIN_MARGIN)) &&
+      // §27 하-11: 다른 핀의 배지도 그 핀 덩어리의 일부 (+4 여유)
+      shown.every((other) => {
+        const badge = other.id === target.id ? null : topRightBadge(other);
+        return badge === null || !touchesCircle(rect, badge, badge.r + PIN_MARGIN);
+      }) &&
       !(meDot && me && touchesCircle(rect, me, me.size / 2)) &&
       panels.every((panel) => rectGap(rect, panel) > PANEL_MARGIN + EPS) &&
       labels.every((placed) => !touchesRect(rect, placed.rect));

@@ -7,10 +7,10 @@ import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewProps } from 'r
 
 import mapStyleFile from '../../../assets/map/google-map-style.json';
 import { Text } from '@/components/app-text';
-import { fitTargetRegion, metersPerPoint as metersPerPointOf, project, scaleBar, unproject, visibleArea, type Region } from '@/lib/map-project';
+import { fitTargetRegion, metersPerPoint as metersPerPointOf, project, scaleBar, unproject, visibleArea, type Frame, type Region } from '@/lib/map-project';
 import type { NowPin } from '@/lib/now-api';
 import { sameRegionOnScreen, shownRegion } from '@/lib/region-match';
-import { resolvePinOverlap, type Badge, type PinOverlapResult, type Rect, type ScreenPin } from '@/lib/pin-overlap';
+import { BADGE_OFFSET, BADGE_SIZE, resolvePinOverlap, type Badge, type PinOverlapResult, type Rect, type ScreenPin } from '@/lib/pin-overlap';
 import { layout } from '@/planning/layout';
 import tokens from 'design-tokens';
 import { color, control, motion, radius, shadow, space, text } from '@/planning/theme';
@@ -89,12 +89,13 @@ const PIN_SIZE: Record<string, number> = { next: layout.pinNext, now: layout.pin
 const labelWidthOf = (name: string): number =>
   Math.min(layout.pinBubbleMax, [...name].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 0x7f ? 12 : 7), 0) + space['space-2'] * 2);
 
-const BADGE = 18; // 묶음 +N · 집 배지 지름 (글자 12 이상)
+const BADGE = BADGE_SIZE; // 묶음 +N · 집 배지 지름 20 (task-014-design §11-3, TASK-015 §27: 옛 18)
+/** 배지 가운데 = 핀 가운데 + (10, −10) (오른쪽 아래는 + (10, +10)). 핀 누르는 칸(44) 안에서 잰 자리 — 겹침 계산(덩어리)과 같은 값 */
+const BADGE_EDGE = control['touch-min'] / 2 - BADGE_OFFSET - BADGE / 2;
 
 /** 핀 모서리 배지: +N (ink 면 · 흰 글자) 또는 집 (흰 면 · ink 테두리) */
-function PinBadge({ badge, face }: { badge: Badge; face: number }) {
-  const inset = (control['touch-min'] - face) / 2;
-  const place = badge.corner === 'top-right' ? { top: inset - BADGE / 3, right: inset - BADGE / 3 } : { bottom: inset - BADGE / 3, right: inset - BADGE / 3 };
+function PinBadge({ badge }: { badge: Badge }) {
+  const place = badge.corner === 'top-right' ? { top: BADGE_EDGE, right: BADGE_EDGE } : { bottom: BADGE_EDGE, right: BADGE_EDGE };
   return (
     <View testID={badge.type === 'plus' ? 'pin-badge-plus' : 'pin-badge-home'} style={[styles.badge, badge.type === 'home' && styles.badgeHome, place]}>
       {badge.type === 'plus' ? <Text style={text('label', 'surface')}>{`+${badge.count}`}</Text> : <HouseGlyph tint={color.ink} scale={0.6} />}
@@ -127,7 +128,7 @@ function NumberPin({ pin, rules }: { pin: NowPin; rules?: Rules }) {
         ) : null}
         <View style={styles.pinTouch} accessible={rules !== undefined} accessibilityLabel={rules?.a11yLabel}>
           <PinFace pin={pin} />
-          {rules ? rules.badges.map((badge) => <PinBadge key={badge.type} badge={badge} face={pin.state === 'next' ? layout.pinNext : pin.state === 'now' ? layout.pinNow : layout.pinLater} />) : null}
+          {rules ? rules.badges.map((badge) => <PinBadge key={badge.type} badge={badge} />) : null}
         </View>
         {/* 말풍선과 같은 높이의 빈 칸: 핀 가운데가 마커의 가운데가 되게 */}
         {next ? <View style={styles.bubbleSpacer} /> : null}
@@ -152,7 +153,7 @@ function HomePin({ coordinate, shape = 'home', badges = [], a11yLabel }: { coord
           </View>
         )}
         {badges.map((badge) => (
-          <PinBadge key={badge.type} badge={badge} face={layout.homePin} />
+          <PinBadge key={badge.type} badge={badge} />
         ))}
       </View>
     </Marker>
@@ -160,10 +161,10 @@ function HomePin({ coordinate, shape = 'home', badges = [], a11yLabel }: { coord
 }
 
 /** 이름표 (겹침 규칙이 자리를 정한 뒤): 핀과 따로 선 Marker */
-function NameTag({ coordinate, name, width }: { coordinate: LatLng; name: string; width: number }) {
+function NameTag({ coordinate, name, width, zIndex = Z_LABEL }: { coordinate: LatLng; name: string; width: number; zIndex?: number }) {
   const tracking = useTrackingBriefly(`tag-${name}-${width}`);
   return (
-    <Marker testID="map-pin-label" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_LABEL} tappable={false}>
+    <Marker testID="map-pin-label" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={zIndex} tappable={false}>
       <View style={[styles.bubble, styles.tag, { width, maxWidth: undefined }]}>
         <Text numberOfLines={1} style={[text('label'), styles.tagText]}>
           {name}
@@ -288,6 +289,8 @@ export function HouseGlyph({ tint, scale = 1 }: { tint: string; scale?: number }
 const PICK_AREA_RADIUS = 64; // task-015-design §1-3 pick-area: 핀 중심 반지름 64 (그림일 뿐, 저장은 좌표 하나)
 const PICK_FACE = 32; // pin-pick = 머무는 동안 숙소 마커 = "지금 핀" 모양 (지름 32 · ink 면 · 흰 테두리 3 · 흰 집)
 const PICK_BORDER = 3;
+// TASK-015 §27 ②: a2 그리는 순서 범위 원 < 이름표 < 핀
+const PICK_Z = { area: 0, label: 1, pin: 2 } as const;
 const WIDE_DELTA = 8; // 중심을 모를 때(도시 정보를 못 받음) 일본이 보이는 정도
 
 export function PickMap({
@@ -295,6 +298,8 @@ export function PickMap({
   pin,
   bottomPadding,
   focusBand = null,
+  name = null,
+  panels = [],
   onLongPress,
   onReady,
   onFail,
@@ -306,13 +311,20 @@ export function PickMap({
   bottomPadding: number;
   /** TASK-015 §24(03·23·30): 키보드로 시트가 올라가 핀이 가려질 때 핀을 둘 띠(위 버튼 줄 아래 ~ 시트 윗변, 화면 y). 있으면 지도를 밀어 핀을 띠 가운데로 */
   focusBand?: { top: number; bottom: number } | null;
+  /** TASK-015 §26: 찍은 핀 옆 이름표 글 (이름 칸 글의 앞뒤 공백을 자른 것). 비었으면 null = 이름표 없음 */
+  name?: string | null;
+  /** TASK-015 §27 ①: 이름표가 피할 떠 있는 판(위 버튼 줄 · 아래 시트, 화면 pt). 간격 4 이하면 다음 후보 */
+  panels?: Rect[];
   onLongPress: (at: LatLng) => void;
   onReady: () => void;
   onFail: () => void;
 }) {
   const map = useRef<MapView>(null);
-  const { height } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const ready = useRef(false);
+  // §27 ③: 지도 영역 알림을 받은 뒤에만 이름표 자리를 계산한다. 영역은 받은 때의 보이는 영역(mapPadding을 뺀 곳) · 판 자리와 한 묶음으로 둔다
+  // (키보드가 열려 mapPadding · 시트가 바뀌어도 지도가 움직이는 동안은 다음 알림 전까지 그린 이름표를 빼지 않는다, §26). 글 · 핀이 바뀌면 그 묶음으로 바로 다시 계산
+  const [settled, setSettled] = useState<{ region: Region; frame: Required<Frame>; panels: Rect[] } | null>(null);
   const pinKey = pin ? `${pin.latitude},${pin.longitude}` : 'none';
   const tracking = useTrackingBriefly(pinKey);
   useEffect(() => {
@@ -332,6 +344,7 @@ export function PickMap({
   const band = focusBand && focusBand.bottom > focusBand.top ? focusBand : null;
   const mapPadding = band ? { top: band.top, left: 0, right: 0, bottom: Math.max(height - band.bottom, 0) } : { top: 0, left: 0, right: 0, bottom: bottomPadding };
   const bandKey = band ? `${Math.round(band.top)}-${Math.round(band.bottom)}` : 'none';
+  const tag = pin && name && settled ? pickTag(pin, name, settled.region, settled.frame, { width, height }, settled.panels) : null;
   useEffect(() => {
     // 띠가 생기거나 바뀌면 핀을 띠 가운데로 (mapPadding 안쪽 가운데 = 카메라 가운데). 띠가 없어지면 그대로 둔다 (핀은 이미 시트 위에 보인다)
     if (band && pin) map.current?.animateCamera({ center: pin }, { duration: PICK_CAMERA_MS });
@@ -348,15 +361,17 @@ export function PickMap({
       mapPadding={mapPadding}
       toolbarEnabled={false}
       onLongPress={(event) => onLongPress(event.nativeEvent.coordinate)}
+      onRegionChangeComplete={(next: Region) => setSettled({ region: next, frame: visibleArea({ width, height }, mapPadding), panels })}
       onMapReady={signalReady}
       onMapLoaded={signalReady}
     >
       {pin ? (
         <>
-          <Marker testID="pick-area" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={0} tappable={false}>
+          <Marker testID="pick-area" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={PICK_Z.area} tappable={false}>
             <View style={styles.pickArea} />
           </Marker>
-          <Marker testID="pin-pick" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={1}>
+          {tag ? <NameTag coordinate={tag.at} name={tag.name} width={tag.width} zIndex={PICK_Z.label} /> : null}
+          <Marker testID="pin-pick" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={PICK_Z.pin}>
             <View style={styles.pickFace}>
               <HouseGlyph tint={color.surface} />
             </View>
@@ -365,6 +380,22 @@ export function PickMap({
       ) : null}
     </MapView>
   );
+}
+
+/**
+ * TASK-015 §26 · §27 a2 이름표 자리: 찍은 핀(지름 32) 옆, 후보 위 -> 오른쪽 -> 왼쪽 -> 아래 (위 4 · 옆 6 · 화면 8 안쪽 · 판과 4 넘게).
+ * 크게 보기와 같은 판정(resolvePinOverlap)을 핀 하나로 쓴다. 범위 원은 장애물이 아니다. 다 안 되면 null(이름표를 뺀다, 핀은 그대로).
+ * 계산이 던지면 이름표 없이 그린다 (§6 화면이 멈추지 않게)
+ */
+function pickTag(pin: LatLng, name: string, region: Region, frame: Required<Frame>, screen: { width: number; height: number }, panels: Rect[]): { at: LatLng; name: string; width: number } | null {
+  try {
+    const at = project(region, frame, pin);
+    const { label } = resolvePinOverlap({ pins: [{ id: 'pick', kind: 'next', x: at.x, y: at.y, size: PICK_FACE, seq: 1 }], screen, labelWidth: labelWidthOf(name), panels });
+    if (!label) return null;
+    return { at: unproject(region, frame, { x: label.rect.x + label.rect.width / 2, y: label.rect.y + label.rect.height / 2 }), name, width: label.rect.width };
+  } catch {
+    return null;
+  }
 }
 
 // ---------- TASK-015 §D: 코스 크게 보기 (실제 지도 위 경로·핀·축척) ----------

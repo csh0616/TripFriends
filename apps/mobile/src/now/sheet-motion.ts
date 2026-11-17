@@ -8,8 +8,12 @@ export type SheetMotion = {
   fadeMs: number;
 };
 
+/** 시트 높이 움직임 (TASK-015 §26 `822a093` 250ms, 폰 확인 때 200~300 안에서 조정) */
+const SHEET_MOVE_MS = 250;
+/** 내용 교차 페이드 (task-015-design §14-5 ② "약 120ms") */
+const SHEET_FADE_MS = 120;
+
 /** reduceMotion = 기기 설정 "동작 줄이기" (AccessibilityInfo.isReduceMotionEnabled) */
 export function sheetMotion(reduceMotion: boolean): SheetMotion {
-  void reduceMotion;
-  throw new Error('not implemented');
+  return reduceMotion ? { durationMs: 0, fadeMs: 0 } : { durationMs: SHEET_MOVE_MS, fadeMs: SHEET_FADE_MS };
 }

@@ -15,11 +15,14 @@ const LOOK: Record<Status, { label: string; fg: keyof typeof color; bg: keyof ty
   unknown: { label: '모름', fg: 'muted', bg: 'bg-2' },
 };
 
-export function StatusChip({ status }: { status: Status }) {
+/** TASK-015 §27 칩 ㉠ (task-014-design §10-1): 여행 중 메인 카드 라벨 줄의 긴 칩 글자. 모름은 문서에 긴 글이 없어 짧은 글 그대로 */
+const LONG_LABEL: Record<Status, string> = { confirmed: '영업시간 확인됨', unverified: '영업시간 미확인', unknown: '모름' };
+
+export function StatusChip({ status, long = false }: { status: Status; long?: boolean }) {
   const look = LOOK[status];
   return (
     <View style={[styles.chip, { backgroundColor: color[look.bg] }]}>
-      <Text style={text('label', look.fg)}>{look.label}</Text>
+      <Text style={text('label', look.fg)}>{long ? LONG_LABEL[status] : look.label}</Text>
     </View>
   );
 }
@@ -59,7 +62,7 @@ export function HintChip() {
 }
 
 /** 영업시간 칸의 칩 하나: 없음 / 추천 시간대 / 확인 상태 */
-export function HoursChipView({ chip }: { chip: HoursChip }) {
+export function HoursChipView({ chip, long = false }: { chip: HoursChip; long?: boolean }) {
   if (chip === null) return null;
-  return chip === 'hint' ? <HintChip /> : <StatusChip status={chip} />;
+  return chip === 'hint' ? <HintChip /> : <StatusChip status={chip} long={long} />;
 }

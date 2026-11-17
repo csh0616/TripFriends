@@ -95,6 +95,12 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
   const { height: screenHeight } = useWindowDimensions();
   const [panelHeight, setPanelHeight] = useState(SHEET_HEIGHT);
   const focusBand = keyboard > 0 && pin ? { top: insets.top + space['space-2'] + control['touch-min'], bottom: screenHeight - keyboard - panelHeight } : null;
+  // TASK-015 §27 ①: 지도 이름표가 피할 판 = 위 버튼 줄(뒤로 · 가운데 알약이 있는 줄 전체) · 아래 시트(키보드로 올라간 자리 포함)
+  const { width: screenWidth } = useWindowDimensions();
+  const tagPanels = [
+    { x: space['space-4'], y: insets.top + space['space-2'], width: screenWidth - 2 * space['space-4'], height: control['touch-min'] },
+    { x: 0, y: screenHeight - keyboard - panelHeight, width: screenWidth, height: keyboard + panelHeight },
+  ];
   const pressIn = () => {
     pressing.current = true;
   };
@@ -170,6 +176,8 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
           pin={pin ? { latitude: pin.lat, longitude: pin.lng } : null}
           bottomPadding={SHEET_HEIGHT}
           focusBand={focusBand}
+          name={trimLabel(label)}
+          panels={tagPanels}
           onLongPress={place}
           onReady={() => undefined}
           onFail={() => setMapFailed(true)}
