@@ -1,5 +1,6 @@
 // TASK-006 B6: 여행 중 화면의 카드 부품 T-01·T-02·T-03·T-07·T-08. 서버가 준 값을 그리기만 한다 (카드를 고르지 않는다).
 // 장소가 들어간 카드는 확인 상태 칩(색 + 글자)이 항상 붙는다 (SCREEN-001 §3-2). 장소가 없는 줄(facts가 빈 목록)은 칩이 없다 (§11 Q6).
+import { Children, createContext, useContext } from 'react';
 import { Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
@@ -118,10 +119,27 @@ function AlternativeBox({ proposal, chosen, onChoose }: { proposal: NowT06Propos
   );
 }
 
+/** TASK-015 §24 18번: 메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 자리를 재는 곳. NowCardView가 메인 카드일 때만 넣는다 */
+const LastLayout = createContext<((box: { y: number; height: number }) => void) | null>(null);
+
 function Shell({ id, main, children }: { id: string; main: boolean; children: React.ReactNode }) {
+  const onLast = useContext(LastLayout);
+  const items = Children.toArray(children);
+  const last = items.length - 1;
   return (
     <View testID={id} style={[styles.card, !main && styles.sub]}>
-      {children}
+      {main && onLast && last >= 0
+        ? items.map((item, index) =>
+            index === last ? (
+              // 마지막 요소만 감싼 상자: 카드 안 y · 높이 = 마지막 요소 아래 끝 (접힌 시트 높이)
+              <View key="last" onLayout={(event) => onLast(event.nativeEvent.layout)}>
+                {item}
+              </View>
+            ) : (
+              item
+            ),
+          )
+        : children}
     </View>
   );
 }
@@ -164,7 +182,7 @@ export function NowCardView({
   onVisit,
   lateAt = null,
   rehearsal = false,
-  onPrimaryLayout,
+  onLastLayout,
 }: {
   card: NowCard;
   main: boolean;
@@ -179,184 +197,186 @@ export function NowCardView({
   lateAt?: string | null;
   /** TASK-015 §B4: 연습 중에는 실제 위치에서 길을 여는 [길 안내]를 그리지 않는다 */
   rehearsal?: boolean;
-  /** TASK-015 §24 18번: 주 버튼 자리(카드 안 y · 높이). 접힌 시트 높이를 버튼 아래 끝에 맞추려고 화면이 잰다 */
-  onPrimaryLayout?: (box: { y: number; height: number }) => void;
+  /** TASK-015 §24 18번: 메인 카드 마지막 요소(주 버튼 또는 마지막 줄)의 카드 안 y · 높이. 접힌 시트 높이를 그 아래 끝에 맞추려고 화면이 잰다 */
+  onLastLayout?: (box: { y: number; height: number }) => void;
 }) {
-  switch (card.type) {
-    case 'T-01':
-      return (
-        <Shell id="card-T-01" main={main}>
-          <Text style={text('label', 'muted')}>지금 할 일</Text>
-          <View style={styles.titleRow}>
-            <Text style={[text('title'), styles.grow]}>{card.item.name}</Text>
-            <FactChip facts={card.item.facts} />
-          </View>
-          {card.ends_in_min === null ? (
-            <MonoText timesOnly value={`${card.item.start}에 시작해`} base={text('body', 'muted')} />
-          ) : (
-            <BigMinutes value={card.ends_in_min} unit="분 남았어" />
-          )}
-          <MonoText timesOnly value={`${card.item.end}에 끝나`} base={text('caption', 'muted')} />
-        </Shell>
-      );
-    case 'T-02': {
-      const url = card.map_url;
-      const nowMin = lateAt === null ? null : minutesOfAt(lateAt);
-      const late = nowMin === null ? 0 : nowMin - toMinutes(card.leave_at);
-      const open = () => {
-        if (url === null) return;
-        Linking.openURL(url).catch(onOpenFailed);
-      };
-      return (
-        <Shell id="card-T-02" main={main}>
-          <Text style={text('label', 'muted')}>다음 이동</Text>
-          <View style={styles.titleRow}>
-            <Text style={[text('title'), styles.grow]}>{card.next_item.name}</Text>
-            <FactChip facts={card.next_item.facts} />
-          </View>
-          <MonoText
-            timesOnly
-            base={text('body')}
-            value={
-              card.leave_in_min > 0
-                ? `${card.leave_at}에 출발 · ${card.leave_in_min}분 뒤`
-                : late > 0
-                  ? `출발 시각이 ${late}분 지났어`
-                  : `${card.leave_at}에 출발, 지금 나서자`
-            }
-          />
-          {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
-          <Text numberOfLines={1} adjustsFontSizeToFit style={text('caption', 'muted')}>{`이동 ${card.travel_min}분`}</Text>
-          {url !== null && !rehearsal ? <SecondaryButton small testID="directions-button" label="길 안내" onPress={open} /> : null}
-        </Shell>
-      );
-    }
-    case 'T-03':
-      return (
-        <Shell id="card-T-03" main={main}>
-          <Text style={text('label', 'muted')}>남은 일정</Text>
-          {card.items.map((item) => (
-            <View key={item.seq} testID={`rest-row-${item.seq}`} style={styles.restRow}>
-              <Text style={styles.restTime}>{item.start}</Text>
-              <View style={styles.number}>
-                <Text style={text('num-md', 'surface')}>{String(item.seq)}</Text>
-              </View>
-              <Text style={[text('body'), styles.grow]}>{item.name}</Text>
-              <FactChip facts={item.facts} />
-            </View>
-          ))}
-        </Shell>
-      );
-    case 'T-04':
-      return (
-        <Shell id="card-T-04" main={main}>
-          <Text style={text('label', 'muted')}>일정이 늦어졌어</Text>
-          <Text style={text('title')}>{`${card.delay_min}분 늦어지고 있어`}</Text>
-          {card.proposals.length === 0 ? (
-            <Text style={text('body')}>{`어떻게 해도 ${card.fixed ? card.fixed.title : '일정'}에 늦어`}</Text>
-          ) : card.fixed ? (
-            <Text style={text('body')}>{`${card.fixed.title} ${card.fixed.start}은 지킬게`}</Text>
-          ) : null}
-          {card.proposals.map((proposal) => (
-            <ProposalBox key={proposal.proposal_id} proposal={proposal} chosen={chosenId === proposal.proposal_id} onChoose={() => onChoose?.(proposal.proposal_id)} />
-          ))}
-          <SecondaryButton testID="event-dismiss" label="그대로 갈래" onPress={() => onDismiss?.(card.event_id)} />
-        </Shell>
-      );
-    case 'T-05': {
-      const url = card.map_url;
-      return (
-        <Shell id="card-T-05" main={main}>
-          <Text style={text('label', 'muted')}>영업 확인</Text>
-          <Text style={text('title')}>{card.place.name}</Text>
-          <Text style={text('body')}>가기 전에 열었는지 볼래?</Text>
-          {card.facts.map((fact) => (
-            <FactLine key={fact.field} fact={fact} />
-          ))}
-          <SecondaryButton
-            small
-            testID="visit-map-link"
-            label="구글 지도에서 보기"
-            onPress={() => {
-              Linking.openURL(url).catch(onOpenFailed);
-            }}
-          />
-          <View style={styles.pair}>
-            <View style={styles.grow}>
-              <SecondaryButton testID="visit-open" label="열었어" onPress={() => onVisit?.(card.place.place_id, true)} />
-            </View>
-            <View style={styles.grow}>
-              <SecondaryButton testID="visit-closed" label="닫혔어" onPress={() => onVisit?.(card.place.place_id, false)} />
-            </View>
-          </View>
-        </Shell>
-      );
-    }
-    case 'T-06': {
-      const alternatives = card.proposals.filter((proposal) => proposal.closed.alternative !== null);
-      const skip = card.proposals.find((proposal) => proposal.closed.alternative === null);
-      return (
-        <Shell id="card-T-06" main={main}>
-          <Text style={text('label', 'muted')}>닫힘 대안</Text>
-          <Text style={text('title')}>{`${withParticle(card.closed.name, '이/가')} 닫혔대`}</Text>
-          {alternatives.length > 0 ? (
-            <Text style={text('body')}>근처에 이런 데 있어</Text>
-          ) : skip ? (
-            <Text style={text('body')}>근처에 열린 비슷한 곳이 없어</Text>
-          ) : (
-            <Text style={text('body')}>지금은 바꿀 방법을 못 찾았어</Text>
-          )}
-          {alternatives.map((proposal) => (
-            <AlternativeBox key={proposal.proposal_id} proposal={proposal} chosen={chosenId === proposal.proposal_id} onChoose={() => onChoose?.(proposal.proposal_id)} />
-          ))}
-          {skip ? (
-            <ChoiceRow id="closed-skip" chosen={chosenId === skip.proposal_id} onChoose={() => onChoose?.(skip.proposal_id)} minHeight={layout.rowDrop}>
-              <Text style={text('heading')}>빼고 가기</Text>
-              <Text style={text('body')}>{skip.reason}</Text>
-            </ChoiceRow>
-          ) : null}
-          <SecondaryButton testID="event-dismiss" label="그대로 둘게" onPress={() => onDismiss?.(card.event_id)} />
-        </Shell>
-      );
-    }
-    case 'T-07':
-      // TASK-015 §24 2(보드 ①-30대로): 자물쇠 + "고정 일정 · 곧 출발" · 제목 · 장소 줄 "{장소} {시작} 시작" · "N분 뒤에 출발해"(0분이면 "지금 출발해") · "{시각} 출발". 진행 막대 없음
-      return (
-        <Shell id="card-T-07" main={main}>
-          <View style={styles.labelRow}>
-            <LockIcon color={color.muted} size={layout.factIcon} />
-            <Text style={text('label', 'muted')}>고정 일정 · 곧 출발</Text>
-          </View>
-          <Text style={text('title')}>{card.fixed.title}</Text>
-          <View style={styles.titleRow}>
-            <MonoText timesOnly value={`${card.fixed.name} ${card.fixed.start} 시작`} base={{ ...text('body'), flexShrink: 1 }} />
-            <FactChip facts={card.fixed.facts} />
-          </View>
-          {card.leave_in_min > 0 ? <BigMinutes value={card.leave_in_min} unit="분 뒤에 출발해" /> : <Text style={text('heading')}>지금 출발해</Text>}
-          <MonoText timesOnly value={`${card.leave_by} 출발`} base={text('caption', 'muted')} />
-        </Shell>
-      );
-    case 'T-08': {
-      const mapUrl = card.map_url;
-      // §31 Q2·Q3: 숙소가 없으면(서버가 lodging·map_url을 null로 준다) 숙소 줄·길 안내 없이 "오늘 일정 끝"
-      if (card.lodging == null) {
+  return <LastLayout.Provider value={main ? (onLastLayout ?? null) : null}>{cardBody()}</LastLayout.Provider>;
+
+  function cardBody() {
+    switch (card.type) {
+      case 'T-01':
         return (
-          <Shell id="card-T-08" main={main}>
-            <Text style={text('title')}>오늘 일정 끝</Text>
-            <Text style={text('body')}>{NO_LODGING_BODY}</Text>
+          <Shell id="card-T-01" main={main}>
+            <Text style={text('label', 'muted')}>지금 할 일</Text>
+            <View style={styles.titleRow}>
+              <Text style={[text('title'), styles.grow]}>{card.item.name}</Text>
+              <FactChip facts={card.item.facts} />
+            </View>
+            {card.ends_in_min === null ? (
+              <MonoText timesOnly value={`${card.item.start}에 시작해`} base={text('body', 'muted')} />
+            ) : (
+              <BigMinutes value={card.ends_in_min} unit="분 남았어" />
+            )}
+            <MonoText timesOnly value={`${card.item.end}에 끝나`} base={text('caption', 'muted')} />
+          </Shell>
+        );
+      case 'T-02': {
+        const url = card.map_url;
+        const nowMin = lateAt === null ? null : minutesOfAt(lateAt);
+        const late = nowMin === null ? 0 : nowMin - toMinutes(card.leave_at);
+        const open = () => {
+          if (url === null) return;
+          Linking.openURL(url).catch(onOpenFailed);
+        };
+        return (
+          <Shell id="card-T-02" main={main}>
+            <Text style={text('label', 'muted')}>다음 이동</Text>
+            <View style={styles.titleRow}>
+              <Text style={[text('title'), styles.grow]}>{card.next_item.name}</Text>
+              <FactChip facts={card.next_item.facts} />
+            </View>
+            <MonoText
+              timesOnly
+              base={text('body')}
+              value={
+                card.leave_in_min > 0
+                  ? `${card.leave_at}에 출발 · ${card.leave_in_min}분 뒤`
+                  : late > 0
+                    ? `출발 시각이 ${late}분 지났어`
+                    : `${card.leave_at}에 출발, 지금 나서자`
+              }
+            />
+            {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
+            <Text numberOfLines={1} adjustsFontSizeToFit style={text('caption', 'muted')}>{`이동 ${card.travel_min}분`}</Text>
+            {url !== null && !rehearsal ? <SecondaryButton small testID="directions-button" label="길 안내" onPress={open} /> : null}
           </Shell>
         );
       }
-      const minutes = card.go_home_min;
-      return (
-        <Shell id="card-T-08" main={main}>
-          <Text style={text('label', 'muted')}>숙소로</Text>
-          {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
-          <Text numberOfLines={1} adjustsFontSizeToFit style={text('title')}>{minutes != null && minutes > 0 ? `숙소까지 ${minutes}분` : '숙소로 돌아가자'}</Text>
-          {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
-          {/* TASK-015 §24 1: 하루 끝에 할 일이 이것뿐이라 주 버튼(52, 주황). T-08이 메인이면 화면의 주황 주 버튼은 이것 하나 */}
-          {mapUrl != null && !rehearsal ? (
-            <View onLayout={onPrimaryLayout ? (event) => onPrimaryLayout(event.nativeEvent.layout) : undefined}>
+      case 'T-03':
+        return (
+          <Shell id="card-T-03" main={main}>
+            <Text style={text('label', 'muted')}>남은 일정</Text>
+            {card.items.map((item) => (
+              <View key={item.seq} testID={`rest-row-${item.seq}`} style={styles.restRow}>
+                <Text style={styles.restTime}>{item.start}</Text>
+                <View style={styles.number}>
+                  <Text style={text('num-md', 'surface')}>{String(item.seq)}</Text>
+                </View>
+                <Text style={[text('body'), styles.grow]}>{item.name}</Text>
+                <FactChip facts={item.facts} />
+              </View>
+            ))}
+          </Shell>
+        );
+      case 'T-04':
+        return (
+          <Shell id="card-T-04" main={main}>
+            <Text style={text('label', 'muted')}>일정이 늦어졌어</Text>
+            <Text style={text('title')}>{`${card.delay_min}분 늦어지고 있어`}</Text>
+            {card.proposals.length === 0 ? (
+              <Text style={text('body')}>{`어떻게 해도 ${card.fixed ? card.fixed.title : '일정'}에 늦어`}</Text>
+            ) : card.fixed ? (
+              <Text style={text('body')}>{`${card.fixed.title} ${card.fixed.start}은 지킬게`}</Text>
+            ) : null}
+            {card.proposals.map((proposal) => (
+              <ProposalBox key={proposal.proposal_id} proposal={proposal} chosen={chosenId === proposal.proposal_id} onChoose={() => onChoose?.(proposal.proposal_id)} />
+            ))}
+            <SecondaryButton testID="event-dismiss" label="그대로 갈래" onPress={() => onDismiss?.(card.event_id)} />
+          </Shell>
+        );
+      case 'T-05': {
+        const url = card.map_url;
+        return (
+          <Shell id="card-T-05" main={main}>
+            <Text style={text('label', 'muted')}>영업 확인</Text>
+            <Text style={text('title')}>{card.place.name}</Text>
+            <Text style={text('body')}>가기 전에 열었는지 볼래?</Text>
+            {card.facts.map((fact) => (
+              <FactLine key={fact.field} fact={fact} />
+            ))}
+            <SecondaryButton
+              small
+              testID="visit-map-link"
+              label="구글 지도에서 보기"
+              onPress={() => {
+                Linking.openURL(url).catch(onOpenFailed);
+              }}
+            />
+            <View style={styles.pair}>
+              <View style={styles.grow}>
+                <SecondaryButton testID="visit-open" label="열었어" onPress={() => onVisit?.(card.place.place_id, true)} />
+              </View>
+              <View style={styles.grow}>
+                <SecondaryButton testID="visit-closed" label="닫혔어" onPress={() => onVisit?.(card.place.place_id, false)} />
+              </View>
+            </View>
+          </Shell>
+        );
+      }
+      case 'T-06': {
+        const alternatives = card.proposals.filter((proposal) => proposal.closed.alternative !== null);
+        const skip = card.proposals.find((proposal) => proposal.closed.alternative === null);
+        return (
+          <Shell id="card-T-06" main={main}>
+            <Text style={text('label', 'muted')}>닫힘 대안</Text>
+            <Text style={text('title')}>{`${withParticle(card.closed.name, '이/가')} 닫혔대`}</Text>
+            {alternatives.length > 0 ? (
+              <Text style={text('body')}>근처에 이런 데 있어</Text>
+            ) : skip ? (
+              <Text style={text('body')}>근처에 열린 비슷한 곳이 없어</Text>
+            ) : (
+              <Text style={text('body')}>지금은 바꿀 방법을 못 찾았어</Text>
+            )}
+            {alternatives.map((proposal) => (
+              <AlternativeBox key={proposal.proposal_id} proposal={proposal} chosen={chosenId === proposal.proposal_id} onChoose={() => onChoose?.(proposal.proposal_id)} />
+            ))}
+            {skip ? (
+              <ChoiceRow id="closed-skip" chosen={chosenId === skip.proposal_id} onChoose={() => onChoose?.(skip.proposal_id)} minHeight={layout.rowDrop}>
+                <Text style={text('heading')}>빼고 가기</Text>
+                <Text style={text('body')}>{skip.reason}</Text>
+              </ChoiceRow>
+            ) : null}
+            <SecondaryButton testID="event-dismiss" label="그대로 둘게" onPress={() => onDismiss?.(card.event_id)} />
+          </Shell>
+        );
+      }
+      case 'T-07':
+        // TASK-015 §24 2(보드 ①-30대로): 자물쇠 + "고정 일정 · 곧 출발" · 제목 · 장소 줄 "{장소} {시작} 시작" · "N분 뒤에 출발해"(0분이면 "지금 출발해") · "{시각} 출발". 진행 막대 없음
+        return (
+          <Shell id="card-T-07" main={main}>
+            <View style={styles.labelRow}>
+              <LockIcon color={color.muted} size={layout.factIcon} />
+              <Text style={text('label', 'muted')}>고정 일정 · 곧 출발</Text>
+            </View>
+            <Text style={text('title')}>{card.fixed.title}</Text>
+            <View style={styles.titleRow}>
+              <MonoText timesOnly value={`${card.fixed.name} ${card.fixed.start} 시작`} base={{ ...text('body'), flexShrink: 1 }} />
+              <FactChip facts={card.fixed.facts} />
+            </View>
+            {card.leave_in_min > 0 ? <BigMinutes value={card.leave_in_min} unit="분 뒤에 출발해" /> : <Text style={text('heading')}>지금 출발해</Text>}
+            <MonoText timesOnly value={`${card.leave_by} 출발`} base={text('caption', 'muted')} />
+          </Shell>
+        );
+      case 'T-08': {
+        const mapUrl = card.map_url;
+        // §31 Q2·Q3: 숙소가 없으면(서버가 lodging·map_url을 null로 준다) 숙소 줄·길 안내 없이 "오늘 일정 끝"
+        if (card.lodging == null) {
+          return (
+            <Shell id="card-T-08" main={main}>
+              <Text style={text('title')}>오늘 일정 끝</Text>
+              <Text style={text('body')}>{NO_LODGING_BODY}</Text>
+            </Shell>
+          );
+        }
+        const minutes = card.go_home_min;
+        return (
+          <Shell id="card-T-08" main={main}>
+            <Text style={text('label', 'muted')}>숙소로</Text>
+            {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
+            <Text numberOfLines={1} adjustsFontSizeToFit style={text('title')}>{minutes != null && minutes > 0 ? `숙소까지 ${minutes}분` : '숙소로 돌아가자'}</Text>
+            {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
+            {/* TASK-015 §24 1: 하루 끝에 할 일이 이것뿐이라 주 버튼(52, 주황). T-08이 메인이면 화면의 주황 주 버튼은 이것 하나 */}
+            {mapUrl != null && !rehearsal ? (
               <PrimaryButton
                 testID="home-directions-button"
                 label="숙소로 길 안내"
@@ -364,10 +384,10 @@ export function NowCardView({
                   Linking.openURL(mapUrl).catch(onOpenFailed);
                 }}
               />
-            </View>
-          ) : null}
-        </Shell>
-      );
+            ) : null}
+          </Shell>
+        );
+      }
     }
   }
 }
