@@ -2,7 +2,7 @@
 // 앱은 그리기만 한다: 지도를 길게 눌러 핀 -> 이름 붙이기(선택) -> [여기로 정했어]. Google을 부르지 않는다 (지도 타일만).
 // 50km 검사는 서버와 같은 규칙을 lib가 먼저 해서 바로 안내 · 비활성 (서버 POST /trips가 마지막에 다시 확인한다).
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Keyboard, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { Component, type ReactNode } from 'react';
@@ -72,20 +72,38 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
   const [mapFailed, setMapFailed] = useState(false);
   const [mapKey, setMapKey] = useState(0);
   // TASK-015 §18 막는 것 1: 이름 칸을 누르면 시트가 키보드 위로 (②-07 field와 같은 규칙). iOS는 Will, 안드로이드는 Did 신호
-  // 이름 칸이 포커스인 동안에는 키보드 숨김 신호가 와도 시트를 내리지 않는다 (시뮬레이터에서 글을 칠 때 키보드가 잠깐 내려갔다 올라오며
-  // 시트가 움직여, 그 사이에 누른 [여기로 정했어]가 키보드 위로 떨어졌다. 칸이 블러될 때 내린다)
+  // §24 42번(승현 11-18): 키보드가 내려가면 포커스가 있어도 시트를 내린다. 단 [여기로 정했어]를 누르는 중(pressIn~pressOut)에 숨김 신호가 오면
+  // 손을 뗄 때까지 그대로 두고 뗀 뒤에 내린다 (§22: 누르는 사이 시트가 움직여 탭이 버튼에 닿지 않았다)
   const [keyboard, setKeyboard] = useState(0);
-  const labelFocused = useRef(false);
+  const pressing = useRef(false);
+  const hideLater = useRef(false);
   useEffect(() => {
-    const show = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow', (event) => setKeyboard(event.endCoordinates.height));
+    const show = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow', (event) => {
+      hideLater.current = false;
+      setKeyboard(event.endCoordinates.height);
+    });
     const hide = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide', () => {
-      if (!labelFocused.current) setKeyboard(0);
+      if (pressing.current) hideLater.current = true;
+      else setKeyboard(0);
     });
     return () => {
       show.remove();
       hide.remove();
     };
   }, []);
+  // §24(03·23·30): 키보드로 시트가 올라가면 핀을 위 버튼 줄 아래 ~ 시트 윗변 가운데로 (task-015-design §12-1 중-2)
+  const { height: screenHeight } = useWindowDimensions();
+  const [panelHeight, setPanelHeight] = useState(SHEET_HEIGHT);
+  const focusBand = keyboard > 0 && pin ? { top: insets.top + space['space-2'] + control['touch-min'], bottom: screenHeight - keyboard - panelHeight } : null;
+  const pressIn = () => {
+    pressing.current = true;
+  };
+  const pressOut = () => {
+    pressing.current = false;
+    if (!hideLater.current) return;
+    hideLater.current = false;
+    setKeyboard(0);
+  };
 
   const tooFar = pin !== null && (serverTooFar || (center !== null && isTooFar(pin, center)));
   const canConfirm = pin !== null && !tooFar && !sending && (center === null || canConfirmPin(pin, center));
@@ -151,13 +169,18 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
           center={center ? { latitude: center.lat, longitude: center.lng } : null}
           pin={pin ? { latitude: pin.lat, longitude: pin.lng } : null}
           bottomPadding={SHEET_HEIGHT}
+          focusBand={focusBand}
           onLongPress={place}
           onReady={() => undefined}
           onFail={() => setMapFailed(true)}
         />
       </MapGuard>
       {topBar}
-      <View testID="pick-panel" style={[styles.sheet, { bottom: keyboard, minHeight: SHEET_HEIGHT, paddingBottom: Math.max(insets.bottom, space['space-5']) }]}>
+      <View
+        testID="pick-panel"
+        onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
+        style={[styles.sheet, { bottom: keyboard, minHeight: SHEET_HEIGHT, paddingBottom: Math.max(insets.bottom, space['space-5']) }]}
+      >
         <Text style={text('heading')}>{pin ? PIN_TITLE : FIRST_TITLE}</Text>
         <Text style={text('body', tooFar || otherError ? 'alert' : 'ink')}>{sub}</Text>
         {pin ? (
@@ -173,18 +196,21 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
               placeholder="예: 친구 집"
               placeholderTextColor={color.muted}
               autoCorrect={false}
-              onFocus={() => {
-                labelFocused.current = true;
-              }}
               onBlur={() => {
-                labelFocused.current = false;
-                setKeyboard(0);
+                if (pressing.current) hideLater.current = true;
+                else setKeyboard(0);
               }}
               style={styles.labelInput}
             />
           </View>
-        ) : null}
-        <PrimaryButton testID="pick-confirm" label="여기로 정했어" disabled={!canConfirm} onPress={() => void confirm()} />
+        ) : (
+          // §24(02): 핀을 찍기 전에도 이름 칸 자리를 비워 둔다 — 이름 칸이 생길 때 [여기로 정했어]가 뛰지 않게 (task-015-design §12-4 a2 처음 상태)
+          <View testID="pick-label-room" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.labelBox}>
+            <View style={styles.captionRoom} />
+            <View style={styles.labelRoom} />
+          </View>
+        )}
+        <PrimaryButton testID="pick-confirm" label="여기로 정했어" disabled={!canConfirm} onPress={() => void confirm()} onPressIn={pressIn} onPressOut={pressOut} />
       </View>
     </View>
   );
@@ -209,6 +235,8 @@ const styles = StyleSheet.create({
     ...shadow.sheet,
   },
   labelBox: { gap: space['space-2'], marginTop: space['space-2'] },
+  captionRoom: { height: text('caption').lineHeight },
+  labelRoom: { height: control.input },
   labelInput: { ...text('body'), minHeight: control.input, paddingHorizontal: space['space-4'], borderRadius: radius['r-md'], backgroundColor: color['bg-2'] },
   failMap: { ...StyleSheet.absoluteFill, backgroundColor: color['bg-2'], alignItems: 'center', justifyContent: 'center' },
   failIcon: { width: layout.mapOffCircle, height: layout.mapOffCircle, borderRadius: radius['r-full'], backgroundColor: color.surface, ...shadow.float },

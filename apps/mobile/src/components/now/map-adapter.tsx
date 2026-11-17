@@ -25,6 +25,7 @@ export type MapAdapterHandle = {
 };
 
 const MAP_READY_LIMIT_MS = 8000; // §11 Q17
+const PICK_CAMERA_MS = 250; // 키보드가 올라올 때 핀을 보이는 곳으로 미는 시간 (문서에 값 없음, 키보드 애니메이션과 비슷하게)
 /**
  * TASK-015 §22 막는 2: 크게 보기에서 경로 맞춤(fitToCoordinates)을 부른 뒤 맞춤 끝 영역 보고(onRegionChangeComplete)를
  * 이만큼 기다린다. 끝까지 안 오면(카메라가 움직이지 않음) 맞춤이 요청한 목표 영역(fitTargetRegion)으로, 그게 없으면 처음 영역(initialRegion)으로
@@ -163,7 +164,7 @@ function NameTag({ coordinate, name, width }: { coordinate: LatLng; name: string
   const tracking = useTrackingBriefly(`tag-${name}-${width}`);
   return (
     <Marker testID="map-pin-label" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_LABEL} tappable={false}>
-      <View style={[styles.bubble, { width, maxWidth: undefined }]}>
+      <View style={[styles.bubble, styles.tag, { width, maxWidth: undefined }]}>
         <Text numberOfLines={1} style={[text('label'), styles.tagText]}>
           {name}
         </Text>
@@ -293,6 +294,7 @@ export function PickMap({
   center,
   pin,
   bottomPadding,
+  focusBand = null,
   onLongPress,
   onReady,
   onFail,
@@ -302,10 +304,14 @@ export function PickMap({
   pin: LatLng | null;
   /** 아래 시트가 가리는 높이 (Google 로고가 가려지지 않게 mapPadding.bottom) */
   bottomPadding: number;
+  /** TASK-015 §24(03·23·30): 키보드로 시트가 올라가 핀이 가려질 때 핀을 둘 띠(위 버튼 줄 아래 ~ 시트 윗변, 화면 y). 있으면 지도를 밀어 핀을 띠 가운데로 */
+  focusBand?: { top: number; bottom: number } | null;
   onLongPress: (at: LatLng) => void;
   onReady: () => void;
   onFail: () => void;
 }) {
+  const map = useRef<MapView>(null);
+  const { height } = useWindowDimensions();
   const ready = useRef(false);
   const pinKey = pin ? `${pin.latitude},${pin.longitude}` : 'none';
   const tracking = useTrackingBriefly(pinKey);
@@ -323,14 +329,23 @@ export function PickMap({
   };
   const start = center ?? NO_CENTER;
   const delta = center ? layout.mapDelta : WIDE_DELTA;
+  const band = focusBand && focusBand.bottom > focusBand.top ? focusBand : null;
+  const mapPadding = band ? { top: band.top, left: 0, right: 0, bottom: Math.max(height - band.bottom, 0) } : { top: 0, left: 0, right: 0, bottom: bottomPadding };
+  const bandKey = band ? `${Math.round(band.top)}-${Math.round(band.bottom)}` : 'none';
+  useEffect(() => {
+    // 띠가 생기거나 바뀌면 핀을 띠 가운데로 (mapPadding 안쪽 가운데 = 카메라 가운데). 띠가 없어지면 그대로 둔다 (핀은 이미 시트 위에 보인다)
+    if (band && pin) map.current?.animateCamera({ center: pin }, { duration: PICK_CAMERA_MS });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bandKey]);
   return (
     <MapView
+      ref={map}
       testID="pick-map"
       provider={PROVIDER_GOOGLE}
       customMapStyle={MAP_STYLE}
       style={StyleSheet.absoluteFill}
       initialRegion={{ ...start, latitudeDelta: delta, longitudeDelta: delta }}
-      mapPadding={{ top: 0, left: 0, right: 0, bottom: bottomPadding }}
+      mapPadding={mapPadding}
       toolbarEnabled={false}
       onLongPress={(event) => onLongPress(event.nativeEvent.coordinate)}
       onMapReady={signalReady}
@@ -670,6 +685,7 @@ export function MapAdapter({
 const styles = StyleSheet.create({
   badge: { position: 'absolute', minWidth: BADGE, height: BADGE, paddingHorizontal: 3, borderRadius: radius['r-full'], backgroundColor: color.ink, alignItems: 'center', justifyContent: 'center' },
   badgeHome: { backgroundColor: color.surface, borderWidth: layout.routeHomeStroke, borderColor: color.ink },
+  tag: { height: layout.nameTag, borderWidth: layout.nameTagStroke, borderColor: color.line }, // TASK-015 §24: 이름표 높이 28 + 테두리 1 (task-014-design §11-3 B6, 겹침 계산과 같은 높이)
   tagText: { textAlign: 'center' },
   scaleSlot: { position: 'absolute', right: space['space-4'], alignItems: 'flex-end' },
   scale: { minWidth: layout.scaleWidth, height: layout.scaleHeight, alignItems: 'flex-start', gap: layout.scaleGap },

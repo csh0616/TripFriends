@@ -57,6 +57,9 @@ export const layout = {
   pinNext: tokens.map['pin-next'],
   pinRing: 3, // §14 승인: 다음 핀 brand 고리 굵기 (문서에 굵기 없음)
   pinBubble: 24, // §14 승인: 다음 핀 이름 말풍선 높이 (label 줄 높이 16 + 위아래 4)
+  noneBody: 300, // TASK-015 a3 못 찾음 본문 폭 (task-015-design §1-4)
+  nameTag: 28, // TASK-015 §24: 지도 이름표 높이 (겹침 규칙 LABEL_HEIGHT와 같다)
+  nameTagStroke: 1, // 이름표 테두리 (line)
   pinBubbleMax: 160, // §14 승인: 말풍선 최대 폭
   homePin: 28, // §14 승인: 지도 숙소 원 지름 (테두리는 routeHomeStroke)
   homeWall: [12, 8], // §14 승인: 지도 숙소 아이콘 벽 폭·높이 (Svg 없이 View로 그린다)

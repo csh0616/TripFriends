@@ -14,8 +14,8 @@ import { SosSheet } from '@/components/planning/sos-sheet';
 import { layout } from '@/planning/layout';
 import { color, control, radius, shadow, space, text } from '@/planning/theme';
 
-const SHEET_HEIGHT = 168; // course-bar
-const SIDE = 24; // 경로 맞춤 좌우 여백
+const SHEET_INNER = 134; // course-bar 안쪽 (TASK-015 §24: + 실제 아래 안전영역, 34면 168)
+const SIDE = 38; // 경로 맞춤 좌우 여백 = 핀 중심 기준 (핀 가장자리 24 + 반지름 14, §24)
 const LOGO_ROOM = 40; // Google 로고 + 여유
 const LABEL_ROOM = 28; // 이름표 높이 자리
 
@@ -58,7 +58,7 @@ export function CourseMapScreen({
   const known = useContext(SafeAreaInsetsContext); // 없으면 판 위치를 모름 -> 이름표 없이 핀만 (§22 막는 2. 위쪽 0은 정상 값)
   const insets = known ?? { top: 0, bottom: 0, left: 0, right: 0 };
   const [sosOpen, setSosOpen] = useState(false);
-  const sheet = SHEET_HEIGHT + insets.bottom;
+  const sheet = SHEET_INNER + insets.bottom;
   const { width, height } = useWindowDimensions();
   // 떠 있는 판 = 위 버튼 줄 · 아래 course-bar (이름표가 피한다, TASK-015 §17)
   const panels = [

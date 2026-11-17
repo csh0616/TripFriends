@@ -84,6 +84,7 @@ const LABEL_GAP_TOP_BOTTOM = 4;
 const LABEL_GAP_SIDE = 6;
 const SCREEN_MARGIN = 8;
 const PIN_MARGIN = 4; // 다른 핀 둘레 여유 (맞닿음 = 간격 <= 여유도 겹침)
+const PANEL_MARGIN = 4; // 떠 있는 판 여유 (TASK-015 §24: 0 -> 4, 간격 <= 4면 겹침 -> 다음 후보)
 const LODGING_STAYING_SIZE = 32; // 머무는 동안 숙소 마커 = "지금 핀" 지름 (§12)
 const EPS = 1e-9;
 
@@ -100,6 +101,13 @@ function touchesCircle(rect: Rect, c: { x: number; y: number }, radius: number):
 
 function touchesRect(a: Rect, b: Rect): boolean {
   return a.x <= b.x + b.width + EPS && b.x <= a.x + a.width + EPS && a.y <= b.y + b.height + EPS && b.y <= a.y + a.height + EPS;
+}
+
+/** 두 사각형 사이 거리 (겹치면 0). 모서리 쪽은 유클리드 거리 */
+function rectGap(a: Rect, b: Rect): number {
+  const dx = Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width), 0);
+  const dy = Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height), 0);
+  return Math.hypot(dx, dy);
 }
 
 function labelRects(pin: { x: number; y: number; size: number }, w: number): [LabelSide, Rect][] {
@@ -183,7 +191,7 @@ export function resolvePinOverlap(input: PinOverlapInput): PinOverlapResult {
       rect.y + rect.height <= screen.height - SCREEN_MARGIN &&
       shown.every((other) => other.id === target.id || !touchesCircle(rect, other, other.size / 2 + PIN_MARGIN)) &&
       !(meDot && me && touchesCircle(rect, me, me.size / 2)) &&
-      panels.every((panel) => !touchesRect(rect, panel)) &&
+      panels.every((panel) => rectGap(rect, panel) > PANEL_MARGIN + EPS) &&
       labels.every((placed) => !touchesRect(rect, placed.rect));
     const width = input.labelWidths?.[target.id] ?? labelWidth;
     const found = labelRects(target, width).find(([, rect]) => free(rect));
