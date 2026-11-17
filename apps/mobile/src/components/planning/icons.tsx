@@ -25,6 +25,8 @@ export const LocateIcon = (p: Props) => (
 );
 
 // TASK-010 여행 만들기: 검색 칸·숙소·다음·알림
+// TASK-015 §24(04·05): a3 못 찾음 = 돋보기 + 렌즈 안 ×
+export const SearchOffIcon = (p: Props) => <Icon {...p} d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5L20 20M8.5 8.5l4 4M12.5 8.5l-4 4" />;
 export const SearchIcon = (p: Props) => <Icon {...p} d="M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5L20 20" />;
 export const HouseIcon = (p: Props) => <Icon {...p} d="M4 11l8-6.5 8 6.5M6 9.8V19h12V9.8M10 19v-5h4v5" />;
 export const NextIcon = (p: Props) => <Icon {...p} d="M9.5 5.5L16 12l-6.5 6.5" />;

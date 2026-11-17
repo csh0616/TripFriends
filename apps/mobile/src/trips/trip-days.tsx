@@ -401,9 +401,14 @@ function DayRow({
           </View>
         </View>
       ) : (
-        <View style={styles.addRow}>
-          <CardButton size="small" testID={`card-plan-${day.day_id}`} label="같이 고르기" onPress={onPlan} />
-          <CardButton size="small" testID={`card-auto-${day.day_id}`} label="알아서 짜 줘" onPress={onAuto} />
+        // TASK-015 §24(15): 작은 버튼 둘도 각 flex 1 · 사이 8 (task-015-design §3 btn-pair-small)
+        <View style={styles.pair}>
+          <View style={styles.grow}>
+            <CardButton size="small" testID={`card-plan-${day.day_id}`} label="같이 고르기" onPress={onPlan} />
+          </View>
+          <View style={styles.grow}>
+            <CardButton size="small" testID={`card-auto-${day.day_id}`} label="알아서 짜 줘" onPress={onAuto} />
+          </View>
         </View>
       )}
     </Pressable>
@@ -490,7 +495,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addRow: { flexDirection: 'row', gap: space['space-2'] },
   addEvent: {
     height: fit['btn-add-event'].height,
     flexDirection: 'row',

@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 
 import { Text } from '@/components/app-text';
 import { GoogleMark } from '@/components/google-mark';
-import { CheckIcon, CloseIcon, HouseIcon, InfoIcon, PinIcon, SearchIcon } from '@/components/planning/icons';
+import { CheckIcon, CloseIcon, HouseIcon, InfoIcon, PinIcon, SearchOffIcon } from '@/components/planning/icons';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
@@ -50,6 +50,7 @@ const FIELD_MESSAGE: Record<string, string> = {
   must_visits: '꼭 갈 곳을 다시 확인해 줘. 하루 5곳까지, 같은 곳은 한 날에만 담을 수 있어',
 };
 const ADDRESS_NOTICE = '이름으로는 못 찾아서 같은 글로 주소를 찾아 봤어'; // a1
+const PICK_MAP_HINT = '코스 끝에 숙소 가는 길을 계산할 때 써요'; // a1 · a3 [지도에서 찍기] 아래 보조 글 (task-015-design §1-2)
 const NONE_TITLE = '주소로도 못 찾았어'; // a3 ① 둘 다 못 찾음
 const NONE_BODY = '에어비앤비나 친구 집은 이렇게 안 나올 때가 많아. 지도에서 대략 찍어도 돼';
 const ADDRESS_DOWN_TITLE = '지금 주소로 못 찾았어'; // a3 ② 공급자 실패
@@ -434,10 +435,16 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
 
 function PickMapButton({ label, onPress, busy }: { label: string; onPress: () => void; busy: boolean }) {
   return (
-    <Pressable testID="btn-pick-map" accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={onPress} style={styles.pickMap}>
-      <PinIcon color={color.ink} size={control.icon - 4} />
-      <Text style={text('heading')}>{label}</Text>
-    </Pressable>
+    <View style={styles.pickMapBlock}>
+      <Pressable testID="btn-pick-map" accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={onPress} style={styles.pickMap}>
+        <PinIcon color={color.ink} size={control.icon - 4} />
+        <Text style={text('heading')}>{label}</Text>
+      </Pressable>
+      {/* §24(01 · 04 · 05): 버튼 아래 보조 글 (task-015-design §1-2) */}
+      <Text testID="pick-map-hint" style={text('src', 'muted')}>
+        {PICK_MAP_HINT}
+      </Text>
+    </View>
   );
 }
 
@@ -446,10 +453,13 @@ function LodgingNone({ addressDown, busy, onPick, onSkip }: { addressDown: boole
   return (
     <View testID="lodging-none" style={styles.none}>
       <View style={styles.noneIcon}>
-        <SearchIcon color={color.muted} size={control.icon} />
+        <SearchOffIcon color={color.ink} size={control.icon} />
       </View>
       <Text style={text('heading')}>{addressDown ? ADDRESS_DOWN_TITLE : NONE_TITLE}</Text>
-      <Text style={[text('caption', 'muted'), styles.center]}>{addressDown ? ADDRESS_DOWN_BODY : NONE_BODY}</Text>
+      {/* §24(04): 한국어는 단어 단위로 끊는다 ("찍/어도" 막기) */}
+      <Text lineBreakStrategyIOS="hangul-word" textBreakStrategy="balanced" style={[text('caption', 'muted'), styles.center, styles.noneBody]}>
+        {addressDown ? ADDRESS_DOWN_BODY : NONE_BODY}
+      </Text>
       <PickMapButton label="지도에서 찍기" busy={busy} onPress={onPick} />
       <SecondaryButton small testID="lodging-skip" label="건너뛰기" onPress={onSkip} />
     </View>
@@ -514,6 +524,8 @@ function PlaceRow({ hit, index, form, date, onPress }: { hit: SearchPlace; index
 
 const styles = StyleSheet.create({
   noticeLine: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  pickMapBlock: { gap: space['space-2'] },
+  noneBody: { alignSelf: 'center', maxWidth: layout.noneBody },
   pickMap: { minHeight: control.btn, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space['space-2'], borderRadius: radius['r-md'], borderWidth: layout.actionBarLine, borderColor: color.muted, backgroundColor: color.surface },
   none: { alignItems: 'stretch', gap: space['space-3'], paddingVertical: space['space-3'] },
   noneIcon: { alignSelf: 'center', width: layout.lodgeThumb, height: layout.lodgeThumb, borderRadius: radius['r-full'], backgroundColor: color['bg-2'], alignItems: 'center', justifyContent: 'center' },
