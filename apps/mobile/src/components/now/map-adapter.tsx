@@ -24,6 +24,11 @@ export type MapAdapterHandle = {
 };
 
 const MAP_READY_LIMIT_MS = 8000; // §11 Q17
+/**
+ * TASK-015 §22 막는 2 (껍데기, test-writer): 크게 보기에서 경로 맞춤(fitToCoordinates)을 부른 뒤 맞춤 끝 영역 보고(onRegionChangeComplete)를
+ * 이만큼 기다린다. 끝까지 안 오면(카메라가 움직이지 않음) 마지막으로 받은 영역으로 이름표를 그린다. 문서에 값이 없어 frontend가 구현과 함께 정한다
+ */
+export const COURSE_LABEL_FIT_WAIT_MS = 1000;
 
 /** 안의 그림이 바뀐 직후에만 Marker가 다시 사진을 뜨게 한다 (계속 켜 두면 지도가 느려진다) */
 function useTrackingBriefly(key: string): boolean {

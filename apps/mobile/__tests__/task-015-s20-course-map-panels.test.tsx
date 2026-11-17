@@ -105,6 +105,11 @@ async function showMap(stops: CourseStop[]) {
   frame = { x: left, y: top, width: WIDTH - left - right, height: HEIGHT - top - bottom };
   const padding = map.props.mapPadding !== undefined ? fitPaddingOf() : null;
   const region = fitRegion([HOME, ...stops], padding ?? { top: INSET_TOP + 52 + 28, bottom: 168 + INSET_BOTTOM + 40, left: 24, right: 24 });
+  // (§22 막는 2, 11-17) 이름표는 경로 맞춤(fitToCoordinates) 뒤 처음 온 영역으로만 그린다 -> 준비 신호(맞춤)를 먼저 주고 영역을 넣는다.
+  // 영역 값은 바꾸지 않으려고 맞춤 전에 위에서 계산해 둔 값 그대로 쓴다 (이 파일은 처음부터 맞춤 전 padding 대체값으로 계산해 왔다)
+  await act(async () => {
+    mapControl.ready();
+  });
   await act(async () => {
     fireEvent(map as never, 'regionChangeComplete', region);
   });
