@@ -43,7 +43,7 @@ const ROW_TOP = INSET_TOP + 8;
 const BUTTON = 44;
 const PILL = 36;
 const SIDE = 16;
-const SHEET_TOP = HEIGHT - 168; // 706 — §24: course-bar 168은 아래 안전영역 34 포함 (옛 진단 672 = 874 − 202)
+const SHEET_TOP = HEIGHT - (134 + INSET_BOTTOM); // 706 — §24: course-bar 168은 아래 안전영역 34 포함 (옛 진단 672 = 874 − 202)
 const LABEL_H = 28;
 const HOME = { lat: 35.0, lng: 135.0 };
 

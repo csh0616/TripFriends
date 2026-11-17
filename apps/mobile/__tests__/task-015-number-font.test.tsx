@@ -309,7 +309,12 @@ describe('§13-3 4 · §14-3 사실 줄 시각 — T-02 · T-07', () => {
     expect(timeMistakes(textHost('14:40 출발'))).toEqual([]);
   });
 
-  // §24: 제목은 제목만(옛 "제목 · 15:00–16:00"). 장소 줄에 시작 시각을 붙이는지는 질문 -> 카드에 보이는 다른 시각 글자도 시각만 DM Mono인지 본다
+  test('T15_S24_T07_장소_줄_장소_HH:MM_시작의_시각만_DM_Mono', async () => {
+    await showCard(t07());
+    expect(timeMistakes(textHost('서버_식당_이름 15:00 시작'))).toEqual([]);
+  });
+
+  // §24: 제목은 제목만(옛 "제목 · 15:00–16:00") -> 카드에 보이는 시각 글자는 모두 시각만 DM Mono
   test('T15_S24_T07_카드_안_시각_글자는_모두_시각만_DM_Mono', async () => {
     await showCard(t07());
     const hosts = screen.queryAllByText(/\d{1,2}:\d{2}/) as unknown as Host[];

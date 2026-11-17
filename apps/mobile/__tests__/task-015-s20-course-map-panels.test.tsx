@@ -48,7 +48,7 @@ const ROW_TOP = INSET_TOP + 8; // 위 줄 top = insets.top + space-2
 const BUTTON = 44; // 닫기 · SOS 지름
 const PILL = 36; // 제목 알약 높이 (layout.titlePill)
 const SIDE = 16; // 위 줄 좌우 = space-4
-const SHEET_TOP = HEIGHT - 168; // course-bar 168 = 안쪽 134 + 아래 안전영역 34 (§24 · task-015-design §12-4. 옛 168 + insets.bottom)
+const SHEET_TOP = HEIGHT - (134 + INSET_BOTTOM); // course-bar = 134 + 실제 아래 안전영역 (§24 · 승현 답 11-18. 34면 168, 옛 168 + insets.bottom)
 const LABEL_H = 28;
 const HOME = { lat: 35.0, lng: 135.0 }; // 데모 도시 중심 = 숙소 (planning/seed.py DEMO_CENTER)
 
@@ -95,9 +95,9 @@ function fitRegion(points: { lat: number; lng: number }[], pad: { top: number; b
   return { latitude: (north + south) / 2, longitude: west + longitudeDelta / 2, latitudeDelta: north - south, longitudeDelta };
 }
 
-async function showMap(stops: CourseStop[]) {
+async function showMap(stops: CourseStop[], metrics: typeof METRICS = METRICS) {
   await render(
-    <SafeAreaProvider initialMetrics={METRICS}>
+    <SafeAreaProvider initialMetrics={metrics}>
       <CourseMapScreen dayNumber={2} labelText="느긋하게" stops={stops} home={HOME} summary={`${stops.length}곳 · 이동 45분`} busy={false} onClose={jest.fn()} onPick={jest.fn()} onFail={jest.fn()} />
     </SafeAreaProvider>,
   );
@@ -240,16 +240,26 @@ describe('§20 #4 reviewer 사례: 그린 이름표가 위 줄 · 시트와 닿�
 const mapOf = () => root().queryAll((h) => h.props.mapElement === 'MapView' && h.props.testID === 'course-map')[0];
 
 describe('§24 크게 보기 값', () => {
-  test('T15_S24_course_bar는_안전영역_포함_168이라_mapPadding_bottom이_168(옛_202)', async () => {
-    await showMap(FOUR);
-    expect((mapOf().props.mapPadding ?? {}).bottom).toBe(168);
+  // 승현 답(11-18): 시트 = 134 + 실제 아래 안전영역 (34면 168, 0이면 134)
+  const withBottom = (bottom: number) => ({ ...METRICS, insets: { ...METRICS.insets, bottom } });
+
+  test.each([
+    [34, 168],
+    [0, 134],
+    [21, 155],
+  ])('T15_S24_course_bar는_134_+_아래_안전영역_%i_=_%i이고_mapPadding_bottom도_같다(옛_168_+_안전영역)', async (bottom, sheet) => {
+    await showMap(FOUR, withBottom(bottom));
+    expect((mapOf().props.mapPadding ?? {}).bottom).toBe(sheet);
   });
 
-  test('T15_S24_아래_시트_판은_화면_아래_168(안전영역_포함)만_덮는다', async () => {
-    await showMap(FOUR);
+  test.each([
+    [34, 168],
+    [0, 134],
+  ])('T15_S24_아래_시트_판은_화면_아래_134_+_안전영역(%i)_=_%i만_덮는다', async (bottom, sheet) => {
+    await showMap(FOUR, withBottom(bottom));
     const panels = lastPanels();
-    expect(covers(panels, WIDTH / 2, HEIGHT - 168 + 1)).toBe(true);
-    expect(covers(panels, WIDTH / 2, HEIGHT - 168 - 1)).toBe(false); // 옛 202 판이면 덮인다
+    expect(covers(panels, WIDTH / 2, HEIGHT - sheet + 1)).toBe(true);
+    expect(covers(panels, WIDTH / 2, HEIGHT - sheet - 1)).toBe(false); // 옛 168 + 안전영역 판이면 덮인다
   });
 
   test('T15_S24_경로_맞춤_좌우_여백은_핀_중심_기준_38(핀_가장자리_24)', async () => {

@@ -332,11 +332,11 @@ describe('B6 카드 부품', () => {
   // §14 T-07 시각: 시각 글자가 여러 곳에 나오므로 줄을 정확히 찾는다 (승인된 수정)
   const cardWords = (id: string) => textsUnder(byId(id)).map(textOf).join('');
 
-  // TASK-015 §24 · task-015-design §12-5 2(보드대로): 제목 + 장소 줄 (옛: "제목 · 시작–끝" 한 줄). 장소 줄에 시각을 붙이는지는 질문
+  // TASK-015 §24 · task-015-design §12-5 2(보드대로): 제목 + 장소 줄 (옛: "제목 · 시작–끝" 한 줄)
   test('T15_S24_T_07_제목은_제목만_한_줄이고_장소_이름_줄이_따로', async () => {
     await shows(t07());
     expect(inCard('card-T-07').getByText('서버_예약_제목')).toBeTruthy();
-    expect(inCard('card-T-07').getByText(/서버_식당_이름/)).toBeTruthy();
+    expect(inCard('card-T-07').getByText('서버_식당_이름 15:00 시작')).toBeTruthy(); // 승현 답 11-18: "{장소} {시작} 시작"
     expect(cardWords('card-T-07')).not.toContain('서버_예약_제목 · 15:00–16:00');
   });
 

@@ -8,6 +8,7 @@
 //
 // 계약 (이 파일이 정한 것):
 //   T-07: card-T-07 안 글 "고정 일정 · 곧 출발"이 있고 "고정 일정이 곧이야"는 없다. 출발 시각 줄 "HH:MM 출발"(값 = leave_by).
+//         장소 줄 "{fixed.name} {fixed.start} 시작"(승현 답 11-18), 시작–끝 범위 없음. 남은 0분 = "지금 출발해" + "HH:MM 출발"
 //         남은 분 > 0이면 카드 글을 이어 읽은 것에 "N분 뒤에 출발해". 자물쇠 아이콘의 모양은 보지 않는다
 //   T-08(숙소 있음 · map_url 있음): home-directions-button이 주 버튼 = 바탕 brand, 최소 높이 52(btn). 보조 small(44)이 아니다
 //   여행 중 화면에서 T-08이 메인 카드면 화면 전체에서 주황 바탕의 눌리는 것은 정확히 하나 = home-directions-button
@@ -78,6 +79,20 @@ describe('§24 T-07 라벨 · 문장은 보드대로', () => {
   test('T15_S24_T_07_경계_남은_분_0이면_N분_뒤에_출발해가_없다(출발_시각_줄은_있다)', async () => {
     const card = await showCard(t07({ leave_in_min: 0 }));
     expect(cardWords('card-T-07')).not.toContain('분 뒤에 출발해');
+    expect(card.getByText('14:40 출발')).toBeTruthy();
+  });
+
+  // 승현 답(11-18): 장소 줄 = "{장소} {시작 시각} 시작" (띄어쓰기 구분), 옛 시작–끝 범위는 뺀다
+  test('T15_S24_T_07_장소_줄은_장소_시작_시각_시작이고_시작–끝_범위는_없다', async () => {
+    const card = await showCard(t07());
+    expect(card.getByText('서버_식당_이름 15:00 시작')).toBeTruthy();
+    expect(cardWords('card-T-07')).not.toContain('15:00–16:00');
+    expect(cardWords('card-T-07')).not.toContain('16:00');
+  });
+
+  test('T15_S24_경계_T_07_남은_0분이면_지금_출발해와_HH:MM_출발', async () => {
+    const card = await showCard(t07({ leave_in_min: 0 }));
+    expect(card.getByText('지금 출발해')).toBeTruthy();
     expect(card.getByText('14:40 출발')).toBeTruthy();
   });
 
