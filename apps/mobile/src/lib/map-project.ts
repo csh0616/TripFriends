@@ -42,6 +42,15 @@ export function visibleArea(size: Size, padding: MapPadding): Required<Frame> {
   return { x: padding.left, y: padding.top, width: size.width - padding.left - padding.right, height: size.height - padding.top - padding.bottom };
 }
 
+/**
+ * TASK-015 §22 막는 2 (껍데기, test-writer): 경로 맞춤(fitToCoordinates)이 요청하는 목표 영역 — 점 상자를 보이는 영역(size) 안 edgePadding 안쪽에
+ * 한 배율로 넣고 가운데 맞춘 region (region은 size를 채운다). 점이 없거나 한 점뿐이거나 안쪽 넓이가 0 이하면 null.
+ * 계약: __tests__/task-015-s22-fit-target-region.test.ts
+ */
+export function fitTargetRegion(_points: Coord[], _size: Size, _edgePadding: MapPadding): Region | null {
+  throw new Error('not implemented');
+}
+
 /** 화면 가로 한 점이 몇 m인가 (지도 가운데 위도 기준) */
 export function metersPerPoint(region: Region, width: number): number {
   return (region.longitudeDelta * METERS_PER_DEGREE * Math.cos(rad(region.latitude))) / width;

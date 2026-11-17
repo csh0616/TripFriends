@@ -15,8 +15,10 @@
 //   맞춤 끝 영역을 받으면: 이름표 2개(2곳 데모), 이름표 좌표를 그 영역 · 보이는 영역 기준으로 화면 점으로 바꾸면 겹침 함수가 놓은 자리 가운데,
 //     겹침 함수에 넘긴 핀 좌표도 그 영역 기준. 그 뒤 다른 영역이 오면 마지막 영역 기준으로 다시 계산
 //   맞춤 끝 영역이 안 올 때(A): fitToCoordinates를 부른 때부터 COURSE_LABEL_FIT_WAIT_MS 미만이면 이름표 0개, 그 시간이 되면 마지막으로 받은 영역으로 그린다
-//     (시간 값은 '@/components/now/map-adapter'의 COURSE_LABEL_FIT_WAIT_MS — 문서에 없어 frontend가 정한다. 이 파일은 0보다 큰지만 본다)
-//   크기를 모름: 안전 영역을 모름(SafeAreaProvider 없음 -> 판 위치를 모름) 또는 창 크기 폭 · 높이 중 하나라도 0 -> 맞춤 끝 영역이 와도 이름표 0개, 번호 핀은 그대로
+//     영역 보고가 한 번도 없었으면 맞춤이 요청한 목표 영역(fitTargetRegion(맞춤에 넘긴 좌표, 보이는 영역 크기, 맞춤 edgePadding))으로 반드시 그리고,
+//     목표 영역이 없으면(null, 예: 경로가 한 점) 처음 영역(MapView initialRegion)으로. 그 뒤 실제 영역이 오면 그 영역으로 다시 계산 (승현 11-17 보충 ①)
+//     (시간 값 = '@/components/now/map-adapter'의 COURSE_LABEL_FIT_WAIT_MS, 1000ms로 시작 — frontend가 재서 바꿀 수 있어 시험은 상수를 읽어 쓴다, 보충 ②)
+//   크기를 모름: 안전 영역을 모름(SafeAreaProvider 없음 -> 판 위치를 모름. 안전 영역 위쪽 0은 정상 값이라 기다리지 않고 그린다 — 승현 11-17 보충 ③) 또는 창 크기 폭 · 높이 중 하나라도 0 -> 맞춤 끝 영역이 와도 이름표 0개, 번호 핀은 그대로
 //   맞춤 끝 영역 흉내: fitToCoordinates의 edgePadding은 보이는 영역(mapPadding을 뺀 곳) 안쪽 여백으로 보고, 경로 상자가 그 안쪽 끝에 닿는 region을 시험이 계산한다
 //   데이터: testdata/demo/seed-two-places.json(2곳 데모) · 숙소 = 데모 중심(35.0, 135.0)
 import { readFileSync } from 'node:fs';
@@ -28,7 +30,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { COURSE_LABEL_FIT_WAIT_MS, type CourseStop } from '@/components/now/map-adapter';
 import { CourseMapScreen } from '@/components/planning/course-map-screen';
-import type { Region } from '@/lib/map-project';
+import { fitTargetRegion, type Region } from '@/lib/map-project';
 import { resolvePinOverlap, type PinOverlapInput, type PinOverlapResult, type Rect } from '@/lib/pin-overlap';
 
 import { mapControl } from '../test-support/maps-mock';
@@ -98,12 +100,15 @@ function fitRegion(points: { lat: number; lng: number }[], pad: Pad, frame: F): 
 
 let windowSize = { width: WIDTH, height: HEIGHT };
 
-async function mount({ insetsKnown = true }: { insetsKnown?: boolean } = {}) {
+let shownStops: CourseStop[] = TWO;
+
+async function mount({ insetsKnown = true, metrics = METRICS, stops = TWO, home = HOME as typeof HOME | null }: { insetsKnown?: boolean; metrics?: typeof METRICS; stops?: CourseStop[]; home?: typeof HOME | null } = {}) {
   mapControl.silent = true; // 준비 신호는 시험이 직접 준다 (호출 순서를 시험이 정한다)
+  shownStops = stops;
   const view = (
-    <CourseMapScreen dayNumber={2} labelText="느긋하게" stops={TWO} home={HOME} summary="2곳 · 이동 20분" busy={false} onClose={jest.fn()} onPick={jest.fn()} onFail={jest.fn()} />
+    <CourseMapScreen dayNumber={2} labelText="느긋하게" stops={stops} home={home} summary="2곳 · 이동 20분" busy={false} onClose={jest.fn()} onPick={jest.fn()} onFail={jest.fn()} />
   );
-  await render(insetsKnown ? <SafeAreaProvider initialMetrics={METRICS}>{view}</SafeAreaProvider> : view);
+  await render(insetsKnown ? <SafeAreaProvider initialMetrics={metrics}>{view}</SafeAreaProvider> : view);
   const map = mapHost();
   expect(map).toBeDefined(); // 시험 자체 확인: 대체 그림이 아니라 지도
   return map;
@@ -174,7 +179,7 @@ function drawnLabels(region: Region): { name: string; center: { x: number; y: nu
 function placedCenters(): Record<string, { x: number; y: number }> {
   const out: Record<string, { x: number; y: number }> = {};
   for (const placed of lastResult().labels ?? []) {
-    const stop = TWO.find((s) => `p${s.seq}` === placed.pinId);
+    const stop = shownStops.find((s) => `p${s.seq}` === placed.pinId);
     if (stop?.name) out[stop.name] = { x: round(placed.rect.x + placed.rect.width / 2), y: round(placed.rect.y + placed.rect.height / 2) };
   }
   return out;
@@ -183,10 +188,10 @@ function placedCenters(): Record<string, { x: number; y: number }> {
 /** 그린 이름표가 마지막 겹침 결과 · 주어진 region과 맞는가 (이름 -> 가운데) */
 function expectLabelsFrom(region: Region) {
   const drawn = drawnLabels(region);
-  expect(drawn.map((l) => l.name).sort()).toEqual(TWO.map((s) => s.name).sort());
+  expect(drawn.map((l) => l.name).sort()).toEqual(shownStops.map((s) => s.name).sort());
   expect(Object.fromEntries(drawn.map((l) => [l.name, l.center]))).toEqual(placedCenters());
   const frame = visibleFrame();
-  for (const stop of TWO) {
+  for (const stop of shownStops) {
     const pin = lastInput().pins.find((p) => p.id === `p${stop.seq}`);
     const at = toScreen(region, frame, { latitude: stop.lat, longitude: stop.lng });
     expect({ id: pin?.id, x: round(pin?.x ?? NaN), y: round(pin?.y ?? NaN) }).toEqual({ id: `p${stop.seq}`, x: round(at.x), y: round(at.y) });
@@ -292,7 +297,7 @@ describe('§22 막는 2 — 맞춤 끝 영역을 받은 뒤', () => {
 });
 
 describe('§22 막는 2 (A) — 맞춤 끝 영역 보고가 안 오면(카메라가 안 움직임) 기다린 뒤 마지막 영역으로', () => {
-  test('T15_S22_2_A_기다림_시간은_0보다_크다', () => {
+  test('T15_S22_2_A_기다림_시간은_0보다_큰_유한한_값', () => {
     expect(Number.isFinite(COURSE_LABEL_FIT_WAIT_MS)).toBe(true);
     expect(COURSE_LABEL_FIT_WAIT_MS).toBeGreaterThan(0);
   });
@@ -356,6 +361,73 @@ describe('§22 막는 2 (A) — 맞춤 끝 영역 보고가 안 오면(카메라
   });
 });
 
+/** 화면이 맞춤에 넘긴 좌표 · edgePadding으로 계산한 목표 영역 (보이는 영역 크기 기준) */
+function targetRegion(): Region | null {
+  const fit = mapControl.fits[mapControl.fits.length - 1];
+  expect(fit).toBeDefined(); // 시험 자체 확인: 맞춤을 불렀다
+  const frame = visibleFrame();
+  return fitTargetRegion(fit.coordinates, { width: frame.width, height: frame.height }, fit.options?.edgePadding as never);
+}
+
+describe('§22 막는 2 (A ①) — 영역 보고가 한 번도 없이 기다림이 끝나면 목표 영역(없으면 initialRegion)으로', () => {
+  test('T15_S22_2_A1_경계_영역_보고_없이_기다림_시간_1ms_전이면_이름표_0개', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    expect(mapControl.fits).toHaveLength(1); // 시험 자체 확인: 맞춤을 불렀다
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS - 1);
+    });
+    expect(labelHosts()).toHaveLength(0);
+    expect(numberPins()).toHaveLength(2);
+  });
+
+  test('T15_S22_2_A1_경계_영역_보고_없이_기다림_시간이_되면_반드시_목표_영역_기준으로_이름표_2개', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    const target = targetRegion();
+    expect(target).not.toBeNull(); // 시험 자체 확인: 2곳 + 숙소 경로는 목표 영역이 있다
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS);
+    });
+    expect(labelHosts()).toHaveLength(2);
+    expectLabelsFrom(target as Region);
+  });
+
+  test('T15_S22_2_A1_목표_영역이_없으면(경로가_한_점)_기다림_시간이_되면_처음_영역(initialRegion)_기준으로_이름표_1개', async () => {
+    jest.useFakeTimers();
+    const one: CourseStop[] = [TWO[0]];
+    await mount({ stops: one, home: null });
+    await mapReady();
+    expect(targetRegion()).toBeNull(); // 시험 자체 확인: 한 점 경로는 목표 영역이 없다
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS - 1);
+    });
+    expect(labelHosts()).toHaveLength(0);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1);
+    });
+    expect(labelHosts()).toHaveLength(1);
+    expectLabelsFrom(firstRegion());
+  });
+
+  test('T15_S22_2_A1_처음_영역으로_그린_뒤_늦게_실제_영역이_오면_그_영역으로_다시_계산', async () => {
+    jest.useFakeTimers();
+    await mount();
+    await mapReady();
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(COURSE_LABEL_FIT_WAIT_MS);
+    });
+    const before = labelHosts().map((h) => h.props.coordinate);
+    const fitted = fitEnd();
+    await tellRegion(fitted);
+    expect(labelHosts()).toHaveLength(2);
+    expectLabelsFrom(fitted);
+    expect(labelHosts().map((h) => h.props.coordinate)).not.toEqual(before); // 시험 자체 확인: 좌표가 실제로 바뀌었다
+  });
+});
+
 describe('§22 막는 2 — 지도 크기 · 떠 있는 판 크기를 모르면 이름표 0개', () => {
   test('T15_S22_2_안전_영역을_모르면(SafeAreaProvider_없음)_맞춤_끝_영역이_와도_이름표_0개_번호_핀은_2개', async () => {
     await mount({ insetsKnown: false });
@@ -376,6 +448,16 @@ describe('§22 막는 2 — 지도 크기 · 떠 있는 판 크기를 모르면 
     await tellRegion({ latitude: 35.0, longitude: 135.0, latitudeDelta: 0.02, longitudeDelta: 0.02 });
     expect(labelHosts()).toHaveLength(0);
     expect(numberPins()).toHaveLength(2);
+  });
+
+  test('T15_S22_2_경계_안전_영역_위쪽_0은_정상_값이라_맞춤_끝_영역을_받으면_기다리지_않고_바로_이름표_2개', async () => {
+    jest.useFakeTimers(); // 시간을 밀지 않는다 = 기다림 없이
+    await mount({ metrics: { ...METRICS, insets: { ...METRICS.insets, top: 0 } } });
+    await mapReady();
+    const region = fitEnd();
+    await tellRegion(region);
+    expect(labelHosts()).toHaveLength(2);
+    expectLabelsFrom(region);
   });
 
   test('T15_S22_2_경계_안전_영역을_알고_창_크기도_있으면_같은_순서로_이름표_2개(위_두_시험의_짝)', async () => {
