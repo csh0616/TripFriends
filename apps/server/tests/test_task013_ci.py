@@ -79,6 +79,7 @@ OUTSIDE_READS: dict[str, set[str]] = {
     "apps/mobile/__tests__/task-013-toolchain.test.ts": {".node-version", "pnpm-workspace.yaml", "package.json"},
     "apps/mobile/__tests__/task-015-lodging-pick-lib.test.ts": {"apps/server/trip/detect.py"},  # TASK-015 §15 ②: 서버 거리 공식과 같은지 본다
     "apps/mobile/__tests__/task-015-s20-demo-seed.test.tsx": {"testdata/demo/**"},  # TASK-015 §20 #7: 서버 시드 선택지와 같은 데이터로 도식 벌리기를 본다
+    "apps/mobile/__tests__/task-015-s22-course-map-labels-after-fit.test.tsx": {"testdata/demo/**"},  # TASK-015 §22 막는 2: 2곳 데모(seed-two-places.json)로 크게 보기 이름표를 본다
 }
 
 
