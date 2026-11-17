@@ -74,10 +74,10 @@ describe('§27 시트 움직임 — 여행 중 화면', () => {
   test('T15_S27_여행_중에_동작_줄이기를_켜면_알림을_따라_즉시로', async () => {
     jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockResolvedValue(false);
     const listeners: ((on: boolean) => void)[] = [];
-    const real = AccessibilityInfo.addEventListener.bind(AccessibilityInfo);
+    // 이 jest 환경의 addEventListener는 이미 가짜 함수라 진짜를 부르지 않는다: 알림 함수만 모아 두고 떼기 손잡이를 돌려준다 (afterEach restoreAllMocks가 되돌림)
     jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation(((name: string, handler: (on: boolean) => void) => {
       if (name === 'reduceMotionChanged') listeners.push(handler);
-      return real(name as never, handler as never);
+      return { remove() {} };
     }) as never);
     await toNow(nowServer(nowCard(t01())));
     await waitFor(() => expect(duration()).toBe(sheetMotion(false).durationMs));
