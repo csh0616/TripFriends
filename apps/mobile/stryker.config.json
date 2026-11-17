@@ -27,7 +27,7 @@
     "src/lib/live-location.ts",
     "src/lib/now-api.ts",
     "src/lib/pin-overlap.ts",
-    "src/lib/lodging-pick.ts", "src/lib/map-project.ts", "src/lib/diagram-spread.ts", "src/lib/region-match.ts"
+    "src/lib/lodging-pick.ts", "src/lib/map-project.ts", "src/lib/diagram-spread.ts", "src/lib/region-match.ts", "src/now/sheet-motion.ts"
   ],
   "reporters": [
     "clear-text",

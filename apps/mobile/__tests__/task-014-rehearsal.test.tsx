@@ -348,13 +348,13 @@ describe('C4 연습 중 행동', () => {
     nowReply = () => json(200, view);
     checkReply = (sent) => json(200, { ...(hasAction(sent, 'visit_check') ? opened : view), at: body(sent).at });
     await toRehearsal();
-    expect(within(screen.getByTestId('card-T-02')).getByText('미확인')).toBeTruthy(); // 시험 자체 확인
+    expect(within(screen.getByTestId('card-T-02')).getByText('영업시간 미확인')).toBeTruthy(); // 시험 자체 확인 (§27 칩 ㉠: 옛 '미확인')
     const pressedAt = String(body(checks()[checks().length - 1]).at);
     await tap(await screen.findByTestId('visit-open'));
     expect(await screen.findByText(REHEARSAL_NOTE)).toBeTruthy();
     expect(sentTo('POST /places/')).toEqual([]); // [열었어]는 그 자리에서 보내지 않는다
     await waitFor(() => expect(screen.queryByTestId('card-T-05')).toBeNull()); // 실제처럼 카드가 빠진다
-    await waitFor(() => expect(within(screen.getByTestId('card-T-02')).getByText('확인됨')).toBeTruthy());
+    await waitFor(() => expect(within(screen.getByTestId('card-T-02')).getByText('영업시간 확인됨')).toBeTruthy()); // §27 칩 ㉠: 옛 '확인됨'
     await plusTen();
     await waitFor(() => expect(hasAction(checks()[checks().length - 1], 'visit_check')).toBe(true));
     expect(actionsOf(checks()[checks().length - 1])).toEqual([{ type: 'visit_check', place_id: 'D02', day_id: PLANNED, at: pressedAt, was_open: true }]);

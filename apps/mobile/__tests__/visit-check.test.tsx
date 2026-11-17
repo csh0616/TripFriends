@@ -253,7 +253,7 @@ describe('C2 열었어·닫혔어', () => {
     await pressId('visit-open');
     await screen.findByTestId('card-T-01');
     expect(screen.queryByTestId('card-T-05')).toBeNull();
-    expect(inCard('card-T-01').getByText('확인됨')).toBeTruthy();
+    expect(inCard('card-T-01').getByText('영업시간 확인됨')).toBeTruthy(); // §27 칩 ㉠: 옛 '확인됨'
   });
 
   test('T8_C2_닫혔어_응답으로_T_06', async () => {

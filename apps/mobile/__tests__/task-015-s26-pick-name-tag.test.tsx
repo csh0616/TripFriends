@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-// TASK-015 §26 막는 1: a2 "지도에서 찍기" — 찍은 핀 옆에 사용자가 쓴 이름표가 보인다.
+// TASK-015 §26 막는 1 + §27 a2 이름표 4가지: a2 "지도에서 찍기" — 찍은 핀 옆에 사용자가 쓴 이름표가 보인다.
 // 로직 · 가드레일만 본다 (이름표가 있나 · 글 · 자리 후보 · 모양 값 28 · 테두리). 가짜 지도 위 화면 테스트 — 실제로 보이는지는 Maestro · 스크린샷 몫.
 // 근거: TASK-015 §26 "막는 1건"(reviewer 6차 78장: 지도 코드에 이름표 자체가 없음 -> §1-3대로 보인다. ②-06a 이름표 모양 · 자리 후보(위 -> 오른쪽 -> 왼쪽 -> 아래),
 //       이름 칸이 비면 이름표 없음, 치는 대로 바뀜) · docs/design/reviews/task-015-design.md §1-3 이름표 줄("②-06a name tag(흰 알약 28 · 12/16·600) ·
@@ -13,12 +13,17 @@
 //     Marker coordinate = 이름표 가운데 (anchor CENTER). 안쪽에 style.width가 숫자인 상자(= 이름표 폭)가 있고, 높이는 28
 //     글 = 이름 칸(`pick-label`) 글의 앞뒤 공백을 자른 것. 자른 뒤 비면 이름표 없음. 글을 바꾸면 다음 그림에서 바로 바뀐다(지도 영역 알림을 다시 기다리지 않는다)
 //   지도 영역: `pick-map`의 onRegionChangeComplete로 받는다. region은 보이는 영역(화면 390×844에서 MapView mapPadding을 뺀 곳)을 채운다
-//     (__tests__/task-015-s20-course-map-visible-area.test.tsx와 같은 계약). 시험은 영역 알림을 준 뒤에만 이름표 자리를 본다 (알림 전은 보지 않음 — 질문)
+//     (__tests__/task-015-s20-course-map-visible-area.test.tsx와 같은 계약). 알림 전에는 이름표 없음(§27 ③)
 //   자리: 찍은 핀(지름 32, 반지름 16) 화면 점 (px, py), 이름표 폭 w, 높이 28.
 //     위 (px − w/2, py − 16 − 4 − 28) -> 오른쪽 (px + 16 + 6, py − 14) -> 왼쪽 (px − 16 − 6 − w, py − 14) -> 아래 (px − w/2, py + 16 + 4)
 //     화면 가장자리에서 8 안쪽이 아닌 후보는 건너뛴다(밀어 넣지 않는다, §12 중-4)
 //   범위 원(pick-area 반지름 64)은 막는 것이 아니다 — 네 후보 모두 핀 중심에서 64 안이라 막는 것이면 이름표가 늘 빠진다(§1-3 "보임"과 어긋남)
-//   떠 있는 판(위 버튼 줄 · 시트)과의 여유는 문서에 a2 값이 없어 이 파일은 묻지 않는다: 모든 경우 판과 4 넘게 떨어진 자리만 쓴다 (질문)
+//   **§27(11-19 결정권자 "추천대로")**: ① 위 버튼 줄 · 시트(키보드로 올라간 시트 포함)는 장애물, 여유 4(간격 4 이하면 다음 후보 — 크게 보기와 같은 판정)
+//     위 버튼 줄 = y insets.top + 8 ~ + 52 (뒤로 x 16–60, 가운데 알약). 판을 몇 개로 나누든(줄 전체 · 부품마다) 결과가 같은 자리만 골랐다.
+//     시트 윗변 = 844 − 키보드 − 258 (pick-panel 높이를 잰 값이 없을 때 258). 로고는 SDK가 그려 자리를 몰라 보지 않는다
+//   ② 범위 원은 막지 않음, 그리는 순서(zIndex) 범위 원 < 이름표 < 핀
+//   ③ 지도 영역 알림 전에는 핀만(이름표 없음). 단 이미 그린 이름표는 키보드가 열려 지도가 움직이는 동안에도 빼지 않는다(마지막 테스트, §26 뜻 그대로)
+//   ④ 네 후보가 모두 안 되면 이름표를 뺀다(핀은 그대로)
 //   키보드: 이름 칸 포커스 -> 키보드 336 -> 시트가 올라가고 지도는 핀을 띠 가운데로 민다(§24). 그 뒤 영역 알림이 오면 이름표가 새 핀 화면 자리 옆에 있다
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import fc from 'fast-check';
@@ -253,7 +258,7 @@ describe('§26 a2 이름표 모양 — ②-06a 이름표 (높이 28 + 테두리 
 });
 
 describe('§26 a2 이름표 자리 후보 — 위 -> 오른쪽 -> 왼쪽 -> 아래 (밀어 넣지 않는다)', () => {
-  // 화면 390×844 · 키보드 없음 · 시트 258. 아래 자리는 모두 위 버튼 줄(뒤로 x16–60 · 가운데 알약, y 55–99)과 시트(y ≥ 586)에서 4 넘게 떨어진 곳을 골랐다
+  // 화면 390×844 · 키보드 없음 · 시트 258(윗변 586). 위 버튼 줄 = 뒤로 x16–60 · 가운데 알약, y 55–99 (insets.top 47 + 8, 높이 44)
   test('T15_S26_위가_되면_위', async () => {
     await show(NAME);
     const point = { x: 195, y: 400 };
@@ -278,28 +283,97 @@ describe('§26 a2 이름표 자리 후보 — 위 -> 오른쪽 -> 왼쪽 -> 아�
     expect(inside(candidate('right', point, drawn.width))).toBe(false);
   });
 
-  test('T15_S26_위_오른쪽_왼쪽이_다_화면_밖이면_아래', async () => {
+  test('T15_S26_경계_위_후보_오른쪽_끝이_화면_8_안쪽에_딱_닿으면_위_0.5_넘으면_왼쪽', async () => {
+    // 위 후보 오른쪽 끝 = px + w/2. 382(= 390 − 8)면 안쪽(위), 382.5면 밖 -> 오른쪽도 밖 -> 왼쪽
     await show(NAME);
-    const point = { x: 340, y: 20 };
-    const { region, frame } = await pinSettlesAt(SPOT, point);
-    const drawn = expectTagAt('bottom', point, region, frame);
-    for (const side of ['top', 'right', 'left'] as const) expect(inside(candidate(side, point, drawn.width))).toBe(false); // 시험 자체 확인
-  });
-
-  test('T15_S26_경계_위_후보가_화면_위_8에_딱_닿으면_위_7.5면_오른쪽', async () => {
-    // 위 후보 y = py − 48. py = 56 -> y 8 (안쪽, 위) · py = 55.5 -> y 7.5 (밖, 오른쪽). 가로는 가운데라 x는 걸리지 않는다
-    await show(NAME);
-    const on = { x: 195, y: 56 + 200 }; // 위 버튼 줄과 떨어지게 먼저 아래에서 폭을 잰다
-    const first = await pinSettlesAt(SPOT, on);
+    const first = await pinSettlesAt(SPOT, { x: 195, y: 400 });
     const w = tagRect(tags()[0], first.region, first.frame).width;
     expect(w).toBeGreaterThan(0);
-    // 오른쪽 후보가 화면 오른쪽 8 안쪽에 들어가는 가장 오른쪽 자리(위 버튼 줄의 뒤로 · 가운데 알약과 가로로 먼 곳)
-    const x = WIDTH - EDGE - PIN_R - GAP_SIDE - w - 1;
-    expect(inside(candidate('right', { x, y: 55.5 }, w))).toBe(true); // 시험 자체 확인
-    const atEdge = await pinSettlesAt(SPOT, { x, y: 56 });
-    expectTagAt('top', { x, y: 56 }, atEdge.region, atEdge.frame);
-    const past = await pinSettlesAt(SPOT, { x, y: 55.5 });
-    expectTagAt('right', { x, y: 55.5 }, past.region, past.frame);
+    const on = { x: WIDTH - EDGE - w / 2, y: 400 };
+    const atEdge = await pinSettlesAt(SPOT, on);
+    expectTagAt('top', on, atEdge.region, atEdge.frame);
+    const past = { x: WIDTH - EDGE - w / 2 + 0.5, y: 400 };
+    const over = await pinSettlesAt(SPOT, past);
+    expectTagAt('left', past, over.region, over.frame);
+  });
+
+  test('T15_S26_네_후보가_모두_안_되면_이름표를_뺀다(핀은_그대로)', async () => {
+    // §27 ④: 오른쪽 위 구석 — 위(화면 위) · 오른쪽(화면 오른쪽) · 왼쪽(화면 위) · 아래(화면 오른쪽) 모두 8 안쪽을 벗어남
+    await show(NAME);
+    const first = await pinSettlesAt(SPOT, { x: 195, y: 400 });
+    const w = tagRect(tags()[0], first.region, first.frame).width;
+    const corner = { x: 375, y: 20 };
+    for (const side of ['top', 'right', 'left', 'bottom'] as const) expect(inside(candidate(side, corner, w))).toBe(false); // 시험 자체 확인
+    await pinSettlesAt(SPOT, corner);
+    expect(tags()).toHaveLength(0);
+    expect(pickMap().queryAll((h) => h.props.testID === 'pin-pick')).not.toHaveLength(0);
+  });
+});
+
+describe('§27 ① a2 이름표는 위 버튼 줄 · 시트와 4 넘게 띄운다 (간격 4 이하면 다음 후보)', () => {
+  test('T15_S27_경계_위_후보가_위_버튼_줄(뒤로)과_간격_4면_오른쪽_4.5면_위', async () => {
+    // 핀 x 60: 위 후보(가로 60 ± w/2)가 뒤로 버튼(x 16–60) 아래. 위 후보 윗변 = py − 48, 버튼 아랫변 99 -> py 151이면 간격 4, 151.5면 4.5
+    await show(NAME);
+    const touching = { x: 60, y: 151 };
+    const a = await pinSettlesAt(SPOT, touching);
+    expectTagAt('right', touching, a.region, a.frame);
+    const apart = { x: 60, y: 151.5 };
+    const b = await pinSettlesAt(SPOT, apart);
+    expectTagAt('top', apart, b.region, b.frame);
+  });
+
+  test('T15_S27_위_버튼_줄_바로_아래_가운데_핀은_위·오른쪽·왼쪽이_막혀_아래', async () => {
+    // 핀 (195, 110): 위 후보는 줄과 겹치고, 옆 후보(y 96–124)는 가운데 알약(y 59–95, 가운데 195)과 간격 1
+    await show(NAME);
+    const point = { x: 195, y: 110 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    expectTagAt('bottom', point, region, frame);
+  });
+
+  test('T15_S27_경계_시트_윗변(586)과_간격_4면_뺌_4.5면_오른쪽', async () => {
+    // 핀 x 20(위 · 왼쪽은 화면 밖). 오른쪽 후보 아랫변 = py + 14 -> py 568이면 시트와 4(막힘), 아래 후보는 시트 안 -> 이름표 없음. 567.5면 4.5 -> 오른쪽
+    await show(NAME);
+    const touching = { x: 20, y: HEIGHT - 258 - 4 - 14 };
+    await pinSettlesAt(SPOT, touching);
+    expect(tags()).toHaveLength(0);
+    const apart = { x: 20, y: HEIGHT - 258 - 4.5 - 14 };
+    const b = await pinSettlesAt(SPOT, apart);
+    expectTagAt('right', apart, b.region, b.frame);
+  });
+
+  test('T15_S27_키보드로_올라간_시트(윗변_844−336−258=250)도_장애물', async () => {
+    await show(NAME);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    await keyboardShow();
+    const sheetTop = HEIGHT - KEYBOARD - 258;
+    const touching = { x: 20, y: sheetTop - 4 - 14 };
+    await pinSettlesAt(SPOT, touching);
+    expect(tags()).toHaveLength(0);
+    const apart = { x: 20, y: sheetTop - 4.5 - 14 };
+    const b = await pinSettlesAt(SPOT, apart);
+    expectTagAt('right', apart, b.region, b.frame);
+  });
+});
+
+describe('§27 ② ③ a2 그리는 순서 · 영역 알림 전', () => {
+  test('T15_S27_그리는_순서는_범위_원_->_이름표_->_핀(zIndex)', async () => {
+    await show(NAME);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    const z = (id: string) => {
+      const found = pickMap().queryAll((h) => h.props.mapElement === 'Marker' && h.props.testID === id);
+      expect(found).toHaveLength(1);
+      return Number(found[0].props.zIndex ?? 0);
+    };
+    expect(z('pick-area')).toBeLessThan(z('map-pin-label'));
+    expect(z('map-pin-label')).toBeLessThan(z('pin-pick'));
+  });
+
+  test('T15_S27_지도_영역_알림_전에는_핀만(이름표_없음)_알림_뒤에_이름표', async () => {
+    await show(NAME);
+    expect(pickMap().queryAll((h) => h.props.mapElement === 'Marker' && h.props.testID === 'pin-pick')).toHaveLength(1);
+    expect(tags()).toHaveLength(0);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    expect(tags()).toHaveLength(1);
   });
 });
 
