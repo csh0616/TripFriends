@@ -71,6 +71,7 @@ export const layout = {
   sheetFractions: [0.16, 0.44, 0.88], // §14 승인: 시트 3단 높이(낮게·중간·높게)가 시트 영역에서 차지하는 비율
   sheetHandleWidth: 40, // §14 승인: 시트 손잡이
   sheetHandleHeight: 4,
+  sheetHandlePad: 10, // gorhom 손잡이 상자 안쪽 여백(라이브러리 기본값) — 접힌 단 높이 계산 (TASK-015 §24 18번)
   demoThumb: 20, // §14 승인: 데모 시각 막대의 손잡이 지름
   mapEdge: 60, // §14 승인: 카메라 맞춤 좌우 여백 (핀 반쪽 + 이름 말풍선이 잘리지 않게)
   // TASK-009 / DESIGN-001 §4-7 고르기 방식. 값은 tokens.json(select)에서 읽는다 (TASK-010 §E1)

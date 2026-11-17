@@ -611,9 +611,15 @@ export function TripNowScreen({
   // 연습 중엔 중간 단 윗변이 보드 자리 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
   // TASK-015 §24(17): 맨 위 단의 윗변은 위 버튼 줄 아래 + 8보다 올라가지 않는다 (task-015-design §12-4: 손잡이 · 위 버튼 줄이 안 가려지게)
   const sheetTopMin = insets.top + rehTop + layout.header + space['space-2'];
+  // §24 18번: 접힌 단 = 지금 메인 카드 주 버튼 아래 끝 + 16 (손잡이 자리 포함). 잰 값은 메인 카드가 바뀌면 버린다
+  const mainKey = view && visible(view.main) ? view.main.type : null;
+  const [mainBoxY, setMainBoxY] = useState(0);
+  const [primaryBox, setPrimaryBox] = useState<{ key: string | null; y: number; height: number } | null>(null);
+  const primaryBottom = primaryBox && primaryBox.key === mainKey ? mainBoxY + primaryBox.y + primaryBox.height : null;
   const snapPoints = useMemo(() => {
     const total = areaHeight || windowHeight;
     return layout.sheetFractions.map((fraction, index) => {
+      if (index === 0) return collapsedSnap(fraction, primaryBottom, total);
       if (rehearsal && index === 1) return rehSheetHeight(total);
       if (rehearsal && index === 2) return Math.max(rehSheetHeight(total, layout.rehSheetTopUp), rehSheetHeight(total) + 1); // 위로 끌면 윗변 417 (TASK-015 §B3)
       if (index === layout.sheetFractions.length - 1 && total > 0) {
@@ -623,7 +629,7 @@ export function TripNowScreen({
       return `${Math.round(fraction * 100)}%`;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rehearsal, areaHeight, windowHeight, sheetTopMin]);
+  }, [rehearsal, areaHeight, windowHeight, sheetTopMin, primaryBottom]);
   const sheetTop = useSharedValue(0);
   const gap = space['space-3'];
   // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)
@@ -833,8 +839,21 @@ export function TripNowScreen({
           <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
             {view ? (
               <>
-                <View testID="now-main" style={styles.mainBox}>
-                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} rehearsal={rehearsal} /> : null}
+                <View testID="now-main" style={styles.mainBox} onLayout={(event) => setMainBoxY(event.nativeEvent.layout.y)}>
+                  {mainCard ? (
+                    <NowCardView
+                      card={mainCard}
+                      main
+                      onOpenFailed={showToast}
+                      chosenId={chosen}
+                      onChoose={choose}
+                      onDismiss={dismiss}
+                      onVisit={visit}
+                      lateAt={lateAt}
+                      rehearsal={rehearsal}
+                      onPrimaryLayout={(box) => setPrimaryBox({ key: mainCard.type, y: box.y, height: box.height })}
+                    />
+                  ) : null}
                   {note === null && reasonHidden(mainCard, view.reason) ? null : (
                     <View testID="now-reason">
                       <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
@@ -877,6 +896,19 @@ export function TripNowScreen({
       {location.sheet === 'off' ? <LocationOffSheet onSettings={location.openSettings} onClose={location.closeSheet} /> : null}
     </View>
   );
+}
+
+/** 손잡이 자리 = gorhom 손잡이 위아래 안쪽 10 + 손잡이 막대 (§24 18번 접힌 단 계산) */
+const SHEET_HANDLE_ROOM = 2 * layout.sheetHandlePad + layout.sheetHandleHeight;
+
+/**
+ * TASK-015 §24 18번 접힌 단. 메인 카드에 주 버튼이 있고 자리를 쟀으면 = 손잡이 자리 + 버튼 아래 끝 + 16 (px, 중간 단보다 낮게).
+ * 주 버튼이 없는 메인 카드(숙소 없는 T-08 · T-01 등)나 아직 못 잰 때는 옛 비율(16%) — 승현 답 대기, 이 분기 한 곳에서만 정한다
+ */
+function collapsedSnap(fraction: number, primaryBottom: number | null, total: number): string | number {
+  if (primaryBottom === null || total <= 0) return `${Math.round(fraction * 100)}%`;
+  const height = SHEET_HANDLE_ROOM + primaryBottom + space['space-4'];
+  return Math.min(Math.round(height), Math.floor(total * layout.sheetFractions[1]) - 1);
 }
 
 const styles = StyleSheet.create({

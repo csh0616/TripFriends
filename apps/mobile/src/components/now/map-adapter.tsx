@@ -524,7 +524,8 @@ export function CourseMap({
             })
           : null}
       </MapView>
-      {confirmed ? (
+      {/* §24 D-2: 이름표와 축척은 함께 — 안전 영역(떠 있는 판)을 모르면 축척도 숨긴다. 겹침 계산 실패(§6)면 축척은 보인다 */}
+      {confirmed && panels ? (
         <View pointerEvents="none" style={[styles.scaleSlot, { bottom: scaleBottom }]}>
           <MapScale region={confirmed} width={size.width} />
         </View>

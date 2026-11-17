@@ -164,6 +164,7 @@ export function NowCardView({
   onVisit,
   lateAt = null,
   rehearsal = false,
+  onPrimaryLayout,
 }: {
   card: NowCard;
   main: boolean;
@@ -178,6 +179,8 @@ export function NowCardView({
   lateAt?: string | null;
   /** TASK-015 §B4: 연습 중에는 실제 위치에서 길을 여는 [길 안내]를 그리지 않는다 */
   rehearsal?: boolean;
+  /** TASK-015 §24 18번: 주 버튼 자리(카드 안 y · 높이). 접힌 시트 높이를 버튼 아래 끝에 맞추려고 화면이 잰다 */
+  onPrimaryLayout?: (box: { y: number; height: number }) => void;
 }) {
   switch (card.type) {
     case 'T-01':
@@ -353,13 +356,15 @@ export function NowCardView({
           {/* §13 E4: 서버가 준 숙소 길찾기 주소를 구글 지도 앱으로 넘긴다 */}
           {/* TASK-015 §24 1: 하루 끝에 할 일이 이것뿐이라 주 버튼(52, 주황). T-08이 메인이면 화면의 주황 주 버튼은 이것 하나 */}
           {mapUrl != null && !rehearsal ? (
-            <PrimaryButton
-              testID="home-directions-button"
-              label="숙소로 길 안내"
-              onPress={() => {
-                Linking.openURL(mapUrl).catch(onOpenFailed);
-              }}
-            />
+            <View onLayout={onPrimaryLayout ? (event) => onPrimaryLayout(event.nativeEvent.layout) : undefined}>
+              <PrimaryButton
+                testID="home-directions-button"
+                label="숙소로 길 안내"
+                onPress={() => {
+                  Linking.openURL(mapUrl).catch(onOpenFailed);
+                }}
+              />
+            </View>
           ) : null}
         </Shell>
       );
