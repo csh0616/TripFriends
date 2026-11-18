@@ -1674,7 +1674,8 @@ describe('§24 18번 · §27 접힌 단 = 메인 카드 마지막 요소 아래 
     const before = low();
     expect(before).toBe(HANDLE + 90 + 22 + MARGIN); // 시험 자체 확인 (§27 규칙)
     await nextCard(control, t07({ leave_in_min: 0 }), 'T-07');
-    expect(screen.getByText('지금 출발해')).toBeTruthy(); // 시험 자체 확인: 같은 종류, 내용만 바뀜
+    // 같은 종류라 card-T-07은 이미 있다 -> 바뀐 내용이 보일 때까지 기다린다 (요청은 누른 뒤 조금 있다 나간다)
+    expect(await screen.findByText('지금 출발해')).toBeTruthy(); // 시험 자체 확인: 같은 종류, 내용만 바뀜
     await measure('T-07', 70, 22); // 아래 끝 20 줄어듦
     expect(low()).toBe(before);
   });
