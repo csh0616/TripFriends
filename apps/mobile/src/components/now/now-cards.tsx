@@ -9,7 +9,8 @@ import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { LockIcon } from '@/components/planning/icons';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { SecondaryButton } from '@/components/planning/secondary-button';
-import { HoursChipView, StatusChip } from '@/components/planning/status-chip';
+import { HoursChipView, StatusChip, type ChipWords } from '@/components/planning/status-chip';
+import { SheetFrame, sheetStyles } from '@/account/sheet-frame';
 import { minutesOfAt, toMinutes } from '@/lib/demo-clock';
 import { withParticle } from '@/lib/particle';
 import { sourceLabel } from '@/lib/source-label';
@@ -29,27 +30,58 @@ export const reasonHidden = (card: NowCard | null, reason: string): boolean =>
   card !== null && card.type === 'T-08' && card.lodging == null && reason.trim() === NO_LODGING_BODY;
 
 /** 영업시간 칩 자리 (TASK-011 §9 Q10, §14 N9): 확인 상태 칩 / curated 시간대는 "추천 시간대" / 늘 열림은 그 status 칩(보통 확인됨) + "늘 열려 있어" */
-function FactChip({ facts, long = false }: { facts: NowCourseItem['facts']; long?: boolean }) {
+function FactChip({ facts, words = 'short', onOpen }: { facts: NowCourseItem['facts']; words?: ChipWords; onOpen?: () => void }) {
   if (facts.length === 0) return null;
   const view = hoursView(facts);
+  // TASK-015 §29 (task-015-design §15-5): "늘 열려 있어"는 값이 영업을 말하니 칩은 짧게
   if (view.text === ALWAYS_OPEN_TEXT)
     return (
       <View style={styles.alwaysOpen}>
-        <HoursChipView chip={view.chip} long={long} />
+        <HoursChipView chip={view.chip} words="short" onOpen={onOpen} />
         <Text style={text('caption', 'muted')}>{ALWAYS_OPEN_TEXT}</Text>
       </View>
     );
-  return <HoursChipView chip={view.chip} long={long} />;
+  return <HoursChipView chip={view.chip} words={words} onOpen={onOpen} />;
 }
 
+/** 칩 시트에 보일 장소 (TASK-015 §29: 미확인 · 모름 칩을 누르면) */
+export type ChipPlace = { name: string; facts: NowFact[] };
+
 /** TASK-015 §27 칩 ㉠ (task-014-design §10-1 "라벨 줄 24 | 라벨 + 오른쪽 칩"): 라벨 줄 오른쪽 끝에 긴 칩. 이름이 길어도 칩이 밀리거나 이름을 자르지 않는다 */
-function LabelRow({ children, facts }: { children: ReactNode; facts: NowCourseItem['facts'] }) {
+function LabelRow({ children, place, onChip }: { children: ReactNode; place: ChipPlace; onChip?: (place: ChipPlace) => void }) {
   return (
     <View style={styles.labelRow}>
       {children}
       <View style={styles.grow} />
-      <FactChip facts={facts} long />
+      <FactChip facts={place.facts} words="long" onOpen={onChip ? () => onChip(place) : undefined} />
     </View>
+  );
+}
+
+/**
+ * TASK-015 §29 (task-015-design §15-5 제안 · PM 승인): 미확인 · 모름 칩을 누르면 작은 시트 — 장소 이름 · 칩 · 출처 · "확인: 날짜"/"확인한 적 없음" · [닫기].
+ * T-05 사실 줄과 같은 내용. 서버에 묻지 않는다. [열었어][닫혔어] · [구글 지도에서 보기]는 응답에 값이 없어 결정권자 답 대기라 넣지 않는다.
+ * 보드가 아직 없어 모양은 기존 시트 틀(sheet-confirm)과 카드 글자 토큰으로
+ */
+export function ChipSheet({ place, onClose }: { place: ChipPlace; onClose: () => void }) {
+  const fact = place.facts.find((one) => one.field === 'opening_hours') ?? place.facts[0];
+  return (
+    <SheetFrame testID="chip-sheet" scrimTestID="chip-sheet-scrim" scrimLabel="닫기" onScrim={onClose}>
+      <Text style={text('heading')}>{place.name}</Text>
+      {fact ? (
+        <View style={styles.chipFacts}>
+          <View style={styles.titleRow}>
+            <StatusChip status={fact.status} words="long" />
+          </View>
+          {/* §11 G1: Google 출처 글자는 Roboto 400 (src-google). 번역하지 않는다 */}
+          <Text style={fact.source_type === 'google' ? googleText : text('body')}>{sourceLabel(fact.source_type)}</Text>
+          <Text style={text('caption', 'muted')}>{fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}</Text>
+        </View>
+      ) : null}
+      <View style={sheetStyles.buttons}>
+        <SecondaryButton testID="chip-sheet-close" label="닫기" onPress={onClose} />
+      </View>
+    </SheetFrame>
   );
 }
 
@@ -194,6 +226,7 @@ export function NowCardView({
   lateAt = null,
   rehearsal = false,
   onLastLayout,
+  onChip,
 }: {
   card: NowCard;
   main: boolean;
@@ -210,6 +243,8 @@ export function NowCardView({
   rehearsal?: boolean;
   /** TASK-015 §24 18번: 메인 카드 마지막 요소(주 버튼 또는 마지막 줄)의 카드 안 y · 높이. 접힌 시트 높이를 그 아래 끝에 맞추려고 화면이 잰다 */
   onLastLayout?: (box: { y: number; height: number }) => void;
+  /** TASK-015 §29: 라벨 줄의 미확인 · 모름 칩을 누르면 (화면이 칩 시트를 연다) */
+  onChip?: (place: ChipPlace) => void;
 }) {
   return <LastLayout.Provider value={main ? (onLastLayout ?? null) : null}>{cardBody()}</LastLayout.Provider>;
 
@@ -218,7 +253,7 @@ export function NowCardView({
       case 'T-01':
         return (
           <Shell id="card-T-01" main={main}>
-            <LabelRow facts={card.item.facts}>
+            <LabelRow place={{ name: card.item.name, facts: card.item.facts }} onChip={onChip}>
               <Text style={text('label', 'muted')}>지금 할 일</Text>
             </LabelRow>
             <Text style={text('title')}>{card.item.name}</Text>
@@ -240,7 +275,7 @@ export function NowCardView({
         };
         return (
           <Shell id="card-T-02" main={main}>
-            <LabelRow facts={card.next_item.facts}>
+            <LabelRow place={{ name: card.next_item.name, facts: card.next_item.facts }} onChip={onChip}>
               <Text style={text('label', 'muted')}>다음 이동</Text>
             </LabelRow>
             <Text style={text('title')}>{card.next_item.name}</Text>
@@ -272,7 +307,7 @@ export function NowCardView({
                   <Text style={text('num-md', 'surface')}>{String(item.seq)}</Text>
                 </View>
                 <Text style={[text('body'), styles.grow]}>{item.name}</Text>
-                <FactChip facts={item.facts} />
+                <FactChip facts={item.facts} words="row" />
               </View>
             ))}
           </Shell>
@@ -353,7 +388,7 @@ export function NowCardView({
         // TASK-015 §24 2(보드 ①-30대로): 자물쇠 + "고정 일정 · 곧 출발" · 제목 · 장소 줄 "{장소} {시작} 시작" · "N분 뒤에 출발해"(0분이면 "지금 출발해") · "{시각} 출발". 진행 막대 없음
         return (
           <Shell id="card-T-07" main={main}>
-            <LabelRow facts={card.fixed.facts}>
+            <LabelRow place={{ name: card.fixed.name, facts: card.fixed.facts }} onChip={onChip}>
               <LockIcon color={color.muted} size={layout.factIcon} />
               <Text style={text('label', 'muted')}>고정 일정 · 곧 출발</Text>
             </LabelRow>
@@ -431,6 +466,7 @@ const styles = StyleSheet.create({
   thumb: { width: layout.thumbSm, height: layout.thumbSm, borderRadius: radius['r-sm'], overflow: 'hidden' },
   pair: { flexDirection: 'row', gap: space['space-2'] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['space-2'] },
+  chipFacts: { gap: space['space-2'] },
   alwaysOpen: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },
   big: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },

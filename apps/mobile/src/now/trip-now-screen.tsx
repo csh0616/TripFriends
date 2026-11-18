@@ -12,7 +12,7 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { Text } from '@/components/app-text';
 import { DemoPanel } from '@/components/now/demo-panel';
 import { MapAdapter, type MapAdapterHandle } from '@/components/now/map-adapter';
-import { NowCardView, reasonHidden } from '@/components/now/now-cards';
+import { ChipSheet, NowCardView, reasonHidden, type ChipPlace } from '@/components/now/now-cards';
 import { ProfileMenu } from '@/account/profile-menu';
 import { FriendAvatar } from '@/components/planning/friend-bubble';
 import { LocateIcon } from '@/components/planning/icons';
@@ -173,6 +173,10 @@ export function TripNowScreen({
   const [delay, setDelay] = useState(0); // C2: 위치만 이만큼 앞 시각 자리
   const [note, setNote] = useState<string | null>(null);
   const [sheetIndex, setSheetIndex] = useState(1);
+  // TASK-015 §29 하-12: 시트가 접힌 단으로 가는(또는 있는) 동안은 이유 줄을 그리지 않는다 — 짧은 카드로 바뀔 때 잘린 채 비치지 않게. 움직이기 시작할 때(onAnimate) 정한다
+  const [sheetGoal, setSheetGoal] = useState(1);
+  // TASK-015 §29: 미확인 · 모름 칩을 눌러 연 칩 시트의 장소 (서버에 묻지 않는다)
+  const [chipPlace, setChipPlace] = useState<ChipPlace | null>(null);
   const [chosen, setChosen] = useState<string | null>(null); // TASK-009 A1: 고른 제안 id. 화면에만 있고 서버에는 보내지 않는다
   const [rehearsalInfo, setRehearsalInfo] = useState(false); // §9 답 7: "연습이라 저장하지 않았어" 한 줄
 
@@ -853,7 +857,11 @@ export function TripNowScreen({
           // 기본값(true)이면 시트 안 카드가 하나로 묶여 보조 기술·자동 확인에 낱개로 안 보인다
           accessible={false}
           snapPoints={snapPoints}
-          onChange={setSheetIndex}
+          onChange={(index) => {
+            setSheetIndex(index);
+            setSheetGoal(index);
+          }}
+          onAnimate={(_from, to) => setSheetGoal(to)}
           animatedPosition={sheetTop}
           // §26 · §27: 접힌 단 높이가 바뀌면(메인 카드가 바뀜) 시트가 sheetMotion 시간(250ms) 동안 부드럽게 옮겨 간다. 접힌 단에 있을 때만 보이는 움직임이다 (다른 단의 높이는 그대로라)
           animationConfigs={sheetAnimation}
@@ -880,17 +888,18 @@ export function TripNowScreen({
                         lateAt={lateAt}
                         rehearsal={rehearsal}
                         onLastLayout={(box) => setLastBox({ key: mainCard.type, y: box.y, height: box.height })}
+                        onChip={setChipPlace}
                       />
                     </Animated.View>
                   ) : null}
-                  {note === null && reasonHidden(mainCard, view.reason) ? null : (
+                  {sheetGoal === 0 || (note === null && reasonHidden(mainCard, view.reason)) ? null : (
                     <View testID="now-reason">
                       <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
                     </View>
                   )}
                 </View>
                 {subCards.map((card, index) => (
-                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} rehearsal={rehearsal} />
+                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} rehearsal={rehearsal} onChip={setChipPlace} />
                 ))}
               </>
             ) : problem === null ? (
@@ -920,6 +929,7 @@ export function TripNowScreen({
       {profileOpen ? (
         <ProfileMenu restartLabel={live ? '날짜 목록으로' : '처음부터 다시'} onRestart={onExit} onClose={() => setProfileOpen(false)} />
       ) : null}
+      {chipPlace ? <ChipSheet place={chipPlace} onClose={() => setChipPlace(null)} /> : null}
       {sosOpen ? <SosSheet located={live ? location.spot !== null : position !== null} onClose={() => setSosOpen(false)} /> : null}
       {location.sheet === 'intro' ? <LocationIntroSheet onTurnOn={() => void location.turnOn()} onLater={location.later} /> : null}
       {location.sheet === 'off' ? <LocationOffSheet onSettings={location.openSettings} onClose={location.closeSheet} /> : null}

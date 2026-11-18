@@ -71,6 +71,8 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
   const [sending, setSending] = useState(false);
   const [mapFailed, setMapFailed] = useState(false);
   const [mapKey, setMapKey] = useState(0);
+  // TASK-015 §29 (b): 지도 준비 신호(또는 첫 영역 알림) 뒤에만 있는 표시 — Maestro가 길게 누르기 전에 기다린다. 한 번 생기면 그대로
+  const [mapReady, setMapReady] = useState(false);
   // TASK-015 §18 막는 것 1: 이름 칸을 누르면 시트가 키보드 위로 (②-07 field와 같은 규칙). iOS는 Will, 안드로이드는 Did 신호
   // §24 42번(승현 11-18): 키보드가 내려가면 포커스가 있어도 시트를 내린다. 단 [여기로 정했어]를 누르는 중(pressIn~pressOut)에 숨김 신호가 오면
   // 손을 뗄 때까지 그대로 두고 뗀 뒤에 내린다 (§22: 누르는 사이 시트가 움직여 탭이 버튼에 닿지 않았다)
@@ -161,6 +163,7 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
               label="다시"
               onPress={() => {
                 setMapFailed(false);
+                setMapReady(false);
                 setMapKey((now) => now + 1);
               }}
             />
@@ -183,10 +186,12 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
           name={trimLabel(label)}
           panels={tagPanels}
           onLongPress={place}
-          onReady={() => undefined}
+          onReady={() => setMapReady(true)}
           onFail={() => setMapFailed(true)}
         />
       </MapGuard>
+      {/* §29: 누르기를 가로채지 않고(pointerEvents none) 화면 읽기에도 따로 읽히지 않는 1pt 표시 (accessible 없음 · 이름 없음). 모습은 없다 */}
+      {mapReady ? <View testID="pick-map-ready" pointerEvents="none" style={styles.readyMark} /> : null}
       {topBar}
       <View
         testID="pick-panel"
@@ -250,6 +255,7 @@ const styles = StyleSheet.create({
   captionRoom: { height: text('caption').lineHeight },
   labelRoom: { height: control.input },
   labelInput: { ...text('body'), minHeight: control.input, paddingHorizontal: space['space-4'], borderRadius: radius['r-md'], backgroundColor: color['bg-2'] },
+  readyMark: { position: 'absolute', left: 0, top: 0, width: layout.readyMark, height: layout.readyMark },
   failMap: { ...StyleSheet.absoluteFill, backgroundColor: color['bg-2'], alignItems: 'center', justifyContent: 'center' },
   failIcon: { width: layout.mapOffCircle, height: layout.mapOffCircle, borderRadius: radius['r-full'], backgroundColor: color.surface, ...shadow.float },
   failButtons: { gap: space['space-2'], marginTop: space['space-3'] },

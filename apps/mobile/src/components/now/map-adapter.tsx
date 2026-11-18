@@ -369,7 +369,9 @@ export function PickMap({
     const size = { width: now.width, height: now.height };
     // §28 질문 5: Google 로고 · 출처 표시를 가리지 않게 로고 자리도 장애물 (여유 4는 판과 같다)
     tagRef.current?.settle({ region: next, frame: visibleArea(size, now.mapPadding), panels: [...now.panels, googleLogoRect(size, now.mapPadding)] });
-  }, []);
+    // §29: 준비 신호보다 첫 영역 알림이 먼저 오면 그것도 준비로 본다 (지도가 그려져 카메라가 멈췄다)
+    signalReady();
+  }, [signalReady]);
   return (
     <MapView
       ref={map}

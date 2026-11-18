@@ -1,9 +1,9 @@
 // TASK-004 §B-6 G6: 상태는 색 + 글자를 항상 같이 보여 준다 (확인됨/미확인/모름).
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
 import type { HoursChip } from '@/lib/today-hours-text';
-import { color, fit, fitText, radius, space, text } from '@/planning/theme';
+import { color, control, fit, fitText, radius, space, text } from '@/planning/theme';
 
 import { ClockIcon } from './icons';
 
@@ -15,15 +15,30 @@ const LOOK: Record<Status, { label: string; fg: keyof typeof color; bg: keyof ty
   unknown: { label: '모름', fg: 'muted', bg: 'bg-2' },
 };
 
-/** TASK-015 §27 칩 ㉠ (task-014-design §10-1) · §28 질문 1: 여행 중 메인 카드 라벨 줄의 긴 칩 글자 */
+/** TASK-015 §27 칩 ㉠ (task-014-design §10-1) · §28 질문 1: 영업 값이 옆에 없는 자리의 긴 칩 글자 */
 const LONG_LABEL: Record<Status, string> = { confirmed: '영업시간 확인됨', unverified: '영업시간 미확인', unknown: '영업시간 모름' };
 
-export function StatusChip({ status, long = false }: { status: Status; long?: boolean }) {
+/**
+ * 칩 글자 자리 (task-015-design §15-5 · TASK-015 §29): 'short' = 옆에 영업 값이 있음(짧게) · 'long' = 라벨 줄(영업 값 없음, 길게) ·
+ * 'row' = T-03 줄(폭 때문에 확인됨 · 미확인은 짧게, 값 자리가 빈 모름만 길게)
+ */
+export type ChipWords = 'short' | 'long' | 'row';
+const wordsOf = (status: Status, words: ChipWords): string => (words === 'long' || (words === 'row' && status === 'unknown') ? LONG_LABEL[status] : LOOK[status].label);
+
+/** onOpen이 있으면 미확인 · 모름 칩만 누르는 버튼(보이는 24 · 누르는 44, task-014-design §10-1). 확인됨 칩은 버튼이 아니다 (§15-5) */
+export function StatusChip({ status, words = 'short', onOpen }: { status: Status; words?: ChipWords; onOpen?: () => void }) {
   const look = LOOK[status];
-  return (
+  const chip = (
     <View style={[styles.chip, { backgroundColor: color[look.bg] }]}>
-      <Text style={text('label', look.fg)}>{long ? LONG_LABEL[status] : look.label}</Text>
+      <Text style={text('label', look.fg)}>{wordsOf(status, words)}</Text>
     </View>
+  );
+  if (!onOpen || status === 'confirmed') return chip;
+  const slop = Math.max(0, (control['touch-min'] - fit['fact-line'].height) / 2);
+  return (
+    <Pressable accessibilityRole="button" accessibilityHint="출처와 확인 날짜를 보여 줘" hitSlop={{ top: slop, bottom: slop, left: 0, right: 0 }} onPress={onOpen} style={styles.chipHit}>
+      {chip}
+    </Pressable>
   );
 }
 
@@ -40,6 +55,8 @@ const styles = StyleSheet.create({
     borderColor: fit['chip-hint'].border,
     borderRadius: fit['chip-hint'].radius,
   },
+  // 누르는 칩: 보이는 24 + 위아래 hitSlop = 44, 폭도 44 이상 (§10-1)
+  chipHit: { minHeight: fit['fact-line'].height, minWidth: control['touch-min'], justifyContent: 'center' },
   chip: {
     minHeight: fit['fact-line'].height, // 사실 줄 칩 24
     justifyContent: 'center',
@@ -62,7 +79,7 @@ export function HintChip() {
 }
 
 /** 영업시간 칸의 칩 하나: 없음 / 추천 시간대 / 확인 상태 */
-export function HoursChipView({ chip, long = false }: { chip: HoursChip; long?: boolean }) {
+export function HoursChipView({ chip, words = 'short', onOpen }: { chip: HoursChip; words?: ChipWords; onOpen?: () => void }) {
   if (chip === null) return null;
-  return chip === 'hint' ? <HintChip /> : <StatusChip status={chip} long={long} />;
+  return chip === 'hint' ? <HintChip /> : <StatusChip status={chip} words={words} onOpen={onOpen} />;
 }
