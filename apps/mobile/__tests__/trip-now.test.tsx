@@ -356,7 +356,7 @@ describe('B6 카드 부품', () => {
   test('T11_S14_N9_여행_중_카드_늘_열림은_확인됨_칩과_늘_열려_있어', async () => {
     await shows(t01({ item: withHours({ source_type: 'curated', value: '00:00-24:00', status: 'confirmed' }) }));
     expect(inCard('card-T-01').getByText('영업시간 확인됨')).toBeTruthy();
-    for (const chip of ['영업시간 미확인', '모름', '추천 시간대']) expect(inCard('card-T-01').queryByText(chip)).toBeNull();
+    for (const chip of ['영업시간 미확인', '영업시간 모름', '추천 시간대']) expect(inCard('card-T-01').queryByText(chip)).toBeNull();
     expect(inCard('card-T-01').getByText(/늘 열려 있어/)).toBeTruthy();
   });
 
@@ -390,11 +390,11 @@ describe('B6 카드 부품', () => {
   });
 
   // SCREEN-001 §3-2, AC-3 상태 칩. §27 칩 ㉠(task-014-design §10-1 · TASK-015 §B1): 여행 중 메인 카드 칩은 긴 글
-  //   옛 '확인됨' · '미확인' -> '영업시간 확인됨' · '영업시간 미확인'. 모름은 문서에 긴 글이 없어 옛 '모름' 그대로 (질문)
+  //   옛 '확인됨' · '미확인' · '모름' -> '영업시간 확인됨' · '영업시간 미확인' · '영업시간 모름'(§28 질문 1, TASK-004 영업시간 글과 같게)
   const STATUS: ['confirmed' | 'unverified' | 'unknown', string][] = [
     ['confirmed', '영업시간 확인됨'],
     ['unverified', '영업시간 미확인'],
-    ['unknown', '모름'],
+    ['unknown', '영업시간 모름'], // §28 질문 1: 옛 '모름'
   ];
 
   test.each(STATUS)('T6_S3_2_T_01에_%s_상태_글자_%s', async (status, label) => {
@@ -1656,5 +1656,58 @@ describe('§24 18번 · §27 접힌 단 = 메인 카드 마지막 요소 아래 
     await toNow(nowServer(nowView({ main: t01(), subs: [] })));
     await measure('T-01', 100, 22); // 아래 끝 122
     expect(low()).toBe(withButton);
+  });
+
+  // ---------- TASK-015 §28 질문 2(11-19): 같은 카드 종류 안에서는 접힌 단이 줄어들지 않고, 잘릴 때만 늘어난다. 종류가 바뀌면 그때 잰 값으로 다시 ----------
+  // 옛(§24 18번 · §27): 잰 값을 늘 따라감(줄면 줄어듦 — reviewer 7차 T-07 "14분 뒤" -> "지금 출발해" 577 -> 597).
+  // 새: 같은 종류에서 아래 끝이 줄면 접힌 단 그대로 · 늘면 정확히 그만큼 (위 "40 내려가면 정확히 40" 테스트 그대로) · 종류가 바뀌면 새로 잰 값(줄 수 있음)
+  async function nextCard(control: ReturnType<typeof nowServer>, card: object, type: string) {
+    control.show(nowView({ main: card, subs: [] }));
+    await pressId('demo-toggle');
+    await pressId('demo-plus-10');
+    await screen.findByTestId(`card-${type}`);
+  }
+
+  test('T15_S28_T_07_14분_뒤에서_지금_출발해로_아래_끝이_20_줄어도_접힌_단_그대로', async () => {
+    const { control } = await toNow(nowServer(nowView({ main: t07({ leave_in_min: 14 }), subs: [] })));
+    await measure('T-07', 90, 22);
+    const before = low();
+    expect(before).toBe(HANDLE + 90 + 22 + MARGIN); // 시험 자체 확인 (§27 규칙)
+    await nextCard(control, t07({ leave_in_min: 0 }), 'T-07');
+    expect(screen.getByText('지금 출발해')).toBeTruthy(); // 시험 자체 확인: 같은 종류, 내용만 바뀜
+    await measure('T-07', 70, 22); // 아래 끝 20 줄어듦
+    expect(low()).toBe(before);
+  });
+
+  test('T15_S28_같은_종류에서_줄었다가_다시_늘면_가장_컸던_값을_넘을_때만_늘어난다', async () => {
+    await toNow(nowServer(nowView({ main: t01(), subs: [] })));
+    await measure('T-01', 100, 22);
+    const top = low();
+    await measure('T-01', 60, 22); // 40 줄어듦 -> 그대로
+    expect(low()).toBe(top);
+    await measure('T-01', 90, 22); // 다시 30 늘어도 처음(100)보다 작다 -> 그대로
+    expect(low()).toBe(top);
+    await measure('T-01', 101, 22); // 처음보다 1 커짐 -> 잘리니 1 늘어남 (경계)
+    expect(low()).toBe(top + 1);
+  });
+
+  test('T15_S28_종류가_바뀌면_새로_잰_값으로_다시(줄어들_수_있다)', async () => {
+    const { control } = await toNow(nowServer(nowView({ main: t07(), subs: [] })));
+    await measure('T-07', 120, 22);
+    const t07Low = low();
+    await nextCard(control, t08(), 'T-08');
+    await measure('T-08', 50, 52);
+    expect(low()).toBe(HANDLE + 50 + 52 + MARGIN);
+    expect(low()).toBeLessThan(t07Low);
+  });
+
+  test('T15_S28_종류가_바뀐_뒤에는_그_종류_안에서_다시_줄지_않는다', async () => {
+    const { control } = await toNow(nowServer(nowView({ main: t07(), subs: [] })));
+    await measure('T-07', 120, 22);
+    await nextCard(control, t08(), 'T-08');
+    await measure('T-08', 80, 52);
+    const t08Low = low();
+    await measure('T-08', 50, 52);
+    expect(low()).toBe(t08Low);
   });
 });

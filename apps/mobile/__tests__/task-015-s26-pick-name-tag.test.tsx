@@ -24,12 +24,17 @@
 //   ② 범위 원은 막지 않음, 그리는 순서(zIndex) 범위 원 < 이름표 < 핀
 //   ③ 지도 영역 알림 전에는 핀만(이름표 없음). 단 이미 그린 이름표는 키보드가 열려 지도가 움직이는 동안에도 빼지 않는다(마지막 테스트, §26 뜻 그대로)
 //   ④ 네 후보가 모두 안 되면 이름표를 뺀다(핀은 그대로)
+//   **§28 질문 5(11-19)**: Google 로고도 장애물, 여유 4 (약관: 로고 · 출처 표시를 가리면 안 됨). 로고 자리 = '@/lib/map-logo' googleLogoRect(화면 크기, 지금 mapPadding)
+//     로고 크기 · 안쪽 여백 값은 SDK가 정해 문서에 없다(질문) -> 시험은 함수가 준 사각형을 그대로 쓰고, 문서에서 온 성질만 본다:
+//     보이는 영역(mapPadding 안쪽) 왼쪽 아래 (design §1-3 "시트가 가리지 않게 mapPadding.bottom", 코드 주석 "Google 로고가 가려지지 않게 mapPadding.bottom")
+//     이름표 폭은 지금 160 + "…" 그대로 (200은 디자이너 확인)
 //   키보드: 이름 칸 포커스 -> 키보드 336 -> 시트가 올라가고 지도는 핀을 띠 가운데로 민다(§24). 그 뒤 영역 알림이 오면 이름표가 새 핀 화면 자리 옆에 있다
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import fc from 'fast-check';
 import { DeviceEventEmitter, Dimensions, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { googleLogoRect } from '@/lib/map-logo';
 import { project, unproject, type Region } from '@/lib/map-project';
 import { LodgingPickScreen, type LodgingPickResult, type PickedLodging } from '@/trips/lodging-pick-screen';
 
@@ -330,15 +335,16 @@ describe('§27 ① a2 이름표는 위 버튼 줄 · 시트와 4 넘게 띄운�
     expectTagAt('bottom', point, region, frame);
   });
 
-  test('T15_S27_경계_시트_윗변(586)과_간격_4면_뺌_4.5면_오른쪽', async () => {
-    // 핀 x 20(위 · 왼쪽은 화면 밖). 오른쪽 후보 아랫변 = py + 14 -> py 568이면 시트와 4(막힘), 아래 후보는 시트 안 -> 이름표 없음. 567.5면 4.5 -> 오른쪽
+  // §28: Google 로고(보이는 영역 왼쪽 아래)를 피하게 되어 시트 경계는 오른쪽 끝 핀으로 본다 (옛: x 20 · 오른쪽 후보)
+  test('T15_S27_경계_시트_윗변(586)과_간격_4면_뺌_4.5면_왼쪽', async () => {
+    // 핀 x 375(위 · 오른쪽은 화면 밖). 왼쪽 후보 아랫변 = py + 14 -> py 568이면 시트와 4(막힘), 아래 후보는 시트 안 -> 이름표 없음. 567.5면 4.5 -> 왼쪽
     await show(NAME);
-    const touching = { x: 20, y: HEIGHT - 258 - 4 - 14 };
+    const touching = { x: 375, y: HEIGHT - 258 - 4 - 14 };
     await pinSettlesAt(SPOT, touching);
     expect(tags()).toHaveLength(0);
-    const apart = { x: 20, y: HEIGHT - 258 - 4.5 - 14 };
+    const apart = { x: 375, y: HEIGHT - 258 - 4.5 - 14 };
     const b = await pinSettlesAt(SPOT, apart);
-    expectTagAt('right', apart, b.region, b.frame);
+    expectTagAt('left', apart, b.region, b.frame);
   });
 
   test('T15_S27_키보드로_올라간_시트(윗변_844−336−258=250)도_장애물', async () => {
@@ -346,12 +352,12 @@ describe('§27 ① a2 이름표는 위 버튼 줄 · 시트와 4 넘게 띄운�
     await pinSettlesAt(SPOT, { x: 195, y: 300 });
     await keyboardShow();
     const sheetTop = HEIGHT - KEYBOARD - 258;
-    const touching = { x: 20, y: sheetTop - 4 - 14 };
+    const touching = { x: 375, y: sheetTop - 4 - 14 }; // §28: 로고를 피하려고 옛 x 20 · 오른쪽 -> x 375 · 왼쪽
     await pinSettlesAt(SPOT, touching);
     expect(tags()).toHaveLength(0);
-    const apart = { x: 20, y: sheetTop - 4.5 - 14 };
+    const apart = { x: 375, y: sheetTop - 4.5 - 14 };
     const b = await pinSettlesAt(SPOT, apart);
-    expectTagAt('right', apart, b.region, b.frame);
+    expectTagAt('left', apart, b.region, b.frame);
   });
 });
 
@@ -494,5 +500,97 @@ describe('§26 a2 이름표는 키보드 열림 · 닫힘 모두에서 보인다
     await keyboardShow();
     expect(tags()).toHaveLength(1);
     expect(tagText(tags()[0])).toBe(NAME);
+  });
+});
+
+describe('§28 질문 5 — Google 로고 자리 (googleLogoRect, 순수 함수)', () => {
+  const SIZE = { width: WIDTH, height: HEIGHT };
+  const CLOSED = { top: 0, bottom: 258, left: 0, right: 0 };
+
+  test('T15_S28_로고는_보이는_영역(mapPadding_안쪽)_왼쪽_아래에_있다', () => {
+    const logo = googleLogoRect(SIZE, CLOSED);
+    expect(logo.width).toBeGreaterThan(0);
+    expect(logo.height).toBeGreaterThan(0);
+    expect(logo.x).toBeGreaterThanOrEqual(CLOSED.left);
+    expect(logo.x + logo.width).toBeLessThanOrEqual(WIDTH / 2);
+    expect(logo.y).toBeGreaterThanOrEqual(HEIGHT / 2);
+    expect(logo.y + logo.height).toBeLessThanOrEqual(HEIGHT - CLOSED.bottom);
+  });
+
+  test('T15_S28_mapPadding이_바뀌면_로고가_같은_크기로_따라간다(키보드_띠)', () => {
+    const closed = googleLogoRect(SIZE, CLOSED);
+    const band = { top: 99, bottom: HEIGHT - 250, left: 0, right: 0 }; // 키보드 336 + 시트 258 -> 보이는 띠 99~250
+    const open = googleLogoRect(SIZE, band);
+    expect({ width: open.width, height: open.height }).toEqual({ width: closed.width, height: closed.height });
+    expect(open.x).toBe(closed.x);
+    expect(open.y).toBeCloseTo(closed.y - (band.bottom - CLOSED.bottom), 6);
+    expect(open.y + open.height).toBeLessThanOrEqual(250);
+    expect(open.y).toBeGreaterThanOrEqual(band.top);
+    const shifted = googleLogoRect(SIZE, { ...CLOSED, left: 10 });
+    expect(shifted.x).toBeCloseTo(closed.x + 10, 6);
+  });
+});
+
+describe('§28 질문 5 — a2 이름표는 Google 로고와 4 넘게 띄운다', () => {
+  const gapOf = (a: Rect, b: Rect) => Math.hypot(Math.max(b.x - (a.x + a.width), a.x - (b.x + b.width), 0), Math.max(b.y - (a.y + a.height), a.y - (b.y + b.height), 0));
+  const logoNow = () => {
+    const mp = (pickMap().props.mapPadding ?? {}) as Record<string, number | undefined>;
+    return googleLogoRect({ width: WIDTH, height: HEIGHT }, { top: mp.top ?? 0, bottom: mp.bottom ?? 0, left: mp.left ?? 0, right: mp.right ?? 0 });
+  };
+  async function widthOfTag() {
+    const first = await pinSettlesAt(SPOT, { x: 195, y: 400 });
+    const w = tagRect(tags()[0], first.region, first.frame).width;
+    expect(w).toBeGreaterThan(0); // 시험 자체 확인
+    return w;
+  }
+  /** 위 후보가 로고와 가로로 겹치고, 위 후보 아랫변이 로고 윗변에서 gap 위에 오는 핀 자리 */
+  const aboveLogo = (logo: Rect, w: number, gap: number) => {
+    const x = Math.min(Math.max(logo.x + logo.width / 2, EDGE + w / 2 + 1), WIDTH - EDGE - w / 2 - 1);
+    return { x, y: logo.y - gap + PIN_R + GAP_TOP };
+  };
+
+  test('T15_S28_위_후보가_로고에_걸리면_위가_아닌_자리_또는_뺌_어느_쪽이든_로고와_4_넘게', async () => {
+    await show(NAME);
+    const w = await widthOfTag();
+    const logo = logoNow();
+    // 위 후보 가운데 = 로고 가운데 높이
+    const base = aboveLogo(logo, w, 0);
+    const point = { x: base.x, y: logo.y + logo.height / 2 + PIN_R + GAP_TOP + LABEL_H / 2 };
+    expect(gapOf(candidate('top', point, w), logo)).toBe(0); // 시험 자체 확인: 위 후보가 로고와 겹친다
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    const all = tags();
+    expect(all.length).toBeLessThanOrEqual(1);
+    if (all.length === 1) expect(gapOf(tagRect(all[0], region, frame), logo)).toBeGreaterThan(4);
+    expect(pickMap().queryAll((h) => h.props.testID === 'pin-pick')).not.toHaveLength(0);
+  });
+
+  test('T15_S28_경계_위_후보가_로고_위로_간격_4면_위가_아님_4.5면_위', async () => {
+    await show(NAME);
+    const w = await widthOfTag();
+    const logo = logoNow();
+    const touching = aboveLogo(logo, w, 4);
+    expect(gapOf(candidate('top', touching, w), logo)).toBeCloseTo(4, 6); // 시험 자체 확인: 로고 바로 위(가로로 겹침)
+    const a = await pinSettlesAt(SPOT, touching);
+    const drawn = tags();
+    if (drawn.length === 1) {
+      const rect = tagRect(drawn[0], a.region, a.frame);
+      expect(Math.abs(rect.y - candidate('top', touching, w).y) < 0.5 && Math.abs(rect.x - candidate('top', touching, w).x) < 0.5).toBe(false);
+      expect(gapOf(rect, logo)).toBeGreaterThan(4);
+    }
+    const apart = aboveLogo(logo, w, 4.5);
+    expect(gapOf(candidate('top', apart, w), logo)).toBeCloseTo(4.5, 6);
+    const b = await pinSettlesAt(SPOT, apart);
+    expectTagAt('top', apart, b.region, b.frame);
+  });
+
+  test('T15_S28_키보드가_열려_로고가_띠_아래로_올라가도_이름표가_로고와_4_넘게', async () => {
+    await show(NAME);
+    const w = await widthOfTag();
+    await keyboardShow();
+    const logo = logoNow();
+    expect(logo.y + logo.height).toBeLessThanOrEqual(HEIGHT - KEYBOARD - 258); // 시험 자체 확인: 올라간 시트 위
+    const point = { x: aboveLogo(logo, w, 0).x, y: logo.y + logo.height / 2 + PIN_R + GAP_TOP + LABEL_H / 2 };
+    const { region, frame } = await pinSettlesAt(SPOT, point);
+    for (const tag of tags()) expect(gapOf(tagRect(tag, region, frame), logo)).toBeGreaterThan(4);
   });
 });
