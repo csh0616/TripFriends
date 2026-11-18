@@ -1,7 +1,7 @@
 // TASK-006 B2·ADR-014: react-native-maps를 감싼 유일한 파일. 화면 코드는 이 부품만 쓴다 (SDK를 바꿀 수 있게).
 // 노출하는 것: 핀·선·숙소·내 위치·카메라 맞추기·옮기기. 준비 신호가 8초 안에 없으면 onFail (§11 Q17).
 // 핀 안은 Svg가 아니라 View와 Text로만 그린다: 지도 Marker는 안의 그림을 사진으로 떠 가는데 중첩 Svg는 네이티브에서 안 그려진 적이 있다 (TASK-005).
-import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
+import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useReducer, useRef, useState, type Ref } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewProps } from 'react-native-maps';
 
@@ -10,6 +10,7 @@ import { Text } from '@/components/app-text';
 import { fitTargetRegion, metersPerPoint as metersPerPointOf, project, scaleBar, unproject, visibleArea, type Frame, type Region } from '@/lib/map-project';
 import type { NowPin } from '@/lib/now-api';
 import { sameRegionOnScreen, shownRegion } from '@/lib/region-match';
+import { googleLogoRect } from '@/lib/map-logo';
 import { BADGE_OFFSET, BADGE_SIZE, resolvePinOverlap, type Badge, type PinOverlapResult, type Rect, type ScreenPin } from '@/lib/pin-overlap';
 import { layout } from '@/planning/layout';
 import tokens from 'design-tokens';
@@ -298,6 +299,7 @@ export function PickMap({
   pin,
   bottomPadding,
   focusBand = null,
+  raise = 0,
   name = null,
   panels = [],
   onLongPress,
@@ -311,6 +313,8 @@ export function PickMap({
   bottomPadding: number;
   /** TASK-015 §24(03·23·30): 키보드로 시트가 올라가 핀이 가려질 때 핀을 둘 띠(위 버튼 줄 아래 ~ 시트 윗변, 화면 y). 있으면 지도를 밀어 핀을 띠 가운데로 */
   focusBand?: { top: number; bottom: number } | null;
+  /** TASK-015 §28: 키보드가 열릴 때마다 1씩 는다. 띠가 같아도(두 번째로 열 때) 매번 핀을 띠 가운데로 민다 */
+  raise?: number;
   /** TASK-015 §26: 찍은 핀 옆 이름표 글 (이름 칸 글의 앞뒤 공백을 자른 것). 비었으면 null = 이름표 없음 */
   name?: string | null;
   /** TASK-015 §27 ①: 이름표가 피할 떠 있는 판(위 버튼 줄 · 아래 시트, 화면 pt). 간격 4 이하면 다음 후보 */
@@ -322,34 +326,50 @@ export function PickMap({
   const map = useRef<MapView>(null);
   const { width, height } = useWindowDimensions();
   const ready = useRef(false);
-  // §27 ③: 지도 영역 알림을 받은 뒤에만 이름표 자리를 계산한다. 영역은 받은 때의 보이는 영역(mapPadding을 뺀 곳) · 판 자리와 한 묶음으로 둔다
-  // (키보드가 열려 mapPadding · 시트가 바뀌어도 지도가 움직이는 동안은 다음 알림 전까지 그린 이름표를 빼지 않는다, §26). 글 · 핀이 바뀌면 그 묶음으로 바로 다시 계산
-  const [settled, setSettled] = useState<{ region: Region; frame: Required<Frame>; panels: Rect[] } | null>(null);
-  const pinKey = pin ? `${pin.latitude},${pin.longitude}` : 'none';
-  const tracking = useTrackingBriefly(pinKey);
+  // TASK-015 §28 막는 1 규칙: 이름표 · 지도 영역 알림이 바뀌어도 지도 · 핀 · 길게 누르기를 받는 뷰는 다시 만들지 않는다.
+  // MapView에 주는 값 · 함수는 같은 것을 그대로 주고(처음 영역 · 여백 · 처리 함수), 이름표는 따로 선 PickTag만 다시 그린다
+  const callbacks = useRef({ onLongPress, onReady, onFail });
+  callbacks.current = { onLongPress, onReady, onFail };
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (!ready.current) onFail();
+      if (!ready.current) callbacks.current.onFail();
     }, MAP_READY_LIMIT_MS);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const signalReady = () => {
+  const signalReady = useCallback(() => {
     if (ready.current) return;
     ready.current = true;
-    onReady();
-  };
-  const start = center ?? NO_CENTER;
-  const delta = center ? layout.mapDelta : WIDE_DELTA;
+    callbacks.current.onReady();
+  }, []);
+  const handleLongPress = useCallback((event: { nativeEvent: { coordinate: LatLng } }) => callbacks.current.onLongPress(event.nativeEvent.coordinate), []);
+  const [initialRegion] = useState(() => {
+    const start = center ?? NO_CENTER;
+    const delta = center ? layout.mapDelta : WIDE_DELTA;
+    return { ...start, latitudeDelta: delta, longitudeDelta: delta };
+  });
   const band = focusBand && focusBand.bottom > focusBand.top ? focusBand : null;
-  const mapPadding = band ? { top: band.top, left: 0, right: 0, bottom: Math.max(height - band.bottom, 0) } : { top: 0, left: 0, right: 0, bottom: bottomPadding };
+  const bandTop = band ? band.top : null;
+  const bandBottom = band ? band.bottom : null;
+  const mapPadding = useMemo(
+    () => (bandTop !== null && bandBottom !== null ? { top: bandTop, left: 0, right: 0, bottom: Math.max(height - bandBottom, 0) } : { top: 0, left: 0, right: 0, bottom: bottomPadding }),
+    [bandTop, bandBottom, height, bottomPadding],
+  );
   const bandKey = band ? `${Math.round(band.top)}-${Math.round(band.bottom)}` : 'none';
-  const tag = pin && name && settled ? pickTag(pin, name, settled.region, settled.frame, { width, height }, settled.panels) : null;
   useEffect(() => {
-    // 띠가 생기거나 바뀌면 핀을 띠 가운데로 (mapPadding 안쪽 가운데 = 카메라 가운데). 띠가 없어지면 그대로 둔다 (핀은 이미 시트 위에 보인다)
+    // 띠가 생기거나 바뀌면, 그리고 키보드가 열릴 때마다(raise) 핀을 띠 가운데로 (mapPadding 안쪽 가운데 = 카메라 가운데). 띠가 없어지면 그대로 둔다 (핀은 이미 시트 위에 보인다)
     if (band && pin) map.current?.animateCamera({ center: pin }, { duration: PICK_CAMERA_MS });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bandKey]);
+  }, [bandKey, raise]);
+  // 영역 알림: 상태를 바꾸지 않고 이름표 부품에만 넘긴다 (§27 ③ 받은 때의 보이는 영역 · 판 · 로고 자리와 한 묶음)
+  const tagRef = useRef<PickTagHandle>(null);
+  const latest = useRef({ width, height, mapPadding, panels });
+  latest.current = { width, height, mapPadding, panels };
+  const handleRegion = useCallback((next: Region) => {
+    const now = latest.current;
+    const size = { width: now.width, height: now.height };
+    // §28 질문 5: Google 로고 · 출처 표시를 가리지 않게 로고 자리도 장애물 (여유 4는 판과 같다)
+    tagRef.current?.settle({ region: next, frame: visibleArea(size, now.mapPadding), panels: [...now.panels, googleLogoRect(size, now.mapPadding)] });
+  }, []);
   return (
     <MapView
       ref={map}
@@ -357,29 +377,62 @@ export function PickMap({
       provider={PROVIDER_GOOGLE}
       customMapStyle={MAP_STYLE}
       style={StyleSheet.absoluteFill}
-      initialRegion={{ ...start, latitudeDelta: delta, longitudeDelta: delta }}
+      initialRegion={initialRegion}
       mapPadding={mapPadding}
       toolbarEnabled={false}
-      onLongPress={(event) => onLongPress(event.nativeEvent.coordinate)}
-      onRegionChangeComplete={(next: Region) => setSettled({ region: next, frame: visibleArea({ width, height }, mapPadding), panels })}
+      onLongPress={handleLongPress}
+      onRegionChangeComplete={handleRegion}
       onMapReady={signalReady}
       onMapLoaded={signalReady}
     >
-      {pin ? (
-        <>
-          <Marker testID="pick-area" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={PICK_Z.area} tappable={false}>
-            <View style={styles.pickArea} />
-          </Marker>
-          {tag ? <NameTag coordinate={tag.at} name={tag.name} width={tag.width} zIndex={PICK_Z.label} /> : null}
-          <Marker testID="pin-pick" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={PICK_Z.pin}>
-            <View style={styles.pickFace}>
-              <HouseGlyph tint={color.surface} />
-            </View>
-          </Marker>
-        </>
-      ) : null}
+      {pin ? <PickMarkers latitude={pin.latitude} longitude={pin.longitude} /> : null}
+      <PickTag ref={tagRef} pin={pin} name={name} width={width} height={height} />
     </MapView>
   );
+}
+
+/** a2 찍은 핀 · 범위 원 (이름표 · 영역 알림이 바뀌어도 다시 그리지 않는다) */
+const PickMarkers = memo(function PickMarkers({ latitude, longitude }: { latitude: number; longitude: number }) {
+  const pin = useMemo(() => ({ latitude, longitude }), [latitude, longitude]);
+  const tracking = useTrackingBriefly(`${latitude},${longitude}`);
+  return (
+    <>
+      <Marker testID="pick-area" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={PICK_Z.area} tappable={false}>
+        <View style={styles.pickArea} />
+      </Marker>
+      <Marker testID="pin-pick" coordinate={pin} anchor={CENTER} tracksViewChanges={tracking} zIndex={PICK_Z.pin}>
+        <View style={styles.pickFace}>
+          <HouseGlyph tint={color.surface} />
+        </View>
+      </Marker>
+    </>
+  );
+});
+
+type PickSettle = { region: Region; frame: Required<Frame>; panels: Rect[] };
+type PickTagHandle = { settle: (next: PickSettle) => void };
+type PickTagResult = { at: LatLng; name: string; width: number } | null;
+
+const sameTag = (a: PickTagResult, b: PickTagResult): boolean =>
+  a === b || (a !== null && b !== null && a.name === b.name && a.width === b.width && Math.abs(a.at.latitude - b.at.latitude) < 1e-9 && Math.abs(a.at.longitude - b.at.longitude) < 1e-9);
+
+/**
+ * a2 이름표만 맡는 부품. 영역 알림은 받아 두기만 하고, 그린 이름표 자리가 실제로 달라질 때만 다시 그린다
+ * (지도를 끌어 옮기는 동안은 이름표의 지도 좌표가 같아 다시 그리지 않는다). 글 · 핀이 바뀌면 받아 둔 영역으로 바로 다시 계산 (§26)
+ */
+function PickTag({ ref, pin, name, width, height }: { ref: Ref<PickTagHandle>; pin: LatLng | null; name: string | null; width: number; height: number }) {
+  const settled = useRef<PickSettle | null>(null);
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const tagOf = (at: PickSettle | null): PickTagResult => (pin && name && at ? pickTag(pin, name, at.region, at.frame, { width, height }, at.panels) : null);
+  const tag = tagOf(settled.current);
+  useImperativeHandle(ref, () => ({
+    settle(next) {
+      const before = tagOf(settled.current);
+      settled.current = next;
+      if (!sameTag(before, tagOf(next))) redraw();
+    },
+  }));
+  return tag ? <NameTag coordinate={tag.at} name={tag.name} width={tag.width} zIndex={PICK_Z.label} /> : null;
 }
 
 /**
@@ -387,7 +440,7 @@ export function PickMap({
  * 크게 보기와 같은 판정(resolvePinOverlap)을 핀 하나로 쓴다. 범위 원은 장애물이 아니다. 다 안 되면 null(이름표를 뺀다, 핀은 그대로).
  * 계산이 던지면 이름표 없이 그린다 (§6 화면이 멈추지 않게)
  */
-function pickTag(pin: LatLng, name: string, region: Region, frame: Required<Frame>, screen: { width: number; height: number }, panels: Rect[]): { at: LatLng; name: string; width: number } | null {
+function pickTag(pin: LatLng, name: string, region: Region, frame: Required<Frame>, screen: { width: number; height: number }, panels: Rect[]): PickTagResult {
   try {
     const at = project(region, frame, pin);
     const { label } = resolvePinOverlap({ pins: [{ id: 'pick', kind: 'next', x: at.x, y: at.y, size: PICK_FACE, seq: 1 }], screen, labelWidth: labelWidthOf(name), panels });

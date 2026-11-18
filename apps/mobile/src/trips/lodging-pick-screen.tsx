@@ -75,12 +75,15 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
   // §24 42번(승현 11-18): 키보드가 내려가면 포커스가 있어도 시트를 내린다. 단 [여기로 정했어]를 누르는 중(pressIn~pressOut)에 숨김 신호가 오면
   // 손을 뗄 때까지 그대로 두고 뗀 뒤에 내린다 (§22: 누르는 사이 시트가 움직여 탭이 버튼에 닿지 않았다)
   const [keyboard, setKeyboard] = useState(0);
+  // §28: 키보드가 열릴 때마다 센다 — 두 번째로 열 때(같은 높이)도 매번 지도를 위로 민다
+  const [raise, setRaise] = useState(0);
   const pressing = useRef(false);
   const hideLater = useRef(false);
   useEffect(() => {
     const show = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidShow' : 'keyboardWillShow', (event) => {
       hideLater.current = false;
       setKeyboard(event.endCoordinates.height);
+      setRaise((now) => now + 1);
     });
     const hide = Keyboard.addListener(Platform.OS === 'android' ? 'keyboardDidHide' : 'keyboardWillHide', () => {
       if (pressing.current) hideLater.current = true;
@@ -176,6 +179,7 @@ export function LodgingPickScreen({ cityCode, center, onConfirm, onBack, onSkip,
           pin={pin ? { latitude: pin.lat, longitude: pin.lng } : null}
           bottomPadding={SHEET_HEIGHT}
           focusBand={focusBand}
+          raise={raise}
           name={trimLabel(label)}
           panels={tagPanels}
           onLongPress={place}

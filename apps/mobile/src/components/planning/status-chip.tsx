@@ -15,8 +15,8 @@ const LOOK: Record<Status, { label: string; fg: keyof typeof color; bg: keyof ty
   unknown: { label: '모름', fg: 'muted', bg: 'bg-2' },
 };
 
-/** TASK-015 §27 칩 ㉠ (task-014-design §10-1): 여행 중 메인 카드 라벨 줄의 긴 칩 글자. 모름은 문서에 긴 글이 없어 짧은 글 그대로 */
-const LONG_LABEL: Record<Status, string> = { confirmed: '영업시간 확인됨', unverified: '영업시간 미확인', unknown: '모름' };
+/** TASK-015 §27 칩 ㉠ (task-014-design §10-1) · §28 질문 1: 여행 중 메인 카드 라벨 줄의 긴 칩 글자 */
+const LONG_LABEL: Record<Status, string> = { confirmed: '영업시간 확인됨', unverified: '영업시간 미확인', unknown: '영업시간 모름' };
 
 export function StatusChip({ status, long = false }: { status: Status; long?: boolean }) {
   const look = LOOK[status];

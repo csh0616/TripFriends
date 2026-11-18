@@ -614,11 +614,15 @@ export function TripNowScreen({
   // TASK-015 §24(17): 맨 위 단의 윗변은 위 버튼 줄 아래 + 8보다 올라가지 않는다 (task-015-design §12-4: 손잡이 · 위 버튼 줄이 안 가려지게)
   const sheetTopMin = insets.top + rehTop + layout.header + space['space-2'];
   // §24 18번(승현 11-18) · §27: 접힌 단 = 지금 메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 아래 끝 + 4, 모든 카드 같은 규칙.
-  // §26: 메인 카드가 바뀌면 새 카드를 잴 때까지 앞 카드의 잰 값을 쓴다 (버리면 옛 16%로 내려갔다 다시 올라와 시트가 두 번 움직인다). 메인 카드가 없으면 버린다
+  // §26: 메인 카드가 바뀌면 새 카드를 잴 때까지 앞 카드의 접힌 단을 쓴다 (버리면 옛 16%로 내려갔다 다시 올라와 시트가 두 번 움직인다). 메인 카드가 없으면 버린다
   const mainKey = view && visible(view.main) ? view.main.type : null;
   const [mainBoxY, setMainBoxY] = useState(0);
-  const [lastBox, setLastBox] = useState<{ y: number; height: number } | null>(null);
-  const lastBottom = lastBox && mainKey !== null ? mainBoxY + lastBox.y + lastBox.height : null;
+  const [lastBox, setLastBox] = useState<{ key: string; y: number; height: number } | null>(null);
+  // §28 질문 2: 같은 카드 종류 안에서는 접힌 단이 줄지 않고 잘릴 때만 늘어난다(그 종류에서 잰 가장 큰 아래 끝). 종류가 바뀌면 그 종류에서 처음 잰 값부터 다시
+  const measured = lastBox && lastBox.key === mainKey ? mainBoxY + lastBox.y + lastBox.height : null;
+  const [peak, setPeak] = useState<{ key: string; bottom: number } | null>(null);
+  if (measured !== null && mainKey !== null && (peak === null || peak.key !== mainKey || measured > peak.bottom)) setPeak({ key: mainKey, bottom: measured });
+  const lastBottom = peak && mainKey !== null ? peak.bottom : null;
   // §26: 사용자가 시트(손잡이 · 내용)를 끌고 있는 동안은 접힌 단을 끌기 시작할 때 값으로 둔다 (손가락 밑에서 시트를 옮기지 않게). 놓으면 새 값으로
   const [dragLow, setDragLow] = useState<string | number | null>(null);
   const lowNow = useRef<string | number | null>(null);
@@ -875,7 +879,7 @@ export function TripNowScreen({
                         onVisit={visit}
                         lateAt={lateAt}
                         rehearsal={rehearsal}
-                        onLastLayout={(box) => setLastBox({ y: box.y, height: box.height })}
+                        onLastLayout={(box) => setLastBox({ key: mainCard.type, y: box.y, height: box.height })}
                       />
                     </Animated.View>
                   ) : null}
