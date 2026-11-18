@@ -353,10 +353,11 @@ describe('B6 카드 부품', () => {
 
   // TASK-011 §14 N9 (§9 Q10 고침): 늘 열림에도 "확인됨" 칩. 옛 "칩 없이" 테스트를 바꿈
   // §27 칩 ㉠: 옛 '확인됨' · '미확인' -> '영업시간 확인됨' · '영업시간 미확인' (모름은 문서에 긴 글이 없어 그대로)
+  // §29(task-015-design §15-5 "늘 열려 있어 | 짧은 '확인됨'(TASK-011 N9 그대로) — 값이 영업을 말한다"): §27의 '영업시간 확인됨' -> 다시 짧은 '확인됨'
   test('T11_S14_N9_여행_중_카드_늘_열림은_확인됨_칩과_늘_열려_있어', async () => {
     await shows(t01({ item: withHours({ source_type: 'curated', value: '00:00-24:00', status: 'confirmed' }) }));
-    expect(inCard('card-T-01').getByText('영업시간 확인됨')).toBeTruthy();
-    for (const chip of ['영업시간 미확인', '영업시간 모름', '추천 시간대']) expect(inCard('card-T-01').queryByText(chip)).toBeNull();
+    expect(inCard('card-T-01').getByText('확인됨')).toBeTruthy();
+    for (const chip of ['영업시간 확인됨', '영업시간 미확인', '영업시간 모름', '추천 시간대']) expect(inCard('card-T-01').queryByText(chip)).toBeNull();
     expect(inCard('card-T-01').getByText(/늘 열려 있어/)).toBeTruthy();
   });
 
@@ -409,8 +410,10 @@ describe('B6 카드 부품', () => {
 
   test('T6_S3_2_T_03은_줄마다_자기_상태_글자', async () => {
     await shows(t03());
+    // §29(task-015-design §15-5 T-03 줄): 확인됨 · 미확인은 짧게(폭 때문에 예외), 모름만 '영업시간 모름' (옛 '모름')
     expect(inCard('rest-row-2').getByText('미확인')).toBeTruthy();
-    expect(inCard('rest-row-3').getByText('모름')).toBeTruthy();
+    expect(inCard('rest-row-2').queryByText('영업시간 미확인')).toBeNull();
+    expect(inCard('rest-row-3').getByText('영업시간 모름')).toBeTruthy();
   });
 
   test('T6_S12_R4_T_07_카드_제목은_fixed_title', async () => {

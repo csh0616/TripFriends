@@ -4,6 +4,11 @@
 #     --test-output-dir=.maestro/screenshots/lodging-pin -e METRO_URL=http://127.0.0.1:<Metro 포트> .maestro/lodging-pin.yaml
 # 화면 이름(testID)은 apps/mobile/__tests__/task-015-lodging-flow.test.tsx 머리말의 계약과 같다.
 # 검색 글 "친구 집 근처": 이름 · 주소 모두 0건 (가짜 공급자). a2 지도는 길게 눌러 핀을 찍는다
+# TASK-015 §29 (b) 흐름 바꾸기 (결정권자 11-20). 이 흐름이 실패하던 원인 둘 (frontend 조사, 6차 코드로 되돌려도 같음):
+#   ① 지도가 준비되기 약 0.5초 전에 길게 눌러 핀이 안 생김 -> 길게 누르기 전에 지도 준비 표시(`pick-map-ready`)가 보일 때까지 기다린다 (시간이 아니라 상태)
+#   ② Maestro의 글 한 번에 입력(inputText) 도중 iOS가 "키보드 숨김"을 보내는데 실제 키보드는 안 보이는 채 남아 탭을 받음
+#      -> §24 42번 규칙대로 시트가 내려가 [여기로 정했어] 탭이 보이지 않는 키보드에 떨어짐. a2 이름 칸은 lodging-pin-keyboard.yaml처럼 자판을 하나씩 누른다
+#   화면 키보드가 한국어(두벌식) 자판으로 떠야 한다 (Connect Hardware Keyboard 끔 — lodging-pin-keyboard.yaml 머리말과 같다). 시간 기다림은 넣지 않는다
 appId: com.csh0616.tripfriends
 ---
 - evalScript: |
@@ -79,6 +84,11 @@ appId: com.csh0616.tripfriends
       id: "pick-map"
     timeout: 30000
 - takeScreenshot: lodging-pin-2-a2-first
+# §29 ①: 지도 준비 표시를 기다린 뒤 길게 누른다 (계약: __tests__/task-015-s29-pick-map-ready.test.tsx)
+- extendedWaitUntil:
+    visible:
+      id: "pick-map-ready"
+    timeout: 30000
 # 지도 가운데 위쪽(시트 위)을 길게 눌러 핀
 - longPressOn:
     point: "50%,35%"
@@ -88,7 +98,20 @@ appId: com.csh0616.tripfriends
     timeout: 10000
 - tapOn:
     id: "pick-label"
-- inputText: "친구 집"
+# §29 ②: 자판이 보일 때까지 기다린 뒤 하나씩 눌러 "친구 집" (inputText를 쓰지 않는다)
+- extendedWaitUntil:
+    visible: "ㅊ"
+    timeout: 10000
+- tapOn: "ㅊ"
+- tapOn: "ㅣ"
+- tapOn: "ㄴ"
+- tapOn: "ㄱ"
+- tapOn: "ㅜ"
+- tapOn: "space"
+- tapOn: "ㅈ"
+- tapOn: "ㅣ"
+- tapOn: "ㅂ"
+- assertVisible: "ㅊ"
 # 키보드가 올라와도 시트(이름 칸 · [여기로 정했어])가 보여야 한다 (§18 막는 것 1)
 - assertVisible:
     id: "pick-confirm"

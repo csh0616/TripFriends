@@ -11,10 +11,13 @@ export const sheetControl = {
   commands: [] as string[], // 앱이 시트를 직접 움직인 기록 (§6: 시트 높이는 사용자 것)
   onChange: undefined as undefined | ((index: number) => void),
   props: null as Props | null,
+  /** TASK-015 §29 하-13: 그릴 때마다 받은 snapPoints (접힌 단이 중간 값을 거치는지 본다) */
+  history: [] as (string | number)[][],
   reset() {
     this.commands = [];
     this.onChange = undefined;
     this.props = null;
+    this.history = [];
   },
   /**
    * 사용자가 index 단으로 끌어 놓은 것처럼: animatedPosition(시트 윗면의 y)을 넣고 onChange를 부른다.
@@ -32,6 +35,7 @@ export const sheetControl = {
 const BottomSheet = forwardRef<unknown, Props>(function BottomSheet(props, ref) {
   sheetControl.onChange = props.onChange;
   sheetControl.props = props;
+  if (Array.isArray(props.snapPoints)) sheetControl.history.push([...props.snapPoints]);
   const record = (name: string) => () => {
     sheetControl.commands.push(name);
   };
