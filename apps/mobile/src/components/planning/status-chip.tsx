@@ -3,9 +3,10 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/app-text';
 import type { HoursChip } from '@/lib/today-hours-text';
+import { layout } from '@/planning/layout';
 import { color, control, fit, fitText, radius, space, text } from '@/planning/theme';
 
-import { ClockIcon } from './icons';
+import { CheckIcon, ClockIcon, MinusIcon, QuestionIcon } from './icons';
 
 type Status = 'confirmed' | 'unverified' | 'unknown';
 
@@ -34,7 +35,11 @@ export function StatusChip({ status, words = 'short', onOpen }: { status: Status
   const label = wordsOf(status, words);
   const button = onOpen !== undefined && status !== 'confirmed';
   const chip = (
-    <View style={[styles.chip, button && styles.chipWithMark, { backgroundColor: color[look.bg] }]}>
+    <View style={[styles.chip, styles.chipWithIcon, button && styles.chipWithMark, { backgroundColor: color[look.bg] }]}>
+      {/* §33 하-18: 앞 아이콘 14 (확인됨 ✓ · 미확인 ? · 모름 −). 칩 안을 가로 줄로 만들지 않으려고 왼쪽 안쪽에 겹쳐 둔다 (› 와 같은 방식) */}
+      <View style={styles.iconSlot} pointerEvents="none">
+        <StatusIcon status={status} tint={color[look.fg]} />
+      </View>
       <Text style={text('label', look.fg)}>{label}</Text>
       {button ? <Text style={[text('label', look.fg), styles.mark]}>›</Text> : null}
     </View>
@@ -54,6 +59,13 @@ export function StatusChip({ status, words = 'short', onOpen }: { status: Status
   );
 }
 
+function StatusIcon({ status, tint }: { status: Status; tint: string }) {
+  const size = layout.chipIcon;
+  if (status === 'confirmed') return <CheckIcon color={tint} size={size} />;
+  if (status === 'unverified') return <QuestionIcon color={tint} size={size} />;
+  return <MinusIcon color={tint} size={size} />;
+}
+
 const styles = StyleSheet.create({
   hint: {
     alignSelf: 'flex-start',
@@ -69,6 +81,9 @@ const styles = StyleSheet.create({
   },
   // 누르는 칩: 보이는 24 + 위아래 hitSlop = 44, 폭도 44 이상 (§10-1)
   chipHit: { minHeight: fit['fact-line'].height, minWidth: control['touch-min'], justifyContent: 'center' },
+  // 앞 아이콘 자리: 왼쪽 안쪽 8 + 아이콘 14 + 글과 사이 4
+  chipWithIcon: { paddingLeft: space['space-2'] + layout.chipIcon + space['space-1'] },
+  iconSlot: { position: 'absolute', left: space['space-2'], top: 0, bottom: 0, justifyContent: 'center' },
   // › 자리: 칩 오른쪽 안쪽에 둔다 (글과 같은 줄, 글 뒤 4)
   chipWithMark: { paddingRight: space['space-2'] + space['space-1'] + space['space-2'] },
   mark: { position: 'absolute', right: space['space-2'], top: 0, bottom: 0, textAlignVertical: 'center', lineHeight: fit['fact-line'].height },

@@ -6,7 +6,7 @@ import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { MonoText } from '@/components/trips/parts';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
-import { ExternalIcon, InfoIcon, LockIcon } from '@/components/planning/icons';
+import { CheckIcon, CloseIcon, ExternalIcon, InfoIcon, LockIcon } from '@/components/planning/icons';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { HoursChipView, StatusChip, type ChipWords } from '@/components/planning/status-chip';
@@ -71,6 +71,10 @@ function LabelRow({ children, place, onChip }: { children: ReactNode; place: Chi
     </View>
   );
 }
+
+/** §33 하-18: [열었어] ✓ · [닫혔어] ✕ 앞 아이콘 20 (모양은 문서에 없어 정함 — 주황 없음) */
+const openIcon = (tint: string) => <CheckIcon color={tint} size={layout.pairIcon} />;
+const closedIcon = (tint: string) => <CloseIcon color={tint} size={layout.pairIcon} />;
 
 const CHIP_SHEET_QUESTION = '가기 전에 열었는지 볼래?'; // T-05와 같은 문구
 const SHEET_FACT = fit['sheet-confirm']; // sheet-fact는 sheet-confirm 틀 그대로 (§16-3): 장소 이름 17/24·700, 글 14/20
@@ -166,10 +170,10 @@ export function ChipSheet({
           <Text style={[fitText({ size: text('body').fontSize as number, lineHeight: text('body').lineHeight as number, weight: 600 }), styles.chipQuestion]}>{CHIP_SHEET_QUESTION}</Text>
           <View style={styles.pair}>
             <View style={styles.grow}>
-              <SecondaryButton testID="visit-open" label="열었어" disabled={busy} onPress={() => onVisit(placeId, true)} />
+              <SecondaryButton testID="visit-open" label="열었어" icon={openIcon} disabled={busy} onPress={() => onVisit(placeId, true)} />
             </View>
             <View style={styles.grow}>
-              <SecondaryButton testID="visit-closed" label="닫혔어" disabled={busy} onPress={() => onVisit(placeId, false)} />
+              <SecondaryButton testID="visit-closed" label="닫혔어" icon={closedIcon} disabled={busy} onPress={() => onVisit(placeId, false)} />
             </View>
           </View>
         </>
@@ -473,10 +477,10 @@ export function NowCardView({
             />
             <View style={styles.pair}>
               <View style={styles.grow}>
-                <SecondaryButton testID="visit-open" label="열었어" onPress={() => onVisit?.(card.place.place_id, true)} />
+                <SecondaryButton testID="visit-open" label="열었어" icon={openIcon} onPress={() => onVisit?.(card.place.place_id, true)} />
               </View>
               <View style={styles.grow}>
-                <SecondaryButton testID="visit-closed" label="닫혔어" onPress={() => onVisit?.(card.place.place_id, false)} />
+                <SecondaryButton testID="visit-closed" label="닫혔어" icon={closedIcon} onPress={() => onVisit?.(card.place.place_id, false)} />
               </View>
             </View>
           </Shell>
