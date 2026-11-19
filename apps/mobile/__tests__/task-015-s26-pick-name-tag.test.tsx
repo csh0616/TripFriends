@@ -714,3 +714,137 @@ describe('§31 a2 시트 높이 · 키보드 높이가 바뀌면 경계를 다�
     expect(mapControl.boundaryAsks).toBeGreaterThan(asked);
   });
 });
+
+// ---------- TASK-015 §32 중-9: 이름표는 늘 가장 최근 확정 경계로 — 경계가 바뀌는 사이 새로 찍은 핀까지 다시 계산 ----------
+// 근거: TASK-015 §32 "중-9: a2 키보드 닫자마자 다른 자리 길게 눌러 다시 찍으면 위가 비었는데 이름표가 아래 · 오른쪽(3초 뒤에도 그대로) ·
+//   규칙: 이름표는 늘 가장 최근 확정 경계로 계산 — 확정 경계가 바뀔 때마다, 그 사이 새로 찍은 핀까지 모두 다시 계산"
+// 계약 (정한 것): 여백이 바뀌면 화면은 경계를 여러 번 물을 수 있다(지금: 바로 한 번 + 두 프레임 뒤 한 번). 물음마다 차례 번호가 있고 늦게 온 옛 차례의 답은 버린다.
+//   시험은 물음마다 답을 따로 쥔다(묻는 차례대로 1, 2, …). 어떤 답이 언제 오든, 마지막으로 받아들인 답(가장 최근 확정 경계)으로 지금 핀의 이름표를 계산한다.
+//   "옛 경계" = 키보드가 열렸을 때 영역 (지도가 아직 옛 여백으로 답한 것), "새 경계" = 닫힌 뒤 진짜 영역
+describe('§32 중-9 a2 경계가 바뀌는 사이 새로 찍은 핀 — 늦은 확정 경계로 다시 계산', () => {
+  const boundsOf = (region: Region) => ({
+    northEast: { latitude: region.latitude + region.latitudeDelta / 2, longitude: region.longitude + region.longitudeDelta / 2 },
+    southWest: { latitude: region.latitude - region.latitudeDelta / 2, longitude: region.longitude - region.longitudeDelta / 2 },
+  });
+  type Answer = (value: ReturnType<typeof boundsOf>) => void;
+  /** 물음마다 따로 답을 쥔다 */
+  function queueAnswers() {
+    const answers: Answer[] = [];
+    mapControl.boundaries = () =>
+      new Promise((done) => {
+        answers.push(done);
+      });
+    return answers;
+  }
+  const frames = () =>
+    act(async () => {
+      await new Promise((done) => setTimeout(done, 80)); // 두 프레임 뒤 물음이 나가게 (requestAnimationFrame 두 번)
+    });
+
+  async function closeThenRepin() {
+    await show(NAME);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    await keyboardShow();
+    const band = frameNow();
+    const opened = await pinSettlesAt(SPOT, { x: WIDTH / 2, y: band.y + band.height / 2 });
+    const answers = queueAnswers();
+    await keyboardHide(); // 여백이 바뀜 -> 경계 묻는 중 (영역 알림 없음)
+    const closed = frameNow();
+    const truth = regionPutting(SPOT, { x: WIDTH / 2, y: closed.y + closed.height / 2 }, closed);
+    const next = { x: 120, y: 430 }; // 위 자리가 빈 곳
+    const at = unproject(truth, closed, next);
+    await act(async () => {
+      fireEvent(pickMap() as never, 'longPress', { nativeEvent: { coordinate: at } }); // 키보드를 닫자마자 다시 찍기
+    });
+    // 시험 자체 확인: 옛 경계로 보면 다른 자리다
+    const stale = project(opened.region, opened.frame, at);
+    expect(Math.hypot(stale.x - next.x, stale.y - next.y)).toBeGreaterThan(1);
+    return { answers, opened, closed, truth, next };
+  }
+
+  test('T15_S32_바로_한_물음이_새_경계로_답하면_새_핀_위', async () => {
+    const { answers, closed, truth, next } = await closeThenRepin();
+    expect(answers.length).toBeGreaterThanOrEqual(1);
+    await act(async () => {
+      answers[0](boundsOf(truth));
+    });
+    expectTagAt('top', next, truth, closed);
+  });
+
+  test('T15_S32_바로_한_물음은_옛_경계_두_프레임_뒤_물음이_새_경계면_새_핀_위', async () => {
+    const { answers, opened, closed, truth, next } = await closeThenRepin();
+    await act(async () => {
+      answers[0](boundsOf(opened.region)); // 지도가 아직 옛 여백으로 답함
+    });
+    await frames();
+    expect(answers.length).toBeGreaterThanOrEqual(2); // 시험 자체 확인: 두 번째 물음이 나갔다
+    await act(async () => {
+      answers[answers.length - 1](boundsOf(truth));
+    });
+    expectTagAt('top', next, truth, closed);
+  });
+
+  test('T15_S32_옛_차례의_답이_새_답보다_늦게_오면_버리고_새_경계를_지킨다', async () => {
+    const { answers, opened, closed, truth, next } = await closeThenRepin();
+    await frames();
+    expect(answers.length).toBeGreaterThanOrEqual(2);
+    await act(async () => {
+      answers[answers.length - 1](boundsOf(truth)); // 나중 물음이 먼저 답
+    });
+    expectTagAt('top', next, truth, closed);
+    await act(async () => {
+      answers[0](boundsOf(opened.region)); // 옛 차례의 답이 늦게 옴 -> 버린다
+    });
+    expectTagAt('top', next, truth, closed);
+  });
+
+  // 위 네 신호는 지금 코드로 통과한다(9차 실패를 Jest로 재현 못 함). 남는 빈틈: 지도가 여백을 늦게 그려 두 물음이 모두 옛 경계로 답하면, 그 뒤 아무 신호도 없어 옛 경계가 남는다(3초 뒤에도 그대로와 맞음).
+  // 정한 것(§31 "키보드가 바뀐 직후에도 다시 계산"): 키보드가 다 닫힌 신호(keyboardDidHide)에도 다시 묻는다
+  test('T15_S32_두_물음이_모두_옛_경계로_답해도_키보드가_다_닫힌_신호(DidHide)_뒤_다시_물어_새_핀_위', async () => {
+    await show(NAME);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    await keyboardShow();
+    const band = frameNow();
+    const opened = await pinSettlesAt(SPOT, { x: WIDTH / 2, y: band.y + band.height / 2 });
+    const answers = queueAnswers();
+    await act(async () => {
+      DeviceEventEmitter.emit('keyboardWillHide', keyboardEvent(0)); // 닫히기 시작 (여백이 바뀜)
+    });
+    await act(async () => {
+      fireEvent(screen.getByTestId('pick-label'), 'blur');
+    });
+    await frames();
+    const closed = frameNow();
+    const truth = regionPutting(SPOT, { x: WIDTH / 2, y: closed.y + closed.height / 2 }, closed);
+    const next = { x: 120, y: 430 };
+    await act(async () => {
+      fireEvent(pickMap() as never, 'longPress', { nativeEvent: { coordinate: unproject(truth, closed, next) } });
+    });
+    await act(async () => {
+      for (const answer of answers) answer(boundsOf(opened.region)); // 지도가 아직 옛 여백 -> 모두 옛 경계
+    });
+    const before = answers.length;
+    await act(async () => {
+      DeviceEventEmitter.emit('keyboardDidHide', keyboardEvent(0)); // 다 닫힘
+    });
+    await frames();
+    expect(answers.length).toBeGreaterThan(before);
+    await act(async () => {
+      for (const answer of answers.slice(before)) answer(boundsOf(truth));
+    });
+    expectTagAt('top', next, truth, closed);
+  });
+
+  test('T15_S32_답을_받은_뒤에_다시_찍어도_가장_최근_확정_경계로_계산', async () => {
+    const { answers, closed, truth } = await closeThenRepin();
+    await frames();
+    await act(async () => {
+      for (const answer of answers) answer(boundsOf(truth));
+    });
+    const again = { x: 260, y: 470 };
+    await act(async () => {
+      fireEvent(pickMap() as never, 'longPress', { nativeEvent: { coordinate: unproject(truth, closed, again) } });
+    });
+    expectTagAt('top', again, truth, closed);
+  });
+});
