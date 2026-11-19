@@ -69,6 +69,7 @@
 | GET `/days/{day_id}/now?at` | 현재 시간. **위치는 주소창에 싣지 않는다**(모든 길 400, TASK-014 §10 Q2) — 위치는 `POST /check` 본문으로만, 저장 안 함 | `NowView`: 지금 할 일, 다음 이동, 남은 일정, 숙소 가는 방법, 열린 사건·대안 | FR-10·16 |
 | (11-15 TASK-014 §29·§31) `NowView.day.lodging` | 숙소를 입력하지 않았거나 좌표를 못 찾은 여행이면 **`null`** (도시 중심을 숙소처럼 내보내지 않음). 그때 T-08은 숨기지 않고 **숙소 없는 모양**(`lodging: null`, `map_url: null`, `go_home_min: null` → 앱이 "오늘 일정 끝" 카드), 집 표시 없음, 경로 선에 도시 중심 없음 | — | FR-30 관련 |
 | (11-16 TASK-015 §E③·§9) `NowView.city` | `{code, center: {lat, lng}}` — 도시 팩의 **우리 값**(Google 값 아님), 시각과 상관없이 같음, 숙소와 별개. 앱 지도 시작 가운데(숙소 → 첫 핀 → `city.center`). Trip·계획 응답엔 아직 없음(도시 정보는 `GET /cities/{city_code}`) | — | — |
+| (11-19 TASK-015 §30·§32) T-01·T-02·T-07 카드 `can_confirm_hours`, `place_map_url` | 칩 시트(디자인 §16)용. **`can_confirm_hours: bool`** — 그 카드 장소가 지금 영업 확인 대상이면 `true`: 같은 시각 T-05가 그 장소로 뜰 조건과 같음(출발 30분 전 ≤ 지금 < 도착). 이미 확인됨 · 그날 확인함 · 고정 일정이면 `false`, "모름"이면 `true`. **`place_map_url: str \| null`** — 그 카드 장소의 Google 지도 링크, T-05 `map_url`과 같은 함수(place_id 링크, 없으면 좌표 검색 링크, **장소 이름은 넣지 않음**). 대상: T-01 지금 장소 · T-02 다음 장소 · T-07 고정 일정 장소 | — | FR-30 관련 |
 | POST `/days/{day_id}/check` | `{lat, lng, at}` | 새 `TripEvent[]` + `RecomposeProposal[]` (같은 사건은 다시 안 만듦) | FR-11·12·19, AC-05·10 |
 | POST `/proposals/{proposal_id}/accept` | — | `TripDay` (반영) | FR-13 |
 | POST `/proposals/{proposal_id}/dismiss` | — | 204 (일정 그대로) | FR-13, AC-06 |
