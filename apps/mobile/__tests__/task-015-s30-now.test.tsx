@@ -123,11 +123,8 @@ describe('§30 접힌 단에서는 보조 카드가 비치지 않는다 (T-07 "�
     for (let node: Tree | null = host; node; node = node.parent) out.push(node);
     return out;
   };
-  const hidden = (id: string) => {
-    const host = screen.queryByTestId(id) as unknown as Tree | null;
-    if (host === null) return true;
-    return chain(host).some((node) => Number(StyleSheet.flatten(node.props.style)?.opacity ?? 1) === 0);
-  };
+  // §31 하-15: 옛 "없음 또는 opacity 0" -> 그리지 않음(없음)만 (접힘 밖 요소는 그리지 않는다)
+  const hidden = (id: string) => screen.queryByTestId(id) === null;
   async function settle(index: number) {
     await act(async () => {
       sheetControl.settle(index, AREA_H);

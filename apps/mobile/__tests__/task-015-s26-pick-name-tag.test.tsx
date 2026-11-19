@@ -670,3 +670,47 @@ describe('§30 a2 키보드를 닫은 직후 — 지도에 경계를 물어 다�
     expect(tagText(tags()[0])).toBe(NAME);
   });
 });
+
+// ---------- TASK-015 §31 중-9 (task-015-design §17-3): 시트 높이 · 키보드가 바뀐 직후에도 다시 계산 ----------
+// 규칙(디자이너): 이름표 자리는 "카메라가 멈춘 뒤"만이 아니라 시트 높이 · 키보드가 바뀐 직후(레이아웃이 자리잡은 다음 프레임)에도 다시 계산한다
+// 계약 (정한 것): pick-panel 높이(onLayout)가 바뀌거나 키보드 높이가 바뀌면 mapPadding이 그대로여도 지도에 경계를 다시 묻고(getMapBoundaries),
+//   답이 오면 새 시트 윗변(844 − 키보드 − 잰 시트 높이)을 장애물로 다시 계산한다 (여유 4 그대로)
+describe('§31 a2 시트 높이 · 키보드 높이가 바뀌면 경계를 다시 묻고 다시 계산', () => {
+  const boundsOf = (region: Region) => ({
+    northEast: { latitude: region.latitude + region.latitudeDelta / 2, longitude: region.longitude + region.longitudeDelta / 2 },
+    southWest: { latitude: region.latitude - region.latitudeDelta / 2, longitude: region.longitude - region.longitudeDelta / 2 },
+  });
+  async function panelHeight(height: number) {
+    await act(async () => {
+      (screen.getByTestId('pick-panel') as unknown as Host).props.onLayout({ persist() {}, nativeEvent: { layout: { x: 0, y: HEIGHT - height, width: WIDTH, height } } });
+    });
+  }
+
+  test('T15_S31_키보드_없이_시트가_300으로_커지면_묻고_새_시트_윗변(544)으로_다시_계산', async () => {
+    await show(NAME);
+    // 핀 x 375: 위 · 오른쪽은 화면 밖, 왼쪽 후보 아랫변 = py + 14. py 530 -> 544(새 시트 윗변)와 간격 0, 옛 시트 윗변 586과는 42
+    const point = { x: 375, y: 530 };
+    const settled = await pinSettlesAt(SPOT, point);
+    expectTagAt('left', point, settled.region, settled.frame); // 옛 시트(258)로는 왼쪽이 된다
+    const asked = mapControl.boundaryAsks;
+    mapControl.boundaries = () => Promise.resolve(boundsOf(settled.region));
+    await panelHeight(300);
+    expect(mapControl.boundaryAsks).toBeGreaterThan(asked);
+    await act(async () => undefined);
+    expect(tags()).toHaveLength(0); // 왼쪽은 새 시트와 닿고 아래는 시트 안 -> 뺌
+  });
+
+  test('T15_S31_키보드_높이가_바뀌면(336_->_300)_다시_묻는다', async () => {
+    await show(NAME);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    await keyboardShow();
+    const asked = mapControl.boundaryAsks;
+    await act(async () => {
+      DeviceEventEmitter.emit('keyboardWillShow', keyboardEvent(300));
+    });
+    await act(async () => {
+      DeviceEventEmitter.emit('keyboardDidShow', keyboardEvent(300));
+    });
+    expect(mapControl.boundaryAsks).toBeGreaterThan(asked);
+  });
+});

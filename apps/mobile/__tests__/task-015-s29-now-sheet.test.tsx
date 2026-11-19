@@ -102,7 +102,7 @@ describe('§29 미확인 · 모름 칩을 누르면 작은 시트', () => {
     await act(async () => {
       fireEvent.press(within(screen.getByTestId(id)).getByText(LONG.unverified));
     });
-    expect(words('chip-sheet')).toContain('확인: 2026-11-01');
+    expect(words('chip-sheet')).toContain('확인: 11월 1일'); // §31 · §16-3 출처 줄 "{출처} · 확인: {월 일}" (§29 옛 '확인: 2026-11-01')
     expect(words('chip-sheet')).not.toContain('확인한 적 없음');
   });
 
@@ -139,9 +139,17 @@ describe('§29 미확인 · 모름 칩을 누르면 작은 시트', () => {
     expect(words('chip-sheet')).not.toMatch(/열었어|닫혔어/);
   });
 
-  test('T15_S29_칩에_›_같은_표시를_더하지_않는다', async () => {
+  // §31 · task-015-design §16-1 정정(PM 승인 11-18): 옛 "칩에 › 를 더하지 않는다" -> 미확인 · 모름 버튼 칩에는 › 가 있고 확인됨 칩에는 없다
+  test('T15_S31_미확인_·_모름_버튼_칩에는_›가_있고_확인됨_칩에는_없다', async () => {
     await toNow(nowServer(nowCard(t01({ item: withFact('unverified') }))));
-    expect(words('card-T-01')).not.toMatch(/[›>]/);
+    expect(words('card-T-01')).toContain('›');
+    await screen.unmount();
+    resetDevice();
+    mapControl.reset();
+    sheetControl.reset();
+    installConfig(TEST_KEY);
+    await toNow(nowServer(nowCard(t01({ item: withFact('confirmed') }))));
+    expect(words('card-T-01')).not.toContain('›');
   });
 });
 
@@ -186,11 +194,8 @@ describe('§29 칩 글자 — 자리별 표 (task-015-design §15-5)', () => {
 
 describe('§29 하-12 접힌 단에서는 이유 줄을 그리지 않는다 (짧아지는 카드로 바뀔 때 잘린 채 안 비침)', () => {
   const AREA_H = 746;
-  const hidden = () => {
-    const reason = screen.queryByTestId('now-reason') as unknown as Tree | null;
-    if (reason === null) return true;
-    return chain(reason).some((node) => Number(StyleSheet.flatten(node.props.style)?.opacity ?? 1) === 0);
-  };
+  // §31 하-15(task-015-design §17-3 "접힘일 때 접힘 밖 요소는 그리지 않는다"): 옛 "없음 또는 opacity 0" -> 그리지 않음(없음)만
+  const hidden = () => screen.queryByTestId('now-reason') === null;
   async function settle(index: number) {
     await act(async () => {
       sheetControl.settle(index, AREA_H);
