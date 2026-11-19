@@ -1,0 +1,94 @@
+# TASK-015 AC-5 · §A 경로 ① 이름 검색으로 숙소 고르기 -> 여행 만들기 -> 계획 첫 이동이 그 숙소에서
+# 전제·실행 방법은 create-trip.yaml 머리말과 같다 (로컬 Supabase + 점검 서버 8010 가짜 오사카 + 개발 빌드 + Metro). 실행:
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/lodging-name -e METRO_URL=http://127.0.0.1:<Metro 포트> .maestro/lodging-name.yaml
+# 화면 이름(testID)은 apps/mobile/__tests__/task-015-lodging-flow.test.tsx 머리말의 계약과 같다.
+# 가짜 공급자의 숙소: "난바" -> "난바 테스트 호텔 1" (lodging-result-FAKE-lodging-1)
+appId: com.csh0616.tripfriends
+---
+- evalScript: |
+    ${
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const tokyo = (offsetDays) => {
+        const d = new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400 * 1000);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      };
+      output.start = tokyo(7);
+      output.end = tokyo(8);
+    }
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1&__expo_disable_fab=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 만들기"
+    timeout: 60000
+- runFlow: common/close-dev-menu.yaml
+- tapOn: "여행 만들기"
+- extendedWaitUntil:
+    visible:
+      id: "create-trip-submit"
+    timeout: 30000
+- tapOn:
+    id: "field-start-date"
+- extendedWaitUntil:
+    visible:
+      id: "calendar-sheet"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.start}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.start}"
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.end}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.end}"
+- tapOn:
+    id: "calendar-confirm"
+- tapOn:
+    id: "lodging-search"
+- inputText: "난바"
+- extendedWaitUntil:
+    visible:
+      id: "lodging-result-FAKE-lodging-1"
+    timeout: 15000
+- takeScreenshot: lodging-name-1-name-results
+- tapOn:
+    id: "lodging-result-FAKE-lodging-1"
+- hideKeyboard
+- assertVisible:
+    id: "lodging-picked"
+- assertVisible: "난바 테스트 호텔 1"
+- takeScreenshot: lodging-name-2-form
+- takeScreenshot: lodging-name-3-picked
+- tapOn:
+    id: "create-trip-submit"
+- extendedWaitUntil:
+    visible: "계획 전"
+    timeout: 30000
+- takeScreenshot: lodging-name-4-day-list
+# 첫날 [알아서 짜 줘] -> 코스안 (AC-2: 첫 이동의 출발이 고른 숙소). 코스안 도식의 집(route-home)은 서버가 준 숙소 좌표(home)가 있을 때만 그려진다
+- tapOn:
+    text: "알아서 짜 줘"
+    index: 0
+- extendedWaitUntil:
+    visible: "이걸로 할래"
+    timeout: 60000
+- assertVisible:
+    id: "route-home"
+- takeScreenshot: lodging-name-5-course-from-lodging

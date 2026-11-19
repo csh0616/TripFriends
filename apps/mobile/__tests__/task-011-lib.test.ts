@@ -50,7 +50,7 @@ const trip = (list: Day[]) => ({
   city_code: 'osaka',
   start_date: list[0].date,
   end_date: list[list.length - 1].date,
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   trip_days: list,
 });

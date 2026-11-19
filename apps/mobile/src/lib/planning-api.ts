@@ -12,6 +12,7 @@ export type CourseResult = Schemas['CourseResult'];
 export type PlanningDone = Schemas['PlanningDone'];
 export type Picks = Schemas['Picks'];
 export type SeedResult = Schemas['SeedResult'];
+export type DemoPlaces = 'close_pins' | 'two_places';
 export type SeedChosenResult = Schemas['SeedChosenResult'];
 export type SelectResult = Schemas['SelectResult'];
 export type DaySummary = Schemas['DaySummary'];
@@ -34,7 +35,7 @@ export type Request = {
 /** 실패 종류 (TASK-004 §7, §12 Q18·Q21). 끊김·시간 초과는 network, 모르는 모양은 server */
 export type Failure =
   | { kind: 'network' }
-  | { kind: 'invalid'; field?: string } // TASK-010 §9 Q13: 400 VALIDATION_ERROR의 detail.field
+  | { kind: 'invalid'; field?: string; code?: string; reason?: string } // TASK-010 §9 Q13: 400 VALIDATION_ERROR의 detail.field · TASK-015 §11 Q1: 400 INVALID_LODGING의 code · detail.reason
   | { kind: 'not_found'; resource: string | null }
   | { kind: 'conflict'; reason: string | null; code?: string } // code: 공통 오류 코드 (예: PLAN_EXISTS)
   | { kind: 'infeasible'; reason: string; blocking: string[] }
@@ -52,7 +53,9 @@ function classify(status: number, body: unknown): Failure {
   const detail = isRecord(body) && isRecord(body.error) ? body.error.detail : undefined;
   if (status === 400) {
     const field = isRecord(detail) && typeof detail.field === 'string' ? detail.field : undefined;
-    return field === undefined ? { kind: 'invalid' } : { kind: 'invalid', field };
+    const code = isRecord(body) && isRecord(body.error) && typeof body.error.code === 'string' ? body.error.code : undefined;
+    const reason = isRecord(detail) && typeof detail.reason === 'string' ? detail.reason : undefined;
+    return { kind: 'invalid', ...(field === undefined ? {} : { field }), ...(code === undefined ? {} : { code }), ...(reason === undefined ? {} : { reason }) };
   }
   if (status === 404) {
     const resource = isRecord(detail) && typeof detail.resource === 'string' ? detail.resource : null;
@@ -142,7 +145,9 @@ type AdjustBody = Schemas['AdjustRequest'];
 type StartBody = Schemas['StartRequest'];
 
 export const requests = {
-  seed: (): Request => ({ method: 'POST', path: '/debug/seed-demo' }),
+  // demoPlaces: TASK-015 §20 #7 개발용 데모 선택지(가까운 핀 · 2곳). 없으면 본문 없이(데모 도시 30곳)
+  seed: (demoPlaces?: DemoPlaces): Request =>
+    demoPlaces ? { method: 'POST', path: '/debug/seed-demo', body: { demo_places: demoPlaces } satisfies Partial<Schemas['SeedRequest']> } : { method: 'POST', path: '/debug/seed-demo' },
   // TASK-006 §14: 둘째 날을 코스 선택까지 해 둔 시드. 응답의 day로 바로 여행 중 화면을 연다
   seedChosen: (): Request => ({ method: 'POST', path: '/debug/seed-demo', body: { chosen: true } satisfies Partial<Schemas['SeedRequest']> }),
   // mode 'auto' = [알아서 짜 줘] (TASK-011 §9 Q3): 대화 없이 바로 자동 계획 -> 코스안

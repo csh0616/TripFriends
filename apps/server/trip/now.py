@@ -38,6 +38,7 @@ from trip.schemas import (
     NowT04Fixed,
     NowT06Proposal,
     NowDaySummary,
+    NowCity,
     NowView,
 )
 from trip.repo import EventRecord, ProposalRecord
@@ -47,7 +48,7 @@ log = logging.getLogger(__name__)
 
 SUPPORTED = ("T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07", "T-08")  # A3: 이번에 만드는 카드 (T-04: TASK-007, T-05·T-06: TASK-008)
 STATUS_TEXT = {"on_track": "동선대로 가는 중", "delayed": "늦어지는 중", "free": "다음까지 여유 있음"}
-DAY_OVER_REASON = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1, TASK-007 F2
+DAY_OVER_REASON = "오늘 일정이 끝났어"  # §12 R1, TASK-007 F2
 DAY_OVER_PILL = "오늘 일정 끝"  # TASK-007 F1
 
 
@@ -232,6 +233,20 @@ def _transit_url(lat: float, lng: float, place_id: str | None = None) -> str:
     return f"{link}&travelmode=transit"
 
 
+def _place_map_url(place: Place, map_id: MapId | None = None) -> str:
+    """장소 구글 지도 링크 (T-05 map_url과 같은 함수·같은 값, TASK-015 §30)."""
+    return maps_url(gid) if map_id and (gid := map_id(place.id)) else map_search_url(place.lat, place.lng)
+
+
+def _chip_fields(entry: _Entry, to_check: _Entry | None, map_id: MapId | None) -> dict:
+    """T-01·T-02·T-07 칩 시트 두 칸 (TASK-015 §30). can_confirm_hours = 같은 시각 T-05가 그 장소로 뜨는 때 (check_target 결과 재사용)."""
+    place = entry.place
+    return {
+        "can_confirm_hours": place is not None and to_check is not None and to_check.place is not None and to_check.place.id == place.id,
+        "place_map_url": _place_map_url(place, map_id) if place else None,
+    }
+
+
 def _card(
     kind: str,
     m: _Moment,
@@ -251,7 +266,7 @@ def _card(
         if entry is None:
             return None
         ends_in = entry.end_min - m.now_min if m.current else None
-        return NowCardT01(item=_view(entry, weekday, checks), ends_in_min=ends_in)
+        return NowCardT01(item=_view(entry, weekday, checks), ends_in_min=ends_in, **_chip_fields(entry, to_check, map_id))
     if kind == "T-02":
         nxt = m.following
         if nxt is None:
@@ -262,6 +277,7 @@ def _card(
             leave_in_min=max(0, nxt.leave_min - m.now_min),  # 이동 중 0 (Q10), 쉬는 시간은 남은 분 (R2)
             travel_min=nxt.travel_min,
             map_url=_map_url(nxt, map_id),
+            **_chip_fields(nxt, to_check, map_id),
         )
     if kind == "T-03":
         later = [e for e in entries if e.start_min > m.now_min]  # 지금 일정 제외
@@ -284,7 +300,7 @@ def _card(
         return NowCardT05(
             place=NowPlaceRef(place_id=place.id, name=place.name),
             facts=_facts(place, weekday, checks, target.source),
-            map_url=maps_url(gid) if map_id and (gid := map_id(place.id)) else map_search_url(place.lat, place.lng),
+            map_url=_place_map_url(place, map_id),
         )
     if kind == "T-06":
         if event is None or event.type != "closed":
@@ -305,6 +321,7 @@ def _card(
             fixed=NowFixed(name=fixed.name, title=fixed.title, start=fixed.start, end=fixed.end, facts=_facts(fixed.place, weekday, checks, fixed.source)),
             leave_by=_hhmm(fixed.leave_min),
             leave_in_min=max(0, fixed.leave_min - m.now_min),  # Q4: 출발 시각이 지나도 시작 전이면 0
+            **_chip_fields(fixed, to_check, map_id),
         )
     if kind == "T-08":
         if not day.lodging_known:
@@ -407,6 +424,7 @@ def build_now_view(
     others: Sequence[NowEvent] = (),
     checks: Checks | None = None,
     map_id: MapId | None = None,
+    city: NowCity | None = None,
 ) -> NowView:
     """at는 시간대 없는 그날의 시각. 날짜 검사는 부르는 쪽 몫.
 
@@ -442,7 +460,9 @@ def build_now_view(
     else:
         status, status_text = screen.move_status, STATUS_TEXT[screen.move_status]
     assert main is not None  # 코스가 비지 않았고 하루가 끝나지 않았다면 지금 일정이나 다음 일정이 있다
+    assert city is not None  # 부르는 쪽(TripService)이 늘 넘긴다
     return NowView(
+        city=city,
         day=summary,
         at=at.isoformat(),
         status=status,

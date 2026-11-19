@@ -57,7 +57,7 @@ def raw():
 
 
 def test_T10_S13_정본_seed_v2(raw):
-    assert raw["version"] == 2
+    assert raw["version"] == 3  # TASK-015 §11: v3 = v2 + center lat·lng (이전: == 2). open_space·curated_hours는 그대로
     assert len(raw["places"]) == 58
 
 

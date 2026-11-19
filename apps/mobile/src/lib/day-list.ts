@@ -42,7 +42,7 @@ export type DayListPrimary = { label: string; dayId: string; sublabel: string | 
 /** 날짜 목록 머리 (TASK-011 A0): title "오사카 2박 3일", dots "●○○", line "D-35 · 3일 중 1일 계획 완료" */
 export type TripHeader = { title: string; dots: string; line: string };
 
-const CITY_NAME: Readonly<Record<string, string>> = { osaka: '오사카' };
+export const CITY_NAME: Readonly<Record<string, string>> = { osaka: '오사카' };
 const DAY_MS = 86_400_000;
 const dayIndex = (iso: string): number => Date.parse(`${iso}T00:00:00Z`) / DAY_MS;
 

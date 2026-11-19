@@ -20,7 +20,7 @@ from trip.alternatives import delay_course
 from trip.detect import DelayFinding, detect_delay, is_stale
 from trip.now import build_now_view, event_view, visit_check_target
 from trip.repo import EventRecord, TripRepo
-from trip.schemas import NowEvent, NowView
+from trip.schemas import NowCity, NowEvent, NowView
 from api.now import parse_at
 from trip.rehearsal import rebuild, shape_of
 from trip.trips import invalid
@@ -41,9 +41,14 @@ class TripService:
         self._last_check: dict[str, datetime] = {}
         # TASK-010 §11 H3: Google 영업시간을 부르는 자리 (kind, day_id, place_id). 실패해도 화면·대안 찾기는 멈추지 않는다
         self.map_id: Callable[[str], str | None] | None = None  # 우리 장소 id -> 구글 place_id (실제 여행, 지도 링크용)
+        self.city_info: Callable[[], NowCity] | None = None  # 도시 중심 (TASK-015 §E ③, 도시 팩 값). main이 끼운다
         self.refresh_hours: Callable[[str, str, str | None], None] | None = None
 
     # ---- 도우미 ----
+
+    def _city(self) -> NowCity:
+        assert self.city_info is not None
+        return self.city_info()
 
     def _hours(self, kind: str, day_id: str, place_id: str | None = None) -> None:
         if self.refresh_hours is None:
@@ -85,13 +90,13 @@ class TripService:
             self._hours("now", day_id)
             day, course, overrides = self.load(day_id, when)
             return build_now_view(
-                day_id, day, course, when, None, overrides, None, self._open_views(day_id, day), self._checks(day.plan, day_id), self.map_id
+                day_id, day, course, when, None, overrides, None, self._open_views(day_id, day), self._checks(day.plan, day_id), self.map_id, self._city()
             )
 
     def _builder(self, day_id: str, day: DayRecord, course: CourseOption, when: datetime, position, overrides, pending: VisitCheckRecord | None = None):
         def build(event: NowEvent | None, new_course: CourseOption | None) -> NowView:
             others = self._open_views(day_id, day, pending, skip=event)
-            return build_now_view(day_id, day, new_course or course, when, position, overrides, event, others, self._checks(day.plan, day_id, pending), self.map_id)
+            return build_now_view(day_id, day, new_course or course, when, position, overrides, event, others, self._checks(day.plan, day_id, pending), self.map_id, self._city())
 
         return build
 

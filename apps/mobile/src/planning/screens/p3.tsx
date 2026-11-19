@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { Text } from '@/components/app-text';
+import { CourseMapScreen } from '@/components/planning/course-map-screen';
+import { ExpandIcon } from '@/components/planning/icons';
 import { Notice } from '@/components/planning/notice';
 import { RouteDiagram } from '@/components/planning/route-diagram';
 import { PrimaryButton } from '@/components/planning/primary-button';
@@ -44,6 +46,8 @@ export function P3Screen({
   const { width } = useWindowDimensions();
   const [label, setLabel] = useState<'relaxed' | 'packed'>('relaxed');
   const [open, setOpen] = useState<string | null>(null);
+  const [bigMap, setBigMap] = useState(false); // TASK-015 §D: 코스 카드를 눌러 실제 지도로 크게 보기
+  const [mapNotice, setMapNotice] = useState<string | null>(null);
 
   // Q14: 보던 label의 안을 보여 주고, 없으면 첫 안
   const option = course.options.find((o) => o.label === label) ?? course.options[0];
@@ -63,7 +67,11 @@ export function P3Screen({
 
   const empty = items.length === 0;
 
+  const stops = items.flatMap((item) => (item.lat !== null && item.lng !== null ? [{ seq: item.seq, lat: item.lat, lng: item.lng, name: item.name }] : []));
+  const summary = option ? `${items.length}곳 · 이동 ${option.total_travel_min}분` : '';
+
   return (
+    <View style={styles.grow}>
     <ScreenFrame
       title="코스 짜 봤어"
       // §13 Q33: P3 부제는 "{날 이름} · {n}곳"
@@ -100,6 +108,7 @@ export function P3Screen({
       {notice ? (
         <Notice message={notice.message} tone={notice.tone} onRetry={notice.onRetry} retryDisabled={busy} />
       ) : null}
+      {mapNotice ? <Notice message={mapNotice} /> : null}
 
       {course.options.length > 1 ? (
         <View style={styles.toggle}>
@@ -127,14 +136,33 @@ export function P3Screen({
 
       {option ? (
         <>
-          <RouteDiagram
-            width={width - 2 * layout.screenMargin}
-            home={day.lodging}
-            stops={items.flatMap((item) =>
-              item.lat !== null && item.lng !== null ? [{ seq: item.seq, lat: item.lat, lng: item.lng }] : [],
-            )}
-          />
-          <Text style={text('caption', 'muted')}>{`${items.length}곳 · 이동 ${option.total_travel_min}분`}</Text>
+          {stops.length > 0 ? (
+            // 도식 + 요약 줄이 통째로 버튼 하나: 누르면 실제 지도로 크게 (aria "코스 지도 크게 보기, 요약"). 알약은 눌림 표시일 뿐
+            <Pressable
+              testID="btn-expand-map"
+              accessibilityRole="button"
+              accessibilityLabel={`코스 지도 크게 보기, ${summary}`}
+              style={styles.expandHit}
+              onPress={() => {
+                setMapNotice(null);
+                setBigMap(true);
+              }}
+            >
+              <RouteDiagram width={width - 2 * layout.screenMargin} home={day.lodging} stops={stops} spread />
+              <View testID="course-summary" style={styles.summaryRow}>
+                <Text style={text('caption', 'muted')}>{summary}</Text>
+                <View testID="expand-pill" aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.expandPill}>
+                  <ExpandIcon color={color.ink} size={layout.pillIcon} />
+                  <Text style={text('label', 'ink')}>크게 보기</Text>
+                </View>
+              </View>
+            </Pressable>
+          ) : (
+            <>
+              <RouteDiagram width={width - 2 * layout.screenMargin} home={day.lodging} stops={stops} spread />
+              <Text style={text('caption', 'muted')}>{summary}</Text>
+            </>
+          )}
 
           {empty ? <Text style={text('body', 'muted')}>담은 곳이 없어서 코스가 비었어</Text> : null}
 
@@ -163,11 +191,30 @@ export function P3Screen({
                 {`${d.name} · ${REASON_TEXT[d.reason]}`}
               </Text>
             ))}
-            <Text style={text('body')}>{`숙소까지 ${option.go_home_min}분`}</Text>
+            {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
+            <Text numberOfLines={1} adjustsFontSizeToFit style={text('body')}>{`숙소까지 ${option.go_home_min}분`}</Text>
           </View>
         </>
       ) : null}
     </ScreenFrame>
+    {bigMap && option ? (
+      <CourseMapScreen
+        dayNumber={day.day_number}
+        labelText={LABEL_TEXT[option.label]}
+        stops={stops}
+        home={day.lodging}
+        summary={summary}
+        busy={busy}
+        onClose={() => setBigMap(false)}
+        onPick={select}
+        onFail={() => {
+          // §6: 크게 보기를 닫고 도식 카드 그대로, 알림 한 줄
+          setBigMap(false);
+          setMapNotice('지도를 못 불러왔어');
+        }}
+      />
+    ) : null}
+    </View>
   );
 }
 
@@ -304,6 +351,9 @@ export function ReadRow({ item, must }: { item: CourseItem; must: boolean }) {
 }
 
 const styles = StyleSheet.create({
+  expandHit: { minHeight: layout.routeDiagram + space['space-2'] + layout.expandPill, marginBottom: space['space-1'] }, // 도식 + 요약 줄(8 + 24) = 152. 아래 4로 목록 자리는 그대로
+  summaryRow: { marginTop: space['space-2'], height: layout.expandPill, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  expandPill: { height: layout.expandPill, paddingLeft: space['space-2'], paddingRight: 10, flexDirection: 'row', alignItems: 'center', gap: space['space-1'], borderRadius: radius['r-full'], backgroundColor: color['bg-2'] },
   readRow: {
     minHeight: fit['row-read'].minHeight,
     paddingHorizontal: space['space-3'],
@@ -368,7 +418,8 @@ const styles = StyleSheet.create({
   lineMiddle: { top: 0, bottom: 0 },
   lineLast: { top: 0, height: layout.courseRow / 2 },
   rowText: { flex: 1 },
-  sub: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  // 칩 자리가 모자라면 칩이 아래로 내려간다 ("이동 9분" 글을 좁혀 숫자와 단위가 두 줄로 나뉘지 않게)
+  sub: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space['space-2'], rowGap: space['space-1'] },
   subText: { flexShrink: 1 },
   stay: {
     minWidth: layout.stayColumn,

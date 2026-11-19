@@ -3,10 +3,22 @@
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Polyline, Text as SvgText } from 'react-native-svg';
 
+import { spreadDiagramPins } from '@/lib/diagram-spread';
 import { homeIconLines } from '@/lib/home-icon';
 import { projectRoute } from '@/lib/project-route';
 import { layout } from '@/planning/layout';
 import { color, control, radius, text } from '@/planning/theme';
+
+function spreadAll(projected: { x: number; y: number }[], hasHome: boolean, stops: { seq: number }[], width: number, height: number) {
+  const pins = hasHome ? projected.slice(1) : projected;
+  const r = spreadDiagramPins({
+    frame: { width, height },
+    stops: pins.map((p, i) => ({ seq: stops[i].seq, ...p })),
+    home: hasHome ? projected[0] : null,
+  });
+  const moved = r.stops.map(({ x, y }) => ({ x, y }));
+  return r.home ? [r.home, ...moved] : moved;
+}
 
 /**
  * 동선 도식 (지도 SDK 없음). 숙소 + 코스 항목 좌표(A8)를 상자에 맞춰 그린다.
@@ -16,14 +28,18 @@ export function RouteDiagram({
   width,
   home,
   stops,
+  spread = false,
 }: {
   width: number;
   /** 숙소가 없으면 null: 집 그림 없이 핀만 (§29 ④) */
   home: { lat: number; lng: number } | null;
   stops: { seq: number; lat: number; lng: number }[];
+  /** P3 코스안만 true: 겹친 핀을 벌린다 (TASK-015 §19). 여행 중 지도 대체 도식은 문서에 없어 안 벌린다 */
+  spread?: boolean;
 }) {
   const height = layout.routeDiagram;
-  const all = projectRoute(home ? [home, ...stops] : stops, width, height, layout.routePad);
+  const projected = projectRoute(home ? [home, ...stops] : stops, width, height, layout.routePad);
+  const all = spread ? spreadAll(projected, home !== null, stops, width, height) : projected;
   const points = home ? all : [{ x: 0, y: 0 }, ...all]; // 아래 코드는 points[0] = 집, points[i + 1] = 핀
   const homeLines = home ? homeIconLines(points[0].x, points[0].y, layout.routeHomeIcon) : [];
   const line = all.map((p) => `${p.x},${p.y}`).join(' ');

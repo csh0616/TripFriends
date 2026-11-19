@@ -18,7 +18,7 @@ TASK-007 F1(알약 "오늘 일정 끝").
     Q3 마지막 장소 끝 뒤·빈 코스 날: status_text = "오늘 일정 끝" (숙소와 상관없이)
     Q3 빈 코스 날 + 숙소 없음: reason = "오늘 코스가 비어 있어" 그대로, subs·pins = [], 메인은 숙소 없는 T-08 (§31 Q2로 바뀜)
     Q6 POST /trips에 lodging_place_id를 줬지만 좌표를 못 구한 여행(city.lodging_location이 None) -> 숙소 없는 여행과 같다:
-        trip.lodging_place_id는 준 값 그대로, now·실제 check·연습 check의 day.lodging = null, 마지막 뒤 숙소 없는 T-08(§31 Q2), 경로에 도시 중심 없음
+        trip.lodging.place_id는 준 값 그대로(TASK-015 §9 Q2: 응답의 lodging_place_id는 없어짐), now·실제 check·연습 check의 day.lodging = null, 마지막 뒤 숙소 없는 T-08(§31 Q2), 경로에 도시 중심 없음
         (§29 심은 하루 테스트 test_T14_S29_4_심은_하루_lodging_known_False…가 저장소 쪽을 이미 덮는다. 이 파일은 POST /trips 길로 한 번 더)
     빈 시간 < 이동 시간(Q7)은 앱의 가짜 위치 몫이라 서버 테스트는 없다
 """
@@ -46,7 +46,7 @@ from trip_helpers import at_place, at_time, plain_day, plant
 
 HOME = (35.0, 135.0)  # trip_helpers: 심은 하루의 출발점(숙소 자리) = 숙소 모름이면 도시 중심 같은 출발점
 DAY_OVER_PILL = "오늘 일정 끝"
-DAY_OVER_WITH_LODGING = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # TASK-006 §12 R1 (숙소 있음은 그대로, §31 Q3)
+DAY_OVER_WITH_LODGING = "오늘 일정이 끝났어"  # TASK-006 §12 R1 -> TASK-015 §20 #5 (숙소 있음, REASONS 표와 같게. 이전 "…숙소로 가 볼까?")
 EMPTY_REASON = "오늘 코스가 비어 있어"
 
 
@@ -244,7 +244,7 @@ def unlocated_day(mem, monkeypatch):  # noqa: F811
     """숙소 검색 첫 결과를 골랐지만 좌표를 못 구한 여행 (city.lodging_location -> None, TASK-010: 여행은 숙소 없이도 만들어진다)"""
     hit = lodging_hit(mem)
     monkeypatch.setattr(mem.app.state.city, "lodging_location", lambda place_id, now: None)
-    day_id, date = planned_day(mem, lodging=hit["place_id"])  # trip.lodging_place_id는 준 값 그대로 (planned_day가 확인)
+    day_id, date = planned_day(mem, lodging=hit["place_id"])  # trip.lodging.place_id는 준 값 그대로 (planned_day가 확인)
     return mem, day_id, date
 
 

@@ -1,0 +1,226 @@
+{
+ "about": "TASK-015 §20 #7 데모 시드 선택지 close_pins 전용 장소(test-writer가 지어낸 가짜 값, demo_city.json과 섞지 않는다). 숙소 = 데모 중심(35.0, 135.0). CP01·CP02는 서로 약 50m — P3 도식(폭 350, 높이 120, 여백 24)에서 핀 중심 거리 < 28이 되어 도식 벌리기가 일어난다. CP03·CP04는 경로 상자를 넓히는 먼 곳. 영업 매일 09:00~21:00(확인됨).",
+ "places": [
+  {
+   "id": "CP01",
+   "name": "골목 카페 가",
+   "category": "cafe",
+   "lat": 35.006,
+   "lng": 135.0,
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "조용",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   }
+  },
+  {
+   "id": "CP02",
+   "name": "옆집 빵집 나",
+   "category": "food",
+   "lat": 35.0063,
+   "lng": 135.0004,
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   }
+  },
+  {
+   "id": "CP03",
+   "name": "강변 공원 다",
+   "category": "walk",
+   "lat": 34.995,
+   "lng": 135.012,
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "자연"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   }
+  },
+  {
+   "id": "CP04",
+   "name": "작은 서점 라",
+   "category": "shop",
+   "lat": 34.998,
+   "lng": 134.988,
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "조용"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   }
+  }
+ ]
+}

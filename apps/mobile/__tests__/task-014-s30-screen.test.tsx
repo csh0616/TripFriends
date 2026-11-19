@@ -201,7 +201,7 @@ describe('§30 Q1 실제 여행: 위치·시계 check도 하나씩', () => {
     city_code: 'osaka',
     start_date: '2026-12-01',
     end_date: '2026-12-04',
-    lodging_place_id: null,
+    lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
     status: 'active',
     is_demo: false,
     trip_days: [tripDay(1, 'past'), tripDay(2, 'today'), tripDay(3, 'planned'), tripDay(4, 'planning')],

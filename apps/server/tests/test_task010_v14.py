@@ -53,7 +53,9 @@ def test_T10_S12_정본_목록의_줄은_S_모양이고_id는_겹치지_않는�
 
 def test_T10_S12_정본_목록_머리는_center와_areas(raw):
     assert (raw["city_code"], raw["timezone"]) == ("osaka", "Asia/Tokyo")
-    assert set(raw["center"]) == {"name_ko", "query"}
+    # TASK-015 §11(시드 v3): center는 name_ko·query + 선택 lat·lng(둘 다 있거나 둘 다 없음). 이전: set(center) == {"name_ko", "query"}
+    assert {"name_ko", "query"} <= set(raw["center"]) <= {"name_ko", "query", "lat", "lng"}
+    assert ("lat" in raw["center"]) == ("lng" in raw["center"])
     assert all(set(a) == {"id", "name_ko", "query"} for a in raw["areas"])
 
 
@@ -65,7 +67,9 @@ def test_T10_S12_AC2_정본_목록에_Google_값이_없다(raw):
             return {k for v in node for k in keys(v)}
         return set()
 
-    assert not keys(raw) & (GOOGLE_KEYS | {"place_id"})
+    # TASK-015 §11(시드 v3): center의 우리 값 lat·lng만 예외 (Google 값 아님, §9 Q6). 그 밖 어디에도 Google 키가 없다
+    center_ours = {k: v for k, v in raw["center"].items() if k not in {"lat", "lng"}}
+    assert not keys({**raw, "center": center_ours}) & (GOOGLE_KEYS | {"place_id"})
 
 
 def test_T10_S12_서버의_seed_읽기가_정본_4지역_목록을_받는다():
@@ -74,6 +78,7 @@ def test_T10_S12_서버의_seed_읽기가_정본_4지역_목록을_받는다():
     data = load_seed(SEED)
     assert len(data["places"]) == 58
     assert {a["id"] for a in data["areas"]} == {"namba", "shinsaibashi", "umeda", "osakajo"}
+    assert (data["center"]["lat"], data["center"]["lng"]) == (34.6662, 135.5010)  # TASK-015 §11: v3 center 좌표를 받는다
 
 
 # ---------- §12 답 2: 429는 1·2·4초 기다려 3번까지 다시, 403은 바로 멈춤 ----------

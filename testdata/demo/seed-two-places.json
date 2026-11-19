@@ -1,0 +1,116 @@
+{
+ "about": "TASK-015 §20 #7 데모 시드 선택지 two_places 전용 장소(test-writer가 지어낸 가짜 값, demo_city.json과 섞지 않는다). 숙소 = 데모 중심(35.0, 135.0). 장소가 2곳뿐이라 코스도 2곳 — 크게 보기에서 이름표 2개를 본다. 두 곳은 서로 약 1.4km. 영업 매일 09:00~21:00(확인됨).",
+ "places": [
+  {
+   "id": "TP01",
+   "name": "언덕 카페 마",
+   "category": "cafe",
+   "lat": 35.006,
+   "lng": 135.004,
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "조용",
+    "감성"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   }
+  },
+  {
+   "id": "TP02",
+   "name": "시장 국수집 바",
+   "category": "food",
+   "lat": 34.996,
+   "lng": 134.994,
+   "crowd_level": 2,
+   "price_level": 2,
+   "mood_tags": [
+    "활기"
+   ],
+   "hours": [
+    {
+     "weekday": 0,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 1,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 2,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 3,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 4,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 5,
+     "open": "09:00",
+     "close": "21:00"
+    },
+    {
+     "weekday": 6,
+     "open": "09:00",
+     "close": "21:00"
+    }
+   ],
+   "hours_status": "confirmed",
+   "stay": {
+    "min": 30,
+    "typical": 60,
+    "max": 90
+   }
+  }
+ ]
+}

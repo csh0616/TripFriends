@@ -10,6 +10,7 @@ import BottomSheet from '@gorhom/bottom-sheet';
 import { Linking, StyleSheet, View } from 'react-native';
 
 import { contrast } from '@/lib/contrast';
+import { layout } from '@/planning/layout';
 
 import { sheetControl } from '../test-support/bottom-sheet-mock';
 import { COLORS, LISTS, STRINGS } from '../test-support/design-table';
@@ -254,12 +255,14 @@ describe('B4 지도에 넘기는 값', () => {
 // ---------- B5 시트, 입력창 ----------
 
 describe('B5 카드 시트', () => {
+  // TASK-015 §24 18번(승현 "추천대로" 11-18): 접힌 단 = 지금 메인 카드의 주 버튼 아래 끝 + 여백 (옛: 16% 고정). 3단 · 기본 중간 뜻은 그대로.
+  //   중간 44% · 높게 88%(§24 17번: 위 버튼 줄 아래 8보다 높으면 그만큼 낮춤)는 그대로
   test('T6_B5_3단이고_기본은_중간', async () => {
     await toNow();
     const sheet = byId('card-sheet');
     expect(sheet.props.snapPoints).toHaveLength(3);
-    // §14 정한 값 승인: [0.16, 0.44, 0.88]. 비율을 숫자로 주든 '%' 글자로 주든 같다
-    expect((sheet.props.snapPoints as (string | number)[]).map((p) => (typeof p === 'string' ? Number(p.replace('%', '')) / 100 : p))).toEqual([0.16, 0.44, 0.88]);
+    const ratio = (p: string | number) => (typeof p === 'string' ? Number(p.replace('%', '')) / 100 : p);
+    expect((sheet.props.snapPoints as (string | number)[]).slice(1).map(ratio)).toEqual([0.44, 0.88]);
     expect(sheet.props.index).toBe(1);
   });
 
@@ -332,9 +335,12 @@ describe('B6 카드 부품', () => {
   // §14 T-07 시각: 시각 글자가 여러 곳에 나오므로 줄을 정확히 찾는다 (승인된 수정)
   const cardWords = (id: string) => textsUnder(byId(id)).map(textOf).join('');
 
-  test('T6_S14_T_07_제목과_시작_끝_시각', async () => {
+  // TASK-015 §24 · task-015-design §12-5 2(보드대로): 제목 + 장소 줄 (옛: "제목 · 시작–끝" 한 줄)
+  test('T15_S24_T_07_제목은_제목만_한_줄이고_장소_이름_줄이_따로', async () => {
     await shows(t07());
-    expect(cardWords('card-T-07')).toContain('서버_예약_제목 · 15:00–16:00'); // TASK-011 §9 Q8: 앱 전체 timeRange (승인)
+    expect(inCard('card-T-07').getByText('서버_예약_제목')).toBeTruthy();
+    expect(inCard('card-T-07').getByText('서버_식당_이름 15:00 시작')).toBeTruthy(); // 승현 답 11-18: "{장소} {시작} 시작"
+    expect(cardWords('card-T-07')).not.toContain('서버_예약_제목 · 15:00–16:00');
   });
 
   // TASK-011 §9 Q10: 영업시간을 보여 주는 모든 곳(여행 중 카드 포함). curated 시간대 -> "추천 시간대", 늘 열림 -> "확인됨" 칩 + "늘 열려 있어" (§14 N9로 바뀜)
@@ -342,31 +348,36 @@ describe('B6 카드 부품', () => {
   test('T11_Q10_여행_중_카드_curated_시간대는_추천_시간대', async () => {
     await shows(t01({ item: withHours({ source_type: 'curated', value: '17:00-24:00', status: 'confirmed' }) }));
     expect(inCard('card-T-01').getByText('추천 시간대')).toBeTruthy();
-    expect(inCard('card-T-01').queryByText('확인됨')).toBeNull();
+    expect(inCard('card-T-01').queryByText('영업시간 확인됨')).toBeNull(); // §27 칩 ㉠: 옛 '확인됨'
   });
 
   // TASK-011 §14 N9 (§9 Q10 고침): 늘 열림에도 "확인됨" 칩. 옛 "칩 없이" 테스트를 바꿈
+  // §27 칩 ㉠: 옛 '확인됨' · '미확인' -> '영업시간 확인됨' · '영업시간 미확인' (모름은 문서에 긴 글이 없어 그대로)
+  // §29(task-015-design §15-5 "늘 열려 있어 | 짧은 '확인됨'(TASK-011 N9 그대로) — 값이 영업을 말한다"): §27의 '영업시간 확인됨' -> 다시 짧은 '확인됨'
   test('T11_S14_N9_여행_중_카드_늘_열림은_확인됨_칩과_늘_열려_있어', async () => {
     await shows(t01({ item: withHours({ source_type: 'curated', value: '00:00-24:00', status: 'confirmed' }) }));
     expect(inCard('card-T-01').getByText('확인됨')).toBeTruthy();
-    for (const chip of ['미확인', '모름', '추천 시간대']) expect(inCard('card-T-01').queryByText(chip)).toBeNull();
+    for (const chip of ['영업시간 확인됨', '영업시간 미확인', '영업시간 모름', '추천 시간대']) expect(inCard('card-T-01').queryByText(chip)).toBeNull();
     expect(inCard('card-T-01').getByText(/늘 열려 있어/)).toBeTruthy();
   });
 
-  test('T6_S14_T_07_까지_출발해야_해', async () => {
+  // TASK-015 §24 (보드 ①-30 "11분 뒤에 출발해 · 18:42 출발"): 옛 "HH:MM까지 출발해야 해" -> "HH:MM 출발"
+  test('T15_S24_T_07_출발_시각_줄은_HH:MM_출발', async () => {
     await shows(t07());
-    expect(inCard('card-T-07').getByText('14:40까지 출발해야 해')).toBeTruthy();
+    expect(inCard('card-T-07').getByText('14:40 출발')).toBeTruthy();
+    expect(inCard('card-T-07').queryByText('14:40까지 출발해야 해')).toBeNull();
   });
 
-  test('T6_S14_T_07_남은_분', async () => {
+  test('T15_S24_T_07_남은_분은_N분_뒤에_출발해', async () => {
     await shows(t07());
-    expect(inCard('card-T-07').getByText(/^15(분.*)?$/)).toBeTruthy();
+    expect(cardWords('card-T-07')).toContain('15분 뒤에 출발해');
   });
 
   test('T6_S11_Q4_T_07_출발_시각이_지나면_지금_출발해', async () => {
     await shows(t07({ leave_in_min: 0 }));
     expect(inCard('card-T-07').getByText('지금 출발해')).toBeTruthy();
-    expect(inCard('card-T-07').getByText('14:40까지 출발해야 해')).toBeTruthy();
+    expect(inCard('card-T-07').getByText('14:40 출발')).toBeTruthy(); // §24: 옛 "14:40까지 출발해야 해"
+    expect(cardWords('card-T-07')).not.toContain('분 뒤에 출발해');
   });
 
   test('T6_B6_T_08_숙소까지_분', async () => {
@@ -379,11 +390,12 @@ describe('B6 카드 부품', () => {
     expect(inCard('now-reason').getByText('서버_바뀐_이유')).toBeTruthy();
   });
 
-  // SCREEN-001 §3-2, AC-3 상태 칩
+  // SCREEN-001 §3-2, AC-3 상태 칩. §27 칩 ㉠(task-014-design §10-1 · TASK-015 §B1): 여행 중 메인 카드 칩은 긴 글
+  //   옛 '확인됨' · '미확인' · '모름' -> '영업시간 확인됨' · '영업시간 미확인' · '영업시간 모름'(§28 질문 1, TASK-004 영업시간 글과 같게)
   const STATUS: ['confirmed' | 'unverified' | 'unknown', string][] = [
-    ['confirmed', '확인됨'],
-    ['unverified', '미확인'],
-    ['unknown', '모름'],
+    ['confirmed', '영업시간 확인됨'],
+    ['unverified', '영업시간 미확인'],
+    ['unknown', '영업시간 모름'], // §28 질문 1: 옛 '모름'
   ];
 
   test.each(STATUS)('T6_S3_2_T_01에_%s_상태_글자_%s', async (status, label) => {
@@ -398,19 +410,45 @@ describe('B6 카드 부품', () => {
 
   test('T6_S3_2_T_03은_줄마다_자기_상태_글자', async () => {
     await shows(t03());
+    // §29(task-015-design §15-5 T-03 줄): 확인됨 · 미확인은 짧게(폭 때문에 예외), 모름만 '영업시간 모름' (옛 '모름')
     expect(inCard('rest-row-2').getByText('미확인')).toBeTruthy();
-    expect(inCard('rest-row-3').getByText('모름')).toBeTruthy();
+    expect(inCard('rest-row-2').queryByText('영업시간 미확인')).toBeNull();
+    expect(inCard('rest-row-3').getByText('영업시간 모름')).toBeTruthy();
   });
 
   test('T6_S12_R4_T_07_카드_제목은_fixed_title', async () => {
     await shows(t07());
     expect(cardWords('card-T-07')).toContain('서버_예약_제목');
-    expect(cardWords('card-T-07')).not.toContain('서버_식당_이름');
+    // TASK-015 §24(승현 답 11-18): 장소 줄 "{장소} {시작} 시작"이 생겨 옛 "장소 이름 없음" 단언은 뺐다. 제목 = fixed.title 뜻은 위 단언이 지킨다
   });
 
   test('T6_S11_Q21_T_07_고정_일정에_장소가_있으면_상태_글자', async () => {
     await shows(t07());
-    expect(inCard('card-T-07').getByText('확인됨')).toBeTruthy();
+    expect(inCard('card-T-07').getByText('영업시간 확인됨')).toBeTruthy(); // §27 칩 ㉠: 옛 '확인됨'
+  });
+
+  // ---------- TASK-015 §27 칩 ㉠: 긴 칩은 라벨 줄 오른쪽 (task-014-design §10-1 "라벨 줄 24 | '지금 할 일' + 오른쪽 칩" · TASK-015 §B1 · task-015-design §14-4) ----------
+  // 계약: 칩 글자(Text)에서 위로 올라가 처음 만나는 가로 줄(flexDirection 'row')에 라벨 글자가 있고, 라벨이 칩보다 앞(왼쪽)이다.
+  //   그 줄에 카드 제목(장소 이름 · 고정 일정 제목)은 없다 (옛: 이름 줄 옆)
+  const rowOf = (host: Tree): Tree | null => {
+    for (let node = host.parent; node; node = node.parent) if (StyleSheet.flatten(node.props.style)?.flexDirection === 'row') return node;
+    return null;
+  };
+  const textsIn = (host: Tree): string[] => host.queryAll((inner) => inner.type === 'Text').map((inner) => [inner.props.children].flat(Infinity).filter((c: unknown) => typeof c === 'string').join(''));
+  const CHIP_ROWS: [string, () => object, string, string, string][] = [
+    ['T_01', () => t01({ item: nowItem(2, '서버_장소_이름', '12:20', '14:00', 'confirmed') }), 'card-T-01', '지금 할 일', '서버_장소_이름'],
+    ['T_02', () => t02({ next_item: nowItem(2, '서버_장소_이름', '12:20', '14:00', 'unverified') }), 'card-T-02', '다음 이동', '서버_장소_이름'],
+    ['T_07', () => t07(), 'card-T-07', '고정 일정 · 곧 출발', '서버_예약_제목'],
+  ];
+  test.each(CHIP_ROWS)('T15_S27_%s_긴_칩은_라벨_줄_오른쪽(이름_줄이_아님)', async (_name, card, id, label, title) => {
+    await shows(card());
+    const chip = inCard(id).getByText(/^영업시간 (확인됨|미확인)$/) as unknown as Tree;
+    const row = rowOf(chip);
+    expect(row).not.toBeNull();
+    const words = textsIn(row as Tree);
+    expect(words).toContain(label);
+    expect(words.indexOf(label)).toBeLessThan(words.findIndex((w) => /^영업시간 (확인됨|미확인)$/.test(w)));
+    expect(words.join(' ')).not.toContain(title);
   });
 
   test('T6_S11_Q21_T_07_장소가_없으면_상태_글자_없이_그려진다', async () => {
@@ -1510,5 +1548,170 @@ describe('리뷰 재점검 §7 띠 가림', () => {
       if (screen.queryByTestId('my-location-button') !== null) expect([id, drawnAbove(byId(id), floatBox())]).toEqual([id, true]);
       if (screen.queryByTestId('demo-panel') !== null) expect([id, drawnAbove(byId(id), byId('demo-panel'))]).toEqual([id, true]);
     }
+  });
+});
+
+
+// ---------- TASK-015 §24 18번: 접힌 단 = 메인 카드의 마지막 요소 아래 끝 + 16 (모든 카드 같은 규칙) ----------
+// 근거: TASK-015 §24 표 하 18("시트를 접으면 버튼이 입력창에 반쯤 잘림 -> 접힌 높이 조정") · task-015-design §12-4("카드 시트 접힘 단: 내용 경계에 맞춘다") ·
+//   승현 규칙(11-18 원문): "메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 아래 끝 + 16. 모든 카드에 같은 규칙이고, 테스트도 이 규칙으로." (옛: 16% 고정 · 주 버튼 있는 T-08만)
+// 계약 (이 묶음이 정한 것 — frontend는 이대로 잰다):
+//   마지막 요소 = 메인 카드(`card-{type}`) 안에서 그리는 순서로 마지막인 "줄"(바깥 Text, 다른 Text 안이 아닌 것) 또는 "버튼"(누를 수 있는 host, 그 안의 Text는 따로 세지 않음).
+//     카드 아래 이유 줄(now-reason)은 메인 카드 밖이라 세지 않는다
+//   화면은 그 마지막 요소(또는 그것만 감싼 상자)에 onLayout을 두고, 메인 카드부터 시트 내용까지의 위치도 onLayout으로 잰다(지금 now-main처럼).
+//   시험은 시트 영역 높이(AREA_H)를 알린 뒤, 마지막 요소에서 card-sheet까지 onLayout이 있는 host마다
+//     마지막 요소에 가장 가까운 것 = { y: Y, height: H }, 나머지 = { y: 0 } 을 준다 -> 마지막 요소 아래 끝 = Y + H (시트 내용 기준)
+//   접힌 단(snapPoints[0])은 px 숫자 · 아래 끝이 Δ 바뀌면 접힌 단도 정확히 Δ · 16% 고정 분기 없음 · 중간 단(44%)보다 낮다 · 3단 · 기본 중간 그대로
+//   **TASK-015 §27(11-19) · task-015-design §14-5 "접힌 단에서 이유 줄이 약 1pt 비침 -> 접힌 경계를 이유 줄 윗변(버튼 아래 8)보다 위, 예를 들어 버튼 아래 4"**:
+//     옛 ">= Y + H + 16" -> 새 "= 손잡이 자리 + Y + H + 4" (손잡이 자리 = 2 × layout.sheetHandlePad + layout.sheetHandleHeight = 24, 화면 collapsedSnap과 같은 머리 높이).
+//     PM "§26 규칙의 +16 안에서" -> 여유를 16에서 4로 줄인 같은 규칙. 경계(시트 내용 기준) < 이유 줄 윗변 Y + H + 8
+describe('§24 18번 · §27 접힌 단 = 메인 카드 마지막 요소 아래 끝 + 4', () => {
+  const AREA_H = 746;
+  const MARGIN = 4; // §27: 옛 16
+  const HANDLE = 2 * layout.sheetHandlePad + layout.sheetHandleHeight; // 시트 머리(손잡이 자리)
+  const REASON_GAP = 8; // 이유 줄 = 메인 카드 아래 위 8 (task-014-design §10-1 · task-015-design §14-5)
+  const insideText = (host: Tree | null): boolean => host !== null && (host.type === 'Text' || insideText(host.parent));
+  const pressable = (host: Tree) => typeof host.props.onClick === 'function';
+  const insidePressable = (host: Tree | null): boolean => host !== null && (pressable(host) || insidePressable(host.parent));
+
+  /** 메인 카드의 마지막 요소: 바깥 줄(Text) 또는 버튼(누르는 host). 버튼 안의 Text는 버튼에 포함 */
+  function lastElement(type: string): Tree {
+    const card = byId(`card-${type}`);
+    const items = card.queryAll(
+      (host) => (pressable(host) && !insidePressable(host.parent)) || (host.type === 'Text' && !insideText(host.parent) && !insidePressable(host.parent)),
+    );
+    expect(items.length).toBeGreaterThanOrEqual(1); // 시험 자체 확인
+    return items[items.length - 1];
+  }
+
+  async function measure(type: string, y: number, height: number) {
+    const sheetHost = byId('card-sheet');
+    const area = chain(sheetHost).find((host) => typeof host.props.onLayout === 'function') as Tree;
+    await fireEvent(area as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 390, height: AREA_H } } });
+    const path = chain(lastElement(type));
+    const stop = path.indexOf(sheetHost);
+    const measured = path.slice(0, stop < 0 ? path.length : stop).filter((host) => typeof host.props.onLayout === 'function');
+    expect(measured.length).toBeGreaterThanOrEqual(1); // 화면이 마지막 요소 자리를 잰다 (계약)
+    for (const [i, host] of measured.entries()) {
+      const layout = i === 0 ? { x: 0, y, width: 342, height } : { x: 0, y: 0, width: 390, height: 400 };
+      await act(async () => {
+        host.props.onLayout({ persist() {}, nativeEvent: { layout } });
+      });
+    }
+  }
+
+  const low = () => {
+    const point = (byId('card-sheet').props.snapPoints as (string | number)[])[0];
+    expect(typeof point).toBe('number'); // px (16% 글자가 아니다)
+    return point as number;
+  };
+
+  // [이름, 메인 카드, type, 마지막 요소 높이]
+  const CARDS: [string, () => object, string, number][] = [
+    ['T_08_주_버튼', () => t08(), 'T-08', 52],
+    ['T_08_숙소_없음(마지막_줄)', () => t08({ lodging: null, map_url: null, go_home_min: null }), 'T-08', 22],
+    ['T_01(마지막_줄)', () => t01(), 'T-01', 22],
+    ['T_02(마지막_요소)', () => t02(), 'T-02', 44],
+    ['T_07(마지막_줄)', () => t07(), 'T-07', 22],
+  ];
+
+  // §27: 옛 "아래 끝 + 16 이상" -> "손잡이 자리 + 아래 끝 + 4" 정확히
+  test.each(CARDS)('T15_S27_%s_접힌_단은_손잡이_자리_+_마지막_요소_아래_끝_+_4이고_중간_단보다_낮다', async (_name, card, type, h) => {
+    await toNow(nowServer(nowView({ main: card(), subs: [] })));
+    await measure(type, 70, h);
+    expect(low()).toBe(HANDLE + 70 + h + MARGIN);
+    expect(low()).toBeLessThan(AREA_H * 0.44);
+    expect(byId('card-sheet').props.snapPoints).toHaveLength(3);
+    expect(byId('card-sheet').props.index).toBe(1);
+  });
+
+  test.each(CARDS)('T15_S24_18_%s_마지막_요소_아래_끝이_40_내려가면_접힌_단도_정확히_40_높아진다', async (_name, card, type, h) => {
+    await toNow(nowServer(nowView({ main: card(), subs: [] })));
+    await measure(type, 70, h);
+    const before = low();
+    await measure(type, 110, h);
+    expect(low() - before).toBe(40);
+  });
+
+  test.each(CARDS)('T15_S24_18_경계_%s_옛_16%_고정이_아니다(아래_끝이_16%보다_아래여도_잘리지_않음)', async (_name, card, type, h) => {
+    await toNow(nowServer(nowView({ main: card(), subs: [] })));
+    await measure(type, 120, h); // 120 + h + 16 > 746 × 0.16 = 119.4
+    expect(low()).toBeGreaterThan(AREA_H * 0.16);
+    expect(low()).toBe(HANDLE + 120 + h + MARGIN); // §27: 옛 >= 120 + h + 16
+  });
+
+  test.each(CARDS)('T15_S27_%s_접힌_경계는_이유_줄_윗변(아래_끝_+_8)보다_위(이유_줄이_안_비침)', async (_name, card, type, h) => {
+    await toNow(nowServer(nowView({ main: card(), subs: [] })));
+    await measure(type, 70, h);
+    expect(low() - HANDLE).toBeGreaterThan(70 + h); // 마지막 요소는 다 보인다
+    expect(low() - HANDLE).toBeLessThan(70 + h + REASON_GAP); // 이유 줄 윗변보다 위에서 끊긴다
+  });
+
+  test('T15_S24_18_같은_규칙_하나_마지막_요소_아래_끝이_같으면_카드가_달라도_접힌_단이_같다', async () => {
+    await toNow(nowServer(nowView({ main: t08(), subs: [] })));
+    await measure('T-08', 70, 52); // 아래 끝 122
+    const withButton = low();
+    await screen.unmount();
+    resetDevice(); // 처음부터 다시 (beforeEach와 같은 준비)
+    mapControl.reset();
+    sheetControl.reset();
+    installConfig(TEST_KEY);
+    await toNow(nowServer(nowView({ main: t01(), subs: [] })));
+    await measure('T-01', 100, 22); // 아래 끝 122
+    expect(low()).toBe(withButton);
+  });
+
+  // ---------- TASK-015 §28 질문 2(11-19): 같은 카드 종류 안에서는 접힌 단이 줄어들지 않고, 잘릴 때만 늘어난다. 종류가 바뀌면 그때 잰 값으로 다시 ----------
+  // 옛(§24 18번 · §27): 잰 값을 늘 따라감(줄면 줄어듦 — reviewer 7차 T-07 "14분 뒤" -> "지금 출발해" 577 -> 597).
+  // 새: 같은 종류에서 아래 끝이 줄면 접힌 단 그대로 · 늘면 정확히 그만큼 (위 "40 내려가면 정확히 40" 테스트 그대로) · 종류가 바뀌면 새로 잰 값(줄 수 있음)
+  async function nextCard(control: ReturnType<typeof nowServer>, card: object, type: string) {
+    control.show(nowView({ main: card, subs: [] }));
+    await pressId('demo-toggle');
+    await pressId('demo-plus-10');
+    await screen.findByTestId(`card-${type}`);
+  }
+
+  test('T15_S28_T_07_14분_뒤에서_지금_출발해로_아래_끝이_20_줄어도_접힌_단_그대로', async () => {
+    const { control } = await toNow(nowServer(nowView({ main: t07({ leave_in_min: 14 }), subs: [] })));
+    await measure('T-07', 90, 22);
+    const before = low();
+    expect(before).toBe(HANDLE + 90 + 22 + MARGIN); // 시험 자체 확인 (§27 규칙)
+    await nextCard(control, t07({ leave_in_min: 0 }), 'T-07');
+    // 같은 종류라 card-T-07은 이미 있다 -> 바뀐 내용이 보일 때까지 기다린다 (요청은 누른 뒤 조금 있다 나간다)
+    expect(await screen.findByText('지금 출발해')).toBeTruthy(); // 시험 자체 확인: 같은 종류, 내용만 바뀜
+    await measure('T-07', 70, 22); // 아래 끝 20 줄어듦
+    expect(low()).toBe(before);
+  });
+
+  test('T15_S28_같은_종류에서_줄었다가_다시_늘면_가장_컸던_값을_넘을_때만_늘어난다', async () => {
+    await toNow(nowServer(nowView({ main: t01(), subs: [] })));
+    await measure('T-01', 100, 22);
+    const top = low();
+    await measure('T-01', 60, 22); // 40 줄어듦 -> 그대로
+    expect(low()).toBe(top);
+    await measure('T-01', 90, 22); // 다시 30 늘어도 처음(100)보다 작다 -> 그대로
+    expect(low()).toBe(top);
+    await measure('T-01', 101, 22); // 처음보다 1 커짐 -> 잘리니 1 늘어남 (경계)
+    expect(low()).toBe(top + 1);
+  });
+
+  test('T15_S28_종류가_바뀌면_새로_잰_값으로_다시(줄어들_수_있다)', async () => {
+    const { control } = await toNow(nowServer(nowView({ main: t07(), subs: [] })));
+    await measure('T-07', 120, 22);
+    const t07Low = low();
+    await nextCard(control, t08(), 'T-08');
+    await measure('T-08', 50, 52);
+    expect(low()).toBe(HANDLE + 50 + 52 + MARGIN);
+    expect(low()).toBeLessThan(t07Low);
+  });
+
+  test('T15_S28_종류가_바뀐_뒤에는_그_종류_안에서_다시_줄지_않는다', async () => {
+    const { control } = await toNow(nowServer(nowView({ main: t07(), subs: [] })));
+    await measure('T-07', 120, 22);
+    await nextCard(control, t08(), 'T-08');
+    await measure('T-08', 80, 52);
+    const t08Low = low();
+    await measure('T-08', 50, 52);
+    expect(low()).toBe(t08Low);
   });
 });

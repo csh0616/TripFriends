@@ -38,6 +38,7 @@ import psycopg
 from store.unit import SaverParticipant, StorageUnavailable
 from trip.trips import ApiError, TripBook
 from places.city import open_city
+from trip.schemas import NowCity, NowCityCenter
 from planning.schemas import ErrorResponse, SeedChosenResult, SeedRequest, SeedResult
 from planning.service import PlanningError, PlanningService
 from planning.seed import DEMO_DATES
@@ -112,6 +113,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.account_link = AccountLink(app.state.trip_book, app.state.trip_store, app.state.claims)
     app.state.planning_service.before_start = lambda day_id: app.state.trip_book.refresh_hours("planning", day_id)  # §11 H3 ①
     app.state.trip_service.refresh_hours = app.state.trip_book.refresh_hours  # H3 ② ③
+    app.state.trip_service.city_info = lambda: NowCity(
+        code=app.state.city.city_code, center=NowCityCenter(lat=app.state.city.city_center()[0], lng=app.state.city.city_center()[1])
+    )
     app.state.trip_service.map_id = lambda our_id: (app.state.city.row(our_id) or {}).get("place_id")  # 지도 링크: 실제 여행은 place_id (PM 답 3)
     # TASK-012 A3: 요청 하나 = 트랜잭션 하나. 메모리 저장소는 실패하면 되돌릴 수 있게 상태를 떠 둔다 (§10 Q8)
     app.state.unit = UnitOfWork(
@@ -252,7 +256,9 @@ if os.environ.get("APP_ENV", "development") != "production":
         TASK-012 §11: 토큰이 필요하고, 데모는 그 사용자 소유(is_demo)다. 지금 여행은 바꾸지 않는다 —
         `{"as_current": true}`일 때만 그 사용자의 지금 여행으로 붙인다 (점검 전용, 이전 여행은 archived)."""
         past_days = body.past_days if body and "past_days" in body.model_fields_set else None
-        result = request.app.state.planning_service.seed(chosen=bool(body and body.chosen), past_days=past_days)
+        result = request.app.state.planning_service.seed(
+            chosen=bool(body and body.chosen), past_days=past_days, demo_places=body.demo_places if body else None
+        )
         request.app.state.trip_book.attach_demo(
             user,
             result.trip_id,

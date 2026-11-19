@@ -5,7 +5,7 @@
 §29 원인 ③(서버가 도시 중심을 숙소로 써서 day.lodging도 도시 중심) · TASK-010 §9 Q10(숙소가 없으면 도시 중심이 하루 시작점)·§10 Q27(lodging_known).
 
 계약 (이 테스트가 정한 것, 승인 대기):
-    "숙소 없는 여행" = POST /trips에 lodging_place_id를 주지 않은 여행 (저장소의 DayRecord.lodging_known = False)
+    "숙소 없는 여행" = POST /trips에 숙소를 주지 않은 여행 (응답 trip.lodging = null, TASK-015 §9 Q2) (저장소의 DayRecord.lodging_known = False)
         -> GET /days/{id}/now · POST /days/{id}/check(실제) · POST /days/{id}/check(본문 rehearsal: true) 응답의 day.lodging = null
         -> (§31 Q2로 바뀜) T-08은 숨기지 않는다: 마지막 장소 뒤(끝 정각 포함)는 main = T-08 "숙소 없는 모양"
            (lodging = null, map_url = null), 이유 = §31 Q3 "오늘 일정이 끝났어. 오늘도 수고했어!". subs에는 T-08이 없다 (짝 표 그대로)
@@ -53,7 +53,12 @@ def planned_day(osaka: Osaka, lodging: str | None) -> tuple[str, str]:
     """계획 완료(코스를 고른) 날 하나. lodging=None이면 숙소 없이 만든 여행. (day_id, 'YYYY-MM-DD')."""
     extra = {"lodging": lodging} if lodging is not None else {}
     trip = osaka.make_trip(days=2, offset=OFFSET, device=ME, **extra)
-    assert trip["lodging_place_id"] == lodging
+    # TASK-015 §9 Q2: 응답에서 lodging_place_id를 뺐다 (이전: trip["lodging_place_id"] == lodging)
+    if lodging is None:
+        assert trip["lodging"] is None
+    else:
+        assert trip["lodging"]["place_id"] == lodging
+    assert "lodging_place_id" not in trip
     day = trip["trip_days"][0]
     started = osaka.client.post(f"/days/{day['day_id']}/planning", json={"mode": "auto"})
     assert started.status_code == 201, started.text

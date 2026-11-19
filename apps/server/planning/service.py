@@ -114,10 +114,10 @@ class PlanningService:
 
     # ---- 엔드포인트 ----
 
-    def seed(self, chosen: bool = False, past_days: int | None = None) -> SeedResult | SeedChosenResult:
+    def seed(self, chosen: bool = False, past_days: int | None = None, demo_places: str | None = None) -> SeedResult | SeedChosenResult:
         """chosen(TASK-006 A5·Q14): 둘째 날을 자동으로 계획하고 relaxed 안을 고른 상태로 둔다 (저녁 예약 포함)."""
         with self._lock:
-            result = seed_demo(self.repo, with_dinner=chosen, past_days=past_days)
+            result = seed_demo(self.repo, with_dinner=chosen, past_days=past_days, demo_option=demo_places)
             if chosen:
                 course = self.start(result.day_ids[1], "auto")
                 option = next(o for o in course.options if o.label == "relaxed")  # type: ignore[union-attr]

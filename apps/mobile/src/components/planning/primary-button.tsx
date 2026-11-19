@@ -9,11 +9,16 @@ export function PrimaryButton({
   onPress,
   disabled,
   testID,
+  onPressIn,
+  onPressOut,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
   testID?: string;
+  /** 누르기 시작 · 손 뗌 (TASK-015 §24 42번: 누르는 동안 시트를 움직이지 않으려고) */
+  onPressIn?: () => void;
+  onPressOut?: () => void;
 }) {
   return (
     <Pressable
@@ -21,6 +26,8 @@ export function PrimaryButton({
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       style={[styles.button, disabled && styles.disabled]}
     >
       <Text style={text('heading', disabled ? 'muted' : 'on-brand')}>{label}</Text>

@@ -5,13 +5,13 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 
 import { Text } from '@/components/app-text';
 import { GoogleMark } from '@/components/google-mark';
-import { CheckIcon, CloseIcon, HouseIcon } from '@/components/planning/icons';
+import { CheckIcon, CloseIcon, HouseIcon, InfoIcon, PinIcon, SearchOffIcon } from '@/components/planning/icons';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { ScreenFrame } from '@/components/planning/screen-frame';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { CityCover } from '@/components/trips/city-cover';
-import { AddDot, ChipButton, FieldBox, InfoNotice, SearchInput } from '@/components/trips/parts';
+import { AddDot, ChipButton, FieldBox, InfoNotice, MonoText, SearchInput } from '@/components/trips/parts';
 import { cityToday } from '@/lib/calendar';
 import {
   addMustVisit,
@@ -19,7 +19,9 @@ import {
   createBlocker,
   createTripBody,
   emptyForm,
+  lodgingError,
   lodgingQueryReady,
+  lodgingText,
   mustVisitDayNumber,
   placeQueryReady,
   tripDates,
@@ -31,7 +33,8 @@ import { layout } from '@/planning/layout';
 import { color, control, radius, space, text } from '@/planning/theme';
 
 import { CalendarSheet } from './calendar-sheet';
-import { tripRequests, isTrip, type LodgingHit, type SearchPlace, type Trip } from './api';
+import { LodgingPickScreen, type LodgingPickResult, type PickedLodging } from './lodging-pick-screen';
+import { tripRequests, isTrip, type CityInfo, type LodgingHit, type SearchPlace, type Trip } from './api';
 import { AREA_NAME, dayLabel, shortDay } from './format';
 
 const LODGING_DOWN = '지금 숙소 검색을 못 해. 숙소 없이도 만들 수 있어';
@@ -43,15 +46,27 @@ const FIELD_MESSAGE: Record<string, string> = {
   start_date: '가는 날을 다시 골라 줘',
   end_date: '오는 날을 다시 골라 줘. 기간은 1~7일이야',
   lodging_place_id: '숙소를 다시 골라 줘',
+  lodging: '숙소를 다시 골라 줘',
   must_visits: '꼭 갈 곳을 다시 확인해 줘. 하루 5곳까지, 같은 곳은 한 날에만 담을 수 있어',
 };
+const ADDRESS_NOTICE = '이름으로는 못 찾아서 같은 글로 주소를 찾아 봤어'; // a1
+const PICK_MAP_HINT = '코스 끝에 숙소 가는 길을 계산할 때 써요'; // a1 · a3 [지도에서 찍기] 아래 보조 글 (task-015-design §1-2)
+const NONE_TITLE = '주소로도 못 찾았어'; // a3 ① 둘 다 못 찾음
+const NONE_BODY = '에어비앤비나 친구 집은 이렇게 안 나올 때가 많아. 지도에서 대략 찍어도 돼';
+const ADDRESS_DOWN_TITLE = '지금 주소로 못 찾았어'; // a3 ② 공급자 실패
+const ADDRESS_DOWN_BODY = '잠깐 뒤에 다시 해 보거나, 지도에서 대략 찍어도 돼';
 const GENERIC_INVALID = '입력을 다시 확인해 줘';
 
 type Errors = Record<string, string>;
-type Lookup<T> = { state: 'idle' } | { state: 'loading' } | { state: 'ok'; items: T[] } | { state: 'down' };
+type Lookup<T> = { state: 'idle' } | { state: 'loading' } | { state: 'ok'; items: T } | { state: 'down' };
+/** 숙소 검색 결과: 이름 -> (0건이면) 주소 -> (그래도 0건이면) 못 찾음 (TASK-015 §A) */
+type LodgingResult =
+  | { kind: 'name'; hits: LodgingHit[] }
+  | { kind: 'address'; hits: LodgingHit[] }
+  | { kind: 'none'; addressDown: boolean };
 
 /** 검색 요청 하나: 마지막으로 보낸 것만 반영한다 (앞 요청의 늦은 응답은 버린다) */
-function useLookup<T>(): [Lookup<T>, (run: (() => Promise<T[] | null>) | null) => void] {
+function useLookup<T>(): [Lookup<T>, (run: (() => Promise<T | null>) | null) => void] {
   const [result, setResult] = useState<Lookup<T>>({ state: 'idle' });
   const seq = useRef(0);
   const alive = useRef(true);
@@ -61,7 +76,7 @@ function useLookup<T>(): [Lookup<T>, (run: (() => Promise<T[] | null>) | null) =
       alive.current = false;
     };
   }, []);
-  const start = (run: (() => Promise<T[] | null>) | null) => {
+  const start = (run: (() => Promise<T | null>) | null) => {
     seq.current += 1;
     const mine = seq.current;
     if (run === null) {
@@ -84,11 +99,15 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
   const [day, setDay] = useState<string | null>(null);
   const [lodgingQuery, setLodgingQuery] = useState('');
   const [mustQuery, setMustQuery] = useState('');
-  const [lodgingHits, searchLodging] = useLookup<LodgingHit>();
-  const [placeHits, searchPlaces] = useLookup<SearchPlace>();
+  const [lodgingHits, searchLodging] = useLookup<LodgingResult>();
+  const [placeHits, searchPlaces] = useLookup<SearchPlace[]>();
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [banner, setBanner] = useState<string | null>(null);
+  const [city, setCity] = useState<CityInfo | null>(null);
+  const [opening, setOpening] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [pickTooFar, setPickTooFar] = useState(false);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -123,9 +142,13 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
   const onLodgingText = (value: string) => {
     setLodgingQuery(value);
     if (!lodgingQueryReady(value)) return searchLodging(null);
-    searchLodging(async () => {
+    searchLodging(async (): Promise<LodgingResult | null> => {
       const result = await send(tripRequests.searchLodging(value));
-      return result.ok && Array.isArray(result.data) ? (result.data as LodgingHit[]) : null;
+      if (result.ok && Array.isArray(result.data) && result.data.length > 0) return { kind: 'name', hits: result.data as LodgingHit[] };
+      // ① 이름으로 0건이거나 검색 실패(TASK-015 §18 Q2) -> ② 같은 글을 주소로 다시 (사용자가 다시 치지 않는다)
+      const byAddress = await send(tripRequests.searchAddress(value));
+      if (!(byAddress.ok && Array.isArray(byAddress.data))) return { kind: 'none', addressDown: true };
+      return byAddress.data.length > 0 ? { kind: 'address', hits: byAddress.data as LodgingHit[] } : { kind: 'none', addressDown: false };
     });
   };
   const onMustText = (value: string) => {
@@ -141,7 +164,47 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
     setForm((now) => ({ ...now, lodging: { place_id: hit.place_id, name: hit.name } }));
     setLodgingQuery('');
     searchLodging(null);
-    setErrors((now) => ({ ...now, lodging_place_id: '' }));
+    setFocused(null); // 고르면 검색 칸이 블러 없이 사라진다 -> 포커스를 직접 비운다
+    setErrors((now) => ({ ...now, lodging_place_id: '', lodging: '' }));
+  };
+
+  // a1: 주소 결과 줄을 누르면 곧 고른 것. 남기는 글은 사용자가 친 글 (Google 이름·주소는 저장하지 않는다)
+  const pickAddress = (hit: LodgingHit) => {
+    setForm((now) => ({ ...now, lodging: { kind: 'address', place_id: hit.place_id, address_text: lodgingQuery.trim() } }));
+    setLodgingQuery('');
+    searchLodging(null);
+    setFocused(null); // 고르면 검색 칸이 블러 없이 사라진다 -> 포커스를 직접 비운다
+    setErrors((now) => ({ ...now, lodging_place_id: '', lodging: '' }));
+  };
+
+  // a2: 지도 찍기. 열기 전에 도시 정보(center)를 받는다 — 못 받으면 조용히 한 번 더, 그래도 안 되면 앱 검사를 건너뛴다 (§14 Q2)
+  const openPick = async (tooFarBack = false) => {
+    if (opening) return;
+    setOpening(true);
+    let info = city;
+    if (info === null) {
+      for (let attempt = 0; attempt < 2 && info === null; attempt += 1) {
+        const result = await send(tripRequests.city());
+        const data = result.ok ? (result.data as Partial<CityInfo> | null) : null;
+        if (data && data.center && typeof data.center.lat === 'number' && typeof data.center.lng === 'number') info = data as CityInfo;
+      }
+      if (!alive.current) return;
+      setCity(info);
+    }
+    setOpening(false);
+    setPickTooFar(tooFarBack);
+    setPicking(true);
+  };
+
+  const confirmPick = async (picked: PickedLodging): Promise<LodgingPickResult> => {
+    // 여행이 아직 없어 서버에 묻지 않는다 (POST /trips가 마지막에 확인, too_far면 a2로 돌아온다)
+    setForm((now) => ({ ...now, lodging: { kind: 'pin', lat: picked.lat, lng: picked.lng, label: picked.label } }));
+    setLodgingQuery('');
+    searchLodging(null);
+    setFocused(null); // 고르면 검색 칸이 블러 없이 사라진다 -> 포커스를 직접 비운다
+    setErrors((now) => ({ ...now, lodging_place_id: '', lodging: '' }));
+    setPicking(false);
+    return { ok: true };
   };
 
   const removeMust = (date: string, placeId: string) =>
@@ -171,6 +234,12 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
   };
 
   const showFailure = (failure: Failure) => {
+    if (failure.kind === 'invalid' && failure.code === 'INVALID_LODGING') {
+      // §11 Q1: too_far면 a2로 돌아가 안내 (찍은 핀은 그대로). 다른 reason은 숙소 칸 오류 (문서에 글 없음 -> 정한 것)
+      if (lodgingError(400, failure.code, failure.reason ?? null, 'osaka') !== null && form.lodging?.kind === 'pin') void openPick(true);
+      else setErrors({ lodging: FIELD_MESSAGE.lodging });
+      return;
+    }
     if (failure.kind === 'invalid') {
       // §9 Q13: detail.field 칸에 오류, 입력값은 그대로. 칸을 모르면 아래 안내
       const message = failure.field ? FIELD_MESSAGE[failure.field] : undefined;
@@ -178,6 +247,27 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
       else setBanner(GENERIC_INVALID);
     } else setBanner(authNotice(failure) ?? (failure.kind === 'network' ? OFFLINE : OOPS));
   };
+
+  if (picking) {
+    const pinned = form.lodging?.kind === 'pin' ? form.lodging : null;
+    return (
+      <LodgingPickScreen
+        cityCode="osaka"
+        center={city ? city.center : null}
+        initial={pinned ? { pin: { lat: pinned.lat, lng: pinned.lng }, label: pinned.label, tooFar: pickTooFar } : undefined}
+        onConfirm={confirmPick}
+        onBack={() => {
+          setFocused(null);
+          setPicking(false);
+        }}
+        onSkip={() => {
+          setForm((now) => ({ ...now, lodging: null }));
+          setFocused(null);
+          setPicking(false);
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -228,14 +318,14 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
       {focusMode ? null : (
       <View style={styles.section}>
         <Text style={text('heading')}>숙소는 어디야? (선택)</Text>
-        <FieldBox id="lodging" error={errors.lodging_place_id || null}>
+        <FieldBox id="lodging" error={errors.lodging_place_id || errors.lodging || null}>
           {form.lodging ? (
             <View testID="lodging-picked" style={styles.picked}>
               <View style={styles.thumb}>
                 <HouseIcon color={color.muted} size={layout.lodgeIcon} />
               </View>
               <Text style={[text('body'), styles.grow]} numberOfLines={1}>
-                {form.lodging.name}
+                {lodgingText(form.lodging)}
               </Text>
               <Pressable testID="lodging-clear" accessibilityRole="button" accessibilityLabel="숙소 빼기" onPress={() => setForm((now) => ({ ...now, lodging: null }))} style={styles.hit}>
                 <CloseIcon color={color.ink} size={control.icon - 6} />
@@ -245,29 +335,51 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
             <SearchInput testID="lodging-search" value={lodgingQuery} placeholder="숙소 이름으로 찾기" onChangeText={onLodgingText} onFocus={() => setFocused('lodging')} onBlur={() => setFocused(null)} />
           )}
         </FieldBox>
-        {lodgingHits.state === 'down' ? <InfoNotice message={LODGING_DOWN} /> : null}
+        {lodgingHits.state === 'down' ? (
+          <>
+            <InfoNotice message={LODGING_DOWN} />
+            {/* §17: 이름 검색이 실패해도 막히지 않게 [지도에서 찍기] (§6) */}
+            <PickMapButton label="지도에서 찍기" busy={opening} onPress={() => void openPick()} />
+          </>
+        ) : null}
         {lodgingHits.state === 'ok' && lodgingQueryReady(lodgingQuery) ? (
-          lodgingHits.items.length === 0 ? (
-            <Empty />
+          lodgingHits.items.kind === 'none' ? (
+            <LodgingNone addressDown={lodgingHits.items.addressDown} busy={opening} onPick={() => void openPick()} onSkip={() => { setLodgingQuery(''); searchLodging(null); }} />
           ) : (
-            <View style={styles.googleBox}>
-              {lodgingHits.items.slice(0, 5).map((hit, index) => (
-                <Pressable key={hit.place_id} testID={`lodging-result-${hit.place_id}`} accessible={false} accessibilityRole="button" onPress={() => pickLodging(hit)} style={[styles.resultRow, index > 0 && styles.hair]}>
-                  <View style={styles.thumb}>
-                    <HouseIcon color={color.muted} size={layout.lodgeIcon} />
-                  </View>
-                  <View style={styles.grow}>
-                    <Text style={text('heading')} numberOfLines={1}>
-                      {hit.name}
-                    </Text>
-                    <Text style={text('caption', 'muted')} numberOfLines={1}>
-                      {hit.address_short}
-                    </Text>
-                  </View>
-                </Pressable>
-              ))}
-              <GoogleMark testID="g-footer" />
-            </View>
+            <>
+              {lodgingHits.items.kind === 'address' ? (
+                <View testID="notice-line" style={styles.noticeLine}>
+                  <InfoIcon color={color.muted} size={layout.checkSmall} />
+                  <Text style={[text('caption', 'muted'), styles.grow]}>{ADDRESS_NOTICE}</Text>
+                </View>
+              ) : null}
+              <View style={styles.googleBox}>
+                {lodgingHits.items.hits.slice(0, 5).map((hit, index) => (
+                  <Pressable
+                    key={hit.place_id}
+                    testID={lodgingHits.items.kind === 'address' ? `addr-row-${hit.place_id}` : `lodging-result-${hit.place_id}`}
+                    accessible={false}
+                    accessibilityRole="button"
+                    onPress={() => (lodgingHits.items.kind === 'address' ? pickAddress(hit) : pickLodging(hit))}
+                    style={[styles.resultRow, index > 0 && styles.hair]}
+                  >
+                    <View style={styles.thumb}>
+                      {lodgingHits.items.kind === 'address' ? <PinIcon color={color.muted} size={layout.lodgeIcon} /> : <HouseIcon color={color.muted} size={layout.lodgeIcon} />}
+                    </View>
+                    <View style={styles.grow}>
+                      <Text style={text('heading')} numberOfLines={1}>
+                        {hit.name}
+                      </Text>
+                      <Text style={text('caption', 'muted')} numberOfLines={1}>
+                        {hit.address_short}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ))}
+                <GoogleMark testID="g-footer" />
+              </View>
+              {lodgingHits.items.kind === 'address' ? <PickMapButton label="여기 없어? 지도에서 찍기" busy={opening} onPress={() => void openPick()} /> : null}
+            </>
           )
         ) : null}
       </View>
@@ -321,6 +433,39 @@ export function CreateTripScreen({ onBack, onCreated }: { onBack: () => void; on
   );
 }
 
+function PickMapButton({ label, onPress, busy }: { label: string; onPress: () => void; busy: boolean }) {
+  return (
+    <View style={styles.pickMapBlock}>
+      <Pressable testID="btn-pick-map" accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={onPress} style={styles.pickMap}>
+        <PinIcon color={color.ink} size={control.icon - 4} />
+        <Text style={text('heading')}>{label}</Text>
+      </Pressable>
+      {/* §24(01 · 04 · 05): 버튼 아래 보조 글 (task-015-design §1-2) */}
+      <Text testID="pick-map-hint" style={text('src', 'muted')}>
+        {PICK_MAP_HINT}
+      </Text>
+    </View>
+  );
+}
+
+/** a3: 이름·주소 둘 다 못 찾음, 또는 주소 검색 공급자 실패. 눌러 갈 곳은 [지도에서 찍기] 하나, 숙소 없이도 만들 수 있다 */
+function LodgingNone({ addressDown, busy, onPick, onSkip }: { addressDown: boolean; busy: boolean; onPick: () => void; onSkip: () => void }) {
+  return (
+    <View testID="lodging-none" style={styles.none}>
+      <View style={styles.noneIcon}>
+        <SearchOffIcon color={color.ink} size={control.icon} />
+      </View>
+      <Text style={text('heading')}>{addressDown ? ADDRESS_DOWN_TITLE : NONE_TITLE}</Text>
+      {/* §24(04): 한국어는 단어 단위로 끊는다 ("찍/어도" 막기) */}
+      <Text lineBreakStrategyIOS="hangul-word" textBreakStrategy="balanced" style={[text('caption', 'muted'), styles.center, styles.noneBody]}>
+        {addressDown ? ADDRESS_DOWN_BODY : NONE_BODY}
+      </Text>
+      <PickMapButton label="지도에서 찍기" busy={busy} onPress={onPick} />
+      <SecondaryButton small testID="lodging-skip" label="건너뛰기" onPress={onSkip} />
+    </View>
+  );
+}
+
 function Empty() {
   return (
     <View testID="empty-search" style={styles.empty}>
@@ -332,7 +477,7 @@ function Empty() {
 function DateField({ testID, value, placeholder, onPress }: { testID: string; value: string | null; placeholder: string; onPress: () => void }) {
   return (
     <Pressable testID={testID} accessibilityRole="button" onPress={onPress} style={styles.dateField}>
-      <Text style={text('body', value ? 'ink' : 'muted')}>{value ? dayLabel(value) : placeholder}</Text>
+      {value ? <MonoText base={text('body', 'ink')} value={dayLabel(value)} /> : <Text style={text('body', 'muted')}>{placeholder}</Text>}
     </Pressable>
   );
 }
@@ -378,6 +523,13 @@ function PlaceRow({ hit, index, form, date, onPress }: { hit: SearchPlace; index
 }
 
 const styles = StyleSheet.create({
+  noticeLine: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
+  pickMapBlock: { gap: space['space-2'] },
+  noneBody: { alignSelf: 'center', maxWidth: layout.noneBody },
+  pickMap: { minHeight: control.btn, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space['space-2'], borderRadius: radius['r-md'], borderWidth: layout.actionBarLine, borderColor: color.muted, backgroundColor: color.surface },
+  none: { alignItems: 'stretch', gap: space['space-3'], paddingVertical: space['space-3'] },
+  noneIcon: { alignSelf: 'center', width: layout.lodgeThumb, height: layout.lodgeThumb, borderRadius: radius['r-full'], backgroundColor: color['bg-2'], alignItems: 'center', justifyContent: 'center' },
+  center: { textAlign: 'center' },
   section: { gap: space['space-3'] },
   grow: { flex: 1 },
   topRow: { flexDirection: 'row', gap: space['space-3'], alignItems: 'flex-start' },

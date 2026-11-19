@@ -33,6 +33,8 @@ export function RehearsalBand({ top, label, onEnd }: { top: number; label: strin
 // 날 이름 연회색(DESIGN-001 §4-13): 새 색을 만들지 않고 같은 값의 기존 토큰(pill-past 바탕)을 쓴다 (§13-6)
 const DAY_NAME = tokens.pill['pill-past'].bg;
 const NOTICE = account['notice-fail'];
+/** notice-info 가로 여백 (떠 있는 판 사각형 계산용) */
+export const NOTICE_SIDE = NOTICE.side;
 
 /** notice-info: notice-fail과 같은 모양, 흰 바탕 + 정보 아이콘. 누르면 닫힘, 6초 뒤 사라짐. 닫는 일은 부른 쪽이 한다 */
 export function RehearsalNotice({ top, onClose }: { top: number; onClose: () => void }) {

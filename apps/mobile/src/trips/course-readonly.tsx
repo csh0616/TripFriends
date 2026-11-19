@@ -66,7 +66,8 @@ export function CourseReadonly({ dayId, date, number, onBack }: { dayId: string;
             </View>
             {course.go_home_min !== null ? (
               <View style={styles.check}>
-                <Text style={text('body')}>{`숙소까지 ${course.go_home_min}분`}</Text>
+                {/* TASK-015 §22: 숫자와 단위는 한 덩어리 — 한 줄에 안 들어가면 줄바꿈 대신 글자를 줄인다 */}
+                <Text numberOfLines={1} adjustsFontSizeToFit style={text('body')}>{`숙소까지 ${course.go_home_min}분`}</Text>
               </View>
             ) : null /* 숙소가 없으면 돌아갈 곳이 없다 (TASK-010 Q27) */}
             <Text style={fitText(fit['read-note'])}>지금은 보기만 할 수 있어</Text>

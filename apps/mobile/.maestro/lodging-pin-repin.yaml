@@ -1,0 +1,122 @@
+# TASK-015 §32 중-9 회귀: a2에서 이름을 친 뒤 키보드를 닫고 **바로** 다른 자리를 길게 눌러 다시 찍으면 이름표가 새 핀 위에 있어야 한다
+# (reviewer 9차 117형: 6번 중 3번 이름표가 아래 · 오른쪽, 3초 뒤에도 그대로 — 키보드가 닫히는 사이 찍은 핀이 옛 경계로 계산된 채 남음).
+# 규칙(결정권자): 이름표는 늘 가장 최근 확정 경계로 계산 — 경계가 바뀔 때마다 그 사이 새로 찍은 핀까지 다시 계산. Jest 계약: __tests__/task-015-s26-pick-name-tag.test.tsx "§32 중-9"
+# 앞부분은 lodging-pin.yaml과 같다(지도 준비 표시 기다림 · 자판 하나씩). 전제 · 실행 방법도 같다. 실행:
+#   JAVA_HOME="$(brew --prefix openjdk@17)" maestro --udid <UDID> test \
+#     --test-output-dir=.maestro/screenshots/lodging-pin-repin -e METRO_URL=http://127.0.0.1:<Metro 포트> .maestro/lodging-pin-repin.yaml
+# 키보드 닫기: 이 화면에서 hideKeyboard는 실패한다(9차 메모) -> 화면 자판의 return 키를 누른다(pressKey: Enter = 자판 return).
+# 정해진 시간 기다리기는 넣지 않는다 — 키보드가 사라진 상태(자판 글자 "ㅊ"이 안 보임)만 기다리고 곧바로 길게 누른다.
+# 이름표가 핀 "위"인지는 Maestro가 좌표로 재지 못한다 -> 다시 찍은 직후 스크린샷(lodging-pin-repin-2-repinned)을 reviewer가 본다 (6번 돌려 6/6)
+appId: com.csh0616.tripfriends
+---
+- evalScript: |
+    ${
+      const pad = (n) => (n < 10 ? '0' + n : '' + n);
+      const tokyo = (offsetDays) => {
+        const d = new Date(Date.now() + 9 * 3600 * 1000 + offsetDays * 86400 * 1000);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+      };
+      output.start = tokyo(7);
+      output.end = tokyo(8);
+    }
+- launchApp:
+    clearState: true
+- openLink: exp+mobile://expo-development-client/?url=${METRO_URL}&disableOnboarding=1&__expo_disable_fab=1
+- tapOn:
+    text: "열기"
+    optional: true
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "여행 만들기"
+    timeout: 60000
+- runFlow: common/close-dev-menu.yaml
+- tapOn: "여행 만들기"
+- extendedWaitUntil:
+    visible:
+      id: "create-trip-submit"
+    timeout: 30000
+- tapOn:
+    id: "field-start-date"
+- extendedWaitUntil:
+    visible:
+      id: "calendar-sheet"
+    timeout: 10000
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.start}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.start}"
+- runFlow:
+    when:
+      notVisible:
+        id: "cal-day-${output.end}"
+    commands:
+      - tapOn:
+          id: "cal-next"
+- tapOn:
+    id: "cal-day-${output.end}"
+- tapOn:
+    id: "calendar-confirm"
+- tapOn:
+    id: "lodging-search"
+- inputText: "친구 집 근처"
+# 키보드를 먼저 닫는다 (사용자는 [지도에서 찍기]를 누르기 전에 키보드를 닫는다. 아래 a2의 [여기로 정했어]는 일부러 키보드가 열린 채 한 번 누른다)
+- hideKeyboard
+- extendedWaitUntil:
+    visible:
+      id: "lodging-none"
+    timeout: 15000
+- assertVisible:
+    id: "btn-pick-map"
+- takeScreenshot: lodging-pin-1-a3
+- tapOn:
+    id: "btn-pick-map"
+- extendedWaitUntil:
+    visible:
+      id: "pick-map"
+    timeout: 30000
+- takeScreenshot: lodging-pin-2-a2-first
+# §29 ①: 지도 준비 표시를 기다린 뒤 길게 누른다 (계약: __tests__/task-015-s29-pick-map-ready.test.tsx)
+- extendedWaitUntil:
+    visible:
+      id: "pick-map-ready"
+    timeout: 30000
+# 지도 가운데 위쪽(시트 위)을 길게 눌러 핀
+- longPressOn:
+    point: "50%,35%"
+- extendedWaitUntil:
+    visible:
+      id: "pick-label"
+    timeout: 10000
+- tapOn:
+    id: "pick-label"
+# §29 ②: 자판이 보일 때까지 기다린 뒤 하나씩 눌러 "친구 집" (inputText를 쓰지 않는다)
+- extendedWaitUntil:
+    visible: "ㅊ"
+    timeout: 10000
+- tapOn: "ㅊ"
+- tapOn: "ㅣ"
+- tapOn: "ㄴ"
+- tapOn: "ㄱ"
+- tapOn: "ㅜ"
+- tapOn: "space"
+- tapOn: "ㅈ"
+- tapOn: "ㅣ"
+- tapOn: "ㅂ"
+- assertVisible: "ㅊ"
+- takeScreenshot: lodging-pin-repin-1-typed
+# 키보드를 return으로 닫는다
+- pressKey: Enter
+- extendedWaitUntil:
+    notVisible: "ㅊ"
+    timeout: 10000
+# 바로 다른 자리(지도 왼쪽 위, 시트 위)를 길게 눌러 다시 찍는다
+- longPressOn:
+    point: "30%,30%"
+- takeScreenshot: lodging-pin-repin-2-repinned

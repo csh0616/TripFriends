@@ -4,10 +4,10 @@
 # open_space: true = 거리·공원처럼 닫는 개념이 없는 곳 → 영업시간 "늘 열림"(curated, confirmed). Google 값이 있으면 Google이 먼저
 # curated_hours = 밤거리처럼 영업시간 대신 "가는 시간대"를 우리가 정한 곳 (curated, confirmed)
 # stay = 머무는 시간(분) {min, typical, max} · crowd_level 1~5 · price_level 1~4 (모두 가설, 파일럿 전 검증)
-version: 2   # 11-09 v2: open_space·curated_hours 추가 (TASK-010 §13)
+version: 3   # 11-16 v3: center에 우리 값 lat·lng (TASK-015 §9 Q6) · 11-09 v2: open_space·curated_hours 추가 (TASK-010 §13)
 city_code: osaka
 timezone: Asia/Tokyo
-center: { name_ko: 난바역, query: "Namba Station Osaka" }   # 숙소가 없을 때 시작점 (TASK-010 §9 Q10)
+center: { name_ko: 난바역, query: "Namba Station Osaka", lat: 34.6662, lng: 135.5010 }   # 숙소가 없을 때 시작점 (TASK-010 §9 Q10). lat·lng = 우리가 정한 대략값(공개 지도 자료, 100m 안팎) — 지도 시작 가운데 `city.center`용, Google 값 아님 (TASK-015 §9 Q6)
 
 areas:   # 결과 좌표가 지역 중심에서 3km 밖이면 ambiguous (§11 Q2 답)
   - { id: namba,        name_ko: 난바,       query: "Namba Station Osaka" }

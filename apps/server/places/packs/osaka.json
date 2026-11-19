@@ -3,7 +3,9 @@
  "timezone": "Asia/Tokyo",
  "center": {
   "name_ko": "난바역",
-  "place_id": "ChIJFXXzNhPnAGARUifDEqMzXl4"
+  "place_id": "ChIJFXXzNhPnAGARUifDEqMzXl4",
+  "lat": 34.6662,
+  "lng": 135.501
  },
  "areas": {
   "namba": {

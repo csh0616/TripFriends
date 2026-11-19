@@ -1,23 +1,25 @@
 // TASK-006 B3~B10: 여행 중 화면 SC-04. 지도(바탕) + 카드 시트 3단 + 데모 시계.
 // 앱은 그리기만 한다: 카드를 고르지 않고(서버 main이 이긴다, §6) 일정을 바꾸지 않는다. 시각은 데모 시계만 쓴다 (실제 시계는 쓰지 않는다).
-import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView, useGestureEventsHandlersDefault } from '@gorhom/bottom-sheet';
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import { AccessibilityInfo, ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import Animated, { Easing, FadeIn, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { Text } from '@/components/app-text';
 import { DemoPanel } from '@/components/now/demo-panel';
 import { MapAdapter, type MapAdapterHandle } from '@/components/now/map-adapter';
-import { NowCardView } from '@/components/now/now-cards';
+import { ChipSheet, NowCardView, reasonHidden, type ChipPlace } from '@/components/now/now-cards';
 import { ProfileMenu } from '@/account/profile-menu';
 import { FriendAvatar } from '@/components/planning/friend-bubble';
 import { LocateIcon } from '@/components/planning/icons';
 import { InputBar } from '@/components/planning/input-bar';
 import { LocationIntroSheet, LocationOffPill, LocationOffSheet } from '@/components/now/location-ui';
-import { RehearsalBand, RehearsalNotice, REHEARSAL_FAILED } from '@/components/now/rehearsal-ui';
+import type { Rect } from '@/lib/pin-overlap';
+import { RehearsalBand, RehearsalNotice, NOTICE_SIDE, REHEARSAL_FAILED } from '@/components/now/rehearsal-ui';
 import { Notice } from '@/components/planning/notice';
 import { RouteDiagram } from '@/components/planning/route-diagram';
 import { SecondaryButton } from '@/components/planning/secondary-button';
@@ -46,6 +48,7 @@ import { send, type DaySummary, type Request, type Result } from '@/lib/planning
 import { layout } from '@/planning/layout';
 import { color, control, radius, shadow, space, text } from '@/planning/theme';
 
+import { sheetMotion } from './sheet-motion';
 import { useLiveLocation } from './use-live-location';
 
 /** 기기에 저장해 다시 켜도 이 화면으로 돌아오는 값 (§11 Q16, §12 R10) */
@@ -60,6 +63,8 @@ export type NowRecord = {
   rehearsal?: boolean;
 };
 
+const TOP_ROW = 48; // 위 버튼 줄(프로필·SOS) 높이 (task-014-design §11-1)
+const CLOCK_ABOVE_SHEET = 120; // 연습 시계 판 윗변 = 시트 윗변 − 120 (§12-1)
 const OFFLINE_BAND = '연결이 안 돼, 저장된 일정만 보여';
 const OOPS_BAND = '잠깐 문제가 생겼어';
 const NO_COURSE = '고른 코스가 없어';
@@ -76,7 +81,7 @@ const QUEUE_GAP_MS = 100; // 응답이 온 뒤 기다리던 최신 요청을 보
 const LIVE_TICK_MS = 30000; // 실제 시계를 다시 읽는 간격
 
 /** 시각이 바뀔 때는 POST check(위치는 본문), 재실행·되돌림은 GET now (위치 없음). C1 */
-type Call = { kind: 'now' | 'check'; params: NowParams };
+type Call = { kind: 'now' | 'check'; params: NowParams; /** 행동 응답 뒤 한 번 더: 보내는 순간의 시각으로 다시 정한다 (기다리는 사이 시계가 더 갔을 수 있다) */ latest?: true };
 const MAX_CARDS = 4; // SCREEN-001 §2·§5: 메인 1 + 보조 최대 3
 
 type Problem = 'offline' | 'oops' | 'no_course';
@@ -168,6 +173,10 @@ export function TripNowScreen({
   const [delay, setDelay] = useState(0); // C2: 위치만 이만큼 앞 시각 자리
   const [note, setNote] = useState<string | null>(null);
   const [sheetIndex, setSheetIndex] = useState(1);
+  // TASK-015 §29 하-12: 시트가 접힌 단으로 가는(또는 있는) 동안은 이유 줄을 그리지 않는다 — 짧은 카드로 바뀔 때 잘린 채 비치지 않게. 움직이기 시작할 때(onAnimate) 정한다
+  const [sheetGoal, setSheetGoal] = useState(1);
+  // TASK-015 §29: 미확인 · 모름 칩을 눌러 연 칩 시트의 장소 (서버에 묻지 않는다)
+  const [chipPlace, setChipPlace] = useState<ChipPlace | null>(null);
   const [chosen, setChosen] = useState<string | null>(null); // TASK-009 A1: 고른 제안 id. 화면에만 있고 서버에는 보내지 않는다
   const [rehearsalInfo, setRehearsalInfo] = useState(false); // §9 답 7: "연습이라 저장하지 않았어" 한 줄
 
@@ -180,9 +189,12 @@ export function TripNowScreen({
   const queueTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const queued = useRef<{ call: Call; note: string | null } | null>(null); // 기다리는 동안 바뀐 최신 하나
   const last = useRef<Call | null>(null);
+  const lastSentLatest = useRef(false); // 마지막 check가 행동 응답 뒤 한 번 더였나
+  const lastCheckDelay = useRef(0); // 마지막으로 보낸 check의 지연 (같은 시각·지연을 시계 효과가 또 보내지 않게)
   const lastCheck = useRef<NowParams | null>(null); // accept 409 stale 뒤 같은 시각·위치로 다시 묻는다
   const delayRef = useRef(0);
   const busy = useRef(false); // 이걸로·그대로 갈래 요청 중에는 다시 받지 않는다
+  const debounceActive = useRef(false); // 시계가 바뀌어 곧 check가 나갈 예정 (행동 응답 뒤 한 번 더 보낼 필요가 없다)
   const viewRef = useRef<NowView | null>(null);
   const homeMin = useRef<number | null>(null);
   const positioned = useRef(false); // §12 R7: 첫 응답 뒤 위치를 넣어 한 번 더
@@ -293,7 +305,11 @@ export function TripNowScreen({
       inFlight.current = true;
       seq.current += 1;
       const mine = seq.current;
-      if (call.kind === 'check') lastCheck.current = call.params;
+      if (call.kind === 'check') {
+        lastCheck.current = call.params;
+        lastCheckDelay.current = delayRef.current;
+        lastSentLatest.current = call.latest === true;
+      }
       const request =
         call.kind === 'check' ? checkRequest(record.day_id, call.params, rehearsal ? [...rehearsalLog.current] : undefined) : nowRequest(record.day_id, call.params.at);
       const result = await send(request, signals.current);
@@ -312,7 +328,10 @@ export function TripNowScreen({
           inFlight.current = false;
           const next = queued.current;
           queued.current = null;
-          if (alive.current && next) void fetchNow(next.call, next.note);
+          if (alive.current && next) {
+            const call: Call = next.call.latest ? { kind: 'check', params: { at: currentAt.current, ...positionFor(currentAt.current) }, latest: true } : next.call;
+            void fetchNow(call, next.note);
+          }
         }, QUEUE_GAP_MS);
       }
     },
@@ -348,6 +367,14 @@ export function TripNowScreen({
     [positionFor],
   );
 
+  /** 행동 응답을 반영한 뒤 그 사이 시계가 더 갔으면 check 한 번 (§9 Q8 ①). 진행 중이면 fetchNow가 최신 하나로 합쳐 끝난 뒤 보낸다. 곧 나갈 시계 check가 있으면 그것이 대신한다 */
+  const followLate = (actionAt: string) => {
+    if (!alive.current || debounceActive.current) return;
+    const now = currentAt.current;
+    if (now === actionAt) return;
+    void fetchNow({ kind: 'check', params: { at: now, ...positionFor(now) }, latest: true });
+  };
+
   /** [이걸로]·[그대로 갈래]: 같은 요청을 다시 보내지 않는다 (이미 반영됐을 수 있다, §6) */
   const decide = async (request: Request, accepted: boolean): Promise<void> => {
     if (busy.current) return;
@@ -355,14 +382,20 @@ export function TripNowScreen({
     seq.current += 1;
     const mine = seq.current;
     floorSeq.current = mine;
+    const actionAt = currentAt.current;
     const result = await send(request, signals.current);
     busy.current = false;
     setChosen(null); // §6: 확정이 성공하든 stale이든 끊기든 고른 상태는 지운다
-    if (!alive.current || mine < shownSeq.current) return;
+    if (!alive.current) return;
+    // TASK-015 §E ②: 행동의 응답은 뒤에 보낸 조회(check)의 응답이 먼저 왔어도 버리지 않는다. 오래된 것을 버리는 건 조회 응답뿐
     if (result.ok) {
-      if (show(result, accepted ? ACCEPTED_NOTE : null)) shownSeq.current = mine;
+      if (show(result, accepted ? ACCEPTED_NOTE : null)) {
+        shownSeq.current = Math.max(shownSeq.current, mine);
+        followLate(actionAt);
+      }
       return;
     }
+    if (mine < shownSeq.current) return;
     const failure = result.failure;
     const now: Call = { kind: 'now', params: { at: currentAt.current } };
     if (failure.kind === 'conflict' && failure.reason === 'stale' && accepted) {
@@ -390,9 +423,17 @@ export function TripNowScreen({
       skipAt.current = null;
       return undefined;
     }
-    const run = () => void fetchNow({ kind: 'check', params: { at, ...positionFor(at) } });
+    const run = () => {
+      debounceActive.current = false;
+      // 행동 응답 뒤 check가 이미 이 시각으로 나갔으면 같은 것을 또 보내지 않는다
+      if (lastCheck.current?.at === at && lastCheckDelay.current === delayRef.current && !inFlight.current && queued.current === null && lastSentLatest.current) return;      void fetchNow({ kind: 'check', params: { at, ...positionFor(at) } });
+    };
+    debounceActive.current = true;
     const timer = setTimeout(run, NOW_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      debounceActive.current = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [at, delay]);
 
@@ -419,11 +460,11 @@ export function TripNowScreen({
 
   // 지도 카메라: 처음 한 번만 코스 전체와 숙소가 보이게 (B10). 시트(중간) 높이만큼 아래 여백
   // 연습 중엔 시트 윗변을 보드 ①-35 자리(874 화면에서 y 434)에 맞추고, 시계 판(112)은 그 위에 뜬다 (§19·§20 Q2)
-  const rehSheetHeight = (area: number) => {
+  const rehSheetHeight = (area: number, topY: number = layout.rehSheetTop) => {
     const boardArea = layout.rehBoardHeight - (space['space-2'] + control.input + layout.rehBoardBottom + space['space-2']);
     const low = area * layout.sheetFractions[0];
     const high = area * layout.sheetFractions[2];
-    return Math.round(Math.min(high - 1, Math.max(low + 1, area - (layout.rehSheetTop * area) / boardArea)));
+    return Math.round(Math.min(high - 1, Math.max(low + 1, area - (topY * area) / boardArea)));
   };
   const sheetMid = rehearsal ? rehSheetHeight(areaHeight || windowHeight) : (areaHeight || windowHeight) * layout.sheetFractions[1];
   const clockRoom = rehearsal ? layout.rehClock + space['space-3'] : 0; // 카메라 아래 여백 = 시트 + 시계 판
@@ -465,6 +506,16 @@ export function TripNowScreen({
       },
     );
   }, [mapReady, view, rehearsal, rehPosition, day.lodging, insets.top, sheetMid, clockRoom, areaHeight, width]);
+
+  // TASK-015 §E ③·§9 Q9: 숙소도 핀도 없는 날은 여행 도시의 중심으로 간다. 진짜 지도는 initialRegion을 처음 한 번만 읽으므로 첫 응답 뒤 카메라를 옮긴다
+  const cityCenter = view?.city?.center ?? null;
+  const movedToCity = useRef(false);
+  useEffect(() => {
+    if (!mapReady || !view || movedToCity.current || !cityCenter) return;
+    if (day.lodging || view.pins.length > 0) return;
+    movedToCity.current = true;
+    mapRef.current?.moveTo({ latitude: cityCenter.lat, longitude: cityCenter.lng });
+  }, [mapReady, view, cityCenter, day.lodging]);
 
   const retry = () => {
     if (last.current) void fetchNow(last.current);
@@ -517,11 +568,13 @@ export function TripNowScreen({
     const result = await send(rehearsalVisitCheckRequest(placeId, body, [...rehearsalLog.current]), signals.current);
     busy.current = false;
     setChosen(null);
-    if (!alive.current || mine < shownSeq.current) return;
+    if (!alive.current || (!result.ok && mine < shownSeq.current)) return;
+    // TASK-015 §E ②: 연습 [닫혔어]의 응답도 버리지 않는다 — 화면에 보이고(대안 카드) 연습 기록에 쌓인다
     if (show(result, null)) {
-      shownSeq.current = mine;
+      shownSeq.current = Math.max(shownSeq.current, mine);
       rehearsalLog.current.push({ type: 'visit_check', place_id: placeId, ...body });
       announceRehearsal();
+      followLate(at);
     }
   };
 
@@ -544,15 +597,31 @@ export function TripNowScreen({
     void decide(dismissRequest(eventId), false);
   };
   // T-05 [열었어]/[닫혔어]: 다시 보내지 않는다. 끊기거나 409면 GET /now로 지금 상태를 받는다 (§6)
-  const visit = (placeId: string, wasOpen: boolean) => {
+  /** T-05 [열었어][닫혔어] · §30 칩 시트 같은 요청. 끝나면(답 · 실패 모두) 풀리는 약속을 돌려준다 */
+  const visit = async (placeId: string, wasOpen: boolean): Promise<void> => {
     if (rehearsal) {
       if (wasOpen) rehearse({ type: 'visit_check', place_id: placeId, day_id: record.day_id, at: currentAt.current, was_open: true });
-      else void rehearseClosed(placeId);
+      else await rehearseClosed(placeId);
       return;
     }
-    void decide(visitCheckRequest(placeId, { day_id: record.day_id, at: currentAt.current, was_open: wasOpen }), false);
+    await decide(visitCheckRequest(placeId, { day_id: record.day_id, at: currentAt.current, was_open: wasOpen }), false);
   };
   const lateAt = view?.status === 'delayed' ? view.at : null;
+  // TASK-015 §30 · §31 (task-015-design §16-5): 칩 시트 [열었어][닫혔어] = T-05와 같은 요청 한 번. 요청 중엔 두 버튼 비활성 · 다시 안 보냄,
+  // 답이 오면(끊겨 지금 상태를 다시 받은 뒤도 같다, TASK-008 §6) 시트를 닫는다 — [열었어]면 칩이 확인됨으로, [닫혔어]면 T-06 카드가 바탕에 보인다
+  const [chipBusy, setChipBusy] = useState(false);
+  const chipVisit = async (placeId: string, wasOpen: boolean) => {
+    if (chipBusy) return;
+    setChipBusy(true);
+    try {
+      await visit(placeId, wasOpen);
+    } finally {
+      if (alive.current) {
+        setChipBusy(false);
+        setChipPlace(null);
+      }
+    }
+  };
 
   const showToast = () => {
     setToast(OPEN_FAILED);
@@ -562,12 +631,66 @@ export function TripNowScreen({
 
   // ---------- 시트 ----------
   // 연습 중엔 중간 단 윗변이 보드 자리 (DESIGN-001 §4-13: 시계 판이 시트 위에 떠 있어야 해서)
+  // TASK-015 §24(17): 맨 위 단의 윗변은 위 버튼 줄 아래 + 8보다 올라가지 않는다 (task-015-design §12-4: 손잡이 · 위 버튼 줄이 안 가려지게)
+  const sheetTopMin = insets.top + rehTop + layout.header + space['space-2'];
+  // §24 18번(승현 11-18) · §27: 접힌 단 = 지금 메인 카드의 마지막 요소(주 버튼 또는 마지막 줄) 아래 끝 + 4, 모든 카드 같은 규칙.
+  // §26: 메인 카드가 바뀌면 새 카드를 잴 때까지 앞 카드의 접힌 단을 쓴다 (버리면 옛 16%로 내려갔다 다시 올라와 시트가 두 번 움직인다). 메인 카드가 없으면 버린다
+  const mainKey = view && visible(view.main) ? view.main.type : null;
+  const [mainBoxY, setMainBoxY] = useState(0);
+  const [lastBox, setLastBox] = useState<{ key: string; y: number; height: number } | null>(null);
+  // §28 질문 2: 같은 카드 종류 안에서는 접힌 단이 줄지 않고 잘릴 때만 늘어난다(그 종류에서 잰 가장 큰 아래 끝). 종류가 바뀌면 그 종류에서 처음 잰 값부터 다시
+  const measured = lastBox && lastBox.key === mainKey ? mainBoxY + lastBox.y + lastBox.height : null;
+  const [peak, setPeak] = useState<{ key: string; bottom: number } | null>(null);
+  if (measured !== null && mainKey !== null && (peak === null || peak.key !== mainKey || measured > peak.bottom)) setPeak({ key: mainKey, bottom: measured });
+  const lastBottom = peak && mainKey !== null ? peak.bottom : null;
+  // §26: 사용자가 시트(손잡이 · 내용)를 끌고 있는 동안은 접힌 단을 끌기 시작할 때 값으로 둔다 (손가락 밑에서 시트를 옮기지 않게). 놓으면 새 값으로
+  const [dragLow, setDragLow] = useState<string | number | null>(null);
+  const lowNow = useRef<string | number | null>(null);
+  const onDragStart = useCallback(() => setDragLow(lowNow.current), []);
+  const onDragEnd = useCallback(() => setDragLow(null), []);
+  const sheetGestures = useMemo(() => dragAwareGestures(onDragStart, onDragEnd), [onDragStart, onDragEnd]);
   const snapPoints = useMemo(() => {
     const total = areaHeight || windowHeight;
-    return layout.sheetFractions.map((fraction, index) => (rehearsal && index === 1 ? rehSheetHeight(total) : `${Math.round(fraction * 100)}%`));
+    return layout.sheetFractions.map((fraction, index) => {
+      if (index === 0) return dragLow ?? collapsedSnap(fraction, lastBottom, total);
+      if (rehearsal && index === 1) return rehSheetHeight(total);
+      if (rehearsal && index === 2) return Math.max(rehSheetHeight(total, layout.rehSheetTopUp), rehSheetHeight(total) + 1); // 위로 끌면 윗변 417 (TASK-015 §B3)
+      if (index === layout.sheetFractions.length - 1 && total > 0) {
+        const room = (total - sheetTopMin) / total;
+        if (room < fraction && room > layout.sheetFractions[index - 1]) return `${Math.floor(room * 1000) / 10}%`;
+      }
+      return `${Math.round(fraction * 100)}%`;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rehearsal, areaHeight, windowHeight]);
+  }, [rehearsal, areaHeight, windowHeight, sheetTopMin, lastBottom, dragLow]);
+  useEffect(() => {
+    lowNow.current = snapPoints[0];
+  }, [snapPoints]);
+  // §27(task-015-design §14-5 ②④): 움직임 값은 sheetMotion 한 곳. 기기 "동작 줄이기"면 즉시(0)
+  const reduceMotion = useReduceMotion();
+  const motionNow = sheetMotion(reduceMotion);
+  const sheetAnimation = useMemo(() => ({ duration: motionNow.durationMs, easing: Easing.out(Easing.cubic) }), [motionNow.durationMs]);
+  // ② 메인 카드 종류가 바뀌면 새 카드가 fadeMs 동안 서서히 나타난다 (시트가 옮겨 가는 동안 새 카드가 옛 높이에 먼저 튀어나오지 않게). 첫 그림 · 같은 종류는 그대로
+  const [fadeFrom, setFadeFrom] = useState<{ shown: string | null; fade: boolean }>({ shown: mainKey, fade: false });
+  if (fadeFrom.shown !== mainKey) setFadeFrom({ shown: mainKey, fade: fadeFrom.shown !== null && mainKey !== null });
+  const mainEntering = fadeFrom.fade && motionNow.fadeMs > 0 ? FadeIn.duration(motionNow.fadeMs) : undefined;
   const sheetTop = useSharedValue(0);
+  // §31 하-13: 늘어나는 끌기를 끄면(enableOverDrag false) 끌기가 단 위치에 딱 멈출 때 라이브러리가 움직임을 건너뛰어 onChange가 오지 않는다
+  // (gorhom animateToPosition: 지금 위치 = 목표면 바로 끝). 그래서 시트 단 값(animatedIndex)이 정수 단에 닿을 때도 단을 정한다
+  const sheetIndexValue = useSharedValue(1);
+  const settleIndex = useCallback((index: number) => {
+    setSheetIndex(index);
+    setSheetGoal(index);
+  }, []);
+  useAnimatedReaction(
+    () => {
+      const near = Math.round(sheetIndexValue.value);
+      return Math.abs(sheetIndexValue.value - near) < 0.001 ? near : null;
+    },
+    (index, previous) => {
+      if (index !== null && index >= 0 && index !== previous) scheduleOnRN(settleIndex, index);
+    },
+  );
   const gap = space['space-3'];
   // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)
   const topLimit = insets.top + rehTop + layout.header;
@@ -592,9 +715,27 @@ export function TripNowScreen({
     : firstPin
       ? { latitude: firstPin.lat, longitude: firstPin.lng }
       : null;
+  // TASK-015 §B6: 계획상 지금 있는 곳이 숙소 = 첫 이동을 떠나기 전, 또는 마지막 일정 뒤 숙소에 닿은 뒤 (숙소가 있을 때만)
+  const stayingAtLodging = (() => {
+    if (!day.lodging || !view || view.pins.length === 0) return false;
+    const first = view.pins[0];
+    const lastPin = view.pins[view.pins.length - 1];
+    if (minutes < toMinutes(first.start) - first.travel_min) return true;
+    return homeMin.current !== null && minutes >= toMinutes(lastPin.end) + homeMin.current;
+  })();
   const showClock = !live && (rehearsal || record.demo || __DEV__);
   const pill = view ? PILL[view.status] ?? PILL.on_track : null;
   const bandTop = insets.top + rehTop + layout.header + space['space-2'];
+  // TASK-015 §17: 화면에 실제로 떠 있는 판 = 위 버튼 줄(48) · 연습 시계 판(시트 윗변 − 120부터 112) · 아래 시트. 지도 화면 pt, 맨 위 0
+  const panelArea = areaHeight || windowHeight;
+  const panelSheetTop = panelArea - sheetMid;
+  const floatingPanels: Rect[] = [
+    { x: 0, y: insets.top + rehTop, width, height: TOP_ROW },
+    ...(rehearsal ? [{ x: 0, y: panelSheetTop - CLOCK_ABOVE_SHEET, width, height: layout.rehClock }] : []),
+    { x: 0, y: panelSheetTop, width, height: sheetMid },
+    // TASK-015 §18 Q3: 지도 위에 그려지는 안내 한 줄도 떠 있는 판
+    ...(rehearsalInfo ? [{ x: NOTICE_SIDE, y: bandTop + control.sos, width: Math.max(0, width - 2 * NOTICE_SIDE), height: layout.noticeInfoHeight }] : []),
+  ];
 
   return (
     <View testID="trip-now-screen" style={styles.root}>
@@ -627,6 +768,8 @@ export function TripNowScreen({
               routeRemaining={(view?.route.remaining ?? []).map(([latitude, longitude]) => ({ latitude, longitude }))}
               position={position ? { latitude: position.lat, longitude: position.lng } : null}
               hollowPosition={rehearsal}
+              stayingAtLodging={stayingAtLodging}
+              panels={floatingPanels}
               onReady={() => setMapReady(true)}
               onFail={() => setMapFailed(true)}
             />
@@ -746,9 +889,20 @@ export function TripNowScreen({
           // 기본값(true)이면 시트 안 카드가 하나로 묶여 보조 기술·자동 확인에 낱개로 안 보인다
           accessible={false}
           snapPoints={snapPoints}
-          onChange={setSheetIndex}
+          onChange={(index) => {
+            setSheetIndex(index);
+            setSheetGoal(index);
+          }}
+          onAnimate={(_from, to) => setSheetGoal(to)}
           animatedPosition={sheetTop}
+          animatedIndex={sheetIndexValue}
+          // §26 · §27: 접힌 단 높이가 바뀌면(메인 카드가 바뀜) 시트가 sheetMotion 시간(250ms) 동안 부드럽게 옮겨 간다. 접힌 단에 있을 때만 보이는 움직임이다 (다른 단의 높이는 그대로라)
+          animationConfigs={sheetAnimation}
+          gestureEventsHandlersHook={sheetGestures}
           enableDynamicSizing={false}
+          // TASK-015 §31 하-13 (11-19 시뮬레이터 진단): 접힌 단 아래로 끌면 라이브러리 기본 "늘어나는 끌기"(overDrag)로 시트가 접힌 높이보다 내려갔다가
+          // 손을 떼면 되돌아왔다(접힌 단 값은 그대로 169 — 계산이 아니라 끌기). 끄면 접힌 단 · 맨 위에서 멈춘다 → 접힘 밖 줄이 경계에 걸치지도 않는다
+          enableOverDrag={false}
           style={shadow.sheet}
           backgroundStyle={styles.sheetBackground}
           handleIndicatorStyle={styles.handle}
@@ -756,15 +910,36 @@ export function TripNowScreen({
           <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
             {view ? (
               <>
-                <View testID="now-main" style={styles.mainBox}>
-                  {mainCard ? <NowCardView card={mainCard} main onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} /> : null}
-                  <View testID="now-reason">
-                    <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
-                  </View>
+                <View testID="now-main" style={styles.mainBox} onLayout={(event) => setMainBoxY(event.nativeEvent.layout.y)}>
+                  {mainCard ? (
+                    <Animated.View key={mainKey ?? 'none'} entering={mainEntering}>
+                      <NowCardView
+                        card={mainCard}
+                        main
+                        onOpenFailed={showToast}
+                        chosenId={chosen}
+                        onChoose={choose}
+                        onDismiss={dismiss}
+                        onVisit={visit}
+                        lateAt={lateAt}
+                        rehearsal={rehearsal}
+                        onLastLayout={(box) => setLastBox({ key: mainCard.type, y: box.y, height: box.height })}
+                        onChip={setChipPlace}
+                      />
+                    </Animated.View>
+                  ) : null}
+                  {sheetGoal === 0 || (note === null && reasonHidden(mainCard, view.reason)) ? null : (
+                    <View testID="now-reason">
+                      <Text style={text('caption', 'muted')}>{note ?? view.reason}</Text>
+                    </View>
+                  )}
                 </View>
-                {subCards.map((card, index) => (
-                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} />
-                ))}
+                {/* §30: 접힌 단(으로 가는 중)이면 보조 카드도 그리지 않는다 — 접힌 경계 아래로 윗부분이 비치지 않게 (§29 이유 줄과 같은 판정) */}
+                {sheetGoal === 0
+                  ? null
+                  : subCards.map((card, index) => (
+                      <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} rehearsal={rehearsal} onChip={setChipPlace} />
+                    ))}
               </>
             ) : problem === null ? (
               <ActivityIndicator color={color.muted} />
@@ -793,11 +968,75 @@ export function TripNowScreen({
       {profileOpen ? (
         <ProfileMenu restartLabel={live ? '날짜 목록으로' : '처음부터 다시'} onRestart={onExit} onClose={() => setProfileOpen(false)} />
       ) : null}
+      {chipPlace ? <ChipSheet place={chipPlace} busy={chipBusy} onClose={() => setChipPlace(null)} onVisit={(id, open) => void chipVisit(id, open)} onOpenFailed={showToast} /> : null}
       {sosOpen ? <SosSheet located={live ? location.spot !== null : position !== null} onClose={() => setSosOpen(false)} /> : null}
       {location.sheet === 'intro' ? <LocationIntroSheet onTurnOn={() => void location.turnOn()} onLater={location.later} /> : null}
       {location.sheet === 'off' ? <LocationOffSheet onSettings={location.openSettings} onClose={location.closeSheet} /> : null}
     </View>
   );
+}
+
+/**
+ * TASK-015 §27 · task-015-design §14-5 ④: 기기 설정 "동작 줄이기" (처음 값 + reduceMotionChanged 알림).
+ * 참고: gorhom은 단 높이 변경 반응의 움직임 값을 처음 그릴 때 한 번만 잡는다(그래서 끌어 놓을 때도 같은 움직임, §26).
+ * 중간에 설정이 바뀌어도 reanimated가 기기 "동작 줄이기"를 따라 움직임을 건너뛴다(ReduceMotion.System 기본)
+ */
+function useReduceMotion(): boolean {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((on) => {
+        if (alive) setReduce(on);
+      })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => setReduce(on));
+    return () => {
+      alive = false;
+      subscription?.remove();
+    };
+  }, []);
+  return reduce;
+}
+
+/** §26: gorhom 기본 끌기 처리에 "끌기 시작 · 끝" 알림만 더한다 (끌기 동작은 그대로) */
+function dragAwareGestures(onStart: () => void, onEnd: () => void) {
+  return function useDragAwareGestures() {
+    const base = useGestureEventsHandlersDefault();
+    return {
+      ...base,
+      handleOnStart: (source: Parameters<typeof base.handleOnStart>[0], payload: Parameters<typeof base.handleOnStart>[1]) => {
+        'worklet';
+        scheduleOnRN(onStart);
+        base.handleOnStart(source, payload);
+      },
+      // 놓기는 handleOnEnd로 온다 (그 뒤 gorhom이 handleOnFinalize를 건너뜀). 끝 없이 취소되면 handleOnFinalize로 온다
+      handleOnEnd: (source: Parameters<typeof base.handleOnEnd>[0], payload: Parameters<typeof base.handleOnEnd>[1]) => {
+        'worklet';
+        base.handleOnEnd(source, payload);
+        scheduleOnRN(onEnd);
+      },
+      handleOnFinalize: (source: Parameters<typeof base.handleOnFinalize>[0], payload: Parameters<typeof base.handleOnFinalize>[1]) => {
+        'worklet';
+        base.handleOnFinalize(source, payload);
+        scheduleOnRN(onEnd);
+      },
+    };
+  };
+}
+
+/** 손잡이 자리 = gorhom 손잡이 위아래 안쪽 10 + 손잡이 막대 (§24 18번 접힌 단 계산) */
+const SHEET_HANDLE_ROOM = 2 * layout.sheetHandlePad + layout.sheetHandleHeight;
+
+/**
+ * TASK-015 §24 18번 · §27 접힌 단 = 손잡이 자리 + 메인 카드 마지막 요소 아래 끝 + 4 (px, 중간 단보다 낮게). 모든 카드 같은 규칙.
+ * 아직 못 잰 첫 그림(메인 카드 없음 · 잰 값 전)에만 옛 비율을 쓴다
+ */
+function collapsedSnap(fraction: number, lastBottom: number | null, total: number): string | number {
+  if (lastBottom === null || total <= 0) return `${Math.round(fraction * 100)}%`;
+  // §27(task-015-design §14-5): 여유 16 -> 4. 이유 줄(카드 아래 8)이 접힌 경계 밖으로 나가 윗머리가 비치지 않게
+  const height = SHEET_HANDLE_ROOM + lastBottom + space['space-1'];
+  return Math.min(Math.round(height), Math.floor(total * layout.sheetFractions[1]) - 1);
 }
 
 const styles = StyleSheet.create({

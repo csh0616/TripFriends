@@ -55,7 +55,7 @@ const trip = () => ({
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: '2026-12-04',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   is_demo: false,
   trip_days: [tripDay(1, 'past'), tripDay(2, 'today'), tripDay(3, 'planned'), tripDay(4, 'planning')],
@@ -460,7 +460,9 @@ describe('§29 ④ 연습: 숙소 없음', () => {
     withMap();
     await toRehearsal();
     const card = within(screen.getByTestId('card-T-08'));
-    expect(card.getByTestId('home-directions-button')).toBeTruthy();
+    // TASK-015 §B4·§17(11-16): 연습 중에는 T-08 [숙소로 길 안내]도 그리지 않는다 (이전: 있음). 실제 여행은 그대로(아래 T14_S31_Q2_경계_실제_여행…)
+    expect(card.queryByTestId('home-directions-button')).toBeNull();
+    expect(screen.queryByTestId('home-directions-button')).toBeNull();
     expect(card.queryByText(NO_LODGING_BODY)).toBeNull(); // §31 Q3 경계: 숙소 있음은 지금 모양 그대로
     expect(card.queryByText(DAY_OVER_TITLE)).toBeNull();
     expect(screen.getByTestId('map-home')).toBeTruthy();
@@ -562,6 +564,7 @@ describe('§29 ④ 실제 여행(live): 숙소 없음', () => {
     expect(within(screen.getByTestId('now-reason')).getByText(EMPTY_REASON)).toBeTruthy();
   });
 
+  // TASK-015 §B4·§17: 실제 여행은 그대로 [숙소로 길 안내]가 있다 (연습만 없음)
   test('T14_S31_Q2_경계_실제_여행_숙소_있는_하루_끝_T_08은_지금_모양_길_안내_버튼이_있다', async () => {
     const over = { day: { ...todayDay, lodging: LODGING }, at: '2026-12-02T20:00:00', main: t08(), subs: [] };
     server = new FakeServer().on(CURRENT, json(200, trip()));

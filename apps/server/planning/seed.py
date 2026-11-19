@@ -15,11 +15,18 @@ DEMO_PATH = Path(__file__).parents[1] / "engine" / "fixtures" / "demo_city.json"
 EXTRA_PATH = Path(__file__).parent / "fixtures" / "demo_extra.json"  # 시드 전용 장소 1곳 (TASK-008 §12 Q18). demo_city.json은 바꾸지 않는다
 DEMO_CENTER = (35.0, 135.0)  # 가상 도시 중심점 (TASK-002 §2). 숙소 = 중심점
 DEMO_DATES = [date(2026, 12, 1), date(2026, 12, 2), date(2026, 12, 3)]  # §10 Q26: 고정
+DEMO_OPTION_FILES = {"close_pins": "seed-close-pins.json", "two_places": "seed-two-places.json"}  # TASK-015 §20 #7
 DAY_START, DAY_END = "10:00", "20:00"  # §10 Q26
 
 
-def demo_places() -> dict[str, Place]:
-    rows = json.loads(DEMO_PATH.read_text(encoding="utf-8"))["places"]
+def _demo_dir() -> Path:
+    return next(p / "testdata" / "demo" for p in Path(__file__).resolve().parents if (p / "testdata" / "demo").is_dir())
+
+
+def demo_places(option: str | None = None) -> dict[str, Place]:
+    """option 없으면 demo_city.json 30곳. 있으면 testdata/demo의 그 선택지 파일 (TASK-015 §20 #7, 개발용)."""
+    path = DEMO_PATH if option is None else _demo_dir() / DEMO_OPTION_FILES[option]
+    rows = json.loads(path.read_text(encoding="utf-8"))["places"]
     return {row["id"]: Place.model_validate(row) for row in rows}
 
 
@@ -45,13 +52,13 @@ def _dinner(places: dict[str, Place], day: date) -> PlanFixed:
     )
 
 
-def seed_demo(repo: PlanningRepo, *, with_dinner: bool = False, past_days: int | None = None) -> SeedResult:
+def seed_demo(repo: PlanningRepo, *, with_dinner: bool = False, past_days: int | None = None, demo_option: str | None = None) -> SeedResult:
     """demo_city 3일. 둘째 날 꼭 갈 곳 1곳 = 그날 여는 곳 중 id가 가장 작은 곳 (§10 Q26).
 
     with_dinner(TASK-006 A5): 둘째 날에만 고정 일정 "저녁 예약" 1개를 넣는다.
     past_days(TASK-010 PM 답 1): 데모 시계 = 첫날 + N일. 날 상태는 기존 day_state 규칙 그대로 (응답 trip_days). None이면 trip_days를 싣지 않는다 (예전 응답 모양 그대로)."""
     demo_today = DEMO_DATES[0] + timedelta(days=past_days or 0)
-    places = demo_places()
+    places = demo_places(demo_option)
     day_ids: list[str] = []
     days: list[SeedDay] = []
     for number, day in enumerate(DEMO_DATES, start=1):

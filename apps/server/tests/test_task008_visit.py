@@ -336,7 +336,7 @@ def test_T8_AC6_T_05_카드의_글자는_모두_데이터에서_온다(env):
 
 def test_T8_A5_열었어는_200_NowView이고_T_05가_사라진다(env):
     view = answered(env, visit_day(env), "P02", "11:40", True)
-    assert set(view) == NOW_KEYS
+    assert set(view) - {"city"} == NOW_KEYS  # TASK-015 §E ③: city(도시 중심) 칸이 더해진다 (있는지는 test_task015_city_center)
     assert view["at"] == at_time("11:40")
     assert "T-05" not in types(cards(view))
     assert view["main"]["type"] == "T-01"

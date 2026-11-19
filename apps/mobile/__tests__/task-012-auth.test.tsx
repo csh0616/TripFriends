@@ -44,7 +44,7 @@ const TRIP = {
   city_code: 'osaka',
   start_date: '2026-12-11',
   end_date: '2026-12-11',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   trip_days: [{ day_id: 'day-t1', date: '2026-12-11', state: 'planning', chosen_option_id: null, fixed_events: [], summary: null, must_visits: [] }],
 };
@@ -85,7 +85,7 @@ async function toFormWithDates() {
   await settleAll();
 }
 
-const DATES_BODY = { city_code: 'osaka', start_date: '2026-12-10', end_date: '2026-12-11', must_visits: [] };
+const DATES_BODY = { city_code: 'osaka', start_date: '2026-12-10', end_date: '2026-12-11', must_visits: [], lodging: null }; // TASK-015 §13 Q5·§17: 숙소 없이 만들면 lodging: null을 보낸다 (이전: 칸 없음)
 
 /** [다시]를 누른다. 다시 보내지 않았으면(로그인만 다시 했으면) 주 버튼을 한 번 더 */
 async function retryCreate(before: number) {

@@ -25,6 +25,7 @@ from planning.repo import DayRecord, OptionRecord, PlanningRepo, ReactionAction,
 from store.unit import Database
 from trip.repo import ClosedInfo, EventRecord, ProposalRecord, TripRepo
 from trip.claims import ClaimStore
+from trip.lodging import location as lodging_location
 from trip.store import FixedRow, TripRow, TripStore
 from trip.visit import VisitCheckRecord
 
@@ -101,7 +102,7 @@ class PostgresPlanningRepo(PlanningRepo):
             return None
         with self._db.cursor() as cur:
             cur.execute(
-                "select td.*, t.lodging_place_id from trip_days td left join trips t on t.id = td.trip_id where td.id = %s", (did,)
+                "select td.*, t.lodging from trip_days td left join trips t on t.id = td.trip_id where td.id = %s", (did,)
             )
             row = cur.fetchone()
             if row is None:
@@ -140,8 +141,8 @@ class PostgresPlanningRepo(PlanningRepo):
 
     def _lodging(self, row: dict[str, Any], now: datetime) -> tuple[float, float]:
         """숙소 좌표는 좌표 캐시(30일)에서. 숙소가 없거나 못 구하면 도시 중심 (TASK-010 §9 Q10)."""
-        if row["lodging_known"] and row["lodging_place_id"]:
-            found = self._city.lodging_location(row["lodging_place_id"], now)
+        if row["lodging_known"] and row["lodging"]:
+            found = lodging_location(row["lodging"], self._city.lodging_location, now)
             if found is not None:
                 return found
         return self._city.center()
@@ -532,7 +533,7 @@ class PostgresTripStore(TripStore):
     @staticmethod
     def _trip(row: dict[str, Any], day_ids: list[str]) -> TripRow:
         return TripRow(
-            str(row["id"]), str(row["owner_id"]), row["city_code"], row["start_date"], row["end_date"], row["lodging_place_id"],
+            str(row["id"]), str(row["owner_id"]), row["city_code"], row["start_date"], row["end_date"], row["lodging"],
             day_ids, row["status"], row["is_demo"], row["demo_current"], row["demo_today"],
         )
 
@@ -548,9 +549,9 @@ class PostgresTripStore(TripStore):
             if archive_active:
                 cur.execute("update trips set status = 'archived' where owner_id = %s and status = 'active' and (not is_demo or demo_current)", (_uid(row.owner_id),))
             cur.execute(
-                """insert into trips (id, owner_id, city_code, start_date, end_date, lodging_place_id, status, is_demo, demo_current, demo_today)
+                """insert into trips (id, owner_id, city_code, start_date, end_date, lodging, status, is_demo, demo_current, demo_today)
                    values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (_uid(row.trip_id), _uid(row.owner_id), row.city_code, row.start_date, row.end_date, row.lodging_place_id, row.status, row.is_demo, row.demo_current, row.demo_today),
+                (_uid(row.trip_id), _uid(row.owner_id), row.city_code, row.start_date, row.end_date, _jsonb_text(row.lodging) if row.lodging is not None else None, row.status, row.is_demo, row.demo_current, row.demo_today),
             )
             ids = [_uid(d) for d in row.day_ids]
             cur.execute("update trip_days set trip_id = %s where id = any(%s::uuid[])", (_uid(row.trip_id), ids))

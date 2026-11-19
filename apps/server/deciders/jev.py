@@ -48,7 +48,7 @@ class JevDecider:
     ) -> None:
         key = api_key or os.environ.get("AI_GATEWAY_API_KEY")
         if not key:
-            raise RuntimeError("AI_GATEWAY_API_KEY가 없습니다. apps/server/.env에 넣어 주세요")
+            raise RuntimeError("AI_GATEWAY_API_KEY가 없습니다. ~/.config/tripfriends/server.env에 넣어 주세요")
         self._fallback = fallback
         self._timeout_s = timeout_s
         self._min_confidence = min_confidence

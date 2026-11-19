@@ -40,7 +40,10 @@ function barPoints(text: string): string[] {
 
 test('T14_S13_1_시험_자체_확인_흐름이_있다', () => {
   expect(flows).toEqual(expect.arrayContaining(['rehearsal.yaml', 'trip-now.yaml', 'trip-delay.yaml', 'trip-closed.yaml']));
-  expect(flows).toHaveLength(7);
+  expect(flows).toEqual(expect.arrayContaining(['lodging-name.yaml', 'lodging-address.yaml', 'lodging-pin.yaml'])); // TASK-015 AC-5 · §18
+  expect(flows).toEqual(expect.arrayContaining(['lodging-pin-keyboard.yaml'])); // TASK-015 §21 막는 1건 · AC-5: 키보드가 열린 채 [여기로 정했어] 한 번
+  expect(flows).toEqual(expect.arrayContaining(['lodging-pin-repin.yaml'])); // TASK-015 §32 중-9: 키보드 닫자마자 다시 찍기 -> 이름표 핀 위
+  expect(flows).toHaveLength(12); // (이전 7) + 숙소 세 경로 + 키보드 열린 채 지도 찍기(§21) + 키보드 닫자마자 다시 찍기(§32, 옛 11)
 });
 
 test.each(flows)('T14_S14_1_%s의_앱을_여는_주소는_개발_메뉴_버튼을_끈다__expo_disable_fab_1', (name) => {

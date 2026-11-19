@@ -73,7 +73,7 @@ appId: com.csh0616.tripfriends
     visible: "18:00"
     timeout: 10000
 - extendedWaitUntil:
-    visible: "고정 일정이 곧이야"
+    visible: "고정 일정 · 곧 출발"
     timeout: 10000
 - takeScreenshot: trip-now-2-before-fixed
 
@@ -88,7 +88,7 @@ appId: com.csh0616.tripfriends
           visible: "10:00"
           timeout: 3000
 - extendedWaitUntil:
-    notVisible: "고정 일정이 곧이야"
+    notVisible: "고정 일정 · 곧 출발"
     timeout: 10000
 - extendedWaitUntil:
     visible: "없는 글자 (잠깐 기다림)"

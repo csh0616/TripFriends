@@ -11,6 +11,7 @@ export type TripDay = Schemas['TripDay'];
 export type FixedEvent = Schemas['FixedEvent-Output'];
 export type FixedEventBody = Schemas['FixedEventCreate'];
 export type LodgingHit = Schemas['LodgingHit'];
+export type CityInfo = Schemas['CityInfo'];
 export type SearchPlace = Schemas['PlaceHit'];
 
 export const CITY_CODE = 'osaka';
@@ -29,6 +30,10 @@ export const tripRequests = {
   }),
   searchPlaces: (q: string): Request => ({ method: 'GET', path: `/places/search?${query(q)}` }),
   searchLodging: (q: string): Request => ({ method: 'GET', path: `/places/lodging-search?${query(q)}`, timeoutMs: LODGING_TIMEOUT_MS }),
+  /** TASK-015 §A ②: 이름으로 못 찾았을 때 같은 글을 주소로 다시 찾는다 (lodging-search와 같은 규칙·시간 제한) */
+  searchAddress: (q: string): Request => ({ method: 'GET', path: `/places/address-search?${query(q)}`, timeoutMs: LODGING_TIMEOUT_MS }),
+  /** TASK-015 §14: 도시 정보 (토큰 없이). a2의 50km 검사에 쓰는 center */
+  city: (cityCode: string = CITY_CODE): Request => ({ method: 'GET', path: `/cities/${encodeURIComponent(cityCode)}` }),
   addFixedEvent: (tripId: string, body: FixedEventBody): Request => ({
     method: 'POST',
     path: `/trips/${encodeURIComponent(tripId)}/fixed-events`,

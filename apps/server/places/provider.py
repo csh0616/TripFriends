@@ -74,6 +74,10 @@ class PlacesProvider(ABC):
     def search_lodging(self, q: str) -> list[dict[str, Any]]:
         """[{place_id, name, address_short}]"""
 
+    @abstractmethod
+    def search_address(self, q: str) -> list[dict[str, Any]]:
+        """주소로 찾기 (종류 제한 없음). [{place_id, name, address_short}]"""
+
 
 def _load_fake(path: Path | None) -> dict[str, Any]:
     return json.loads((path or FAKE_PLACES_PATH).read_text(encoding="utf-8"))
@@ -105,12 +109,28 @@ class FakePlaces(PlacesProvider):
             "business_status": found["business_status"],
         }
 
+    def _fail_if_switch(self, q: str) -> None:
+        """TASK-015 §20 #7: 가짜 공급자만의 실패 스위치. 정해 둔 글과 정확히 같을 때만 (실제 Google에는 없다)."""
+        if q in self._data.get("provider_fail", []):
+            raise ProviderTransientError("가짜 공급자 실패 스위치")
+
     def search_lodging(self, q: str) -> list[dict[str, Any]]:
+        self._fail_if_switch(q)
         return [
             {"place_id": hit["place_id"], "name": hit["name"], "address_short": hit["address_short"]}
             for hit in self._data["lodging"]
             if q in hit["name"]
         ]
+
+    def search_address(self, q: str) -> list[dict[str, Any]]:
+        """이름 검색 결과 + address 표에서 query가 정확히 같은 줄 (query 칸은 내보내지 않는다, TASK-015 §18)."""
+        self._fail_if_switch(q)
+        rows = [
+            {"place_id": row["place_id"], "name": row["name"], "address_short": row["address_short"]}
+            for row in self._data.get("address", [])
+            if row["query"] == q
+        ]
+        return self.search_lodging(q) + rows
 
 
 def _hhmm(hour: int, minute: int) -> str:
@@ -199,9 +219,15 @@ class GooglePlaces(PlacesProvider):
         }
 
     def search_lodging(self, q: str) -> list[dict[str, Any]]:
-        body = {
+        return self._search_places(q, "lodging")
+
+    def search_address(self, q: str) -> list[dict[str, Any]]:
+        return self._search_places(q, None)  # 종류 제한 없이 (에어비앤비·지인 집 주소도)
+
+    def _search_places(self, q: str, included_type: str | None) -> list[dict[str, Any]]:
+        body: dict[str, Any] = {
             "textQuery": q,
-            "includedType": "lodging",
+            **({"includedType": included_type} if included_type else {}),
             "pageSize": LODGING_LIMIT,
             "languageCode": "ko",
             "locationBias": {"circle": {"center": {k: LODGING_BIAS[k] for k in ("latitude", "longitude")}, "radius": LODGING_BIAS["radius"]}},

@@ -38,7 +38,9 @@ jobs:
         pnpm-lock.yaml
         .npmrc
         testdata/particles.json
+        testdata/demo/**
         apps/server/trip/link.py
+        apps/server/trip/detect.py
         .node-version
         pnpm-workspace.yaml
         docs/DESIGN-001_Brand-Tokens.md

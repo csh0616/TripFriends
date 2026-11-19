@@ -14,6 +14,9 @@ export const mapControl = {
   moves: [] as { latitude: number; longitude: number }[], // animateToRegion·animateCamera의 가운데
   // TASK-014 §24: animateToRegion에 넘긴 영역 전체 (연습 카메라를 직접 계산한 값)
   regions: [] as { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number }[],
+  // TASK-015 §30: getMapBoundaries(지도에 지금 경계를 직접 묻기). 시험이 답을 정한다. null이면 답하지 않는다(끝나지 않는 약속) — 실제 SDK가 늦게 답하는 경우
+  boundaries: null as null | (() => Promise<{ northEast: { latitude: number; longitude: number }; southWest: { latitude: number; longitude: number } }>),
+  boundaryAsks: 0, // getMapBoundaries를 부른 횟수
   reset() {
     this.failRender = false;
     this.silent = false;
@@ -22,6 +25,8 @@ export const mapControl = {
     this.fits = [];
     this.moves = [];
     this.regions = [];
+    this.boundaries = null;
+    this.boundaryAsks = 0;
   },
 };
 
@@ -37,6 +42,10 @@ const MapView = forwardRef<unknown, Props>(function MapView(props, ref) {
     },
     animateCamera: (camera: { center: { latitude: number; longitude: number } }) => {
       mapControl.moves.push(camera.center);
+    },
+    getMapBoundaries: () => {
+      mapControl.boundaryAsks += 1;
+      return mapControl.boundaries ? mapControl.boundaries() : new Promise(() => undefined);
     },
   }));
   useEffect(() => {

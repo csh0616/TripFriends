@@ -6,7 +6,7 @@
 // 계약 (이 테스트가 정한 것, 승인 대기 — 질문 목록 참고):
 //   연습 띠 `rehearsal-band` = ink 바탕 상자 하나가 화면 맨 위(top 0)부터 높이 안전 영역 + 52 (METRICS top 47 -> 99)
 //   상태 표시줄: expo-status-bar. 연습 중에만 style "light" (<StatusBar style="light" /> 또는 setStatusBarStyle('light')). 연습을 끝내면 light가 남지 않는다
-//   연습 카드 시트 중간 단 윗변 = 874 화면에서 y 434 (§20 Q2, 다른 화면 높이는 문서에 없음). 지도 카메라 아래 여백 >= 440 + 시계 판 112 (§20 Q3 하한)
+//   연습 카드 시트 기본 윗변 = 앱 844 화면에서 y 546, 위로 끌면 417 (TASK-015 §B3, 이전 874 화면 434). 지도 카메라 아래 여백 >= 440 + 시계 판 112 (§20 Q3 하한)
 //   시계 판: "연습 시계"(12/16 muted)와 시각이 위아래 두 줄. [10분](§21 3, 옛 "+10분") `demo-plus-10`·[재생] `demo-play` 안에 아이콘(Svg) 하나씩.
 //           막대 손잡이 testID `demo-thumb` = 보이는 28, 그 손잡이를 받는 상자(onStartShouldSetResponder)의 높이 44 이상
 //   SOS 시트(`sheet-scrim`·`sos-sheet`): 스크림이 위쪽 컨트롤(SOS·연습 띠)보다 위에 그려진다 = Modal 안이거나,
@@ -60,8 +60,10 @@ const PLANNED = 'day-t3';
 const PLANNED_DATE = '2026-12-03';
 const BAND = 52; // DESIGN-001 §4-13 reh-band 띠 내용 높이
 const REH_SHEET = 440; // task-014-design §2 "높이 516 -> 440" (카메라 여백 하한에만 쓴다, §20 Q3)
-const BOARD_HEIGHT = 874; // 보드 ①-35 화면 높이 (402×874)
-const REH_SHEET_TOP = 434; // TASK-014 §20 Q2: 874 화면에서 연습 카드 시트(중간 단) 윗변 y
+const APP_WIDTH = 390; // TASK-015 §B3: 앱 844 기준 (METRICS와 같은 폰)
+const APP_HEIGHT = 844;
+const REH_SHEET_TOP = 546; // TASK-015 §B3 · task-014-design §12-1: 앱 844에서 연습 카드 시트 기본 윗변 y (이전 874 화면 434)
+const REH_SHEET_TOP_UP = 417; // 같은 곳: 위로 끌면 이 윗변까지 (이전 기본 단 값)
 const REH_CLOCK = 112; // DESIGN-001 §4-13 reh-clock 높이
 const EMERGENCY = '경찰 110 · 구급·소방 119'; // TASK-014 §19
 
@@ -77,7 +79,7 @@ const trip = (states: string[] = ['past', 'today', 'planned', 'planning']) => ({
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: `2026-12-0${states.length}`,
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   is_demo: false,
   trip_days: states.map((state, index) => tripDay(index + 1, state)),
@@ -283,35 +285,44 @@ describe('§19 중 연습 시계 판 (reh-clock)', () => {
   });
 });
 
-describe('§19 중·§20 Q2 연습 카드 시트 중간 단 윗변은 874 화면에서 y 434', () => {
-  // §20 Q2: 높이가 아니라 보드 ①-35와 같은 자리(윗변 위치)로 잰다. 다른 화면 높이의 규칙은 문서에 없어 874 하나만 고정한다.
+describe('TASK-015 §B3 연습 카드 시트 기본 윗변은 앱 844 화면에서 y 546 (위로 끌면 417)', () => {
+  // TASK-015 §B3·§17(11-16) · task-014-design §12-1 정본: 874 보드 434 -> 563, 앱 844 417 -> 546. 기준은 높이가 아니라 윗변 위치.
+  // (이전: 874 화면에서 중간 단 윗변 434 — TASK-014 §20 Q2. 제안 A로 바뀌어 옛 단언을 고쳤다)
   // 시험이 넣는 것 (jest에는 실제 배치가 없어서):
-  //   화면 402×874, 안전 영역 위 62 · 아래 34 (보드와 같은 iPhone). Dimensions 창 높이도 874
-  //   입력창 자리 = 그려진 input-bar 스타일의 위 여백 + 입력 칸 최소 높이 + 아래 여백(안전 영역 34 + 8) — 앱이 그린 값에서 읽는다
-  //   시트 영역(지도·시트가 있는 상자, 화면 맨 위 y 0부터) = 874 − 입력창 자리. 그 상자의 onLayout으로 넣는다
-  //   시트 윗변 y = 시트 영역 위 0 + 시트 영역 높이 − 중간 단 높이
-  const BOARD = { frame: { x: 0, y: 0, width: 402, height: BOARD_HEIGHT }, insets: { top: 62, left: 0, right: 0, bottom: 34 } };
-
-  test('T14_S19_S20_Q2_874_화면_중간_단_시트_윗변은_434', async () => {
+  //   화면 390×844, 안전 영역 위 47 · 아래 34 (§11-1 "띠 99 = 47 + 52" 계산과 같은 폰). Dimensions 창 높이도 844
+  //   입력창 자리 = 그려진 input-bar 스타일의 위 여백 + 입력 칸 최소 높이 + 아래 여백 — 앱이 그린 값에서 읽는다
+  //   시트 영역(지도·시트가 있는 상자, 화면 맨 위 y 0부터) = 844 − 입력창 자리. 그 상자의 onLayout으로 넣는다
+  //   시트 윗변 y = 시트 영역 높이 − 단 높이
+  async function rehearsalSnapTops() {
     const window = Dimensions.get('window');
-    jest.spyOn(Dimensions, 'get').mockImplementation(() => ({ ...window, width: 402, height: BOARD_HEIGHT }));
-    await toRehearsal(BOARD);
+    jest.spyOn(Dimensions, 'get').mockImplementation(() => ({ ...window, width: APP_WIDTH, height: APP_HEIGHT }));
+    await toRehearsal(METRICS);
     expect(screen.queryByTestId('action-bar')).toBeNull(); // 시험 자체 확인: 확정 줄 없음 (입력창만 시트 아래)
     const bar = byId('input-bar');
     const field = bar.queryAll((inner) => typeof styleOf(inner).minHeight === 'number')[0];
     expect(field).toBeDefined();
     const inputBar = Number(styleOf(bar).paddingTop ?? 0) + Number(styleOf(field).minHeight) + Number(styleOf(bar).paddingBottom ?? 0);
     expect(Number(styleOf(bar).paddingBottom)).toBeGreaterThanOrEqual(34); // 시험 자체 확인: 아래 안전 영역이 들어갔다
-    const area = BOARD_HEIGHT - inputBar;
+    const area = APP_HEIGHT - inputBar;
     const host = byId('trip-now-screen').queryAll((inner) => typeof inner.props.onLayout === 'function')[0];
     expect(host).toBeDefined();
     await act(async () => {
-      fireEvent(host as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 402, height: area } } });
+      fireEvent(host as never, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: APP_WIDTH, height: area } } });
     });
     const points = sheetControl.props?.snapPoints as unknown[];
-    expect(points).toHaveLength(3);
-    const top = area - snapPx(points[1], area);
-    expect(Math.abs(top - REH_SHEET_TOP)).toBeLessThanOrEqual(1);
+    expect(points.length).toBeGreaterThanOrEqual(3);
+    return points.map((point) => area - snapPx(point, area));
+  }
+
+  test('T15_B3_844_화면_연습_시트_기본_윗변은_546', async () => {
+    const tops = await rehearsalSnapTops();
+    expect(Math.abs(tops[1] - REH_SHEET_TOP)).toBeLessThanOrEqual(1);
+  });
+
+  test('T15_B3_844_화면_연습_시트를_위로_끌면_윗변_417_단이_있다', async () => {
+    const tops = await rehearsalSnapTops();
+    // 기본 단(1)보다 위(윗변 y가 더 작은) 단 가운데 하나가 417
+    expect(tops.slice(2).some((top) => Math.abs(top - REH_SHEET_TOP_UP) <= 1)).toBe(true);
   });
 });
 
@@ -395,7 +406,7 @@ describe('§19 날짜 목록 (D6)', () => {
     city_code: 'osaka',
     start_date: DATES[0],
     end_date: DATES[2],
-    lodging_place_id: null,
+    lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
     status: 'active',
     trip_days: days,
   });

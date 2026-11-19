@@ -28,13 +28,14 @@ ITEM_KEYS = {"seq", "place_id", "name", "start", "end", "lat", "lng", "is_fixed"
 FACT_KEYS = {"field", "value", "status", "source_type", "checked_at"}
 PIN_KEYS = {"seq", "place_id", "name", "lat", "lng", "start", "end", "travel_min", "state"}  # §11 Q15: start·end, §12 R6: travel_min
 CARD_KEYS = {  # §A-1 표, §11 Q8: 평평하게
-    "T-01": {"type", "item", "ends_in_min"},
-    "T-02": {"type", "next_item", "leave_at", "leave_in_min", "travel_min", "map_url"},
+    # TASK-015 §30 칩 시트: T-01 · T-02 · T-07에 can_confirm_hours · place_map_url (제안 이름, tests/test_task015_s30_chip_fields.py)
+    "T-01": {"type", "item", "ends_in_min", "can_confirm_hours", "place_map_url"},
+    "T-02": {"type", "next_item", "leave_at", "leave_in_min", "travel_min", "map_url", "can_confirm_hours", "place_map_url"},
     "T-03": {"type", "items"},
-    "T-07": {"type", "fixed", "leave_by", "leave_in_min"},
+    "T-07": {"type", "fixed", "leave_by", "leave_in_min", "can_confirm_hours", "place_map_url"},
     "T-08": {"type", "go_home_min", "lodging", "map_url"},  # map_url: §13 E4
 }
-DAY_OVER = "오늘 일정이 끝났어. 숙소로 가 볼까?"  # §12 R1
+DAY_OVER = "오늘 일정이 끝났어"  # §12 R1 -> TASK-015 §20 #5 (REASONS 표와 같게, 이전 "…숙소로 가 볼까?")
 ON_TRACK = "동선대로 가는 중"
 FREE = "다음까지 여유 있음"
 
@@ -236,7 +237,7 @@ def assert_card_shape(card: dict) -> None:
 
 
 def assert_now_shape(view: dict) -> None:
-    assert set(view) == NOW_KEYS
+    assert set(view) - {"city"} == NOW_KEYS  # TASK-015 §E ③: city(도시 중심) 칸이 더해진다 (있는지는 test_task015_city_center)
     DaySummary.model_validate(view["day"])
     assert view["status"] in {"on_track", "delayed", "free"}
     assert type(view["reason"]) is str and view["reason"]

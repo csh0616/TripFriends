@@ -57,6 +57,9 @@ export const layout = {
   pinNext: tokens.map['pin-next'],
   pinRing: 3, // §14 승인: 다음 핀 brand 고리 굵기 (문서에 굵기 없음)
   pinBubble: 24, // §14 승인: 다음 핀 이름 말풍선 높이 (label 줄 높이 16 + 위아래 4)
+  noneBody: 300, // TASK-015 a3 못 찾음 본문 폭 (task-015-design §1-4)
+  nameTag: 28, // TASK-015 §24: 지도 이름표 높이 (겹침 규칙 LABEL_HEIGHT와 같다)
+  nameTagStroke: 1, // 이름표 테두리 (line)
   pinBubbleMax: 160, // §14 승인: 말풍선 최대 폭
   homePin: 28, // §14 승인: 지도 숙소 원 지름 (테두리는 routeHomeStroke)
   homeWall: [12, 8], // §14 승인: 지도 숙소 아이콘 벽 폭·높이 (Svg 없이 View로 그린다)
@@ -68,6 +71,7 @@ export const layout = {
   sheetFractions: [0.16, 0.44, 0.88], // §14 승인: 시트 3단 높이(낮게·중간·높게)가 시트 영역에서 차지하는 비율
   sheetHandleWidth: 40, // §14 승인: 시트 손잡이
   sheetHandleHeight: 4,
+  sheetHandlePad: 10, // gorhom 손잡이 상자 안쪽 여백(라이브러리 기본값) — 접힌 단 높이 계산 (TASK-015 §24 18번)
   demoThumb: 20, // §14 승인: 데모 시각 막대의 손잡이 지름
   mapEdge: 60, // §14 승인: 카메라 맞춤 좌우 여백 (핀 반쪽 + 이름 말풍선이 잘리지 않게)
   // TASK-009 / DESIGN-001 §4-7 고르기 방식. 값은 tokens.json(select)에서 읽는다 (TASK-010 §E1)
@@ -159,8 +163,9 @@ export const layout = {
   statusPill: 36, // 이동 상태 알약 높이 (pill-off 자리 계산용)
   rehBand: 52, // reh-band 높이
   rehClock: 112, // reh-clock 판 높이
-  rehSheetTop: 434, // 연습 카드 시트(중간 단) 윗변 y: 보드 ①-35, 화면 874 기준 (TASK-014 §20 Q2). 다른 화면 높이는 이 비율로 줄인다
-  rehBoardHeight: 874, // 보드 ①-35 화면 높이
+  rehSheetTop: 546, // 연습 카드 시트 기본 윗변 y: 앱 844 기준 (TASK-015 §B3 · task-014-design §12-1, 이전 874 화면 434). 다른 화면 높이는 이 비율로 줄인다
+  rehSheetTopUp: 417, // 위로 끌었을 때 윗변 y (같은 곳, 844 기준)
+  rehBoardHeight: 844, // 기준 화면 높이
   rehBoardBottom: 34, // 보드 아래 안전 영역
   rehPlusWidth: 84, // reh-clock [+10분] 폭
   rehPlayWidth: 96, // reh-clock [재생] 폭
@@ -178,4 +183,18 @@ export const layout = {
   rehRowExtra: 40, // row-done-rehearse: 84 + 버튼 줄 40 = 124
   chipSmIcon: 16, // btn-chip-sm 아이콘
   noticeInfoHeight: 44, // notice-info
+  // TASK-015 task-015-design §1-3·§2 (docs/design/reviews/task-015-design.md V129)
+  titlePill: 36, // 지도 위 제목 알약 높이 (a2 "지도에서 찍기" · 크게 보기)
+  expandPill: 24, // 크게 보기 알약 높이 = 요약 줄 높이 (bg-2, 줄 안). 눌러지는 영역은 도식 + 요약 줄
+  mapOffCircle: 56, // a4 지도 꺼짐 원
+  pinBadgeRoom: 50, // TASK-015 §31: 배지 (+15, ∓14) · 지름 20이 들어가는 핀 칸 (가운데에서 25 = 15 + 10)
+  sheetLinkIcon: 18, // TASK-015 §32 칩 시트 링크 바깥 화살표 (task-015-design §16-3)
+  chipIcon: 14, // TASK-015 §33 하-18: 상태 칩 앞 아이콘 (확인됨 ✓ · 미확인 ? · 모름 −)
+  pairIcon: 20, // TASK-015 §33 하-18: [열었어][닫혔어] 앞 아이콘
+  readyMark: 1, // TASK-015 §29: a2 지도 준비 표시(보이지 않는 1pt, Maestro가 기다리는 상태 표시)
+  scaleWidth: 96, // map-scale 폭
+  scaleHeight: 30, // map-scale 높이
+  scaleBarHeight: 8, // L자 눈금 막대의 세로 눈금
+  scaleLine: 2, // 눈금 선 굵기
+  scaleGap: 2, // 글자와 막대 사이
 } as const;

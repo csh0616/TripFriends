@@ -128,5 +128,5 @@ export function renewToken(used: string): Promise<string | null> {
   return promise;
 }
 
-/** 토큰 없이 열린 길 (API-001): /health, /catalog */
-export const isOpenPath = (path: string) => /^\/(health|catalog)(\/|\?|$)/.test(path);
+/** 토큰 없이 열린 길 (API-001): /health, /catalog, /cities/{city_code} (TASK-015 §14 Q1) */
+export const isOpenPath = (path: string) => /^\/(health|catalog|cities)(\/|\?|$)/.test(path);

@@ -46,7 +46,7 @@ const ALL_PLANNED = {
   city_code: 'osaka',
   start_date: '2026-12-01',
   end_date: '2026-12-03',
-  lodging_place_id: null,
+  lodging: null, // TASK-015 §11 Q10 응답 새 모양 (이전: lodging_place_id: null)
   status: 'active',
   trip_days: [tripDay(1, 'planned'), tripDay(2, 'planned'), tripDay(3, 'planned')],
 };

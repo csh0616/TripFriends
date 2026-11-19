@@ -14,6 +14,7 @@ import { ScreenFrame } from '@/components/planning/screen-frame';
 import { CityCover } from '@/components/trips/city-cover';
 import { DayPill } from '@/components/trips/day-pill';
 import { cityClock, cityToday } from '@/lib/calendar';
+import { MonoDigits, MonoText } from '@/components/trips/parts';
 import { dayDestination, dayListPrimary, shortDateLabel, tripHeader, type DayDestination } from '@/lib/day-list';
 import { fixedEventError } from '@/lib/create-trip';
 import { send } from '@/lib/planning-api';
@@ -102,14 +103,14 @@ export function TripDays({
               <Pressable testID="bottom-primary" accessibilityRole="button" onPress={() => open(primaryDay)} style={styles.primary}>
                 <Text style={fitText(fit['bottom-primary'])}>{primary.label}</Text>
               </Pressable>
-              {primary.sublabel ? <Text style={fitText(fit['bottom-primary'].sub)}>{primary.sublabel}</Text> : null}
+              {primary.sublabel ? <MonoText value={primary.sublabel} base={fitText(fit['bottom-primary'].sub)} /> : null}
             </View>
           ) : undefined
         }
       >
         <CityCover size="banner" width={width - layout.coverMargin} style={styles.banner} />
         <View style={styles.head}>
-          <Text style={text('caption', 'muted')}>{periodLabel(trip.start_date, trip.end_date)}</Text>
+          <MonoText value={periodLabel(trip.start_date, trip.end_date)} base={text('caption', 'muted')} />
           <Text style={fitText(fit['title-trip'])}>{header.title}</Text>
           <View style={styles.progress}>
             <View accessible accessibilityLabel={header.dots} style={styles.dots}>
@@ -117,7 +118,7 @@ export function TripDays({
                 <View key={index} style={[styles.dotMark, dot === FILLED ? styles.dotFilled : styles.dotEmpty]} />
               ))}
             </View>
-            <Text style={text('caption', 'muted')}>{header.line}</Text>
+            <MonoDigits value={header.line} />
           </View>
         </View>
         <View style={styles.days}>
@@ -400,8 +401,14 @@ function DayRow({
           </View>
         </View>
       ) : (
-        <View style={styles.addRow}>
-          <CardButton size="small" testID={`card-plan-${day.day_id}`} label="같이 고르기" onPress={onPlan} />
+        // TASK-015 §24(15): 작은 버튼 둘도 각 flex 1 · 사이 8 (task-015-design §3 btn-pair-small)
+        <View style={styles.pair}>
+          <View style={styles.grow}>
+            <CardButton size="small" testID={`card-plan-${day.day_id}`} label="같이 고르기" onPress={onPlan} />
+          </View>
+          <View style={styles.grow}>
+            <CardButton size="small" testID={`card-auto-${day.day_id}`} label="알아서 짜 줘" onPress={onAuto} />
+          </View>
         </View>
       )}
     </Pressable>
@@ -488,7 +495,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addRow: { flexDirection: 'row' },
   addEvent: {
     height: fit['btn-add-event'].height,
     flexDirection: 'row',

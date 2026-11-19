@@ -36,6 +36,8 @@ class NowCardT01(BaseModel):
     type: Literal["T-01"] = "T-01"
     item: NowCourseItem
     ends_in_min: int | None  # 하루 시작 전 미리보기면 null
+    can_confirm_hours: bool  # TASK-015 §30: 이 장소가 지금 영업 확인(T-05) 대상
+    place_map_url: str | None  # TASK-015 §30: 장소 구글 지도 링크 (T-05 map_url과 같은 값), 장소 없으면 null
 
 
 class NowCardT02(BaseModel):
@@ -45,6 +47,8 @@ class NowCardT02(BaseModel):
     leave_in_min: int
     travel_min: int
     map_url: str | None  # 장소가 없으면 null (Q6)
+    can_confirm_hours: bool
+    place_map_url: str | None
 
 
 class NowCardT03(BaseModel):
@@ -144,6 +148,8 @@ class NowCardT07(BaseModel):
     fixed: NowFixed
     leave_by: str
     leave_in_min: int
+    can_confirm_hours: bool
+    place_map_url: str | None
 
 
 class NowCardT08(BaseModel):
@@ -182,7 +188,20 @@ class NowDaySummary(DaySummary):
     lodging: LatLng | None
 
 
+class NowCityCenter(BaseModel):
+    lat: float
+    lng: float
+
+
+class NowCity(BaseModel):
+    """지도 시작 가운데 (TASK-015 §E ③). 도시 팩의 우리 값이며 숙소가 아니다."""
+
+    code: str
+    center: NowCityCenter
+
+
 class NowView(BaseModel):
+    city: NowCity
     day: NowDaySummary
     at: str
     status: Literal["on_track", "delayed", "free"]
