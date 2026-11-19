@@ -594,3 +594,79 @@ describe('§28 질문 5 — a2 이름표는 Google 로고와 4 넘게 띄운다'
     for (const tag of tags()) expect(gapOf(tagRect(tag, region, frame), logo)).toBeGreaterThan(4);
   });
 });
+
+// ---------- TASK-015 §30 중 1: mapPadding이 바뀌면 영역은 "확정 전" -> 지도에 지금 경계를 직접 묻고(getMapBoundaries) 그 답으로 다시 계산 ----------
+// 근거: TASK-015 §30 "a2에서 키보드를 닫은 직후 핀을 다시 찍으면 위 자리가 비었는데도 이름표가 아래로 가거나 빠짐 · 원인 추정: 지도 여백이 바뀌는데 영역 알림이 안 옴 ·
+//   규칙: mapPadding이 바뀌면 그때의 영역을 '확정 전'으로 보고, 지도에 지금 경계를 직접 물어(getMapBoundaries 등) 다시 계산한다. 알림을 기다리지 않음"
+// 계약 (정한 것):
+//   MapView ref getMapBoundaries() -> { northEast, southWest } (react-native-maps). 답 = 지금 보이는 영역(mapPadding 안쪽)의 북동 · 남서 모서리 -> region(가운데 · 폭)으로 바꿔 쓴다
+//   mapPadding이 바뀌면 한 번 이상 묻는다. 답이 오기 전(확정 전)에는 새 자리를 계산하지 않는다:
+//     핀이 그대로면 이미 그린 이름표를 그대로 둔다(§26 "키보드 열림 때 빠지지 않음" 뜻) · 핀을 새로 찍으면 답이 올 때까지 이름표 없음(§22 · §27 ③ "확정 전엔 핀만"과 같은 원칙)
+//   답이 오면 그 영역으로 다시 계산한다. 그 뒤 온 영역 알림은 지금처럼 쓴다
+describe('§30 a2 키보드를 닫은 직후 — 지도에 경계를 물어 다시 계산', () => {
+  const boundsOf = (region: Region) => ({
+    northEast: { latitude: region.latitude + region.latitudeDelta / 2, longitude: region.longitude + region.longitudeDelta / 2 },
+    southWest: { latitude: region.latitude - region.latitudeDelta / 2, longitude: region.longitude - region.longitudeDelta / 2 },
+  });
+  function deferAnswer() {
+    let answer!: (value: ReturnType<typeof boundsOf>) => void;
+    const promise = new Promise<ReturnType<typeof boundsOf>>((done) => (answer = done));
+    mapControl.boundaries = () => promise;
+    return answer;
+  }
+
+  async function openThenClose() {
+    await show(NAME);
+    await pinSettlesAt(SPOT, { x: 195, y: 300 });
+    await keyboardShow();
+    const band = frameNow();
+    const open = { x: WIDTH / 2, y: band.y + band.height / 2 };
+    const opened = await pinSettlesAt(SPOT, open); // 키보드 열림 때 영역 알림 (지도가 핀을 띠 가운데로)
+    expectTagAt('top', open, opened.region, opened.frame);
+    const answer = deferAnswer();
+    const asked = mapControl.boundaryAsks;
+    await keyboardHide(); // mapPadding이 시트 258로 돌아감. 영역 알림은 오지 않는다
+    const closed = frameNow();
+    expect(closed.height).toBeGreaterThan(band.height); // 시험 자체 확인: 여백이 바뀌었다
+    // 지도 SDK는 카메라 가운데(핀)를 바뀐 여백 안쪽 가운데로 둔다 -> 핀이 새 보이는 영역 가운데로 옮겨 보인다. 그 기준의 진짜 영역 (옛 영역과 화면 자리가 다르다)
+    const now = { x: WIDTH / 2, y: closed.y + closed.height / 2 };
+    const truth = regionPutting(SPOT, now, closed);
+    return { opened, open, now, closed, truth, answer, asked };
+  }
+
+  test('T15_S30_mapPadding이_바뀌면_지도에_경계를_묻는다', async () => {
+    const { asked } = await openThenClose();
+    expect(mapControl.boundaryAsks).toBeGreaterThan(asked);
+  });
+
+  test('T15_S30_답이_오면_새_경계로_다시_계산(핀은_그대로_위_자리)', async () => {
+    const { now, closed, truth, answer } = await openThenClose();
+    await act(async () => {
+      answer(boundsOf(truth));
+    });
+    expectTagAt('top', now, truth, closed);
+  });
+
+  test('T15_S30_키보드를_닫은_직후_다시_찍으면_답이_오기_전엔_이름표_없음_답이_오면_새_핀_위', async () => {
+    const { opened, closed, truth, answer } = await openThenClose();
+    const next = { x: 195, y: 420 };
+    const at = unproject(truth, closed, next);
+    // 시험 자체 확인: 옛(키보드 열렸을 때) 영역으로 보면 이 좌표는 다른 화면 자리다 -> 옛 영역으로 계산하면 이름표가 틀린 자리
+    const stale = project(opened.region, opened.frame, at);
+    expect(Math.hypot(stale.x - next.x, stale.y - next.y)).toBeGreaterThan(1);
+    await act(async () => {
+      fireEvent(pickMap() as never, 'longPress', { nativeEvent: { coordinate: at } });
+    });
+    expect(tags()).toHaveLength(0); // 확정 전엔 새 자리를 계산하지 않는다
+    await act(async () => {
+      answer(boundsOf(truth));
+    });
+    expectTagAt('top', next, truth, closed);
+  });
+
+  test('T15_S30_답이_오기_전_핀이_그대로면_그린_이름표는_빠지지_않는다(§26_뜻)', async () => {
+    await openThenClose();
+    expect(tags()).toHaveLength(1);
+    expect(tagText(tags()[0])).toBe(NAME);
+  });
+});
