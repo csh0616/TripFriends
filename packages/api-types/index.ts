@@ -1019,6 +1019,10 @@ export interface components {
             item: components["schemas"]["NowCourseItem"];
             /** Ends In Min */
             ends_in_min: number | null;
+            /** Can Confirm Hours */
+            can_confirm_hours: boolean;
+            /** Place Map Url */
+            place_map_url: string | null;
         };
         /** NowCardT02 */
         NowCardT02: {
@@ -1036,6 +1040,10 @@ export interface components {
             travel_min: number;
             /** Map Url */
             map_url: string | null;
+            /** Can Confirm Hours */
+            can_confirm_hours: boolean;
+            /** Place Map Url */
+            place_map_url: string | null;
         };
         /** NowCardT03 */
         NowCardT03: {
@@ -1106,6 +1114,10 @@ export interface components {
             leave_by: string;
             /** Leave In Min */
             leave_in_min: number;
+            /** Can Confirm Hours */
+            can_confirm_hours: boolean;
+            /** Place Map Url */
+            place_map_url: string | null;
         };
         /** NowCardT08 */
         NowCardT08: {

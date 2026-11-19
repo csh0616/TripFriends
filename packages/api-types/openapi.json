@@ -3743,12 +3743,29 @@
               }
             ],
             "title": "Ends In Min"
+          },
+          "can_confirm_hours": {
+            "type": "boolean",
+            "title": "Can Confirm Hours"
+          },
+          "place_map_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Map Url"
           }
         },
         "type": "object",
         "required": [
           "item",
-          "ends_in_min"
+          "ends_in_min",
+          "can_confirm_hours",
+          "place_map_url"
         ],
         "title": "NowCardT01"
       },
@@ -3785,6 +3802,21 @@
               }
             ],
             "title": "Map Url"
+          },
+          "can_confirm_hours": {
+            "type": "boolean",
+            "title": "Can Confirm Hours"
+          },
+          "place_map_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Map Url"
           }
         },
         "type": "object",
@@ -3793,7 +3825,9 @@
           "leave_at",
           "leave_in_min",
           "travel_min",
-          "map_url"
+          "map_url",
+          "can_confirm_hours",
+          "place_map_url"
         ],
         "title": "NowCardT02"
       },
@@ -3944,13 +3978,30 @@
           "leave_in_min": {
             "type": "integer",
             "title": "Leave In Min"
+          },
+          "can_confirm_hours": {
+            "type": "boolean",
+            "title": "Can Confirm Hours"
+          },
+          "place_map_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place Map Url"
           }
         },
         "type": "object",
         "required": [
           "fixed",
           "leave_by",
-          "leave_in_min"
+          "leave_in_min",
+          "can_confirm_hours",
+          "place_map_url"
         ],
         "title": "NowCardT07"
       },
