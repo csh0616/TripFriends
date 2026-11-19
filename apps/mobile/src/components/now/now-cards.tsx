@@ -49,7 +49,17 @@ function FactChip({ facts, words = 'short', onOpen }: { facts: NowCourseItem['fa
  * kind = 누른 카드(T-01 지금 장소 'now' · T-02 다음 장소 'next' · T-07 고정 일정 'fixed') · seq(T-02 부제 "다음 장소 · N번") · placeId ·
  * canConfirm(§30 can_confirm_hours = T-05가 그 장소로 뜨는 때) · mapUrl(§30 place_map_url)
  */
-export type ChipPlace = { kind: 'now' | 'next' | 'fixed'; name: string; seq: number | null; facts: NowFact[]; placeId: string | null; canConfirm: boolean; mapUrl: string | null };
+export type ChipPlace = {
+  kind: 'now' | 'next' | 'fixed';
+  name: string;
+  seq: number | null;
+  facts: NowFact[];
+  placeId: string | null;
+  canConfirm: boolean;
+  mapUrl: string | null;
+  /** §32: 그 장소가 고정 일정(T-02 next_item.is_fixed, T-07은 늘). 고정 일정은 영업 확인 대상이 아니라 쌍 · 질문 · 창 밖 안내 모두 없다 (§16-4 · TASK-008 §14) */
+  isFixed: boolean;
+};
 
 /** TASK-015 §27 칩 ㉠ (task-014-design §10-1 "라벨 줄 24 | 라벨 + 오른쪽 칩"): 라벨 줄 오른쪽 끝에 긴 칩. 이름이 길어도 칩이 밀리거나 이름을 자르지 않는다 */
 function LabelRow({ children, place, onChip }: { children: ReactNode; place: ChipPlace; onChip?: (place: ChipPlace) => void }) {
@@ -96,8 +106,8 @@ export function ChipSheet({
   const mapUrl = place.mapUrl;
   const next = place.kind === 'next';
   // 쌍은 서버가 "지금 확인 가능"이라 할 때만(서버는 다음 장소 · 창 안에서만 true, §30 · §16-4). 창 밖 안내는 다음 장소(T-02)에서만
-  const pair = place.canConfirm && placeId !== null;
-  const hint = next && !place.canConfirm;
+  const pair = place.canConfirm && placeId !== null && !place.isFixed;
+  const hint = next && !place.canConfirm && !place.isFixed;
   const source = fact ? `${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${monthDay(fact.checked_at)}` : '확인한 적 없음'}` : '출처 없음 · 확인한 적 없음';
   return (
     <SheetFrame testID="chip-sheet" scrimTestID="chip-sheet-scrim" scrimLabel="닫기" onScrim={onClose} dialogLabel="영업시간 확인">
@@ -329,7 +339,16 @@ export function NowCardView({
       case 'T-01':
         return (
           <Shell id="card-T-01" main={main}>
-            <LabelRow place={{ kind: 'now', name: card.item.name, seq: card.item.seq, facts: card.item.facts, placeId: card.item.place_id, canConfirm: card.can_confirm_hours, mapUrl: card.place_map_url }} onChip={onChip}>
+            <LabelRow place={{
+                kind: 'now',
+                name: card.item.name,
+                seq: card.item.seq,
+                facts: card.item.facts,
+                placeId: card.item.place_id,
+                canConfirm: card.can_confirm_hours,
+                mapUrl: card.place_map_url,
+                isFixed: card.item.is_fixed,
+              }} onChip={onChip}>
               <Text style={text('label', 'muted')}>지금 할 일</Text>
             </LabelRow>
             <Text style={text('title')}>{card.item.name}</Text>
@@ -360,6 +379,7 @@ export function NowCardView({
                 placeId: card.next_item.place_id,
                 canConfirm: card.can_confirm_hours,
                 mapUrl: card.place_map_url,
+                isFixed: card.next_item.is_fixed,
               }}
               onChip={onChip}
             >
@@ -475,7 +495,7 @@ export function NowCardView({
         // TASK-015 §24 2(보드 ①-30대로): 자물쇠 + "고정 일정 · 곧 출발" · 제목 · 장소 줄 "{장소} {시작} 시작" · "N분 뒤에 출발해"(0분이면 "지금 출발해") · "{시각} 출발". 진행 막대 없음
         return (
           <Shell id="card-T-07" main={main}>
-            <LabelRow place={{ kind: 'fixed', name: card.fixed.name, seq: null, facts: card.fixed.facts, placeId: null, canConfirm: card.can_confirm_hours, mapUrl: card.place_map_url }} onChip={onChip}>
+            <LabelRow place={{ kind: 'fixed', name: card.fixed.name, seq: null, facts: card.fixed.facts, placeId: null, canConfirm: card.can_confirm_hours, mapUrl: card.place_map_url, isFixed: true }} onChip={onChip}>
               <LockIcon color={color.muted} size={layout.factIcon} />
               <Text style={text('label', 'muted')}>고정 일정 · 곧 출발</Text>
             </LabelRow>
