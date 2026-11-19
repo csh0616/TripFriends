@@ -6,7 +6,7 @@ import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { MonoText } from '@/components/trips/parts';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
-import { LockIcon } from '@/components/planning/icons';
+import { ExternalIcon, LockIcon } from '@/components/planning/icons';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { HoursChipView, StatusChip, type ChipWords } from '@/components/planning/status-chip';
@@ -18,7 +18,7 @@ import type { NowCard, NowCourseItem, NowFact, NowProposal, NowT06Proposal } fro
 import { hoursView, todayHoursText } from '@/lib/today-hours-text';
 import { hoursRangeText } from '@/planning/format';
 import { layout } from '@/planning/layout';
-import { color, googleText, radius, space, text } from '@/planning/theme';
+import { color, control, fit, fitText, googleText, radius, space, text } from '@/planning/theme';
 
 const ALWAYS_OPEN_TEXT = '늘 열려 있어';
 
@@ -73,6 +73,13 @@ function LabelRow({ children, place, onChip }: { children: ReactNode; place: Chi
 }
 
 const CHIP_SHEET_QUESTION = '가기 전에 열었는지 볼래?'; // T-05와 같은 문구
+const SHEET_FACT = fit['sheet-confirm']; // sheet-fact는 sheet-confirm 틀 그대로 (§16-3): 장소 이름 17/24·700, 글 14/20
+
+/**
+ * §32: 칩 시트 출처 줄의 출처 글. serper는 "검색 결과"만 — 공통 글 "검색 결과 · 미확인"의 "미확인"은 바로 위 사실 줄 칩과 겹친다(보드 ③-T15d).
+ * 칩 시트 출처 줄에서만 바꾼다(T-05 사실 줄 · 다른 자리는 그대로)
+ */
+const chipSourceLabel = (sourceType: string): string => (sourceType === 'serper' ? '검색 결과' : sourceLabel(sourceType));
 const CHIP_SHEET_HINT = '출발 30분 전부터 [열었어] [닫혔어]로 알려 줄 수 있어';
 
 /** "2026-11-01T09:00…" -> "11월 1일" (task-015-design §16-3 출처 줄 "확인: {월 일}") */
@@ -108,14 +115,19 @@ export function ChipSheet({
   // 쌍은 서버가 "지금 확인 가능"이라 할 때만(서버는 다음 장소 · 창 안에서만 true, §30 · §16-4). 창 밖 안내는 다음 장소(T-02)에서만
   const pair = place.canConfirm && placeId !== null && !place.isFixed;
   const hint = next && !place.canConfirm && !place.isFixed;
-  const source = fact ? `${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${monthDay(fact.checked_at)}` : '확인한 적 없음'}` : '출처 없음 · 확인한 적 없음';
+  const source = fact ? `${chipSourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${monthDay(fact.checked_at)}` : '확인한 적 없음'}` : '출처 없음 · 확인한 적 없음';
   return (
     <SheetFrame testID="chip-sheet" scrimTestID="chip-sheet-scrim" scrimLabel="닫기" onScrim={onClose} dialogLabel="영업시간 확인">
-      <Text numberOfLines={1} style={text('heading')}>
+      <Text numberOfLines={1} style={fitText(SHEET_FACT)}>
         {place.name}
       </Text>
-      {next && place.seq !== null ? (
-        // 부제 "다음 장소 · 3번" (번호만 DM Mono, §16-3)
+      {/* §32 · §33 부제 우선순위: 고정 일정 > 지금 있는 곳 > 다음 장소 · N번 (T-02에서 눌러도 그 장소가 고정 일정이면 "고정 일정") */}
+      {place.isFixed ? (
+        <Text style={text('caption', 'muted')}>고정 일정</Text>
+      ) : place.kind === 'now' ? (
+        <Text style={text('caption', 'muted')}>지금 있는 곳</Text>
+      ) : next && place.seq !== null ? (
+        // "다음 장소 · 3번" (번호만 DM Mono, §16-3)
         <View style={styles.subtitleRow}>
           <Text style={text('caption', 'muted')}>다음 장소 · </Text>
           <Text style={text('num-sm', 'muted')}>{String(place.seq)}</Text>
@@ -136,18 +148,22 @@ export function ChipSheet({
       {/* §11 G1: Google 출처 글자는 Roboto 400 (src-google). 번역하지 않는다 */}
       <Text style={fact?.source_type === 'google' ? googleText : text('caption', 'muted')}>{source}</Text>
       {mapUrl !== null ? (
-        <SecondaryButton
-          small
+        // §16-3 링크: 높이 44 · 14/20·600 ink 밑줄 + 바깥 화살표 18 · 투명 바탕 (T-05와 같은 글)
+        <Pressable
           testID="chip-sheet-map-link"
-          label="구글 지도에서 보기"
+          accessibilityRole="link"
           onPress={() => {
             Linking.openURL(mapUrl).catch(onOpenFailed);
           }}
-        />
+          style={styles.sheetLink}
+        >
+          <Text style={[fitText({ ...SHEET_FACT.note, weight: 600 }), styles.underline]}>구글 지도에서 보기</Text>
+          <ExternalIcon color={color.ink} size={layout.sheetLinkIcon} />
+        </Pressable>
       ) : null}
       {pair ? (
         <>
-          <Text style={[text('body'), styles.chipQuestion]}>{CHIP_SHEET_QUESTION}</Text>
+          <Text style={[fitText({ size: text('body').fontSize as number, lineHeight: text('body').lineHeight as number, weight: 600 }), styles.chipQuestion]}>{CHIP_SHEET_QUESTION}</Text>
           <View style={styles.pair}>
             <View style={styles.grow}>
               <SecondaryButton testID="visit-open" label="열었어" disabled={busy} onPress={() => onVisit(placeId, true)} />
@@ -164,9 +180,10 @@ export function ChipSheet({
           <Text style={[text('caption', 'muted'), styles.grow]}>{CHIP_SHEET_HINT}</Text>
         </View>
       ) : null}
-      <View style={sheetStyles.buttons}>
-        <SecondaryButton testID="chip-sheet-close" label="닫기" onPress={onClose} />
-      </View>
+      {/* §16-3 [닫기]: 높이 44 · 투명 바탕 · 14/20·600 (sheet-confirm note 색) */}
+      <Pressable testID="chip-sheet-close" accessibilityRole="button" onPress={onClose} style={styles.sheetClose}>
+        <Text style={fitText({ ...SHEET_FACT.note, weight: 600 })}>닫기</Text>
+      </Pressable>
     </SheetFrame>
   );
 }
@@ -576,6 +593,9 @@ const styles = StyleSheet.create({
   chipFactRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], marginTop: space['space-3'] },
   chipQuestion: { marginTop: space['space-2'] },
   subtitleRow: { flexDirection: 'row', alignItems: 'baseline' },
+  sheetLink: { minHeight: control['touch-min'], flexDirection: 'row', alignItems: 'center', gap: space['space-1'], alignSelf: 'flex-start', marginTop: space['space-1'] },
+  underline: { textDecorationLine: 'underline' },
+  sheetClose: { minHeight: control['touch-min'], alignItems: 'center', justifyContent: 'center', marginTop: space['space-1'] },
   alwaysOpen: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },
   big: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },

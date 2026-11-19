@@ -51,3 +51,5 @@ export const PauseIcon = (p: Props) => <Icon {...p} d="M9 5.5v13M15 5.5v13" />;
 
 // TASK-015 §D 코스 크게 보기 알약
 export const ExpandIcon = (p: Props) => <Icon {...p} d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />;
+/** 바깥으로 나가는 링크 화살표 (TASK-015 §32 칩 시트 [구글 지도에서 보기], task-015-design §16-3) */
+export const ExternalIcon = (p: Props) => <Icon {...p} d="M14 5h5v5M19 5l-8 8M17 13.5V19H5V7h5.5" />;

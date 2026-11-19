@@ -188,6 +188,7 @@ export const layout = {
   expandPill: 24, // 크게 보기 알약 높이 = 요약 줄 높이 (bg-2, 줄 안). 눌러지는 영역은 도식 + 요약 줄
   mapOffCircle: 56, // a4 지도 꺼짐 원
   pinBadgeRoom: 50, // TASK-015 §31: 배지 (+15, ∓14) · 지름 20이 들어가는 핀 칸 (가운데에서 25 = 15 + 10)
+  sheetLinkIcon: 18, // TASK-015 §32 칩 시트 링크 바깥 화살표 (task-015-design §16-3)
   readyMark: 1, // TASK-015 §29: a2 지도 준비 표시(보이지 않는 1pt, Maestro가 기다리는 상태 표시)
   scaleWidth: 96, // map-scale 폭
   scaleHeight: 30, // map-scale 높이
