@@ -80,8 +80,8 @@ const CHIP_SHEET_QUESTION = '가기 전에 열었는지 볼래?'; // T-05와 같
 const SHEET_FACT = fit['sheet-confirm']; // sheet-fact는 sheet-confirm 틀 그대로 (§16-3): 장소 이름 17/24·700, 글 14/20
 
 /**
- * §32: 칩 시트 출처 줄의 출처 글. serper는 "검색 결과"만 — 공통 글 "검색 결과 · 미확인"의 "미확인"은 바로 위 사실 줄 칩과 겹친다(보드 ③-T15d).
- * 칩 시트 출처 줄에서만 바꾼다(T-05 사실 줄 · 다른 자리는 그대로)
+ * §32 · §34: 칩이 옆에 있는 줄(칩 시트 출처 줄 · T-05 사실 줄)의 출처 글. serper는 "검색 결과"만 — 공통 글 "검색 결과 · 미확인"의 "미확인"은
+ * 옆 칩과 겹친다(task-015-design §18-1 ②). 칩이 옆에 없는 줄(후보 카드 등)은 공통 글 그대로 (ADR-015 §3-5)
  */
 const chipSourceLabel = (sourceType: string): string => (sourceType === 'serper' ? '검색 결과' : sourceLabel(sourceType));
 const CHIP_SHEET_HINT = '출발 30분 전부터 [열었어] [닫혔어]로 알려 줄 수 있어';
@@ -205,7 +205,7 @@ const changeLabel = (minutes: number): string => (minutes < 0 ? `\u2212${-minute
 /** T-05: 사실마다 상태 칩 + 출처 + 확인 날짜. 서버 값만 쓴다 (영업 여부를 지어내지 않는다) */
 function FactLine({ fact }: { fact: NowFact }) {
   const shown = todayHoursText([fact]);
-  const checkedLine = `${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`;
+  const checkedLine = `${chipSourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}`;
   return (
     <View style={styles.titleRow}>
       <StatusChip status={fact.status} />
