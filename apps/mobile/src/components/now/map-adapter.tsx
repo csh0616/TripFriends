@@ -11,7 +11,7 @@ import { fitTargetRegion, metersPerPoint as metersPerPointOf, project, scaleBar,
 import type { NowPin } from '@/lib/now-api';
 import { sameRegionOnScreen, shownRegion } from '@/lib/region-match';
 import { googleLogoRect } from '@/lib/map-logo';
-import { BADGE_OFFSET, BADGE_SIZE, resolvePinOverlap, type Badge, type PinOverlapResult, type Rect, type ScreenPin } from '@/lib/pin-overlap';
+import { BADGE_DX, BADGE_DY, BADGE_SIZE, resolvePinOverlap, type Badge, type PinOverlapResult, type Rect, type ScreenPin } from '@/lib/pin-overlap';
 import { layout } from '@/planning/layout';
 import tokens from 'design-tokens';
 import { color, control, motion, radius, shadow, space, text } from '@/planning/theme';
@@ -91,12 +91,17 @@ const labelWidthOf = (name: string): number =>
   Math.min(layout.pinBubbleMax, [...name].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 0x7f ? 12 : 7), 0) + space['space-2'] * 2);
 
 const BADGE = BADGE_SIZE; // 묶음 +N · 집 배지 지름 20 (task-014-design §11-3, TASK-015 §27: 옛 18)
-/** 배지 가운데 = 핀 가운데 + (10, −10) (오른쪽 아래는 + (10, +10)). 핀 누르는 칸(44) 안에서 잰 자리 — 겹침 계산(덩어리)과 같은 값 */
-const BADGE_EDGE = control['touch-min'] / 2 - BADGE_OFFSET - BADGE / 2;
+/**
+ * TASK-015 §31 (task-015-design §17-1): 배지 가운데 = 핀 가운데 + (15, −14), 집 + N 둘 다면 +N은 (15, +14) — 겹침 계산(덩어리)과 같은 값.
+ * 배지가 누르는 칸(44) 밖으로 나가서, 배지가 있는 핀은 칸을 layout.pinBadgeRoom(50)으로 넓힌다(지도 마커 그림이 칸 밖을 자르지 않게). 가운데는 그대로
+ */
+const BADGE_ROOM = layout.pinBadgeRoom;
+const BADGE_EDGE_X = BADGE_ROOM / 2 - BADGE_DX - BADGE / 2;
+const BADGE_EDGE_Y = BADGE_ROOM / 2 - BADGE_DY - BADGE / 2;
 
 /** 핀 모서리 배지: +N (ink 면 · 흰 글자) 또는 집 (흰 면 · ink 테두리) */
 function PinBadge({ badge }: { badge: Badge }) {
-  const place = badge.corner === 'top-right' ? { top: BADGE_EDGE, right: BADGE_EDGE } : { bottom: BADGE_EDGE, right: BADGE_EDGE };
+  const place = badge.corner === 'top-right' ? { top: BADGE_EDGE_Y, right: BADGE_EDGE_X } : { bottom: BADGE_EDGE_Y, right: BADGE_EDGE_X };
   return (
     <View testID={badge.type === 'plus' ? 'pin-badge-plus' : 'pin-badge-home'} style={[styles.badge, badge.type === 'home' && styles.badgeHome, place]}>
       {badge.type === 'plus' ? <Text style={text('label', 'surface')}>{`+${badge.count}`}</Text> : <HouseGlyph tint={color.ink} scale={0.6} />}
@@ -127,7 +132,7 @@ function NumberPin({ pin, rules }: { pin: NowPin; rules?: Rules }) {
             </Text>
           </View>
         ) : null}
-        <View style={styles.pinTouch} accessible={rules !== undefined} accessibilityLabel={rules?.a11yLabel}>
+        <View style={[styles.pinTouch, rules && rules.badges.length > 0 && styles.pinBadgeRoom]} accessible={rules !== undefined} accessibilityLabel={rules?.a11yLabel}>
           <PinFace pin={pin} />
           {rules ? rules.badges.map((badge) => <PinBadge key={badge.type} badge={badge} />) : null}
         </View>
@@ -142,7 +147,7 @@ function HomePin({ coordinate, shape = 'home', badges = [], a11yLabel }: { coord
   const tracking = useTrackingBriefly(`home-${shape}`);
   return (
     <Marker testID="map-home" coordinate={coordinate} anchor={CENTER} tracksViewChanges={tracking} zIndex={Z_HOME}>
-      <View style={styles.pinTouch} accessible={a11yLabel !== undefined} accessibilityLabel={a11yLabel}>
+      <View style={[styles.pinTouch, badges.length > 0 && styles.pinBadgeRoom]} accessible={a11yLabel !== undefined} accessibilityLabel={a11yLabel}>
         {shape === 'now' ? (
           // 숙소에 머무는 동안: "지금 핀" 모양 32 (ink 면 · 흰 테두리 3 · 흰 집)
           <View style={styles.pickFace}>
@@ -383,10 +388,13 @@ export function PickMap({
   );
   // TASK-015 §30 중 1: mapPadding이 바뀌면(키보드 열림 · 닫힘) 받아 둔 영역은 "확정 전". 영역 알림을 기다리지 않고 지도에 지금 경계를 직접 물어 다시 계산한다
   // (키보드를 닫으면 알림이 안 오는 때가 있었다). 답 전에는: 핀 그대로면 그린 이름표 유지, 새로 찍은 핀은 이름표 없음 (PickTag)
-  const paddingSeen = useRef(mapPadding);
+  // §31 중-9 (task-015-design §17-3): 여백이 그대로여도 시트 높이(잰 pick-panel) · 키보드 높이가 바뀌면(= 이름표가 피할 판이 바뀜) 똑같이 다시 묻는다
+  const panelsKey = panels.map((rect) => `${Math.round(rect.x)},${Math.round(rect.y)},${Math.round(rect.width)},${Math.round(rect.height)}`).join('|');
+  const layoutKey = `${mapPadding.top},${mapPadding.bottom},${mapPadding.left},${mapPadding.right}|${panelsKey}`;
+  const layoutSeen = useRef(layoutKey);
   useEffect(() => {
-    if (paddingSeen.current === mapPadding) return;
-    paddingSeen.current = mapPadding;
+    if (layoutSeen.current === layoutKey) return;
+    layoutSeen.current = layoutKey;
     tagRef.current?.unsettle();
     // 지금 한 번 묻고, 지도가 새 여백을 그린 뒤(두 프레임 뒤) 한 번 더 묻는다 — 바로 물으면 지도가 아직 옛 여백으로 답할 때가 있다
     // (11-19 시뮬레이터: 여백이 바뀌고 14ms 뒤 온 답이 옛 화면 기준이라 핀 자리가 약 60pt 어긋남). 나중 답이 이긴다
@@ -410,7 +418,7 @@ export function PickMap({
       frame = requestAnimationFrame(ask);
     });
     return () => cancelAnimationFrame(frame);
-  }, [mapPadding, settleWith]);
+  }, [layoutKey, settleWith]);
   return (
     <MapView
       ref={map}
@@ -847,6 +855,7 @@ const styles = StyleSheet.create({
   },
   pinColumn: { alignItems: 'center' },
   pinTouch: { width: control['touch-min'], height: control['touch-min'], alignItems: 'center', justifyContent: 'center' },
+  pinBadgeRoom: { width: BADGE_ROOM, height: BADGE_ROOM },
   faceDone: {
     width: layout.pinDone,
     height: layout.pinDone,

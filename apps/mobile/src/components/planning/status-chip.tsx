@@ -25,18 +25,30 @@ const LONG_LABEL: Record<Status, string> = { confirmed: '영업시간 확인됨'
 export type ChipWords = 'short' | 'long' | 'row';
 const wordsOf = (status: Status, words: ChipWords): string => (words === 'long' || (words === 'row' && status === 'unknown') ? LONG_LABEL[status] : LOOK[status].label);
 
-/** onOpen이 있으면 미확인 · 모름 칩만 누르는 버튼(보이는 24 · 누르는 44, task-014-design §10-1). 확인됨 칩은 버튼이 아니다 (§15-5) */
+/**
+ * onOpen이 있으면 미확인 · 모름 칩만 누르는 버튼(보이는 24 · 누르는 44, task-014-design §10-1). 확인됨 칩은 버튼이 아니다 (§15-5).
+ * TASK-015 §31 (task-015-design §16-1 · §16-6): 버튼 칩은 글 뒤에 "›"를 붙이고, 화면 읽기 이름은 "{칩 글}, 눌러서 확인하기"
+ */
 export function StatusChip({ status, words = 'short', onOpen }: { status: Status; words?: ChipWords; onOpen?: () => void }) {
   const look = LOOK[status];
+  const label = wordsOf(status, words);
+  const button = onOpen !== undefined && status !== 'confirmed';
   const chip = (
-    <View style={[styles.chip, { backgroundColor: color[look.bg] }]}>
-      <Text style={text('label', look.fg)}>{wordsOf(status, words)}</Text>
+    <View style={[styles.chip, button && styles.chipWithMark, { backgroundColor: color[look.bg] }]}>
+      <Text style={text('label', look.fg)}>{label}</Text>
+      {button ? <Text style={[text('label', look.fg), styles.mark]}>›</Text> : null}
     </View>
   );
-  if (!onOpen || status === 'confirmed') return chip;
+  if (!button) return chip;
   const slop = Math.max(0, (control['touch-min'] - fit['fact-line'].height) / 2);
   return (
-    <Pressable accessibilityRole="button" accessibilityHint="출처와 확인 날짜를 보여 줘" hitSlop={{ top: slop, bottom: slop, left: 0, right: 0 }} onPress={onOpen} style={styles.chipHit}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${label}, 눌러서 확인하기`}
+      hitSlop={{ top: slop, bottom: slop, left: 0, right: 0 }}
+      onPress={onOpen}
+      style={styles.chipHit}
+    >
       {chip}
     </Pressable>
   );
@@ -57,6 +69,9 @@ const styles = StyleSheet.create({
   },
   // 누르는 칩: 보이는 24 + 위아래 hitSlop = 44, 폭도 44 이상 (§10-1)
   chipHit: { minHeight: fit['fact-line'].height, minWidth: control['touch-min'], justifyContent: 'center' },
+  // › 자리: 칩 오른쪽 안쪽에 둔다 (글과 같은 줄, 글 뒤 4)
+  chipWithMark: { paddingRight: space['space-2'] + space['space-1'] + space['space-2'] },
+  mark: { position: 'absolute', right: space['space-2'], top: 0, bottom: 0, textAlignVertical: 'center', lineHeight: fit['fact-line'].height },
   chip: {
     minHeight: fit['fact-line'].height, // 사실 줄 칩 24
     justifyContent: 'center',

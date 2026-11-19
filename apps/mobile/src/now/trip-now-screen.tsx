@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedReaction, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
@@ -597,21 +597,30 @@ export function TripNowScreen({
     void decide(dismissRequest(eventId), false);
   };
   // T-05 [열었어]/[닫혔어]: 다시 보내지 않는다. 끊기거나 409면 GET /now로 지금 상태를 받는다 (§6)
-  const visit = (placeId: string, wasOpen: boolean) => {
+  /** T-05 [열었어][닫혔어] · §30 칩 시트 같은 요청. 끝나면(답 · 실패 모두) 풀리는 약속을 돌려준다 */
+  const visit = async (placeId: string, wasOpen: boolean): Promise<void> => {
     if (rehearsal) {
       if (wasOpen) rehearse({ type: 'visit_check', place_id: placeId, day_id: record.day_id, at: currentAt.current, was_open: true });
-      else void rehearseClosed(placeId);
+      else await rehearseClosed(placeId);
       return;
     }
-    void decide(visitCheckRequest(placeId, { day_id: record.day_id, at: currentAt.current, was_open: wasOpen }), false);
+    await decide(visitCheckRequest(placeId, { day_id: record.day_id, at: currentAt.current, was_open: wasOpen }), false);
   };
   const lateAt = view?.status === 'delayed' ? view.at : null;
-  // TASK-015 §30: 칩 시트 [열었어][닫혔어] = T-05와 같은 요청 한 번. 누른 뒤 시트를 닫을지는 결정권자 답 대기 — 지금은 T-05처럼
-  // (답이 오면 카드가 바뀌고 시트는 그 자리에서 닫는다) 여기 한 곳에서만 정한다
-  const CHIP_SHEET_CLOSES_ON_VISIT = true;
-  const chipVisit = (placeId: string, wasOpen: boolean) => {
-    visit(placeId, wasOpen);
-    if (CHIP_SHEET_CLOSES_ON_VISIT) setChipPlace(null);
+  // TASK-015 §30 · §31 (task-015-design §16-5): 칩 시트 [열었어][닫혔어] = T-05와 같은 요청 한 번. 요청 중엔 두 버튼 비활성 · 다시 안 보냄,
+  // 답이 오면(끊겨 지금 상태를 다시 받은 뒤도 같다, TASK-008 §6) 시트를 닫는다 — [열었어]면 칩이 확인됨으로, [닫혔어]면 T-06 카드가 바탕에 보인다
+  const [chipBusy, setChipBusy] = useState(false);
+  const chipVisit = async (placeId: string, wasOpen: boolean) => {
+    if (chipBusy) return;
+    setChipBusy(true);
+    try {
+      await visit(placeId, wasOpen);
+    } finally {
+      if (alive.current) {
+        setChipBusy(false);
+        setChipPlace(null);
+      }
+    }
   };
 
   const showToast = () => {
@@ -666,6 +675,22 @@ export function TripNowScreen({
   if (fadeFrom.shown !== mainKey) setFadeFrom({ shown: mainKey, fade: fadeFrom.shown !== null && mainKey !== null });
   const mainEntering = fadeFrom.fade && motionNow.fadeMs > 0 ? FadeIn.duration(motionNow.fadeMs) : undefined;
   const sheetTop = useSharedValue(0);
+  // §31 하-13: 늘어나는 끌기를 끄면(enableOverDrag false) 끌기가 단 위치에 딱 멈출 때 라이브러리가 움직임을 건너뛰어 onChange가 오지 않는다
+  // (gorhom animateToPosition: 지금 위치 = 목표면 바로 끝). 그래서 시트 단 값(animatedIndex)이 정수 단에 닿을 때도 단을 정한다
+  const sheetIndexValue = useSharedValue(1);
+  const settleIndex = useCallback((index: number) => {
+    setSheetIndex(index);
+    setSheetGoal(index);
+  }, []);
+  useAnimatedReaction(
+    () => {
+      const near = Math.round(sheetIndexValue.value);
+      return Math.abs(sheetIndexValue.value - near) < 0.001 ? near : null;
+    },
+    (index, previous) => {
+      if (index !== null && index >= 0 && index !== previous) scheduleOnRN(settleIndex, index);
+    },
+  );
   const gap = space['space-3'];
   // 떠 있는 줄은 시트 윗면을 따라가되, 위 끝이 상단 줄(SOS가 있는 줄) 아래로 올라가지 못하게 막는다 (시트 높게에서 SOS와 겹침 방지)
   const topLimit = insets.top + rehTop + layout.header;
@@ -870,10 +895,14 @@ export function TripNowScreen({
           }}
           onAnimate={(_from, to) => setSheetGoal(to)}
           animatedPosition={sheetTop}
+          animatedIndex={sheetIndexValue}
           // §26 · §27: 접힌 단 높이가 바뀌면(메인 카드가 바뀜) 시트가 sheetMotion 시간(250ms) 동안 부드럽게 옮겨 간다. 접힌 단에 있을 때만 보이는 움직임이다 (다른 단의 높이는 그대로라)
           animationConfigs={sheetAnimation}
           gestureEventsHandlersHook={sheetGestures}
           enableDynamicSizing={false}
+          // TASK-015 §31 하-13 (11-19 시뮬레이터 진단): 접힌 단 아래로 끌면 라이브러리 기본 "늘어나는 끌기"(overDrag)로 시트가 접힌 높이보다 내려갔다가
+          // 손을 떼면 되돌아왔다(접힌 단 값은 그대로 169 — 계산이 아니라 끌기). 끄면 접힌 단 · 맨 위에서 멈춘다 → 접힘 밖 줄이 경계에 걸치지도 않는다
+          enableOverDrag={false}
           style={shadow.sheet}
           backgroundStyle={styles.sheetBackground}
           handleIndicatorStyle={styles.handle}
@@ -939,7 +968,7 @@ export function TripNowScreen({
       {profileOpen ? (
         <ProfileMenu restartLabel={live ? '날짜 목록으로' : '처음부터 다시'} onRestart={onExit} onClose={() => setProfileOpen(false)} />
       ) : null}
-      {chipPlace ? <ChipSheet place={chipPlace} onClose={() => setChipPlace(null)} onVisit={chipVisit} onOpenFailed={showToast} /> : null}
+      {chipPlace ? <ChipSheet place={chipPlace} busy={chipBusy} onClose={() => setChipPlace(null)} onVisit={(id, open) => void chipVisit(id, open)} onOpenFailed={showToast} /> : null}
       {sosOpen ? <SosSheet located={live ? location.spot !== null : position !== null} onClose={() => setSosOpen(false)} /> : null}
       {location.sheet === 'intro' ? <LocationIntroSheet onTurnOn={() => void location.turnOn()} onLater={location.later} /> : null}
       {location.sheet === 'off' ? <LocationOffSheet onSettings={location.openSettings} onClose={location.closeSheet} /> : null}

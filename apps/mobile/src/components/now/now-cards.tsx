@@ -45,10 +45,11 @@ function FactChip({ facts, words = 'short', onOpen }: { facts: NowCourseItem['fa
 }
 
 /**
- * 칩 시트에 보일 장소 (TASK-015 §29: 미확인 · 모름 칩을 누르면). §30: placeId · canConfirm(서버 can_confirm_hours = T-05가 그 장소로 뜨는 때) ·
- * mapUrl(서버 place_map_url) — 서버 값 그대로. placeId가 없으면(T-07 고정 일정) 확인 버튼을 두지 않는다
+ * 칩 시트에 보일 장소 (TASK-015 §29: 미확인 · 모름 칩을 누르면). 서버 값 그대로:
+ * kind = 누른 카드(T-01 지금 장소 'now' · T-02 다음 장소 'next' · T-07 고정 일정 'fixed') · seq(T-02 부제 "다음 장소 · N번") · placeId ·
+ * canConfirm(§30 can_confirm_hours = T-05가 그 장소로 뜨는 때) · mapUrl(§30 place_map_url)
  */
-export type ChipPlace = { name: string; facts: NowFact[]; placeId: string | null; canConfirm: boolean; mapUrl: string | null };
+export type ChipPlace = { kind: 'now' | 'next' | 'fixed'; name: string; seq: number | null; facts: NowFact[]; placeId: string | null; canConfirm: boolean; mapUrl: string | null };
 
 /** TASK-015 §27 칩 ㉠ (task-014-design §10-1 "라벨 줄 24 | 라벨 + 오른쪽 칩"): 라벨 줄 오른쪽 끝에 긴 칩. 이름이 길어도 칩이 밀리거나 이름을 자르지 않는다 */
 function LabelRow({ children, place, onChip }: { children: ReactNode; place: ChipPlace; onChip?: (place: ChipPlace) => void }) {
@@ -61,39 +62,69 @@ function LabelRow({ children, place, onChip }: { children: ReactNode; place: Chi
   );
 }
 
+const CHIP_SHEET_QUESTION = '가기 전에 열었는지 볼래?'; // T-05와 같은 문구
+const CHIP_SHEET_HINT = '출발 30분 전부터 [열었어] [닫혔어]로 알려 줄 수 있어';
+
+/** "2026-11-01T09:00…" -> "11월 1일" (task-015-design §16-3 출처 줄 "확인: {월 일}") */
+const monthDay = (iso: string): string => {
+  const match = /^\d{4}-(\d{2})-(\d{2})/.exec(iso);
+  return match ? `${Number(match[1])}월 ${Number(match[2])}일` : iso;
+};
+
 /**
- * TASK-015 §29 (task-015-design §15-5 제안 · PM 승인): 미확인 · 모름 칩을 누르면 작은 시트 — 장소 이름 · 칩 · 출처 · "확인: 날짜"/"확인한 적 없음" · [닫기].
- * T-05 사실 줄과 같은 내용. 서버에 묻지 않는다. [열었어][닫혔어] · [구글 지도에서 보기]는 응답에 값이 없어 결정권자 답 대기라 넣지 않는다.
- * 보드가 아직 없어 모양은 기존 시트 틀(sheet-confirm)과 카드 글자 토큰으로
+ * TASK-015 §29 · §31 칩 시트 `sheet-fact` (task-015-design §16 보드 ③-T15d1~d3): 장소 이름 · 부제(T-02만 "다음 장소 · N번") · 사실 줄 ·
+ * 출처 한 줄 · [구글 지도에서 보기] · 창 안이면 질문 + [열었어][닫혔어] / T-02 창 밖이면 안내 한 줄 · [닫기].
+ * 모양은 열 때 받은 place 그대로(시트가 떠 있는 동안 창이 열려도 안 바뀜, §16-4). T-01 · T-07 부제는 문서에 없어(결정권자 답 대기) 넣지 않는다.
+ * busy = [열었어][닫혔어] 요청 중(두 버튼 비활성, §16-5). 답이 오면 화면이 시트를 닫는다
  */
 export function ChipSheet({
   place,
+  busy,
   onClose,
   onVisit,
   onOpenFailed,
 }: {
   place: ChipPlace;
+  busy: boolean;
   onClose: () => void;
-  /** §30 [열었어][닫혔어]: T-05와 같은 요청 (화면이 보낸다) */
+  /** [열었어][닫혔어]: T-05와 같은 요청 (화면이 보낸다) */
   onVisit: (placeId: string, wasOpen: boolean) => void;
   onOpenFailed: () => void;
 }) {
+  const fact = place.facts.find((one) => one.field === 'opening_hours') ?? place.facts[0];
   const placeId = place.placeId;
   const mapUrl = place.mapUrl;
-  const fact = place.facts.find((one) => one.field === 'opening_hours') ?? place.facts[0];
+  const next = place.kind === 'next';
+  // 쌍은 서버가 "지금 확인 가능"이라 할 때만(서버는 다음 장소 · 창 안에서만 true, §30 · §16-4). 창 밖 안내는 다음 장소(T-02)에서만
+  const pair = place.canConfirm && placeId !== null;
+  const hint = next && !place.canConfirm;
+  const source = fact ? `${sourceLabel(fact.source_type)} · ${fact.checked_at ? `확인: ${monthDay(fact.checked_at)}` : '확인한 적 없음'}` : '출처 없음 · 확인한 적 없음';
   return (
-    <SheetFrame testID="chip-sheet" scrimTestID="chip-sheet-scrim" scrimLabel="닫기" onScrim={onClose}>
-      <Text style={text('heading')}>{place.name}</Text>
-      {fact ? (
-        <View style={styles.chipFacts}>
-          <View style={styles.titleRow}>
-            <StatusChip status={fact.status} words="long" />
-          </View>
-          {/* §11 G1: Google 출처 글자는 Roboto 400 (src-google). 번역하지 않는다 */}
-          <Text style={fact.source_type === 'google' ? googleText : text('body')}>{sourceLabel(fact.source_type)}</Text>
-          <Text style={text('caption', 'muted')}>{fact.checked_at ? `확인: ${fact.checked_at.slice(0, 10)}` : '확인한 적 없음'}</Text>
+    <SheetFrame testID="chip-sheet" scrimTestID="chip-sheet-scrim" scrimLabel="닫기" onScrim={onClose} dialogLabel="영업시간 확인">
+      <Text numberOfLines={1} style={text('heading')}>
+        {place.name}
+      </Text>
+      {next && place.seq !== null ? (
+        // 부제 "다음 장소 · 3번" (번호만 DM Mono, §16-3)
+        <View style={styles.subtitleRow}>
+          <Text style={text('caption', 'muted')}>다음 장소 · </Text>
+          <Text style={text('num-sm', 'muted')}>{String(place.seq)}</Text>
+          <Text style={text('caption', 'muted')}>번</Text>
         </View>
       ) : null}
+      {/* 사실 줄: 값이 있으면 짧은 칩 + "오늘 시각", 값이 없으면(모름) 긴 칩 하나 (§16-3) */}
+      <View style={styles.chipFactRow}>
+        {fact && fact.value !== null ? (
+          <>
+            <StatusChip status={fact.status} />
+            <MonoText timesOnly value={`오늘 ${hoursRangeText(todayHoursText([fact]).text)}`} base={text('body')} />
+          </>
+        ) : (
+          <StatusChip status={fact ? fact.status : 'unknown'} words="long" />
+        )}
+      </View>
+      {/* §11 G1: Google 출처 글자는 Roboto 400 (src-google). 번역하지 않는다 */}
+      <Text style={fact?.source_type === 'google' ? googleText : text('caption', 'muted')}>{source}</Text>
       {mapUrl !== null ? (
         <SecondaryButton
           small
@@ -104,14 +135,23 @@ export function ChipSheet({
           }}
         />
       ) : null}
-      {place.canConfirm && placeId !== null ? (
-        <View style={styles.pair}>
-          <View style={styles.grow}>
-            <SecondaryButton testID="visit-open" label="열었어" onPress={() => onVisit(placeId, true)} />
+      {pair ? (
+        <>
+          <Text style={[text('body'), styles.chipQuestion]}>{CHIP_SHEET_QUESTION}</Text>
+          <View style={styles.pair}>
+            <View style={styles.grow}>
+              <SecondaryButton testID="visit-open" label="열었어" disabled={busy} onPress={() => onVisit(placeId, true)} />
+            </View>
+            <View style={styles.grow}>
+              <SecondaryButton testID="visit-closed" label="닫혔어" disabled={busy} onPress={() => onVisit(placeId, false)} />
+            </View>
           </View>
-          <View style={styles.grow}>
-            <SecondaryButton testID="visit-closed" label="닫혔어" onPress={() => onVisit(placeId, false)} />
-          </View>
+        </>
+      ) : null}
+      {hint ? (
+        <View style={styles.labelRow}>
+          <LockIcon color={color.muted} size={layout.factIcon} />
+          <Text style={[text('caption', 'muted'), styles.grow]}>{CHIP_SHEET_HINT}</Text>
         </View>
       ) : null}
       <View style={sheetStyles.buttons}>
@@ -289,7 +329,7 @@ export function NowCardView({
       case 'T-01':
         return (
           <Shell id="card-T-01" main={main}>
-            <LabelRow place={{ name: card.item.name, facts: card.item.facts, placeId: card.item.place_id, canConfirm: card.can_confirm_hours, mapUrl: card.place_map_url }} onChip={onChip}>
+            <LabelRow place={{ kind: 'now', name: card.item.name, seq: card.item.seq, facts: card.item.facts, placeId: card.item.place_id, canConfirm: card.can_confirm_hours, mapUrl: card.place_map_url }} onChip={onChip}>
               <Text style={text('label', 'muted')}>지금 할 일</Text>
             </LabelRow>
             <Text style={text('title')}>{card.item.name}</Text>
@@ -312,7 +352,15 @@ export function NowCardView({
         return (
           <Shell id="card-T-02" main={main}>
             <LabelRow
-              place={{ name: card.next_item.name, facts: card.next_item.facts, placeId: card.next_item.place_id, canConfirm: card.can_confirm_hours, mapUrl: card.place_map_url }}
+              place={{
+                kind: 'next',
+                name: card.next_item.name,
+                seq: card.next_item.seq,
+                facts: card.next_item.facts,
+                placeId: card.next_item.place_id,
+                canConfirm: card.can_confirm_hours,
+                mapUrl: card.place_map_url,
+              }}
               onChip={onChip}
             >
               <Text style={text('label', 'muted')}>다음 이동</Text>
@@ -427,7 +475,7 @@ export function NowCardView({
         // TASK-015 §24 2(보드 ①-30대로): 자물쇠 + "고정 일정 · 곧 출발" · 제목 · 장소 줄 "{장소} {시작} 시작" · "N분 뒤에 출발해"(0분이면 "지금 출발해") · "{시각} 출발". 진행 막대 없음
         return (
           <Shell id="card-T-07" main={main}>
-            <LabelRow place={{ name: card.fixed.name, facts: card.fixed.facts, placeId: null, canConfirm: card.can_confirm_hours, mapUrl: card.place_map_url }} onChip={onChip}>
+            <LabelRow place={{ kind: 'fixed', name: card.fixed.name, seq: null, facts: card.fixed.facts, placeId: null, canConfirm: card.can_confirm_hours, mapUrl: card.place_map_url }} onChip={onChip}>
               <LockIcon color={color.muted} size={layout.factIcon} />
               <Text style={text('label', 'muted')}>고정 일정 · 곧 출발</Text>
             </LabelRow>
@@ -505,7 +553,9 @@ const styles = StyleSheet.create({
   thumb: { width: layout.thumbSm, height: layout.thumbSm, borderRadius: radius['r-sm'], overflow: 'hidden' },
   pair: { flexDirection: 'row', gap: space['space-2'] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space['space-2'] },
-  chipFacts: { gap: space['space-2'] },
+  chipFactRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], marginTop: space['space-3'] },
+  chipQuestion: { marginTop: space['space-2'] },
+  subtitleRow: { flexDirection: 'row', alignItems: 'baseline' },
   alwaysOpen: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },
   big: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },

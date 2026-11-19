@@ -13,6 +13,7 @@ export function SheetFrame({
   scrimTestID,
   scrimLabel,
   onScrim,
+  dialogLabel,
   children,
 }: {
   testID: string;
@@ -20,6 +21,8 @@ export function SheetFrame({
   /** 스크림을 눌렀을 때의 뜻 (접근성 이름). onScrim과 함께 */
   scrimLabel?: string;
   onScrim?: () => void;
+  /** 있으면 시트가 대화 상자(aria-modal)이고 이 이름으로 읽힌다 (TASK-015 §31 칩 시트 "영업시간 확인") */
+  dialogLabel?: string;
   children: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
@@ -30,7 +33,13 @@ export function SheetFrame({
       ) : (
         <View testID={scrimTestID} style={styles.scrim} />
       )}
-      <View testID={testID} style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, SHEET.bottom) }]}>
+      <View
+        testID={testID}
+        accessibilityViewIsModal={dialogLabel !== undefined ? true : undefined}
+        aria-modal={dialogLabel !== undefined ? true : undefined}
+        accessibilityLabel={dialogLabel}
+        style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, SHEET.bottom) }]}
+      >
         <View style={styles.handle} />
         {children}
       </View>
