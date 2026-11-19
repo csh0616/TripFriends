@@ -606,6 +606,13 @@ export function TripNowScreen({
     void decide(visitCheckRequest(placeId, { day_id: record.day_id, at: currentAt.current, was_open: wasOpen }), false);
   };
   const lateAt = view?.status === 'delayed' ? view.at : null;
+  // TASK-015 §30: 칩 시트 [열었어][닫혔어] = T-05와 같은 요청 한 번. 누른 뒤 시트를 닫을지는 결정권자 답 대기 — 지금은 T-05처럼
+  // (답이 오면 카드가 바뀌고 시트는 그 자리에서 닫는다) 여기 한 곳에서만 정한다
+  const CHIP_SHEET_CLOSES_ON_VISIT = true;
+  const chipVisit = (placeId: string, wasOpen: boolean) => {
+    visit(placeId, wasOpen);
+    if (CHIP_SHEET_CLOSES_ON_VISIT) setChipPlace(null);
+  };
 
   const showToast = () => {
     setToast(OPEN_FAILED);
@@ -898,9 +905,12 @@ export function TripNowScreen({
                     </View>
                   )}
                 </View>
-                {subCards.map((card, index) => (
-                  <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} rehearsal={rehearsal} onChip={setChipPlace} />
-                ))}
+                {/* §30: 접힌 단(으로 가는 중)이면 보조 카드도 그리지 않는다 — 접힌 경계 아래로 윗부분이 비치지 않게 (§29 이유 줄과 같은 판정) */}
+                {sheetGoal === 0
+                  ? null
+                  : subCards.map((card, index) => (
+                      <NowCardView key={`${card.type}-${index}`} card={card} main={false} onOpenFailed={showToast} chosenId={chosen} onChoose={choose} onDismiss={dismiss} onVisit={visit} lateAt={lateAt} rehearsal={rehearsal} onChip={setChipPlace} />
+                    ))}
               </>
             ) : problem === null ? (
               <ActivityIndicator color={color.muted} />
@@ -929,7 +939,7 @@ export function TripNowScreen({
       {profileOpen ? (
         <ProfileMenu restartLabel={live ? '날짜 목록으로' : '처음부터 다시'} onRestart={onExit} onClose={() => setProfileOpen(false)} />
       ) : null}
-      {chipPlace ? <ChipSheet place={chipPlace} onClose={() => setChipPlace(null)} /> : null}
+      {chipPlace ? <ChipSheet place={chipPlace} onClose={() => setChipPlace(null)} onVisit={chipVisit} onOpenFailed={showToast} /> : null}
       {sosOpen ? <SosSheet located={live ? location.spot !== null : position !== null} onClose={() => setSosOpen(false)} /> : null}
       {location.sheet === 'intro' ? <LocationIntroSheet onTurnOn={() => void location.turnOn()} onLater={location.later} /> : null}
       {location.sheet === 'off' ? <LocationOffSheet onSettings={location.openSettings} onClose={location.closeSheet} /> : null}

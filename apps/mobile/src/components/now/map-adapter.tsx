@@ -364,14 +364,53 @@ export function PickMap({
   const tagRef = useRef<PickTagHandle>(null);
   const latest = useRef({ width, height, mapPadding, panels });
   latest.current = { width, height, mapPadding, panels };
-  const handleRegion = useCallback((next: Region) => {
+  const settleWith = useCallback((next: Region) => {
     const now = latest.current;
     const size = { width: now.width, height: now.height };
     // §28 질문 5: Google 로고 · 출처 표시를 가리지 않게 로고 자리도 장애물 (여유 4는 판과 같다)
     tagRef.current?.settle({ region: next, frame: visibleArea(size, now.mapPadding), panels: [...now.panels, googleLogoRect(size, now.mapPadding)] });
-    // §29: 준비 신호보다 첫 영역 알림이 먼저 오면 그것도 준비로 본다 (지도가 그려져 카메라가 멈췄다)
-    signalReady();
-  }, [signalReady]);
+  }, []);
+  // §30: 경계 묻기 차례. 영역이 새로 정해질 때마다(알림 · 답) 하나씩 늘어, 늦게 온 옛 답이 새 영역을 덮지 않게 한다
+  const settleSeq = useRef(0);
+  const handleRegion = useCallback(
+    (next: Region) => {
+      settleSeq.current += 1;
+      settleWith(next);
+      // §29: 준비 신호보다 첫 영역 알림이 먼저 오면 그것도 준비로 본다 (지도가 그려져 카메라가 멈췄다)
+      signalReady();
+    },
+    [settleWith, signalReady],
+  );
+  // TASK-015 §30 중 1: mapPadding이 바뀌면(키보드 열림 · 닫힘) 받아 둔 영역은 "확정 전". 영역 알림을 기다리지 않고 지도에 지금 경계를 직접 물어 다시 계산한다
+  // (키보드를 닫으면 알림이 안 오는 때가 있었다). 답 전에는: 핀 그대로면 그린 이름표 유지, 새로 찍은 핀은 이름표 없음 (PickTag)
+  const paddingSeen = useRef(mapPadding);
+  useEffect(() => {
+    if (paddingSeen.current === mapPadding) return;
+    paddingSeen.current = mapPadding;
+    tagRef.current?.unsettle();
+    // 지금 한 번 묻고, 지도가 새 여백을 그린 뒤(두 프레임 뒤) 한 번 더 묻는다 — 바로 물으면 지도가 아직 옛 여백으로 답할 때가 있다
+    // (11-19 시뮬레이터: 여백이 바뀌고 14ms 뒤 온 답이 옛 화면 기준이라 핀 자리가 약 60pt 어긋남). 나중 답이 이긴다
+    const ask = () => {
+      const turn = ++settleSeq.current;
+      map.current
+        ?.getMapBoundaries()
+        .then(({ northEast, southWest }) => {
+          if (turn !== settleSeq.current) return; // 그 사이 새 물음 · 영역 알림이 있었다
+          settleWith({
+            latitude: (northEast.latitude + southWest.latitude) / 2,
+            longitude: (northEast.longitude + southWest.longitude) / 2,
+            latitudeDelta: northEast.latitude - southWest.latitude,
+            longitudeDelta: northEast.longitude - southWest.longitude,
+          });
+        })
+        .catch(() => undefined); // 못 물으면 다음 물음 · 영역 알림을 기다린다
+    };
+    ask();
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(ask);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mapPadding, settleWith]);
   return (
     <MapView
       ref={map}
@@ -412,7 +451,7 @@ const PickMarkers = memo(function PickMarkers({ latitude, longitude }: { latitud
 });
 
 type PickSettle = { region: Region; frame: Required<Frame>; panels: Rect[] };
-type PickTagHandle = { settle: (next: PickSettle) => void };
+type PickTagHandle = { settle: (next: PickSettle) => void; unsettle: () => void };
 type PickTagResult = { at: LatLng; name: string; width: number } | null;
 
 const sameTag = (a: PickTagResult, b: PickTagResult): boolean =>
@@ -424,14 +463,22 @@ const sameTag = (a: PickTagResult, b: PickTagResult): boolean =>
  */
 function PickTag({ ref, pin, name, width, height }: { ref: Ref<PickTagHandle>; pin: LatLng | null; name: string | null; width: number; height: number }) {
   const settled = useRef<PickSettle | null>(null);
+  // §30 확정 전: 여백이 바뀐 뒤 경계 답(또는 영역 알림)이 오기 전. 그때 그려 둔 이름표와 그 핀
+  const waiting = useRef<{ pinKey: string | null; drawn: PickTagResult } | null>(null);
   const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const pinKey = pin ? `${pin.latitude},${pin.longitude}` : null;
   const tagOf = (at: PickSettle | null): PickTagResult => (pin && name && at ? pickTag(pin, name, at.region, at.frame, { width, height }, at.panels) : null);
-  const tag = tagOf(settled.current);
+  const now = (): PickTagResult => (waiting.current ? (waiting.current.pinKey === pinKey ? waiting.current.drawn : null) : tagOf(settled.current));
+  const tag = now();
   useImperativeHandle(ref, () => ({
     settle(next) {
-      const before = tagOf(settled.current);
+      const before = now();
       settled.current = next;
+      waiting.current = null;
       if (!sameTag(before, tagOf(next))) redraw();
+    },
+    unsettle() {
+      if (waiting.current === null) waiting.current = { pinKey, drawn: tagOf(settled.current) };
     },
   }));
   return tag ? <NameTag coordinate={tag.at} name={tag.name} width={tag.width} zIndex={PICK_Z.label} /> : null;
