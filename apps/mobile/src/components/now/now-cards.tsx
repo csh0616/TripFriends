@@ -436,7 +436,10 @@ export function NowCardView({
                   <Text style={text('num-md', 'surface')}>{String(item.seq)}</Text>
                 </View>
                 <Text style={[text('body'), styles.grow]}>{item.name}</Text>
-                <FactChip facts={item.facts} words="row" />
+                {/* §33 하-19: 칩은 줄 세로 가운데 (칩 부품의 alignSelf flex-start가 줄 가운데 맞춤을 덮어 위로 붙던 것) */}
+                <View style={styles.rowChip}>
+                  <FactChip facts={item.facts} words="row" />
+                </View>
               </View>
             ))}
           </Shell>
@@ -604,6 +607,7 @@ const styles = StyleSheet.create({
   alwaysOpen: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'] },
   dropChip: { backgroundColor: color['bg-2'], borderRadius: radius['r-full'], paddingHorizontal: space['space-3'], paddingVertical: space['space-1'] },
   big: { flexDirection: 'row', alignItems: 'baseline', gap: space['space-2'] },
+  rowChip: { alignSelf: 'center' },
   restRow: { flexDirection: 'row', alignItems: 'center', gap: space['space-2'], minHeight: layout.courseRow },
   restTime: { ...text('num-md'), width: layout.timeColumn },
   number: {
