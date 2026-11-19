@@ -6,7 +6,7 @@ import { Linking, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/app-text';
 import { MonoText } from '@/components/trips/parts';
 import { PhotoPlaceholder } from '@/components/planning/photo-placeholder';
-import { ExternalIcon, LockIcon } from '@/components/planning/icons';
+import { ExternalIcon, InfoIcon, LockIcon } from '@/components/planning/icons';
 import { PrimaryButton } from '@/components/planning/primary-button';
 import { SecondaryButton } from '@/components/planning/secondary-button';
 import { HoursChipView, StatusChip, type ChipWords } from '@/components/planning/status-chip';
@@ -176,7 +176,8 @@ export function ChipSheet({
       ) : null}
       {hint ? (
         <View style={styles.labelRow}>
-          <LockIcon color={color.muted} size={layout.factIcon} />
+          {/* §33 하-17: 보드 d2의 ⓘ 16 (자물쇠는 이 앱에서 "고정 일정" · "저장 안 함" 뜻이라 쓰지 않는다) */}
+          <InfoIcon color={color.muted} size={layout.factIcon} />
           <Text style={[text('caption', 'muted'), styles.grow]}>{CHIP_SHEET_HINT}</Text>
         </View>
       ) : null}
