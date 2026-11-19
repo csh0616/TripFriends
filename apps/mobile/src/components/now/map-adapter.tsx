@@ -2,7 +2,7 @@
 // 노출하는 것: 핀·선·숙소·내 위치·카메라 맞추기·옮기기. 준비 신호가 8초 안에 없으면 onFail (§11 Q17).
 // 핀 안은 Svg가 아니라 View와 Text로만 그린다: 지도 Marker는 안의 그림을 사진으로 떠 가는데 중첩 Svg는 네이티브에서 안 그려진 적이 있다 (TASK-005).
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useReducer, useRef, useState, type Ref } from 'react';
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Keyboard, StyleSheet, View, useWindowDimensions } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE, type MapViewProps } from 'react-native-maps';
 
 import mapStyleFile from '../../../assets/map/google-map-style.json';
@@ -346,7 +346,12 @@ export function PickMap({
     ready.current = true;
     callbacks.current.onReady();
   }, []);
-  const handleLongPress = useCallback((event: { nativeEvent: { coordinate: LatLng } }) => callbacks.current.onLongPress(event.nativeEvent.coordinate), []);
+  // §32 중-9: 새로 찍을 때마다 경계를 다시 묻는다 (askBounds는 아래에서 정한다)
+  const askLater = useRef<() => void>(() => undefined);
+  const handleLongPress = useCallback((event: { nativeEvent: { coordinate: LatLng } }) => {
+    callbacks.current.onLongPress(event.nativeEvent.coordinate);
+    askLater.current();
+  }, []);
   const [initialRegion] = useState(() => {
     const start = center ?? NO_CENTER;
     const delta = center ? layout.mapDelta : WIDE_DELTA;
@@ -377,15 +382,36 @@ export function PickMap({
   }, []);
   // §30: 경계 묻기 차례. 영역이 새로 정해질 때마다(알림 · 답) 하나씩 늘어, 늦게 온 옛 답이 새 영역을 덮지 않게 한다
   const settleSeq = useRef(0);
+  // 받아들인 마지막 차례. 이보다 앞선 물음의 답이 늦게 오면 버린다 (§32: 새로 찍을 때 묻는 물음이 있어도, 먼저 물은 답이 먼저 오면 받는다)
+  const appliedSeq = useRef(0);
   const handleRegion = useCallback(
     (next: Region) => {
       settleSeq.current += 1;
+      appliedSeq.current = settleSeq.current;
       settleWith(next);
       // §29: 준비 신호보다 첫 영역 알림이 먼저 오면 그것도 준비로 본다 (지도가 그려져 카메라가 멈췄다)
       signalReady();
     },
     [settleWith, signalReady],
   );
+  /** 지도에 지금 경계를 묻고, 답이 오면(그 사이 더 새 물음 · 영역 알림이 없을 때) 그 경계로 이름표를 다시 계산한다 */
+  const askBounds = useCallback(() => {
+    const turn = ++settleSeq.current;
+    map.current
+      ?.getMapBoundaries()
+      .then(({ northEast, southWest }) => {
+        if (turn < appliedSeq.current) return; // 더 나중 물음의 답이나 영역 알림을 이미 받았다
+        appliedSeq.current = turn;
+        settleWith({
+          latitude: (northEast.latitude + southWest.latitude) / 2,
+          longitude: (northEast.longitude + southWest.longitude) / 2,
+          latitudeDelta: northEast.latitude - southWest.latitude,
+          longitudeDelta: northEast.longitude - southWest.longitude,
+        });
+      })
+      .catch(() => undefined); // 못 물으면 다음 물음 · 영역 알림을 기다린다
+  }, [settleWith]);
+  askLater.current = askBounds;
   // TASK-015 §30 중 1: mapPadding이 바뀌면(키보드 열림 · 닫힘) 받아 둔 영역은 "확정 전". 영역 알림을 기다리지 않고 지도에 지금 경계를 직접 물어 다시 계산한다
   // (키보드를 닫으면 알림이 안 오는 때가 있었다). 답 전에는: 핀 그대로면 그린 이름표 유지, 새로 찍은 핀은 이름표 없음 (PickTag)
   // §31 중-9 (task-015-design §17-3): 여백이 그대로여도 시트 높이(잰 pick-panel) · 키보드 높이가 바뀌면(= 이름표가 피할 판이 바뀜) 똑같이 다시 묻는다
@@ -398,27 +424,19 @@ export function PickMap({
     tagRef.current?.unsettle();
     // 지금 한 번 묻고, 지도가 새 여백을 그린 뒤(두 프레임 뒤) 한 번 더 묻는다 — 바로 물으면 지도가 아직 옛 여백으로 답할 때가 있다
     // (11-19 시뮬레이터: 여백이 바뀌고 14ms 뒤 온 답이 옛 화면 기준이라 핀 자리가 약 60pt 어긋남). 나중 답이 이긴다
-    const ask = () => {
-      const turn = ++settleSeq.current;
-      map.current
-        ?.getMapBoundaries()
-        .then(({ northEast, southWest }) => {
-          if (turn !== settleSeq.current) return; // 그 사이 새 물음 · 영역 알림이 있었다
-          settleWith({
-            latitude: (northEast.latitude + southWest.latitude) / 2,
-            longitude: (northEast.longitude + southWest.longitude) / 2,
-            latitudeDelta: northEast.latitude - southWest.latitude,
-            longitudeDelta: northEast.longitude - southWest.longitude,
-          });
-        })
-        .catch(() => undefined); // 못 물으면 다음 물음 · 영역 알림을 기다린다
-    };
-    ask();
+    askBounds();
     let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(ask);
+      frame = requestAnimationFrame(askBounds);
     });
     return () => cancelAnimationFrame(frame);
-  }, [layoutKey, settleWith]);
+  }, [layoutKey, askBounds]);
+  // TASK-015 §32 중-9: 이름표는 늘 가장 최근 확정 경계로. 위 두 물음이 모두 옛 화면으로 답한 뒤에도 지도는 영역 알림 없이 핀을 새 여백 가운데로 옮긴다
+  // (11-19 시뮬레이터 2/2: 두 답 모두 핀 y 201, 실제 308 — 그 뒤 신호 없음 → 2.3초 뒤 다시 찍은 핀이 옛 경계로 계산돼 이름표가 오른쪽).
+  // 그래서 키보드가 다 열리고 닫힌 신호와, 핀을 새로 찍을 때마다 경계를 다시 묻는다. 답이 오면 지금 핀(그 사이 새로 찍은 핀 포함)을 그 경계로 다시 계산한다
+  useEffect(() => {
+    const subs = (['keyboardDidHide', 'keyboardDidShow'] as const).map((name) => Keyboard.addListener(name, () => askBounds()));
+    return () => subs.forEach((sub) => sub.remove());
+  }, [askBounds]);
   return (
     <MapView
       ref={map}
